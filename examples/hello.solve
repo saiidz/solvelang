@@ -1,3 +1,7 @@
-let x = 5
-let y = 3
-print(x + y)
+let a = 10
+let b = 5
+
+print(a + b)
+print(a - b)
+print(a * b)
+print(a / b)
