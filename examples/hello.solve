@@ -1,7 +1,9 @@
-let a = 10
-let b = 5
+let age = 21
 
-print(a + b)
-print(a - b)
-print(a * b)
-print(a / b)
+if age > 18 {
+    print("Adult")
+}
+
+if age < 18 {
+    print("Minor")
+}
