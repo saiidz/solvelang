@@ -1,5 +1,6 @@
 mod ast;
 mod ast_runtime;
+mod diagnostics;
 mod eval;
 mod lexer;
 mod parser;
@@ -49,6 +50,18 @@ fn main() {
         eprintln!("Error: failed to read '{}': {}", filename, error);
         process::exit(1);
     });
+
+    if let Err(diagnostics) = diagnostics::validate_source(&content) {
+        let lines: Vec<&str> = content.lines().collect();
+
+        for diagnostic in diagnostics {
+            let source_line = lines.get(diagnostic.line.saturating_sub(1)).copied().unwrap_or("");
+            eprintln!("{}", diagnostic.format(source_line));
+            eprintln!();
+        }
+
+        process::exit(1);
+    }
 
     run_command(command, &content);
 }
