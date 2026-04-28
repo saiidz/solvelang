@@ -14,6 +14,12 @@ fn add(a, b) {
     return a + b
 }
 
+agent SupportBot {
+    instruction "Answer clearly using approved tools only."
+    tool searchDocs
+    tool createTicket
+}
+
 print("<h1>Hello from SolveLang</h1>")
 print("Creator:")
 greet(name)
@@ -49,3 +55,6 @@ while count <= 5 {
     print(count)
     let count = count + 1
 }
+
+print("<p>AI Agent test:</p>")
+ask SupportBot("How can SolveLang help with automation?")
