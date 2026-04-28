@@ -32,6 +32,7 @@ Current supported features:
 - Typed value system
 - Legacy runtime fallback
 - CLI subcommands
+- Line-based diagnostics
 - Integration tests
 
 ## Example
@@ -146,6 +147,34 @@ cargo run ../examples/hello.solve -- --ast
 cargo run ../examples/hello.solve -- --legacy
 ```
 
+## Diagnostics
+
+SolveLang validates common mistakes before running and reports clear line-numbered errors.
+
+Example bad code:
+
+```solve
+let name
+```
+
+Example error style:
+
+```text
+SolveLang Error on line 1, column 1:
+Invalid variable declaration: expected '='.
+let name
+^
+Hint: Use syntax like: let name = value
+```
+
+Current diagnostics catch:
+
+- Missing `=` in `let` declarations
+- Unclosed strings
+- Missing opening `{` on `if`, `while`, `fn`, and `agent`
+- Unclosed blocks
+- Unexpected closing braces
+
 ## Tests
 
 Run the test suite:
@@ -154,7 +183,7 @@ Run the test suite:
 cargo test
 ```
 
-The tests cover CLI execution, token output, AST output, legacy runtime fallback, functions, arrays, loops, and agent syntax.
+The tests cover CLI execution, token output, AST output, legacy runtime fallback, functions, arrays, loops, agent syntax, and diagnostics for invalid code.
 
 ## Project Structure
 
@@ -170,6 +199,7 @@ solvelang/
   solvec/
     src/
       main.rs
+      diagnostics.rs
       value.rs
       lexer.rs
       ast.rs
@@ -184,6 +214,7 @@ solvelang/
 File responsibilities:
 
 - `main.rs` starts the command-line program and exposes run, token, AST, and legacy modes
+- `diagnostics.rs` validates source code and formats line-numbered errors
 - `value.rs` defines typed runtime values
 - `lexer.rs` turns SolveLang source code into tokens
 - `ast.rs` defines expression and statement nodes
@@ -198,7 +229,7 @@ File responsibilities:
 SolveLang now uses a real language pipeline by default:
 
 ```text
-source code -> lexer -> parser -> AST -> AST runtime -> output
+source code -> diagnostics -> lexer -> parser -> AST -> AST runtime -> output
 ```
 
 The legacy string-based runtime is still available using `legacy` or `--legacy`, but normal execution now goes through the AST engine.
@@ -236,7 +267,6 @@ The long-term goal is to support:
 
 Planned next steps:
 
-- Better error messages with line numbers
 - File imports
 - JSON support
 - HTTP server support
