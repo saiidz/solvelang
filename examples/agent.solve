@@ -1,0 +1,7 @@
+agent SupportBot {
+    instruction "Answer clearly using approved tools only."
+    tool searchDocs
+    tool createTicket
+}
+
+ask SupportBot("How can SolveLang help with automation?")
