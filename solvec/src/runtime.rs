@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
-use crate::eval::{eval, eval_condition};
+use crate::eval::{eval, eval_condition, split_args};
 
 #[derive(Clone)]
 struct Function {
-    param: String,
+    params: Vec<String>,
     body: Vec<String>,
 }
 
@@ -27,7 +27,7 @@ fn execute_block(
     end: usize,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
-) {
+) -> Option<String> {
     let mut i = start;
 
     while i < end {
@@ -45,24 +45,34 @@ fn execute_block(
 
         if line.starts_with("fn ") {
             i = handle_function_definition(lines, i, functions);
+        } else if line.starts_with("return ") {
+            return Some(eval(line.trim_start_matches("return").trim(), vars));
         } else if line.starts_with("let ") {
-            handle_let(line, vars);
+            handle_let(line, vars, functions);
         } else if line.starts_with("print(") {
-            handle_print(line, vars);
+            handle_print(line, vars, functions);
         } else if line.starts_with("if ") {
-            i = handle_if_else(lines, i, vars, functions);
+            if let Some(value) = handle_if_else(lines, i, vars, functions) {
+                return Some(value);
+            }
+            i = skip_if_else(lines, i);
         } else if line.starts_with("while ") {
-            i = handle_while(lines, i, vars, functions);
+            if let Some(value) = handle_while(lines, i, vars, functions) {
+                return Some(value);
+            }
+            i = skip_block(lines, i);
         } else if line.starts_with("else") {
             i = skip_block(lines, i);
         } else if is_function_call(line) {
-            handle_function_call(line, vars, functions);
+            eval_value(line, vars, functions);
         } else {
             println!("Error: unknown command '{}'", line);
         }
 
         i += 1;
     }
+
+    None
 }
 
 fn handle_while(
@@ -70,7 +80,7 @@ fn handle_while(
     start: usize,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
-) -> usize {
+) -> Option<String> {
     let line = lines[start].trim();
 
     let condition = line
@@ -81,11 +91,12 @@ fn handle_while(
 
     let body_start = start + 1;
     let body_end = find_block_end(lines, body_start);
-
     let mut safety_counter = 0;
 
     while eval_condition(condition, vars) {
-        execute_block(lines, body_start, body_end, vars, functions);
+        if let Some(value) = execute_block(lines, body_start, body_end, vars, functions) {
+            return Some(value);
+        }
 
         safety_counter += 1;
 
@@ -95,7 +106,7 @@ fn handle_while(
         }
     }
 
-    body_end
+    None
 }
 
 fn handle_function_definition(
@@ -115,46 +126,63 @@ fn handle_function_definition(
     let close_paren = header.find(')').unwrap_or(header.len());
 
     let name = header[..open_paren].trim().to_string();
-    let param = header[open_paren + 1..close_paren].trim().to_string();
+    let params = split_args(&header[open_paren + 1..close_paren])
+        .into_iter()
+        .filter(|param| !param.is_empty())
+        .collect();
 
     let body_start = start + 1;
     let body_end = find_block_end(lines, body_start);
+    let body = lines[body_start..body_end].to_vec();
 
-    let mut body = Vec::new();
-
-    for line in &lines[body_start..body_end] {
-        body.push(line.to_string());
-    }
-
-    functions.insert(name, Function { param, body });
+    functions.insert(name, Function { params, body });
 
     body_end
+}
+
+fn eval_value(
+    expr: &str,
+    vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
+) -> String {
+    let expr = expr.trim();
+
+    if is_function_call(expr) {
+        return handle_function_call(expr, vars, functions);
+    }
+
+    eval(expr, vars)
 }
 
 fn handle_function_call(
     line: &str,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
-) {
+) -> String {
     let open_paren = line.find('(').unwrap_or(0);
     let close_paren = line.rfind(')').unwrap_or(line.len());
 
     let name = line[..open_paren].trim();
-    let argument = line[open_paren + 1..close_paren].trim();
+    let argument_text = line[open_paren + 1..close_paren].trim();
 
     let function = match functions.get(name) {
         Some(function) => function.clone(),
         None => {
             println!("Error: unknown function '{}'", name);
-            return;
+            return String::new();
         }
     };
 
-    let argument_value = eval(argument, vars);
+    let args = split_args(argument_text);
     let mut local_vars = vars.clone();
 
-    if !function.param.is_empty() {
-        local_vars.insert(function.param.clone(), argument_value);
+    for (index, param) in function.params.iter().enumerate() {
+        let arg_value = args
+            .get(index)
+            .map(|arg| eval_value(arg, vars, functions))
+            .unwrap_or_default();
+
+        local_vars.insert(param.clone(), arg_value);
     }
 
     execute_block(
@@ -163,14 +191,19 @@ fn handle_function_call(
         function.body.len(),
         &mut local_vars,
         functions,
-    );
+    )
+    .unwrap_or_default()
 }
 
 fn is_function_call(line: &str) -> bool {
-    line.contains('(') && line.ends_with(')')
+    line.contains('(') && line.ends_with(')') && !line.starts_with("print(")
 }
 
-fn handle_let(line: &str, vars: &mut HashMap<String, String>) {
+fn handle_let(
+    line: &str,
+    vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
+) {
     let parts: Vec<&str> = line.splitn(2, '=').collect();
 
     if parts.len() != 2 {
@@ -179,18 +212,22 @@ fn handle_let(line: &str, vars: &mut HashMap<String, String>) {
     }
 
     let name = parts[0].replace("let", "").trim().to_string();
-    let value = eval(parts[1].trim(), vars);
+    let value = eval_value(parts[1].trim(), vars, functions);
 
     vars.insert(name, value);
 }
 
-fn handle_print(line: &str, vars: &HashMap<String, String>) {
+fn handle_print(
+    line: &str,
+    vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
+) {
     let inside = line
         .trim_start_matches("print(")
         .trim_end_matches(")")
         .trim();
 
-    let value = eval(inside, vars);
+    let value = eval_value(inside, vars, functions);
     println!("{}", value);
 }
 
@@ -199,7 +236,7 @@ fn handle_if_else(
     start: usize,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
-) -> usize {
+) -> Option<String> {
     let line = lines[start].trim();
 
     let condition = line
@@ -212,29 +249,32 @@ fn handle_if_else(
     let if_start = start + 1;
     let if_end = find_block_end(lines, if_start);
 
-    let mut next_index = if_end + 1;
-    let has_else = next_index < lines.len() && lines[next_index].trim().starts_with("else");
+    let else_index = if_end + 1;
+    let has_else = else_index < lines.len() && lines[else_index].trim().starts_with("else");
 
     if condition_is_true {
-        execute_block(lines, if_start, if_end, vars, functions);
-
-        if has_else {
-            let else_start = next_index + 1;
-            let else_end = find_block_end(lines, else_start);
-            next_index = else_end;
-        } else {
-            next_index = if_end;
-        }
-    } else if has_else {
-        let else_start = next_index + 1;
-        let else_end = find_block_end(lines, else_start);
-        execute_block(lines, else_start, else_end, vars, functions);
-        next_index = else_end;
-    } else {
-        next_index = if_end;
+        return execute_block(lines, if_start, if_end, vars, functions);
     }
 
-    next_index
+    if has_else {
+        let else_start = else_index + 1;
+        let else_end = find_block_end(lines, else_start);
+        return execute_block(lines, else_start, else_end, vars, functions);
+    }
+
+    None
+}
+
+fn skip_if_else(lines: &Vec<String>, start: usize) -> usize {
+    let if_start = start + 1;
+    let if_end = find_block_end(lines, if_start);
+    let else_index = if_end + 1;
+
+    if else_index < lines.len() && lines[else_index].trim().starts_with("else") {
+        return skip_block(lines, else_index);
+    }
+
+    if_end
 }
 
 fn find_block_end(lines: &Vec<String>, start: usize) -> usize {
