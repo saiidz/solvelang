@@ -65,6 +65,8 @@ fn execute_block(
             handle_print(line, vars);
         } else if line.starts_with("if ") {
             i = handle_if_else(lines, i, vars, functions);
+        } else if line.starts_with("while ") {
+            i = handle_while(lines, i, vars, functions);
         } else if line.starts_with("else") {
             i = skip_block(lines, i);
         } else if is_function_call(line) {
@@ -75,6 +77,39 @@ fn execute_block(
 
         i += 1;
     }
+}
+
+fn handle_while(
+    lines: &Vec<String>,
+    start: usize,
+    vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
+) -> usize {
+    let line = lines[start].trim();
+
+    let condition = line
+        .trim_start_matches("while")
+        .trim()
+        .trim_end_matches("{")
+        .trim();
+
+    let body_start = start + 1;
+    let body_end = find_block_end(lines, body_start);
+
+    let mut safety_counter = 0;
+
+    while eval_condition(condition, vars) {
+        execute_block(lines, body_start, body_end, vars, functions);
+
+        safety_counter += 1;
+
+        if safety_counter > 10_000 {
+            println!("Error: loop stopped after 10000 iterations");
+            break;
+        }
+    }
+
+    body_end
 }
 
 fn handle_function_definition(
