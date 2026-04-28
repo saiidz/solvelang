@@ -1,0 +1,10 @@
+fn add(a, b) {
+    return a + b
+}
+
+fn greet(name) {
+    print("Hello, " .. name)
+}
+
+greet("Saiid")
+print(add(10, 5))
