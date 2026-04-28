@@ -17,36 +17,62 @@ fn main() {
 }
 
 fn run(code: String) {
-    let mut vars = HashMap::new();
+    let mut vars: HashMap<String, String> = HashMap::new();
 
     for line in code.lines() {
         let line = line.trim();
 
-        // handle: let name = "value"
+        if line.is_empty() {
+            continue;
+        }
+
         if line.starts_with("let ") {
             let parts: Vec<&str> = line.split('=').collect();
 
             if parts.len() == 2 {
                 let name = parts[0].replace("let", "").trim().to_string();
-                let value = parts[1].trim().replace("\"", "");
+                let value = eval(parts[1].trim(), &vars);
 
                 vars.insert(name, value);
             }
-        }
-
-        // handle: print(...)
-        else if line.starts_with("print(") {
+        } else if line.starts_with("print(") {
             let inside = line
                 .trim_start_matches("print(")
-                .trim_end_matches(")");
+                .trim_end_matches(")")
+                .trim();
 
-            // if it's a variable
-            if vars.contains_key(inside) {
-                println!("{}", vars.get(inside).unwrap());
-            } else {
-                // string literal
-                println!("{}", inside.replace("\"", ""));
-            }
+            let value = eval(inside, &vars);
+            println!("{}", value);
         }
     }
+}
+
+fn eval(expr: &str, vars: &HashMap<String, String>) -> String {
+    let expr = expr.trim();
+
+    if expr.contains('+') {
+        let parts: Vec<&str> = expr.split('+').collect();
+        let mut total = 0;
+
+        for part in parts {
+            let value = eval(part.trim(), vars);
+            total += value.parse::<i32>().unwrap();
+        }
+
+        return total.to_string();
+    }
+
+    if expr.starts_with('"') && expr.ends_with('"') {
+        return expr.replace('"', "");
+    }
+
+    if let Ok(number) = expr.parse::<i32>() {
+        return number.to_string();
+    }
+
+    if vars.contains_key(expr) {
+        return vars.get(expr).unwrap().to_string();
+    }
+
+    expr.to_string()
 }
