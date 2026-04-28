@@ -6,7 +6,7 @@ It is currently an early working prototype written in Rust. SolveLang is being b
 
 ## Current Status
 
-SolveLang is in early development. The interpreter can already run `.solve` files with practical prototype features.
+SolveLang is in early development. It can run `.solve` files through its default AST-based engine.
 
 Current supported features:
 
@@ -25,10 +25,12 @@ Current supported features:
 - Comments using `//`
 - HTML-style text output
 - AI-agent prototype syntax using `agent`, `tool`, `instruction`, and `ask`
-- Lexer foundation
-- Parser foundation
-- AST foundation
-- Typed value foundation
+- Lexer
+- Parser
+- AST
+- AST runtime
+- Typed value system
+- Legacy runtime fallback
 
 ## Example
 
@@ -104,7 +106,7 @@ git clone https://github.com/saiidz/solvelang.git
 cd solvelang
 ```
 
-Run the example program:
+Run the example program with the default AST engine:
 
 ```bash
 cd solvec
@@ -119,11 +121,17 @@ cargo run ../examples/arrays.solve
 cargo run ../examples/agent.solve
 ```
 
-Inspect tokens or AST using the new compiler foundation:
+Inspect tokens or AST:
 
 ```bash
 cargo run ../examples/hello.solve -- --tokens
 cargo run ../examples/hello.solve -- --ast
+```
+
+Run with the older legacy runtime fallback:
+
+```bash
+cargo run ../examples/hello.solve -- --legacy
 ```
 
 ## Project Structure
@@ -144,29 +152,31 @@ solvelang/
       lexer.rs
       ast.rs
       parser.rs
+      ast_runtime.rs
       eval.rs
       runtime.rs
 ```
 
 File responsibilities:
 
-- `main.rs` starts the command-line program and exposes runtime, token, and AST modes
+- `main.rs` starts the command-line program and exposes default, token, AST, and legacy modes
 - `value.rs` defines typed runtime values
 - `lexer.rs` turns SolveLang source code into tokens
 - `ast.rs` defines expression and statement nodes
-- `parser.rs` starts turning tokens into AST nodes
-- `eval.rs` evaluates values, math, variables, arrays, booleans, strings, and conditions
-- `runtime.rs` executes the current working interpreter features
+- `parser.rs` turns tokens into AST nodes
+- `ast_runtime.rs` executes the AST-based runtime engine
+- `eval.rs` supports the legacy runtime evaluator
+- `runtime.rs` keeps the older legacy runtime available as a fallback
 
-## Architecture Direction
+## Architecture
 
-SolveLang is moving from a string-matching prototype toward a real language pipeline:
+SolveLang now uses a real language pipeline by default:
 
 ```text
-source code -> lexer -> parser -> AST -> interpreter
+source code -> lexer -> parser -> AST -> AST runtime -> output
 ```
 
-The current runtime still executes the working language features. The lexer, parser, AST, and `Value` system are now in place as the foundation for the next engine.
+The legacy string-based runtime is still available using `--legacy`, but normal execution now goes through the AST engine.
 
 ## AI-Native Direction
 
@@ -201,9 +211,8 @@ The long-term goal is to support:
 
 Planned next steps:
 
-- Migrate runtime execution to the AST engine
 - Better error messages with line numbers
-- Native value types throughout the interpreter
+- Native value types throughout all old legacy paths
 - File imports
 - JSON support
 - HTTP server support
