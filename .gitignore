@@ -1,0 +1,10 @@
+# Rust build output
+/target/
+solvec/target/
+
+# macOS
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
