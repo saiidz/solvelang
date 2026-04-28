@@ -1,4 +1,5 @@
 mod ast;
+mod ast_runtime;
 mod eval;
 mod lexer;
 mod parser;
@@ -12,7 +13,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        println!("Usage: solvec <file>");
+        println!("Usage: solvec <file> [--tokens] [--ast] [--legacy]");
         return;
     }
 
@@ -25,13 +26,20 @@ fn main() {
         return;
     }
 
+    let tokens = lexer::lex(&content);
+    let mut parser = parser::Parser::new(tokens);
+    let ast = parser.parse();
+
     if args.iter().any(|arg| arg == "--ast") {
-        let tokens = lexer::lex(&content);
-        let mut parser = parser::Parser::new(tokens);
-        let ast = parser.parse();
         println!("{:#?}", ast);
         return;
     }
 
-    runtime::run(&content);
+    if args.iter().any(|arg| arg == "--legacy") {
+        runtime::run(&content);
+        return;
+    }
+
+    let mut ast_runtime = ast_runtime::AstRuntime::new();
+    ast_runtime.run(&ast);
 }
