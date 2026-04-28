@@ -2,10 +2,16 @@ let name = "Saiid"
 let age = 21
 let x = 10
 let y = 5
+let names = ["Saiid", "Mira", "Alex"]
+let active = true
 
 fn greet(person) {
     print("Hello")
     print(person)
+}
+
+fn add(a, b) {
+    return a + b
 }
 
 print("<h1>Hello from SolveLang</h1>")
@@ -13,10 +19,22 @@ print("Creator:")
 greet(name)
 
 print("<p>Math test:</p>")
-print(x + y)
+print(add(x, y))
 print(x - y)
 print(x * y)
 print(x / y)
+
+print("<p>String join test:</p>")
+print("Hello, " .. name)
+
+print("<p>Array test:</p>")
+print(names[0])
+print(names[1])
+print(names[2])
+
+if active == true {
+    print("<p>Status: Active</p>")
+}
 
 if age >= 18 {
     print("<p>Status: Adult</p>")
