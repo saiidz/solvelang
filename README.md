@@ -31,6 +31,8 @@ Current supported features:
 - AST runtime
 - Typed value system
 - Legacy runtime fallback
+- CLI subcommands
+- Integration tests
 
 ## Example
 
@@ -110,29 +112,49 @@ Run the example program with the default AST engine:
 
 ```bash
 cd solvec
+cargo run -- run ../examples/hello.solve
+```
+
+The old direct file style still works:
+
+```bash
 cargo run ../examples/hello.solve
 ```
 
 Run specific examples:
 
 ```bash
-cargo run ../examples/functions.solve
-cargo run ../examples/arrays.solve
-cargo run ../examples/agent.solve
+cargo run -- run ../examples/functions.solve
+cargo run -- run ../examples/arrays.solve
+cargo run -- run ../examples/agent.solve
 ```
 
-Inspect tokens or AST:
+## CLI Commands
+
+```bash
+cargo run -- run <file.solve>       # Run with the AST runtime
+cargo run -- tokens <file.solve>    # Print lexer tokens
+cargo run -- ast <file.solve>       # Print parsed AST
+cargo run -- legacy <file.solve>    # Run with the legacy runtime
+```
+
+Backwards-compatible debug flags still work:
 
 ```bash
 cargo run ../examples/hello.solve -- --tokens
 cargo run ../examples/hello.solve -- --ast
-```
-
-Run with the older legacy runtime fallback:
-
-```bash
 cargo run ../examples/hello.solve -- --legacy
 ```
+
+## Tests
+
+Run the test suite:
+
+```bash
+cargo test
+```
+
+The tests cover CLI execution, token output, AST output, legacy runtime fallback, functions, arrays, loops, and agent syntax.
 
 ## Project Structure
 
@@ -155,11 +177,13 @@ solvelang/
       ast_runtime.rs
       eval.rs
       runtime.rs
+    tests/
+      cli.rs
 ```
 
 File responsibilities:
 
-- `main.rs` starts the command-line program and exposes default, token, AST, and legacy modes
+- `main.rs` starts the command-line program and exposes run, token, AST, and legacy modes
 - `value.rs` defines typed runtime values
 - `lexer.rs` turns SolveLang source code into tokens
 - `ast.rs` defines expression and statement nodes
@@ -167,6 +191,7 @@ File responsibilities:
 - `ast_runtime.rs` executes the AST-based runtime engine
 - `eval.rs` supports the legacy runtime evaluator
 - `runtime.rs` keeps the older legacy runtime available as a fallback
+- `tests/cli.rs` verifies the command-line behavior
 
 ## Architecture
 
@@ -176,7 +201,7 @@ SolveLang now uses a real language pipeline by default:
 source code -> lexer -> parser -> AST -> AST runtime -> output
 ```
 
-The legacy string-based runtime is still available using `--legacy`, but normal execution now goes through the AST engine.
+The legacy string-based runtime is still available using `legacy` or `--legacy`, but normal execution now goes through the AST engine.
 
 ## AI-Native Direction
 
@@ -212,7 +237,6 @@ The long-term goal is to support:
 Planned next steps:
 
 - Better error messages with line numbers
-- Native value types throughout all old legacy paths
 - File imports
 - JSON support
 - HTTP server support
