@@ -6,7 +6,7 @@ It is currently an early working prototype written in Rust. SolveLang is being b
 
 ## Current Status
 
-SolveLang is in early development. The interpreter can already run `.solve` files with basic language features.
+SolveLang is in early development. The interpreter can already run `.solve` files with practical prototype features.
 
 Current supported features:
 
@@ -15,10 +15,16 @@ Current supported features:
 - Integer math: `+`, `-`, `*`, `/`
 - If / else statements
 - Comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`
-- Functions with one parameter
+- Functions
+- Return values
+- Multiple function parameters
 - While loops
+- Arrays and index access
+- Booleans
+- String joining using `..`
 - Comments using `//`
 - HTML-style text output
+- AI-agent prototype syntax using `agent`, `tool`, `instruction`, and `ask`
 
 ## Example
 
@@ -27,10 +33,22 @@ let name = "Saiid"
 let age = 21
 let x = 10
 let y = 5
+let names = ["Saiid", "Mira", "Alex"]
+let active = true
 
 fn greet(person) {
     print("Hello")
     print(person)
+}
+
+fn add(a, b) {
+    return a + b
+}
+
+agent SupportBot {
+    instruction "Answer clearly using approved tools only."
+    tool searchDocs
+    tool createTicket
 }
 
 print("<h1>Hello from SolveLang</h1>")
@@ -38,10 +56,22 @@ print("Creator:")
 greet(name)
 
 print("<p>Math test:</p>")
-print(x + y)
+print(add(x, y))
 print(x - y)
 print(x * y)
 print(x / y)
+
+print("<p>String join test:</p>")
+print("Hello, " .. name)
+
+print("<p>Array test:</p>")
+print(names[0])
+print(names[1])
+print(names[2])
+
+if active == true {
+    print("<p>Status: Active</p>")
+}
 
 if age >= 18 {
     print("<p>Status: Adult</p>")
@@ -56,27 +86,9 @@ while count <= 5 {
     print(count)
     let count = count + 1
 }
-```
 
-Expected output:
-
-```text
-<h1>Hello from SolveLang</h1>
-Creator:
-Hello
-Saiid
-<p>Math test:</p>
-15
-5
-50
-2
-<p>Status: Adult</p>
-<p>Loop test:</p>
-1
-2
-3
-4
-5
+print("<p>AI Agent test:</p>")
+ask SupportBot("How can SolveLang help with automation?")
 ```
 
 ## Running SolveLang
@@ -95,13 +107,25 @@ cd solvec
 cargo run ../examples/hello.solve
 ```
 
+Run specific examples:
+
+```bash
+cargo run ../examples/functions.solve
+cargo run ../examples/arrays.solve
+cargo run ../examples/agent.solve
+```
+
 ## Project Structure
 
 ```text
 solvelang/
   README.md
+  ROADMAP.md
   examples/
     hello.solve
+    functions.solve
+    arrays.solve
+    agent.solve
   solvec/
     src/
       main.rs
@@ -112,8 +136,24 @@ solvelang/
 File responsibilities:
 
 - `main.rs` starts the command-line program
-- `eval.rs` evaluates values, math, variables, and conditions
-- `runtime.rs` executes SolveLang statements such as `let`, `print`, `if`, `else`, `while`, and functions
+- `eval.rs` evaluates values, math, variables, arrays, booleans, strings, and conditions
+- `runtime.rs` executes SolveLang statements such as `let`, `print`, `if`, `else`, `while`, functions, returns, and agent prototype syntax
+
+## AI-Native Direction
+
+SolveLang is designed to grow toward AI-native scripting. The current `agent` feature is a local prototype. It does not call a live AI provider yet, but it defines the future syntax direction:
+
+```solve
+agent SupportBot {
+    instruction "Answer using approved tools only."
+    tool searchDocs
+    tool createTicket
+}
+
+ask SupportBot("Help me automate this workflow")
+```
+
+Later, this can connect to real AI providers, documents, tools, APIs, and business workflows.
 
 ## Vision
 
@@ -132,15 +172,14 @@ The long-term goal is to support:
 
 Planned next steps:
 
-- Arrays and lists
-- Multiple function parameters
-- Return values
-- Better error messages
+- Real parser and lexer
+- Better error messages with line numbers
+- Native value types instead of storing values as strings
 - File imports
 - JSON support
 - HTTP server support
 - Database support
-- Real parser and lexer
+- Real AI provider integration
 - VS Code syntax highlighting
 - Package manager
 
