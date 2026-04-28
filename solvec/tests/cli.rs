@@ -23,6 +23,21 @@ fn run_solvec(args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).to_string()
 }
 
+fn run_solvec_error(args: &[&str]) -> String {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .args(args)
+        .output()
+        .expect("failed to run solvec");
+
+    assert!(
+        !output.status.success(),
+        "solvec unexpectedly succeeded with stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
 #[test]
 fn run_executes_math_functions_arrays_loops_and_agents() {
     let file = write_temp_solve_file(
@@ -105,4 +120,39 @@ fn backwards_compatible_ast_flag_still_works() {
     let output = run_solvec(&[&file, "--ast"]);
 
     assert!(output.contains("Let"));
+}
+
+#[test]
+fn invalid_let_statement_reports_line_and_hint() {
+    let file = write_temp_solve_file("solvelang_cli_bad_let.solve", "let name\n");
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("SolveLang Error on line 1"));
+    assert!(stderr.contains("Invalid variable declaration"));
+    assert!(stderr.contains("let name = value"));
+}
+
+#[test]
+fn unclosed_string_reports_line_and_hint() {
+    let file = write_temp_solve_file("solvelang_cli_bad_string.solve", "print(\"Hello)\n");
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("SolveLang Error on line 1"));
+    assert!(stderr.contains("Unclosed string literal"));
+    assert!(stderr.contains("closing double quote"));
+}
+
+#[test]
+fn unclosed_block_reports_line_and_hint() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_bad_block.solve",
+        r#"
+if true {
+    print("yes")
+"#,
+    );
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("Unclosed block"));
+    assert!(stderr.contains("matching closing brace"));
 }
