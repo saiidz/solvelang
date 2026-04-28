@@ -46,7 +46,7 @@ fn execute_block(
         if line.starts_with("fn ") {
             i = handle_function_definition(lines, i, functions);
         } else if line.starts_with("return ") {
-            return Some(eval(line.trim_start_matches("return").trim(), vars));
+            return Some(eval_value(line.trim_start_matches("return").trim(), vars, functions));
         } else if line.starts_with("let ") {
             handle_let(line, vars, functions);
         } else if line.starts_with("print(") {
@@ -223,8 +223,9 @@ fn handle_print(
     functions: &mut HashMap<String, Function>,
 ) {
     let inside = line
-        .trim_start_matches("print(")
-        .trim_end_matches(")")
+        .strip_prefix("print(")
+        .and_then(|value| value.strip_suffix(')'))
+        .unwrap_or("")
         .trim();
 
     let value = eval_value(inside, vars, functions);
