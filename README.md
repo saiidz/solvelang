@@ -25,6 +25,10 @@ Current supported features:
 - Comments using `//`
 - HTML-style text output
 - AI-agent prototype syntax using `agent`, `tool`, `instruction`, and `ask`
+- Lexer foundation
+- Parser foundation
+- AST foundation
+- Typed value foundation
 
 ## Example
 
@@ -115,6 +119,13 @@ cargo run ../examples/arrays.solve
 cargo run ../examples/agent.solve
 ```
 
+Inspect tokens or AST using the new compiler foundation:
+
+```bash
+cargo run ../examples/hello.solve -- --tokens
+cargo run ../examples/hello.solve -- --ast
+```
+
 ## Project Structure
 
 ```text
@@ -129,15 +140,33 @@ solvelang/
   solvec/
     src/
       main.rs
+      value.rs
+      lexer.rs
+      ast.rs
+      parser.rs
       eval.rs
       runtime.rs
 ```
 
 File responsibilities:
 
-- `main.rs` starts the command-line program
+- `main.rs` starts the command-line program and exposes runtime, token, and AST modes
+- `value.rs` defines typed runtime values
+- `lexer.rs` turns SolveLang source code into tokens
+- `ast.rs` defines expression and statement nodes
+- `parser.rs` starts turning tokens into AST nodes
 - `eval.rs` evaluates values, math, variables, arrays, booleans, strings, and conditions
-- `runtime.rs` executes SolveLang statements such as `let`, `print`, `if`, `else`, `while`, functions, returns, and agent prototype syntax
+- `runtime.rs` executes the current working interpreter features
+
+## Architecture Direction
+
+SolveLang is moving from a string-matching prototype toward a real language pipeline:
+
+```text
+source code -> lexer -> parser -> AST -> interpreter
+```
+
+The current runtime still executes the working language features. The lexer, parser, AST, and `Value` system are now in place as the foundation for the next engine.
 
 ## AI-Native Direction
 
@@ -172,9 +201,9 @@ The long-term goal is to support:
 
 Planned next steps:
 
-- Real parser and lexer
+- Migrate runtime execution to the AST engine
 - Better error messages with line numbers
-- Native value types instead of storing values as strings
+- Native value types throughout the interpreter
 - File imports
 - JSON support
 - HTTP server support
