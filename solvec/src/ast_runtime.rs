@@ -106,7 +106,8 @@ impl AstRuntime {
                 None
             }
             Stmt::Ask { agent, message } => {
-                println!("{}", self.ask_agent(agent, &self.eval(message)));
+                let message_value = self.eval(message);
+                println!("{}", self.ask_agent(agent, &message_value));
                 None
             }
             Stmt::Expr(expr) => {
