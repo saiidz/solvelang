@@ -1,1 +1,2 @@
-print("Hello, SolveLang")
+let name = "Saiid"
+print(name)

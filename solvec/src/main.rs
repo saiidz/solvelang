@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 
@@ -16,12 +17,36 @@ fn main() {
 }
 
 fn run(code: String) {
-    if code.contains("print(") {
-        let start = code.find("\"").unwrap() + 1;
-        let end = code.rfind("\"").unwrap();
-        let text = &code[start..end];
-        println!("{}", text);
-    } else {
-        println!("Unknown command");
+    let mut vars = HashMap::new();
+
+    for line in code.lines() {
+        let line = line.trim();
+
+        // handle: let name = "value"
+        if line.starts_with("let ") {
+            let parts: Vec<&str> = line.split('=').collect();
+
+            if parts.len() == 2 {
+                let name = parts[0].replace("let", "").trim().to_string();
+                let value = parts[1].trim().replace("\"", "");
+
+                vars.insert(name, value);
+            }
+        }
+
+        // handle: print(...)
+        else if line.starts_with("print(") {
+            let inside = line
+                .trim_start_matches("print(")
+                .trim_end_matches(")");
+
+            // if it's a variable
+            if vars.contains_key(inside) {
+                println!("{}", vars.get(inside).unwrap());
+            } else {
+                // string literal
+                println!("{}", inside.replace("\"", ""));
+            }
+        }
     }
 }
