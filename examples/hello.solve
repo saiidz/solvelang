@@ -3,9 +3,14 @@ let age = 21
 let x = 10
 let y = 5
 
+fn greet(person) {
+    print("Hello")
+    print(person)
+}
+
 print("<h1>Hello from SolveLang</h1>")
 print("Creator:")
-print(name)
+greet(name)
 
 print("<p>Math test:</p>")
 print(x + y)

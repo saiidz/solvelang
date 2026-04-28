@@ -2,6 +2,12 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 
+#[derive(Clone)]
+struct Function {
+    param: String,
+    body: Vec<String>,
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -17,18 +23,24 @@ fn main() {
 }
 
 fn run(code: &str) {
-    let mut vars: HashMap<String, String> = HashMap::new();
     let normalized_code = code.replace("} else {", "}\nelse {");
-    let lines: Vec<&str> = normalized_code.lines().collect();
+    let lines: Vec<String> = normalized_code
+        .lines()
+        .map(|line| line.to_string())
+        .collect();
 
-    execute_block(&lines, 0, lines.len(), &mut vars);
+    let mut vars: HashMap<String, String> = HashMap::new();
+    let mut functions: HashMap<String, Function> = HashMap::new();
+
+    execute_block(&lines, 0, lines.len(), &mut vars, &mut functions);
 }
 
 fn execute_block(
-    lines: &Vec<&str>,
+    lines: &Vec<String>,
     start: usize,
     end: usize,
     vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
 ) {
     let mut i = start;
 
@@ -45,20 +57,97 @@ fn execute_block(
             continue;
         }
 
-        if line.starts_with("let ") {
+        if line.starts_with("fn ") {
+            i = handle_function_definition(lines, i, functions);
+        } else if line.starts_with("let ") {
             handle_let(line, vars);
         } else if line.starts_with("print(") {
             handle_print(line, vars);
         } else if line.starts_with("if ") {
-            i = handle_if_else(lines, i, vars);
+            i = handle_if_else(lines, i, vars, functions);
         } else if line.starts_with("else") {
             i = skip_block(lines, i);
+        } else if is_function_call(line) {
+            handle_function_call(line, vars, functions);
         } else {
             println!("Error: unknown command '{}'", line);
         }
 
         i += 1;
     }
+}
+
+fn handle_function_definition(
+    lines: &Vec<String>,
+    start: usize,
+    functions: &mut HashMap<String, Function>,
+) -> usize {
+    let line = lines[start].trim();
+
+    let header = line
+        .trim_start_matches("fn")
+        .trim()
+        .trim_end_matches("{")
+        .trim();
+
+    let open_paren = header.find('(').unwrap_or(0);
+    let close_paren = header.find(')').unwrap_or(header.len());
+
+    let name = header[..open_paren].trim().to_string();
+    let param = header[open_paren + 1..close_paren].trim().to_string();
+
+    let body_start = start + 1;
+    let body_end = find_block_end(lines, body_start);
+
+    let mut body = Vec::new();
+
+    for line in &lines[body_start..body_end] {
+        body.push(line.to_string());
+    }
+
+    functions.insert(name, Function { param, body });
+
+    body_end
+}
+
+fn handle_function_call(
+    line: &str,
+    vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
+) {
+    let open_paren = line.find('(').unwrap_or(0);
+    let close_paren = line.rfind(')').unwrap_or(line.len());
+
+    let name = line[..open_paren].trim();
+    let argument = line[open_paren + 1..close_paren].trim();
+
+    let function = match functions.get(name) {
+        Some(function) => function.clone(),
+        None => {
+            println!("Error: unknown function '{}'", name);
+            return;
+        }
+    };
+
+    let argument_value = eval(argument, vars);
+
+    let mut local_vars = vars.clone();
+
+    if !function.param.is_empty() {
+        local_vars.insert(function.param.clone(), argument_value);
+    }
+
+    execute_block(
+        &function.body,
+        0,
+        function.body.len(),
+        &mut local_vars,
+        functions,
+    );
+}
+
+fn is_function_call(line: &str) -> bool {
+    line.contains('(') && line.ends_with(')')
 }
 
 fn handle_let(line: &str, vars: &mut HashMap<String, String>) {
@@ -86,9 +175,10 @@ fn handle_print(line: &str, vars: &HashMap<String, String>) {
 }
 
 fn handle_if_else(
-    lines: &Vec<&str>,
+    lines: &Vec<String>,
     start: usize,
     vars: &mut HashMap<String, String>,
+    functions: &mut HashMap<String, Function>,
 ) -> usize {
     let line = lines[start].trim();
 
@@ -104,11 +194,10 @@ fn handle_if_else(
     let if_end = find_block_end(lines, if_start);
 
     let mut next_index = if_end + 1;
-
     let has_else = next_index < lines.len() && lines[next_index].trim().starts_with("else");
 
     if condition_is_true {
-        execute_block(lines, if_start, if_end, vars);
+        execute_block(lines, if_start, if_end, vars, functions);
 
         if has_else {
             let else_start = next_index + 1;
@@ -120,7 +209,7 @@ fn handle_if_else(
     } else if has_else {
         let else_start = next_index + 1;
         let else_end = find_block_end(lines, else_start);
-        execute_block(lines, else_start, else_end, vars);
+        execute_block(lines, else_start, else_end, vars, functions);
         next_index = else_end;
     } else {
         next_index = if_end;
@@ -129,7 +218,7 @@ fn handle_if_else(
     next_index
 }
 
-fn find_block_end(lines: &Vec<&str>, start: usize) -> usize {
+fn find_block_end(lines: &Vec<String>, start: usize) -> usize {
     let mut depth = 0;
 
     for i in start..lines.len() {
@@ -151,7 +240,7 @@ fn find_block_end(lines: &Vec<&str>, start: usize) -> usize {
     lines.len()
 }
 
-fn skip_block(lines: &Vec<&str>, start: usize) -> usize {
+fn skip_block(lines: &Vec<String>, start: usize) -> usize {
     let block_start = start + 1;
     find_block_end(lines, block_start)
 }
