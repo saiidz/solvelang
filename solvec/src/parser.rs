@@ -1,17 +1,23 @@
 use crate::ast::{BinaryOp, Expr, Stmt};
-use crate::lexer::Token;
+use crate::diagnostics::Diagnostic;
+use crate::lexer::{LocatedToken, Token};
 
 pub struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<LocatedToken>,
     current: usize,
+    errors: Vec<Diagnostic>,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, current: 0 }
+    pub fn new(tokens: Vec<LocatedToken>) -> Self {
+        Self {
+            tokens,
+            current: 0,
+            errors: Vec::new(),
+        }
     }
 
-    pub fn parse(&mut self) -> Vec<Stmt> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, Vec<Diagnostic>> {
         let mut statements = Vec::new();
 
         while !self.is_at_end() {
@@ -28,7 +34,11 @@ impl Parser {
             }
         }
 
-        statements
+        if self.errors.is_empty() {
+            Ok(statements)
+        } else {
+            Err(self.errors.clone())
+        }
     }
 
     fn statement(&mut self) -> Option<Stmt> {
@@ -47,17 +57,29 @@ impl Parser {
 
     fn let_statement(&mut self) -> Option<Stmt> {
         self.advance();
-        let name = self.consume_identifier()?;
-        self.matches(&Token::Equal);
+        let name = self.consume_identifier("Expected variable name after 'let'.")?;
+        self.consume(
+            &Token::Equal,
+            "Invalid variable declaration: expected '='.",
+            "Use syntax like: let name = value",
+        );
         let value = self.expression();
         Some(Stmt::Let { name, value })
     }
 
     fn print_statement(&mut self) -> Option<Stmt> {
         self.advance();
-        self.matches(&Token::LeftParen);
+        self.consume(
+            &Token::LeftParen,
+            "Invalid print statement: expected '('.",
+            "Use syntax like: print(value)",
+        );
         let value = self.expression();
-        self.matches(&Token::RightParen);
+        self.consume(
+            &Token::RightParen,
+            "Invalid print statement: expected ')'.",
+            "Close the print call with ')'.",
+        );
         Some(Stmt::Print(value))
     }
 
@@ -68,7 +90,7 @@ impl Parser {
 
     fn function_statement(&mut self) -> Option<Stmt> {
         self.advance();
-        let name = self.consume_identifier()?;
+        let name = self.consume_identifier("Expected function name after 'fn'.")?;
         let params = self.parameter_list();
         let body = self.block();
         Some(Stmt::Function { name, params, body })
@@ -102,8 +124,12 @@ impl Parser {
 
     fn agent_statement(&mut self) -> Option<Stmt> {
         self.advance();
-        let name = self.consume_identifier()?;
-        self.matches(&Token::LeftBrace);
+        let name = self.consume_identifier("Expected agent name after 'agent'.")?;
+        self.consume(
+            &Token::LeftBrace,
+            "Invalid agent declaration: missing opening '{'.",
+            "Use syntax like: agent SupportBot {",
+        );
         self.skip_newlines();
 
         let mut instruction = String::new();
@@ -115,10 +141,13 @@ impl Parser {
             if self.matches(&Token::Instruction) {
                 match self.advance() {
                     Token::Text(value) => instruction = value,
-                    other => instruction = format!("{:?}", other),
+                    _ => self.error_here(
+                        "Invalid agent instruction: expected quoted text.",
+                        "Use syntax like: instruction \"Answer clearly.\"",
+                    ),
                 }
             } else if self.matches(&Token::Tool) {
-                if let Some(tool) = self.consume_identifier() {
+                if let Some(tool) = self.consume_identifier("Expected tool name after 'tool'.") {
                     tools.push(tool);
                 }
             } else {
@@ -128,7 +157,11 @@ impl Parser {
             self.skip_newlines();
         }
 
-        self.matches(&Token::RightBrace);
+        self.consume(
+            &Token::RightBrace,
+            "Unclosed agent block: missing '}'.",
+            "Add a matching closing brace after the agent body.",
+        );
         Some(Stmt::Agent {
             name,
             instruction,
@@ -138,10 +171,18 @@ impl Parser {
 
     fn ask_statement(&mut self) -> Option<Stmt> {
         self.advance();
-        let agent = self.consume_identifier()?;
-        self.matches(&Token::LeftParen);
+        let agent = self.consume_identifier("Expected agent name after 'ask'.")?;
+        self.consume(
+            &Token::LeftParen,
+            "Invalid ask statement: expected '('.",
+            "Use syntax like: ask SupportBot(\"message\")",
+        );
         let message = self.expression();
-        self.matches(&Token::RightParen);
+        self.consume(
+            &Token::RightParen,
+            "Invalid ask statement: expected ')'.",
+            "Close the ask call with ')'.",
+        );
         Some(Stmt::Ask { agent, message })
     }
 
@@ -150,7 +191,11 @@ impl Parser {
     }
 
     fn block(&mut self) -> Vec<Stmt> {
-        self.matches(&Token::LeftBrace);
+        self.consume(
+            &Token::LeftBrace,
+            "Invalid block: missing opening '{'.",
+            "Add '{' before the block body.",
+        );
         self.skip_newlines();
 
         let mut statements = Vec::new();
@@ -171,16 +216,24 @@ impl Parser {
             self.skip_newlines();
         }
 
-        self.matches(&Token::RightBrace);
+        self.consume(
+            &Token::RightBrace,
+            "Unclosed block: missing '}'.",
+            "Add a matching closing brace after the block body.",
+        );
         statements
     }
 
     fn parameter_list(&mut self) -> Vec<String> {
         let mut params = Vec::new();
-        self.matches(&Token::LeftParen);
+        self.consume(
+            &Token::LeftParen,
+            "Invalid function declaration: expected parameter list.",
+            "Use syntax like: fn name(arg) {",
+        );
 
         while !self.check(&Token::RightParen) && !self.is_at_end() {
-            if let Some(param) = self.consume_identifier() {
+            if let Some(param) = self.consume_identifier("Expected parameter name.") {
                 params.push(param);
             }
 
@@ -189,7 +242,11 @@ impl Parser {
             }
         }
 
-        self.matches(&Token::RightParen);
+        self.consume(
+            &Token::RightParen,
+            "Invalid function declaration: expected ')'.",
+            "Close the parameter list with ')'.",
+        );
         params
     }
 
@@ -260,7 +317,10 @@ impl Parser {
     fn term(&mut self) -> Expr {
         let mut expr = self.factor();
 
-        while self.matches(&Token::Plus) || self.matches(&Token::Minus) || self.matches(&Token::Join) {
+        while self.matches(&Token::Plus)
+            || self.matches(&Token::Minus)
+            || self.matches(&Token::Join)
+        {
             let operator = match self.previous() {
                 Token::Plus => BinaryOp::Add,
                 Token::Minus => BinaryOp::Subtract,
@@ -304,7 +364,11 @@ impl Parser {
         loop {
             if self.matches(&Token::LeftBracket) {
                 let index = self.expression();
-                self.matches(&Token::RightBracket);
+                self.consume(
+                    &Token::RightBracket,
+                    "Invalid index expression: expected ']'.",
+                    "Close the index expression with ']'.",
+                );
                 expr = Expr::Index(Box::new(expr), Box::new(index));
             } else {
                 break;
@@ -323,7 +387,11 @@ impl Parser {
             Token::Identifier(name) => {
                 if self.matches(&Token::LeftParen) {
                     let args = self.argument_list();
-                    self.matches(&Token::RightParen);
+                    self.consume(
+                        &Token::RightParen,
+                        "Invalid function call: expected ')'.",
+                        "Close the function call with ')'.",
+                    );
                     Expr::Call { name, args }
                 } else {
                     Expr::Variable(name)
@@ -331,7 +399,11 @@ impl Parser {
             }
             Token::LeftParen => {
                 let expr = self.expression();
-                self.matches(&Token::RightParen);
+                self.consume(
+                    &Token::RightParen,
+                    "Invalid grouped expression: expected ')'.",
+                    "Close the grouped expression with ')'.",
+                );
                 expr
             }
             Token::LeftBracket => {
@@ -344,17 +416,42 @@ impl Parser {
                     }
                 }
 
-                self.matches(&Token::RightBracket);
+                self.consume(
+                    &Token::RightBracket,
+                    "Invalid array literal: expected ']'.",
+                    "Close the array literal with ']'.",
+                );
                 Expr::Array(values)
             }
-            _ => Expr::Text(String::new()),
+            Token::Newline
+            | Token::RightParen
+            | Token::RightBrace
+            | Token::RightBracket
+            | Token::Comma
+            | Token::Eof => {
+                self.error_previous(
+                    "Expected expression.",
+                    "Add a number, string, boolean, variable, array, or function call here.",
+                );
+                Expr::Text(String::new())
+            }
+            other => {
+                self.error_previous(
+                    format!("Unexpected token in expression: {:?}.", other),
+                    "Use a valid SolveLang expression here.",
+                );
+                Expr::Text(String::new())
+            }
         }
     }
 
-    fn consume_identifier(&mut self) -> Option<String> {
+    fn consume_identifier(&mut self, message: &str) -> Option<String> {
         match self.advance() {
             Token::Identifier(name) => Some(name),
-            _ => None,
+            _ => {
+                self.error_previous(message, "Use a valid identifier name.");
+                None
+            }
         }
     }
 
@@ -368,6 +465,15 @@ impl Parser {
             return true;
         }
         false
+    }
+
+    fn consume(&mut self, token: &Token, message: &str, hint: &str) -> bool {
+        if self.matches(token) {
+            true
+        } else {
+            self.error_here(message, hint);
+            false
+        }
     }
 
     fn check(&self, token: &Token) -> bool {
@@ -389,10 +495,39 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        self.tokens.get(self.current).unwrap_or(&Token::Eof)
+        self.tokens
+            .get(self.current)
+            .map(|located| &located.token)
+            .unwrap_or(&Token::Eof)
     }
 
     fn previous(&self) -> &Token {
-        self.tokens.get(self.current.saturating_sub(1)).unwrap_or(&Token::Eof)
+        self.tokens
+            .get(self.current.saturating_sub(1))
+            .map(|located| &located.token)
+            .unwrap_or(&Token::Eof)
+    }
+
+    fn error_here(&mut self, message: impl Into<String>, hint: impl Into<String>) {
+        let token = self.tokens.get(self.current).or_else(|| self.tokens.last());
+        self.errors.push(Diagnostic::new(
+            token.map(|token| token.line).unwrap_or(1),
+            token.map(|token| token.column).unwrap_or(1),
+            message,
+            hint,
+        ));
+    }
+
+    fn error_previous(&mut self, message: impl Into<String>, hint: impl Into<String>) {
+        let token = self
+            .tokens
+            .get(self.current.saturating_sub(1))
+            .or_else(|| self.tokens.last());
+        self.errors.push(Diagnostic::new(
+            token.map(|token| token.line).unwrap_or(1),
+            token.map(|token| token.column).unwrap_or(1),
+            message,
+            hint,
+        ));
     }
 }

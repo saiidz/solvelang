@@ -52,14 +52,7 @@ fn main() {
     });
 
     if let Err(diagnostics) = diagnostics::validate_source(&content) {
-        let lines: Vec<&str> = content.lines().collect();
-
-        for diagnostic in diagnostics {
-            let source_line = lines.get(diagnostic.line.saturating_sub(1)).copied().unwrap_or("");
-            eprintln!("{}", diagnostic.format(source_line));
-            eprintln!();
-        }
-
+        print_diagnostics(&content, diagnostics);
         process::exit(1);
     }
 
@@ -122,7 +115,26 @@ fn run_ast_runtime(content: &str) {
 fn parse_source(content: &str) -> Vec<ast::Stmt> {
     let tokens = lexer::lex(content);
     let mut parser = parser::Parser::new(tokens);
-    parser.parse()
+    match parser.parse() {
+        Ok(ast) => ast,
+        Err(diagnostics) => {
+            print_diagnostics(content, diagnostics);
+            process::exit(1);
+        }
+    }
+}
+
+fn print_diagnostics(content: &str, diagnostics: Vec<diagnostics::Diagnostic>) {
+    let lines: Vec<&str> = content.lines().collect();
+
+    for diagnostic in diagnostics {
+        let source_line = lines
+            .get(diagnostic.line.saturating_sub(1))
+            .copied()
+            .unwrap_or("");
+        eprintln!("{}", diagnostic.format(source_line));
+        eprintln!();
+    }
 }
 
 fn print_usage() {

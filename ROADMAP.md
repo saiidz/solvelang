@@ -1,6 +1,6 @@
 # SolveLang Roadmap
 
-SolveLang is an early language prototype written in Rust. The project already has a working script runner, plus the first compiler layers needed to move beyond a string-matching interpreter.
+SolveLang is an early language prototype written in Rust. The project now has a working lexer, parser, AST, and default AST runtime, with the older line-based runtime kept only as a legacy fallback.
 
 ## Current Baseline
 
@@ -23,16 +23,17 @@ Completed and working today:
 - Arrays and index access
 - Agent prototype syntax: `agent`, `tool`, `instruction`, `ask`
 
-## Phase 1: Finish The Core Interpreter
+## Phase 1: Core Interpreter
 
-This is the critical path. The codebase already has lexer, parser, AST, and `Value` types, but runtime execution still depends mostly on line-based string evaluation.
+Status: mostly complete.
 
-Priority order:
+Completed:
 
-1. Execute AST nodes directly instead of interpreting raw source lines
-2. Use `Value` across evaluation and runtime instead of `HashMap<String, String>`
-3. Unify expression evaluation so math, string joins, arrays, indexing, and comparisons all flow through the AST engine
-4. Add parser-driven runtime support for current language features:
+- CLI execution now defaults to `source -> diagnostics -> lexer -> parser -> AST -> AST runtime`
+- `AstRuntime` evaluates parsed `Stmt` and `Expr` nodes directly
+- Runtime values flow through the typed `Value` enum in the AST path
+- Math, string joins, arrays, indexing, comparisons, function calls, and control flow run through the AST engine
+- Parser-driven runtime support exists for:
    - `let`
    - `print`
    - `return`
@@ -41,13 +42,14 @@ Priority order:
    - `while`
    - arrays
    - agent prototype blocks
-5. Remove duplicated legacy logic once AST execution is feature-complete
+- The old string-based runtime remains available through `solvec legacy`
 
-Definition of done for Phase 1:
+Remaining cleanup:
 
-- `runtime.rs` executes parsed `Stmt` and `Expr` nodes
-- `eval.rs` no longer parses source text ad hoc
-- current examples run unchanged through the AST path
+- Lexer tokens now carry line and column metadata, and parser errors are surfaced as structured diagnostics in the CLI
+- Decide when to remove `runtime.rs` and `eval.rs`, or keep them as a compatibility fallback
+- Add focused tests for any legacy behavior that must stay supported before deleting duplicated logic
+- Rename or document `runtime.rs` clearly as legacy-only if it remains in the tree
 
 ## Phase 2: Tighten Language Semantics
 
@@ -121,11 +123,11 @@ The current agent syntax is only a local prototype. A real AI-native runtime nee
 
 The next concrete implementation steps should be:
 
-1. Add an AST interpreter entry point in `runtime.rs`
-2. Implement `Expr -> Value` evaluation for literals, variables, binary ops, arrays, calls, and indexes
-3. Implement `Stmt` execution with scoped environments and return propagation
-4. Switch `main.rs` runtime mode to `lexer -> parser -> AST interpreter`
-5. Add regression tests for `examples/hello.solve`, `functions.solve`, `arrays.solve`, and `agent.solve`
+1. Add runtime errors for unknown variables, invalid index access, unsupported operations, and divide-by-zero
+2. Decide whether the legacy runtime should be removed or explicitly documented as compatibility mode
+3. Add golden output tests for `examples/hello.solve`, `functions.solve`, `arrays.solve`, and `agent.solve`
+4. Expand parser recovery so one malformed statement does not cascade into duplicate diagnostics
+5. Start tracking source spans on AST nodes for runtime error locations
 
 ## Long-Term Direction
 
@@ -137,4 +139,4 @@ SolveLang should become a simple, readable, safe, and AI-native language for:
 - data workflows
 - tool-using agents
 
-The immediate engineering priority is not more syntax. It is making the compiler pipeline real end to end.
+The immediate engineering priority is tightening correctness and diagnostics now that the compiler pipeline runs end to end.

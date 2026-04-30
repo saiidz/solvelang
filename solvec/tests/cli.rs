@@ -156,3 +156,26 @@ if true {
     assert!(stderr.contains("Unclosed block"));
     assert!(stderr.contains("matching closing brace"));
 }
+
+#[test]
+fn empty_print_expression_reports_parser_error() {
+    let file = write_temp_solve_file("solvelang_cli_empty_print.solve", "print()\n");
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("SolveLang Error on line 1, column 7"));
+    assert!(stderr.contains("Expected expression"));
+    assert!(stderr.contains("number, string, boolean, variable"));
+}
+
+#[test]
+fn missing_call_paren_reports_parser_error() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_missing_call_paren.solve",
+        "print(add(1, 2)\n",
+    );
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("SolveLang Error"));
+    assert!(stderr.contains("Invalid print statement: expected ')'"));
+    assert!(stderr.contains("Close the print call"));
+}
