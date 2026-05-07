@@ -303,6 +303,43 @@ impl AstRuntime {
                     }
                 }
             }
+            "read_file" => {
+                let input = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match input {
+                    Value::Text(path) => Some(self.read_file(&path)),
+                    _ => {
+                        println!("Error: read_file expects a text path");
+                        Some(Value::Null)
+                    }
+                }
+            }
+            "write_file" => {
+                let path = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                let body = args
+                    .get(1)
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match (path, body) {
+                    (Value::Text(path), Value::Text(body)) => Some(self.write_file(&path, &body)),
+                    (Value::Text(_), _) => {
+                        println!("Error: write_file expects a text body");
+                        Some(Value::Null)
+                    }
+                    _ => {
+                        println!("Error: write_file expects a text path");
+                        Some(Value::Null)
+                    }
+                }
+            }
             "env" => {
                 let input = args
                     .first()
@@ -368,6 +405,27 @@ impl AstRuntime {
 
         Value::Object(result)
     }
+
+    fn read_file(&self, path: &str) -> Value {
+        match std::fs::read_to_string(path) {
+            Ok(content) => Value::Text(content),
+            Err(error) => {
+                println!("Error: read_file failed: {}", error);
+                Value::Null
+            }
+        }
+    }
+
+    fn write_file(&self, path: &str, body: &str) -> Value {
+        match std::fs::write(path, body) {
+            Ok(_) => Value::Bool(true),
+            Err(error) => {
+                println!("Error: write_file failed: {}", error);
+                Value::Null
+            }
+        }
+    }
+
 
     fn http_post(&self, url: &str, body: &str) -> Value {
         let client = match Client::builder().build() {

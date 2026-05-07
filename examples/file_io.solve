@@ -1,0 +1,3 @@
+write_file("../examples/tmp_note.txt", "hello from SolveLang")
+let text = read_file("../examples/tmp_note.txt")
+print(text)
