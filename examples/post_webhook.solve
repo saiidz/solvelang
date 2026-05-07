@@ -1,0 +1,10 @@
+let webhookUrl = env("WEBHOOK_URL")
+
+let payload = {
+  app: "SolveLang",
+  event: "demo",
+  status: "ok"
+}
+
+let response = http_post(webhookUrl, json_stringify(payload))
+print(response.status)

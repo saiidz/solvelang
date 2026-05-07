@@ -1,4 +1,5 @@
 let user = {
   name: "Saiid",
-  product: "SolveLang"
+  active: true,
+  plan: "pro"
 }

@@ -1,0 +1,8 @@
+let response = http_get("https://httpbin.org/json")
+print(response.status)
+
+if response.status == 200 {
+  print("request ok")
+} else {
+  print("request failed")
+}

@@ -1,0 +1,8 @@
+import "lib/user.solve"
+
+if user.active == true and user.plan == "pro" {
+  print(user.name)
+  print("pro access granted")
+} else {
+  print("access denied")
+}

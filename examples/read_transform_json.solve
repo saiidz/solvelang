@@ -1,0 +1,5 @@
+let raw = read_file("../examples/sample_input.json")
+let data = json_parse(raw)
+
+print(data.name)
+write_file("../examples/sample_output.json", json_stringify(data))
