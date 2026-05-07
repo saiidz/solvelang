@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
-use crate::ast::{BinaryOp, Expr, Stmt};
+use crate::ast::{BinaryOp, Expr, Stmt, UnaryOp};
 use crate::value::Value;
 
 #[derive(Clone, Debug)]
@@ -159,6 +159,10 @@ impl AstRuntime {
                     _ => Value::Null,
                 }
             }
+            Expr::Unary { operator, expr } => {
+                let value = self.eval(expr);
+                self.eval_unary(operator, value)
+            }
             Expr::Binary {
                 left,
                 operator,
@@ -169,6 +173,12 @@ impl AstRuntime {
                 self.eval_binary(left, operator, right)
             }
             Expr::Call { name, args } => self.call_function(name, args),
+        }
+    }
+
+    fn eval_unary(&self, operator: &UnaryOp, value: Value) -> Value {
+        match operator {
+            UnaryOp::Not => Value::Bool(!value.is_truthy()),
         }
     }
 
@@ -193,6 +203,8 @@ impl AstRuntime {
                 }
             }
             BinaryOp::Join => Value::Text(format!("{}{}", left, right)),
+            BinaryOp::And => Value::Bool(left.is_truthy() && right.is_truthy()),
+            BinaryOp::Or => Value::Bool(left.is_truthy() || right.is_truthy()),
             BinaryOp::Equal => Value::Bool(left == right),
             BinaryOp::NotEqual => Value::Bool(left != right),
             BinaryOp::Greater => {

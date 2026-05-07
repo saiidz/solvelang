@@ -10,6 +10,10 @@ pub enum Expr {
     Object(BTreeMap<String, Expr>),
     Property(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
+    Unary {
+        operator: UnaryOp,
+        expr: Box<Expr>,
+    },
     Binary {
         left: Box<Expr>,
         operator: BinaryOp,
@@ -22,12 +26,19 @@ pub enum Expr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum UnaryOp {
+    Not,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOp {
     Add,
     Subtract,
     Multiply,
     Divide,
     Join,
+    And,
+    Or,
     Equal,
     NotEqual,
     Greater,

@@ -13,6 +13,9 @@ pub enum Token {
     Print,
     True,
     False,
+    And,
+    Or,
+    Not,
     Identifier(String),
     Number(i32),
     Text(String),
@@ -233,6 +236,9 @@ fn keyword_or_identifier(word: &str) -> Token {
         "print" => Token::Print,
         "true" => Token::True,
         "false" => Token::False,
+        "and" => Token::And,
+        "or" => Token::Or,
+        "not" => Token::Not,
         _ => Token::Identifier(word.to_string()),
     }
 }

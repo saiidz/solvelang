@@ -267,7 +267,37 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Expr {
-        self.equality()
+        self.or()
+    }
+
+    fn or(&mut self) -> Expr {
+        let mut expr = self.and();
+
+        while self.matches(&Token::Or) {
+            let right = self.and();
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator: BinaryOp::Or,
+                right: Box::new(right),
+            };
+        }
+
+        expr
+    }
+
+    fn and(&mut self) -> Expr {
+        let mut expr = self.equality();
+
+        while self.matches(&Token::And) {
+            let right = self.equality();
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator: BinaryOp::And,
+                right: Box::new(right),
+            };
+        }
+
+        expr
     }
 
     fn equality(&mut self) -> Expr {
@@ -341,7 +371,7 @@ impl Parser {
     }
 
     fn factor(&mut self) -> Expr {
-        let mut expr = self.postfix();
+        let mut expr = self.unary();
 
         while self.matches(&Token::Star) || self.matches(&Token::Slash) {
             let operator = match self.previous() {
@@ -349,7 +379,7 @@ impl Parser {
                 Token::Slash => BinaryOp::Divide,
                 _ => BinaryOp::Multiply,
             };
-            let right = self.postfix();
+            let right = self.unary();
             expr = Expr::Binary {
                 left: Box::new(expr),
                 operator,
@@ -358,6 +388,17 @@ impl Parser {
         }
 
         expr
+    }
+
+    fn unary(&mut self) -> Expr {
+        if self.matches(&Token::Not) {
+            return Expr::Unary {
+                operator: crate::ast::UnaryOp::Not,
+                expr: Box::new(self.unary()),
+            };
+        }
+
+        self.postfix()
     }
 
     fn postfix(&mut self) -> Expr {

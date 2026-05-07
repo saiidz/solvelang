@@ -1,0 +1,16 @@
+let user = {
+  active: true,
+  plan: "pro"
+}
+
+if user.active == true and user.plan == "pro" {
+  print("allow access")
+}
+
+if not false {
+  print("not works")
+}
+
+if false or true {
+  print("or works")
+}
