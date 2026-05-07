@@ -21,6 +21,8 @@ pub enum Token {
     Star,
     Slash,
     Join,
+    Dot,
+    Colon,
     Equal,
     EqualEqual,
     BangEqual,
@@ -48,11 +50,7 @@ pub struct LocatedToken {
 
 impl LocatedToken {
     fn new(token: Token, line: usize, column: usize) -> Self {
-        Self {
-            token,
-            line,
-            column,
-        }
+        Self { token, line, column }
     }
 }
 
@@ -119,11 +117,7 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                     }
                     text.push(next);
                 }
-                tokens.push(LocatedToken::new(
-                    Token::Text(text),
-                    token_line,
-                    token_column,
-                ));
+                tokens.push(LocatedToken::new(Token::Text(text), token_line, token_column));
             }
             '/' => {
                 if chars.peek() == Some(&'/') {
@@ -150,17 +144,16 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                     chars.next();
                     column += 1;
                     tokens.push(LocatedToken::new(Token::Join, token_line, token_column));
+                } else {
+                    tokens.push(LocatedToken::new(Token::Dot, token_line, token_column));
                 }
             }
+            ':' => tokens.push(LocatedToken::new(Token::Colon, token_line, token_column)),
             '=' => {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(
-                        Token::EqualEqual,
-                        token_line,
-                        token_column,
-                    ));
+                    tokens.push(LocatedToken::new(Token::EqualEqual, token_line, token_column));
                 } else {
                     tokens.push(LocatedToken::new(Token::Equal, token_line, token_column));
                 }
@@ -169,22 +162,14 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(
-                        Token::BangEqual,
-                        token_line,
-                        token_column,
-                    ));
+                    tokens.push(LocatedToken::new(Token::BangEqual, token_line, token_column));
                 }
             }
             '>' => {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(
-                        Token::GreaterEqual,
-                        token_line,
-                        token_column,
-                    ));
+                    tokens.push(LocatedToken::new(Token::GreaterEqual, token_line, token_column));
                 } else {
                     tokens.push(LocatedToken::new(Token::Greater, token_line, token_column));
                 }
@@ -193,45 +178,17 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(
-                        Token::LessEqual,
-                        token_line,
-                        token_column,
-                    ));
+                    tokens.push(LocatedToken::new(Token::LessEqual, token_line, token_column));
                 } else {
                     tokens.push(LocatedToken::new(Token::Less, token_line, token_column));
                 }
             }
-            '(' => tokens.push(LocatedToken::new(
-                Token::LeftParen,
-                token_line,
-                token_column,
-            )),
-            ')' => tokens.push(LocatedToken::new(
-                Token::RightParen,
-                token_line,
-                token_column,
-            )),
-            '{' => tokens.push(LocatedToken::new(
-                Token::LeftBrace,
-                token_line,
-                token_column,
-            )),
-            '}' => tokens.push(LocatedToken::new(
-                Token::RightBrace,
-                token_line,
-                token_column,
-            )),
-            '[' => tokens.push(LocatedToken::new(
-                Token::LeftBracket,
-                token_line,
-                token_column,
-            )),
-            ']' => tokens.push(LocatedToken::new(
-                Token::RightBracket,
-                token_line,
-                token_column,
-            )),
+            '(' => tokens.push(LocatedToken::new(Token::LeftParen, token_line, token_column)),
+            ')' => tokens.push(LocatedToken::new(Token::RightParen, token_line, token_column)),
+            '{' => tokens.push(LocatedToken::new(Token::LeftBrace, token_line, token_column)),
+            '}' => tokens.push(LocatedToken::new(Token::RightBrace, token_line, token_column)),
+            '[' => tokens.push(LocatedToken::new(Token::LeftBracket, token_line, token_column)),
+            ']' => tokens.push(LocatedToken::new(Token::RightBracket, token_line, token_column)),
             ',' => tokens.push(LocatedToken::new(Token::Comma, token_line, token_column)),
             _ => {}
         }

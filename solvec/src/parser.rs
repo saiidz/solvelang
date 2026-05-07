@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::ast::{BinaryOp, Expr, Stmt};
 use crate::diagnostics::Diagnostic;
 use crate::lexer::{LocatedToken, Token};
@@ -370,6 +372,11 @@ impl Parser {
                     "Close the index expression with ']'.",
                 );
                 expr = Expr::Index(Box::new(expr), Box::new(index));
+            } else if self.matches(&Token::Dot) {
+                let name = self.consume_identifier("Expected property name after '.'.");
+                if let Some(name) = name {
+                    expr = Expr::Property(Box::new(expr), name);
+                }
             } else {
                 break;
             }
@@ -423,25 +430,92 @@ impl Parser {
                 );
                 Expr::Array(values)
             }
+            Token::LeftBrace => self.object_literal(),
             Token::Newline
             | Token::RightParen
             | Token::RightBrace
             | Token::RightBracket
             | Token::Comma
+            | Token::Colon
+            | Token::Dot
             | Token::Eof => {
                 self.error_previous(
                     "Expected expression.",
-                    "Add a number, string, boolean, variable, array, or function call here.",
+                    "Add a number, string, boolean, variable, array, object, or function call here.",
                 );
                 Expr::Text(String::new())
             }
             other => {
                 self.error_previous(
-                    format!("Unexpected token in expression: {:?}.", other),
-                    "Use a valid SolveLang expression here.",
+                    &format!("Unexpected token in expression: {:?}", other),
+                    "Try a number, string, boolean, variable, array, object, or function call.",
                 );
                 Expr::Text(String::new())
             }
+        }
+    }
+
+    fn object_literal(&mut self) -> Expr {
+        let mut entries = BTreeMap::new();
+        self.skip_newlines();
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            let key = match self.advance() {
+                Token::Identifier(name) => name,
+                Token::Text(name) => name,
+                _ => {
+                    self.error_previous(
+                        "Invalid object key.",
+                        "Use an identifier or quoted string before ':'.",
+                    );
+                    String::new()
+                }
+            };
+
+            self.consume(
+                &Token::Colon,
+                "Invalid object entry: expected ':'.",
+                "Use syntax like: { name: value }",
+            );
+
+            let value = self.expression();
+
+            if !key.is_empty() {
+                entries.insert(key, value);
+            }
+
+            self.skip_newlines();
+
+            if self.matches(&Token::Comma) {
+                self.skip_newlines();
+            } else {
+                break;
+            }
+        }
+
+        self.skip_newlines();
+
+        self.consume(
+            &Token::RightBrace,
+            "Invalid object literal: expected '}'.",
+            "Close the object literal with '}'.",
+        );
+
+        Expr::Object(entries)
+    }
+
+    fn matches(&mut self, expected: &Token) -> bool {
+        if self.check(expected) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn consume(&mut self, expected: &Token, message: &str, hint: &str) {
+        if !self.matches(expected) {
+            self.error_here(message, hint);
         }
     }
 
@@ -449,38 +523,20 @@ impl Parser {
         match self.advance() {
             Token::Identifier(name) => Some(name),
             _ => {
-                self.error_previous(message, "Use a valid identifier name.");
+                self.error_previous(message, "Use a valid identifier name here.");
                 None
             }
         }
     }
 
     fn skip_newlines(&mut self) {
-        while self.matches(&Token::Newline) {}
-    }
-
-    fn matches(&mut self, token: &Token) -> bool {
-        if self.check(token) {
+        while self.check(&Token::Newline) {
             self.advance();
-            return true;
-        }
-        false
-    }
-
-    fn consume(&mut self, token: &Token, message: &str, hint: &str) -> bool {
-        if self.matches(token) {
-            true
-        } else {
-            self.error_here(message, hint);
-            false
         }
     }
 
-    fn check(&self, token: &Token) -> bool {
-        if self.is_at_end() {
-            return false;
-        }
-        std::mem::discriminant(self.peek()) == std::mem::discriminant(token)
+    fn check(&self, expected: &Token) -> bool {
+        std::mem::discriminant(self.peek()) == std::mem::discriminant(expected)
     }
 
     fn advance(&mut self) -> Token {
@@ -495,39 +551,30 @@ impl Parser {
     }
 
     fn peek(&self) -> &Token {
-        self.tokens
-            .get(self.current)
-            .map(|located| &located.token)
-            .unwrap_or(&Token::Eof)
+        &self.tokens[self.current].token
     }
 
     fn previous(&self) -> &Token {
-        self.tokens
-            .get(self.current.saturating_sub(1))
-            .map(|located| &located.token)
-            .unwrap_or(&Token::Eof)
+        &self.tokens[self.current.saturating_sub(1)].token
     }
 
-    fn error_here(&mut self, message: impl Into<String>, hint: impl Into<String>) {
-        let token = self.tokens.get(self.current).or_else(|| self.tokens.last());
+    fn error_here(&mut self, message: &str, hint: &str) {
+        let token = &self.tokens[self.current.min(self.tokens.len().saturating_sub(1))];
         self.errors.push(Diagnostic::new(
-            token.map(|token| token.line).unwrap_or(1),
-            token.map(|token| token.column).unwrap_or(1),
-            message,
-            hint,
+            token.line,
+            token.column,
+            message.to_string(),
+            hint.to_string(),
         ));
     }
 
-    fn error_previous(&mut self, message: impl Into<String>, hint: impl Into<String>) {
-        let token = self
-            .tokens
-            .get(self.current.saturating_sub(1))
-            .or_else(|| self.tokens.last());
+    fn error_previous(&mut self, message: &str, hint: &str) {
+        let token = &self.tokens[self.current.saturating_sub(1)];
         self.errors.push(Diagnostic::new(
-            token.map(|token| token.line).unwrap_or(1),
-            token.map(|token| token.column).unwrap_or(1),
-            message,
-            hint,
+            token.line,
+            token.column,
+            message.to_string(),
+            hint.to_string(),
         ));
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::ast::{BinaryOp, Expr, Stmt};
 use crate::value::Value;
@@ -123,13 +123,36 @@ impl AstRuntime {
             Expr::Text(value) => Value::Text(value.clone()),
             Expr::Bool(value) => Value::Bool(*value),
             Expr::Variable(name) => self.vars.get(name).cloned().unwrap_or(Value::Null),
-            Expr::Array(values) => Value::Array(values.iter().map(|value| self.eval(value)).collect()),
+            Expr::Array(values) => {
+                Value::Array(values.iter().map(|value| self.eval(value)).collect())
+            }
+            Expr::Object(entries) => {
+                let mut result = BTreeMap::new();
+                for (key, value_expr) in entries {
+                    result.insert(key.clone(), self.eval(value_expr));
+                }
+                Value::Object(result)
+            }
+            Expr::Property(target, property) => {
+                let target = self.eval(target);
+                match target {
+                    Value::Object(entries) => entries.get(property).cloned().unwrap_or(Value::Null),
+                    _ => Value::Null,
+                }
+            }
             Expr::Index(target, index) => {
                 let target = self.eval(target);
-                let index = self.eval(index).as_number().unwrap_or(0) as usize;
+                let index_value = self.eval(index);
 
                 match target {
-                    Value::Array(values) => values.get(index).cloned().unwrap_or(Value::Null),
+                    Value::Array(values) => {
+                        let index = index_value.as_number().unwrap_or(0) as usize;
+                        values.get(index).cloned().unwrap_or(Value::Null)
+                    }
+                    Value::Object(entries) => match index_value {
+                        Value::Text(key) => entries.get(&key).cloned().unwrap_or(Value::Null),
+                        _ => Value::Null,
+                    },
                     _ => Value::Null,
                 }
             }
@@ -148,9 +171,15 @@ impl AstRuntime {
 
     fn eval_binary(&self, left: Value, operator: &BinaryOp, right: Value) -> Value {
         match operator {
-            BinaryOp::Add => Value::Number(left.as_number().unwrap_or(0) + right.as_number().unwrap_or(0)),
-            BinaryOp::Subtract => Value::Number(left.as_number().unwrap_or(0) - right.as_number().unwrap_or(0)),
-            BinaryOp::Multiply => Value::Number(left.as_number().unwrap_or(0) * right.as_number().unwrap_or(0)),
+            BinaryOp::Add => {
+                Value::Number(left.as_number().unwrap_or(0) + right.as_number().unwrap_or(0))
+            }
+            BinaryOp::Subtract => {
+                Value::Number(left.as_number().unwrap_or(0) - right.as_number().unwrap_or(0))
+            }
+            BinaryOp::Multiply => {
+                Value::Number(left.as_number().unwrap_or(0) * right.as_number().unwrap_or(0))
+            }
             BinaryOp::Divide => {
                 let right_number = right.as_number().unwrap_or(0);
                 if right_number == 0 {
@@ -163,10 +192,18 @@ impl AstRuntime {
             BinaryOp::Join => Value::Text(format!("{}{}", left, right)),
             BinaryOp::Equal => Value::Bool(left == right),
             BinaryOp::NotEqual => Value::Bool(left != right),
-            BinaryOp::Greater => Value::Bool(left.as_number().unwrap_or(0) > right.as_number().unwrap_or(0)),
-            BinaryOp::GreaterEqual => Value::Bool(left.as_number().unwrap_or(0) >= right.as_number().unwrap_or(0)),
-            BinaryOp::Less => Value::Bool(left.as_number().unwrap_or(0) < right.as_number().unwrap_or(0)),
-            BinaryOp::LessEqual => Value::Bool(left.as_number().unwrap_or(0) <= right.as_number().unwrap_or(0)),
+            BinaryOp::Greater => {
+                Value::Bool(left.as_number().unwrap_or(0) > right.as_number().unwrap_or(0))
+            }
+            BinaryOp::GreaterEqual => {
+                Value::Bool(left.as_number().unwrap_or(0) >= right.as_number().unwrap_or(0))
+            }
+            BinaryOp::Less => {
+                Value::Bool(left.as_number().unwrap_or(0) < right.as_number().unwrap_or(0))
+            }
+            BinaryOp::LessEqual => {
+                Value::Bool(left.as_number().unwrap_or(0) <= right.as_number().unwrap_or(0))
+            }
         }
     }
 

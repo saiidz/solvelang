@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -6,6 +7,7 @@ pub enum Value {
     Text(String),
     Bool(bool),
     Array(Vec<Value>),
+    Object(BTreeMap<String, Value>),
     Null,
 }
 
@@ -26,6 +28,7 @@ impl Value {
             Value::Number(value) => *value != 0,
             Value::Text(value) => !value.is_empty(),
             Value::Array(value) => !value.is_empty(),
+            Value::Object(value) => !value.is_empty(),
             Value::Null => false,
         }
     }
@@ -44,6 +47,14 @@ impl fmt::Display for Value {
                     .collect::<Vec<String>>()
                     .join(", ");
                 write!(formatter, "[{}]", text)
+            }
+            Value::Object(entries) => {
+                let text = entries
+                    .iter()
+                    .map(|(key, value)| format!("{}: {}", key, value))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(formatter, "{{{}}}", text)
             }
             Value::Null => write!(formatter, "null"),
         }

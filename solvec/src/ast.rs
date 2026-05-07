@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Number(i32),
@@ -5,6 +7,8 @@ pub enum Expr {
     Bool(bool),
     Variable(String),
     Array(Vec<Expr>),
+    Object(BTreeMap<String, Expr>),
+    Property(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
     Binary {
         left: Box<Expr>,
