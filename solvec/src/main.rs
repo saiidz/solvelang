@@ -7,8 +7,10 @@ mod parser;
 mod runtime;
 mod value;
 
+use std::collections::HashSet;
 use std::env;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process;
 
 #[derive(Debug, PartialEq)]
@@ -46,8 +48,8 @@ fn main() {
         }
     };
 
-    let content = fs::read_to_string(&filename).unwrap_or_else(|error| {
-        eprintln!("Error: failed to read '{}': {}", filename, error);
+    let content = load_source_with_imports(&filename).unwrap_or_else(|error| {
+        eprintln!("Error: {}", error);
         process::exit(1);
     });
 
@@ -134,6 +136,63 @@ fn print_diagnostics(content: &str, diagnostics: Vec<diagnostics::Diagnostic>) {
             .unwrap_or("");
         eprintln!("{}", diagnostic.format(source_line));
         eprintln!();
+    }
+}
+
+fn load_source_with_imports(filename: &str) -> Result<String, String> {
+    let path = PathBuf::from(filename);
+    let mut visited = HashSet::new();
+    load_file_recursive(&path, &mut visited)
+}
+
+fn load_file_recursive(path: &Path, visited: &mut HashSet<PathBuf>) -> Result<String, String> {
+    let canonical = fs::canonicalize(path)
+        .map_err(|error| format!("failed to resolve '{}': {}", path.display(), error))?;
+
+    if !visited.insert(canonical.clone()) {
+        return Err(format!("circular import detected for '{}'", canonical.display()));
+    }
+
+    let content = fs::read_to_string(&canonical)
+        .map_err(|error| format!("failed to read '{}': {}", canonical.display(), error))?;
+
+    let parent = canonical
+        .parent()
+        .ok_or_else(|| format!("could not determine parent directory for '{}'", canonical.display()))?;
+
+    let mut output = String::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if let Some(import_path) = parse_import_line(trimmed) {
+            let imported_path = parent.join(import_path);
+            let imported_content = load_file_recursive(&imported_path, visited)?;
+            output.push_str(&imported_content);
+            if !imported_content.ends_with('\n') {
+                output.push('\n');
+            }
+        } else {
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+
+    visited.remove(&canonical);
+    Ok(output)
+}
+
+fn parse_import_line(line: &str) -> Option<&str> {
+    if !line.starts_with("import ") {
+        return None;
+    }
+
+    let rest = line["import ".len()..].trim();
+
+    if rest.len() >= 2 && rest.starts_with('"') && rest.ends_with('"') {
+        Some(&rest[1..rest.len() - 1])
+    } else {
+        None
     }
 }
 
