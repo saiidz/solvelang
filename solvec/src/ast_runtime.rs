@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
+use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
+
 use crate::ast::{BinaryOp, Expr, Stmt};
 use crate::value::Value;
 
@@ -208,6 +210,10 @@ impl AstRuntime {
     }
 
     fn call_function(&mut self, name: &str, args: &[Expr]) -> Value {
+        if let Some(value) = self.call_builtin(name, args) {
+            return value;
+        }
+
         let function = match self.functions.get(name) {
             Some(function) => function.clone(),
             None => {
@@ -226,6 +232,79 @@ impl AstRuntime {
         let result = self.execute_block(&function.body).unwrap_or(Value::Null);
         self.vars = saved_vars;
         result
+    }
+
+    fn call_builtin(&mut self, name: &str, args: &[Expr]) -> Option<Value> {
+        match name {
+            "json_parse" => {
+                let input = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match input {
+                    Value::Text(text) => match serde_json::from_str::<JsonValue>(&text) {
+                        Ok(json) => Some(Self::json_to_value(json)),
+                        Err(error) => {
+                            println!("Error: invalid JSON: {}", error);
+                            Some(Value::Null)
+                        }
+                    },
+                    _ => {
+                        println!("Error: json_parse expects a text value");
+                        Some(Value::Null)
+                    }
+                }
+            }
+            "json_stringify" => {
+                let value = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                let json = Self::value_to_json(&value);
+                Some(Value::Text(json.to_string()))
+            }
+            _ => None,
+        }
+    }
+
+    fn json_to_value(json: JsonValue) -> Value {
+        match json {
+            JsonValue::Null => Value::Null,
+            JsonValue::Bool(value) => Value::Bool(value),
+            JsonValue::Number(value) => Value::Number(value.as_i64().unwrap_or(0) as i32),
+            JsonValue::String(value) => Value::Text(value),
+            JsonValue::Array(values) => {
+                Value::Array(values.into_iter().map(Self::json_to_value).collect())
+            }
+            JsonValue::Object(entries) => {
+                let mut map = BTreeMap::new();
+                for (key, value) in entries {
+                    map.insert(key, Self::json_to_value(value));
+                }
+                Value::Object(map)
+            }
+        }
+    }
+
+    fn value_to_json(value: &Value) -> JsonValue {
+        match value {
+            Value::Null => JsonValue::Null,
+            Value::Bool(value) => JsonValue::Bool(*value),
+            Value::Number(value) => JsonValue::Number(JsonNumber::from(*value)),
+            Value::Text(value) => JsonValue::String(value.clone()),
+            Value::Array(values) => {
+                JsonValue::Array(values.iter().map(Self::value_to_json).collect())
+            }
+            Value::Object(entries) => {
+                let mut map = JsonMap::new();
+                for (key, value) in entries {
+                    map.insert(key.clone(), Self::value_to_json(value));
+                }
+                JsonValue::Object(map)
+            }
+        }
     }
 
     fn ask_agent(&self, name: &str, message: &Value) -> String {

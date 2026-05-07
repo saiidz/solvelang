@@ -106,17 +106,37 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
             }
             '"' => {
                 let mut text = String::new();
-                for next in chars.by_ref() {
+
+                while let Some(next) = chars.next() {
                     column += 1;
+
+                    if next == '\\' {
+                        if let Some(escaped) = chars.next() {
+                            column += 1;
+                            match escaped {
+                                '"' => text.push('"'),
+                                '\\' => text.push('\\'),
+                                'n' => text.push('\n'),
+                                't' => text.push('\t'),
+                                'r' => text.push('\r'),
+                                other => text.push(other),
+                            }
+                        }
+                        continue;
+                    }
+
                     if next == '"' {
                         break;
                     }
+
                     if next == '\n' {
                         line += 1;
                         column = 1;
                     }
+
                     text.push(next);
                 }
+
                 tokens.push(LocatedToken::new(Token::Text(text), token_line, token_column));
             }
             '/' => {
