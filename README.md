@@ -52,8 +52,3 @@ if user.active == true and user.plan == "pro" {
 let response = http_get("https://httpbin.org/get")
 let data = json_parse(response.body)
 print(data.url)
-
-
-
-q
-eof
