@@ -1,0 +1,11 @@
+let payload = {
+  name: "Saiid",
+  product: "SolveLang"
+}
+
+let response = http_post("https://httpbin.org/post", json_stringify(payload))
+print(response.status)
+
+let data = json_parse(response.body)
+print(data.json.name)
+print(data.json.product)

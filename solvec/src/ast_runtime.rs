@@ -280,6 +280,29 @@ impl AstRuntime {
                     }
                 }
             }
+            "http_post" => {
+                let url = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                let body = args
+                    .get(1)
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match (url, body) {
+                    (Value::Text(url), Value::Text(body)) => Some(self.http_post(&url, &body)),
+                    (Value::Text(_), _) => {
+                        println!("Error: http_post expects a text body");
+                        Some(Value::Null)
+                    }
+                    _ => {
+                        println!("Error: http_post expects a text URL");
+                        Some(Value::Null)
+                    }
+                }
+            }
             "env" => {
                 let input = args
                     .first()
@@ -314,6 +337,56 @@ impl AstRuntime {
             Ok(response) => response,
             Err(error) => {
                 println!("Error: http_get failed: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let status = response.status().as_u16() as i32;
+        let final_url = response.url().to_string();
+
+        let mut headers = BTreeMap::new();
+        for (name, value) in response.headers().iter() {
+            headers.insert(
+                name.to_string(),
+                Value::Text(value.to_str().unwrap_or("").to_string()),
+            );
+        }
+
+        let body = match response.text() {
+            Ok(body) => body,
+            Err(error) => {
+                println!("Error: could not read HTTP response body: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let mut result = BTreeMap::new();
+        result.insert("status".to_string(), Value::Number(status));
+        result.insert("url".to_string(), Value::Text(final_url));
+        result.insert("body".to_string(), Value::Text(body));
+        result.insert("headers".to_string(), Value::Object(headers));
+
+        Value::Object(result)
+    }
+
+    fn http_post(&self, url: &str, body: &str) -> Value {
+        let client = match Client::builder().build() {
+            Ok(client) => client,
+            Err(error) => {
+                println!("Error: could not create HTTP client: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let response = match client
+            .post(url)
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .send()
+        {
+            Ok(response) => response,
+            Err(error) => {
+                println!("Error: http_post failed: {}", error);
                 return Value::Null;
             }
         };
