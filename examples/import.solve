@@ -1,4 +1,4 @@
 import "lib/user.solve"
 
 print(user.name)
-print(user.product)
+print(user.plan)
