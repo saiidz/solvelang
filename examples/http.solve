@@ -1,0 +1,7 @@
+let response = http_get("https://httpbin.org/get")
+
+print(response.status)
+print(response.url)
+
+let data = json_parse(response.body)
+print(data.url)

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
+use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::ast::{BinaryOp, Expr, Stmt};
@@ -265,8 +266,67 @@ impl AstRuntime {
                 let json = Self::value_to_json(&value);
                 Some(Value::Text(json.to_string()))
             }
+            "http_get" => {
+                let input = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match input {
+                    Value::Text(url) => Some(self.http_get(&url)),
+                    _ => {
+                        println!("Error: http_get expects a text URL");
+                        Some(Value::Null)
+                    }
+                }
+            }
             _ => None,
         }
+    }
+
+    fn http_get(&self, url: &str) -> Value {
+        let client = match Client::builder().build() {
+            Ok(client) => client,
+            Err(error) => {
+                println!("Error: could not create HTTP client: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let response = match client.get(url).send() {
+            Ok(response) => response,
+            Err(error) => {
+                println!("Error: http_get failed: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let status = response.status().as_u16() as i32;
+        let final_url = response.url().to_string();
+
+        let mut headers = BTreeMap::new();
+        for (name, value) in response.headers().iter() {
+            headers.insert(
+                name.to_string(),
+                Value::Text(value.to_str().unwrap_or("").to_string()),
+            );
+        }
+
+        let body = match response.text() {
+            Ok(body) => body,
+            Err(error) => {
+                println!("Error: could not read HTTP response body: {}", error);
+                return Value::Null;
+            }
+        };
+
+        let mut result = BTreeMap::new();
+        result.insert("status".to_string(), Value::Number(status));
+        result.insert("url".to_string(), Value::Text(final_url));
+        result.insert("body".to_string(), Value::Text(body));
+        result.insert("headers".to_string(), Value::Object(headers));
+
+        Value::Object(result)
     }
 
     fn json_to_value(json: JsonValue) -> Value {
