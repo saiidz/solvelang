@@ -280,6 +280,23 @@ impl AstRuntime {
                     }
                 }
             }
+            "env" => {
+                let input = args
+                    .first()
+                    .map(|arg| self.eval(arg))
+                    .unwrap_or(Value::Null);
+
+                match input {
+                    Value::Text(name) => {
+                        let value = std::env::var(&name).unwrap_or_default();
+                        Some(Value::Text(value))
+                    }
+                    _ => {
+                        println!("Error: env expects a text variable name");
+                        Some(Value::Null)
+                    }
+                }
+            }
             _ => None,
         }
     }
