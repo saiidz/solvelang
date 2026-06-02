@@ -92,29 +92,10 @@ function CheckoutButton({
     }
 
     setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ plan }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.url) {
-        throw new Error(data.error || "Could not start checkout.");
-      }
-
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
-    } finally {
-      setLoading(false);
-    }
+    setError(
+      "Checkout is disabled in the static Amplify preview. Stripe checkout is preserved for a future server deployment."
+    );
+    setLoading(false);
   }
 
   return (
@@ -129,7 +110,7 @@ function CheckoutButton({
             : "w-full rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-950 hover:bg-slate-50 disabled:opacity-60"
         }
       >
-        {loading ? "Opening checkout..." : children}
+        {loading ? "Preparing checkout..." : children}
       </button>
 
       {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}

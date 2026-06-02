@@ -20,31 +20,10 @@ export default function CheckoutButton({
 
   async function startCheckout() {
     setLoading(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ plan }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.url) {
-        throw new Error(data.error || "Could not start checkout.");
-      }
-
-      window.location.href = data.url;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Could not start checkout.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
+    setError(
+      `Checkout for ${plan} is disabled in the static Amplify preview. Stripe checkout is preserved for a future server deployment.`
+    );
+    setLoading(false);
   }
 
   return (
@@ -55,7 +34,7 @@ export default function CheckoutButton({
         disabled={loading}
         className={className}
       >
-        {loading ? "Opening checkout..." : children}
+        {loading ? "Preparing checkout..." : children}
       </button>
 
       {error ? (

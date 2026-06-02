@@ -22,28 +22,11 @@ export default function RunPage() {
     setRunning(true);
     setOutput("");
     setError("");
-
-    try {
-      const response = await fetch("/api/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ code }),
-      });
-
-      const data = await response.json();
-
-      if (!data.ok) {
-        setError(data.error || "Run failed.");
-      }
-
-      setOutput(data.output || "");
-    } catch {
-      setError("Could not reach the hosted runner.");
-    } finally {
-      setRunning(false);
-    }
+    setError(
+      "The hosted runner API is disabled for this static preview. The editor is available for demo scripts while the backend runner is moved to a server deployment."
+    );
+    setOutput(code);
+    setRunning(false);
   }
 
   return (
@@ -93,8 +76,8 @@ export default function RunPage() {
         </div>
 
         <div className="mt-8 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5 text-sm text-cyan-100">
-          Supported in this preview: let variables, print statements, string/number/boolean values,
-          and simple if blocks using == or !=.
+          Static export mode is enabled for Amplify hosting. The hosted runner API is preserved in
+          disabled-routes for a future server deployment.
         </div>
       </div>
     </main>

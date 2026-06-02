@@ -1,26 +1,25 @@
 "use client";
 
+import { useState } from "react";
+
 export default function SubscribeButton() {
-  const handleSubscribe = async () => {
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-    });
+  const [message, setMessage] = useState("");
 
-    const data = await res.json();
-
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      alert("Could not start checkout");
-    }
+  const handleSubscribe = () => {
+    setMessage(
+      "Checkout is disabled in the static Amplify preview. Stripe checkout is preserved for a future server deployment."
+    );
   };
 
   return (
-    <button
-      onClick={handleSubscribe}
-      className="rounded-xl bg-black px-6 py-3 text-white"
-    >
-      Subscribe
-    </button>
+    <div>
+      <button
+        onClick={handleSubscribe}
+        className="rounded-xl bg-black px-6 py-3 text-white"
+      >
+        Subscribe
+      </button>
+      {message ? <p className="mt-2 text-sm text-slate-600">{message}</p> : null}
+    </div>
   );
 }
