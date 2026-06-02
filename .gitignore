@@ -1,3 +1,12 @@
+# Node / Next site
+site/node_modules/
+site/.next/
+site/out/
+site/dist/
+site/build/
+site/.env.local
+site/.env*.local
+
 # Rust build output
 /target/
 /solvec/target/
