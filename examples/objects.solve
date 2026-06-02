@@ -1,0 +1,8 @@
+let user = {
+    name: "Saiid",
+    active: true,
+    plays: 42
+}
+
+print(user.name)
+print(user["plays"])

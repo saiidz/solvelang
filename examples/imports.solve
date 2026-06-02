@@ -1,0 +1,4 @@
+import "lib/user.solve"
+
+print(user_name)
+print(user_plan)

@@ -1,0 +1,7 @@
+let score = 92
+
+if score >= 90 {
+    print("great")
+} else {
+    print("keep going")
+}

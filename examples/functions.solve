@@ -3,8 +3,8 @@ fn add(a, b) {
 }
 
 fn greet(name) {
-    print("Hello, " .. name)
+    return "Hello, " .. name
 }
 
-greet("Saiid")
-print(add(10, 5))
+print(add(2, 3))
+print(greet("Saiid"))

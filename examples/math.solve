@@ -1,0 +1,5 @@
+let total = 10 + 5 * 2
+let average = total / 2
+
+print(total)
+print(average)

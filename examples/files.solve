@@ -1,0 +1,5 @@
+// This example writes to /tmp and then reads the same file back.
+let path = "/tmp/solvelang-example.txt"
+
+write_file(path, "hello from SolveLang")
+print(read_file(path))
