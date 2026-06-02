@@ -25,11 +25,18 @@ pub fn run(code: &str) {
     let mut functions: HashMap<String, Function> = HashMap::new();
     let mut agents: HashMap<String, Agent> = HashMap::new();
 
-    execute_block(&lines, 0, lines.len(), &mut vars, &mut functions, &mut agents);
+    execute_block(
+        &lines,
+        0,
+        lines.len(),
+        &mut vars,
+        &mut functions,
+        &mut agents,
+    );
 }
 
 fn execute_block(
-    lines: &Vec<String>,
+    lines: &[String],
     start: usize,
     end: usize,
     vars: &mut HashMap<String, String>,
@@ -93,7 +100,7 @@ fn execute_block(
 }
 
 fn handle_agent_definition(
-    lines: &Vec<String>,
+    lines: &[String],
     start: usize,
     agents: &mut HashMap<String, Agent>,
 ) -> usize {
@@ -114,7 +121,10 @@ fn handle_agent_definition(
         let item = item.trim();
 
         if item.starts_with("instruction ") {
-            instruction = eval(item.trim_start_matches("instruction").trim(), &HashMap::new());
+            instruction = eval(
+                item.trim_start_matches("instruction").trim(),
+                &HashMap::new(),
+            );
         } else if item.starts_with("tool ") {
             tools.push(item.trim_start_matches("tool").trim().to_string());
         }
@@ -166,7 +176,7 @@ fn eval_ask(
 }
 
 fn handle_while(
-    lines: &Vec<String>,
+    lines: &[String],
     start: usize,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
@@ -201,7 +211,7 @@ fn handle_while(
 }
 
 fn handle_function_definition(
-    lines: &Vec<String>,
+    lines: &[String],
     start: usize,
     functions: &mut HashMap<String, Function>,
 ) -> usize {
@@ -294,7 +304,10 @@ fn handle_function_call(
 }
 
 fn is_function_call(line: &str) -> bool {
-    line.contains('(') && line.ends_with(')') && !line.starts_with("print(") && !line.starts_with("ask ")
+    line.contains('(')
+        && line.ends_with(')')
+        && !line.starts_with("print(")
+        && !line.starts_with("ask ")
 }
 
 fn handle_let(
@@ -333,7 +346,7 @@ fn handle_print(
 }
 
 fn handle_if_else(
-    lines: &Vec<String>,
+    lines: &[String],
     start: usize,
     vars: &mut HashMap<String, String>,
     functions: &mut HashMap<String, Function>,
@@ -367,7 +380,7 @@ fn handle_if_else(
     None
 }
 
-fn skip_if_else(lines: &Vec<String>, start: usize) -> usize {
+fn skip_if_else(lines: &[String], start: usize) -> usize {
     let if_start = start + 1;
     let if_end = find_block_end(lines, if_start);
     let else_index = if_end + 1;
@@ -379,11 +392,11 @@ fn skip_if_else(lines: &Vec<String>, start: usize) -> usize {
     if_end
 }
 
-fn find_block_end(lines: &Vec<String>, start: usize) -> usize {
+fn find_block_end(lines: &[String], start: usize) -> usize {
     let mut depth = 0;
 
-    for i in start..lines.len() {
-        let line = lines[i].trim();
+    for (i, item) in lines.iter().enumerate().skip(start) {
+        let line = item.trim();
 
         if line.ends_with("{") {
             depth += 1;
@@ -401,7 +414,7 @@ fn find_block_end(lines: &Vec<String>, start: usize) -> usize {
     lines.len()
 }
 
-fn skip_block(lines: &Vec<String>, start: usize) -> usize {
+fn skip_block(lines: &[String], start: usize) -> usize {
     let block_start = start + 1;
     find_block_end(lines, block_start)
 }

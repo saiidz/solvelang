@@ -53,6 +53,10 @@ pub enum Stmt {
         name: String,
         value: Expr,
     },
+    Assign {
+        name: String,
+        value: Expr,
+    },
     Print(Expr),
     Return(Expr),
     Function {

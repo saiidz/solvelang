@@ -1,7 +1,8 @@
-agent SupportBot {
-    instruction "Answer clearly using approved tools only."
-    tool searchDocs
-    tool createTicket
+// Agent support is currently a local placeholder.
+// Connect an AI provider later to generate live answers.
+agent Helper {
+    instruction "Answer clearly and briefly."
+    tool docs
 }
 
-ask SupportBot("How can SolveLang help with automation?")
+ask Helper("What can SolveLang run today?")

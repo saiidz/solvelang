@@ -1,5 +1,2 @@
-let user = {
-  name: "Saiid",
-  active: true,
-  plan: "pro"
-}
+let user_name = "Saiid"
+let user_plan = "pro"

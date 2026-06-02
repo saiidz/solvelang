@@ -111,7 +111,10 @@ fn print_ast(content: &str) {
 fn run_ast_runtime(content: &str) {
     let ast = parse_source(content);
     let mut ast_runtime = ast_runtime::AstRuntime::new();
-    ast_runtime.run(&ast);
+    if let Err(error) = ast_runtime.run(&ast) {
+        eprintln!("{}", error);
+        process::exit(1);
+    }
 }
 
 fn parse_source(content: &str) -> Vec<ast::Stmt> {
@@ -150,15 +153,21 @@ fn load_file_recursive(path: &Path, visited: &mut HashSet<PathBuf>) -> Result<St
         .map_err(|error| format!("failed to resolve '{}': {}", path.display(), error))?;
 
     if !visited.insert(canonical.clone()) {
-        return Err(format!("circular import detected for '{}'", canonical.display()));
+        return Err(format!(
+            "circular import detected for '{}'",
+            canonical.display()
+        ));
     }
 
     let content = fs::read_to_string(&canonical)
         .map_err(|error| format!("failed to read '{}': {}", canonical.display(), error))?;
 
-    let parent = canonical
-        .parent()
-        .ok_or_else(|| format!("could not determine parent directory for '{}'", canonical.display()))?;
+    let parent = canonical.parent().ok_or_else(|| {
+        format!(
+            "could not determine parent directory for '{}'",
+            canonical.display()
+        )
+    })?;
 
     let mut output = String::new();
 

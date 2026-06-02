@@ -1,0 +1,32 @@
+name: Rust
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  solvec:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: solvec
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build release
+        run: cargo build --release

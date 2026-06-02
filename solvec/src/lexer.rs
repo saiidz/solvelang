@@ -53,7 +53,11 @@ pub struct LocatedToken {
 
 impl LocatedToken {
     fn new(token: Token, line: usize, column: usize) -> Self {
-        Self { token, line, column }
+        Self {
+            token,
+            line,
+            column,
+        }
     }
 }
 
@@ -140,7 +144,11 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                     text.push(next);
                 }
 
-                tokens.push(LocatedToken::new(Token::Text(text), token_line, token_column));
+                tokens.push(LocatedToken::new(
+                    Token::Text(text),
+                    token_line,
+                    token_column,
+                ));
             }
             '/' => {
                 if chars.peek() == Some(&'/') {
@@ -176,23 +184,33 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(Token::EqualEqual, token_line, token_column));
+                    tokens.push(LocatedToken::new(
+                        Token::EqualEqual,
+                        token_line,
+                        token_column,
+                    ));
                 } else {
                     tokens.push(LocatedToken::new(Token::Equal, token_line, token_column));
                 }
             }
-            '!' => {
-                if chars.peek() == Some(&'=') {
-                    chars.next();
-                    column += 1;
-                    tokens.push(LocatedToken::new(Token::BangEqual, token_line, token_column));
-                }
+            '!' if chars.peek() == Some(&'=') => {
+                chars.next();
+                column += 1;
+                tokens.push(LocatedToken::new(
+                    Token::BangEqual,
+                    token_line,
+                    token_column,
+                ));
             }
             '>' => {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(Token::GreaterEqual, token_line, token_column));
+                    tokens.push(LocatedToken::new(
+                        Token::GreaterEqual,
+                        token_line,
+                        token_column,
+                    ));
                 } else {
                     tokens.push(LocatedToken::new(Token::Greater, token_line, token_column));
                 }
@@ -201,17 +219,45 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                 if chars.peek() == Some(&'=') {
                     chars.next();
                     column += 1;
-                    tokens.push(LocatedToken::new(Token::LessEqual, token_line, token_column));
+                    tokens.push(LocatedToken::new(
+                        Token::LessEqual,
+                        token_line,
+                        token_column,
+                    ));
                 } else {
                     tokens.push(LocatedToken::new(Token::Less, token_line, token_column));
                 }
             }
-            '(' => tokens.push(LocatedToken::new(Token::LeftParen, token_line, token_column)),
-            ')' => tokens.push(LocatedToken::new(Token::RightParen, token_line, token_column)),
-            '{' => tokens.push(LocatedToken::new(Token::LeftBrace, token_line, token_column)),
-            '}' => tokens.push(LocatedToken::new(Token::RightBrace, token_line, token_column)),
-            '[' => tokens.push(LocatedToken::new(Token::LeftBracket, token_line, token_column)),
-            ']' => tokens.push(LocatedToken::new(Token::RightBracket, token_line, token_column)),
+            '(' => tokens.push(LocatedToken::new(
+                Token::LeftParen,
+                token_line,
+                token_column,
+            )),
+            ')' => tokens.push(LocatedToken::new(
+                Token::RightParen,
+                token_line,
+                token_column,
+            )),
+            '{' => tokens.push(LocatedToken::new(
+                Token::LeftBrace,
+                token_line,
+                token_column,
+            )),
+            '}' => tokens.push(LocatedToken::new(
+                Token::RightBrace,
+                token_line,
+                token_column,
+            )),
+            '[' => tokens.push(LocatedToken::new(
+                Token::LeftBracket,
+                token_line,
+                token_column,
+            )),
+            ']' => tokens.push(LocatedToken::new(
+                Token::RightBracket,
+                token_line,
+                token_column,
+            )),
             ',' => tokens.push(LocatedToken::new(Token::Comma, token_line, token_column)),
             _ => {}
         }
@@ -240,5 +286,31 @@ fn keyword_or_identifier(word: &str) -> Token {
         "or" => Token::Or,
         "not" => Token::Not,
         _ => Token::Identifier(word.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Token, lex};
+
+    #[test]
+    fn tokenizes_keywords_literals_and_operators() {
+        let tokens = lex(r#"let ready = true and not false
+print("ok" .. "!")
+"#);
+        let kinds = tokens
+            .into_iter()
+            .map(|located| located.token)
+            .collect::<Vec<_>>();
+
+        assert!(kinds.contains(&Token::Let));
+        assert!(kinds.contains(&Token::Identifier("ready".to_string())));
+        assert!(kinds.contains(&Token::True));
+        assert!(kinds.contains(&Token::And));
+        assert!(kinds.contains(&Token::Not));
+        assert!(kinds.contains(&Token::False));
+        assert!(kinds.contains(&Token::Print));
+        assert!(kinds.contains(&Token::Join));
+        assert!(kinds.contains(&Token::Text("ok".to_string())));
     }
 }

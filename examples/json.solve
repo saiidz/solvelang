@@ -1,6 +1,6 @@
-let user = json_parse("{\"name\":\"Saiid\",\"age\":21,\"active\":true}")
+let text = "{\"name\":\"SolveLang\",\"features\":[\"json\",\"http\",\"files\"]}"
+let data = json_parse(text)
 
-print(user)
-print(user.name)
-print(user["age"])
-print(json_stringify(user))
+print(data.name)
+print(data.features[0])
+print(json_stringify({ ok: true, name: data.name }))

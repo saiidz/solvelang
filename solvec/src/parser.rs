@@ -53,6 +53,7 @@ impl Parser {
             Token::While => self.while_statement(),
             Token::Agent => self.agent_statement(),
             Token::Ask => self.ask_statement(),
+            Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
             _ => self.expression_statement(),
         }
     }
@@ -67,6 +68,17 @@ impl Parser {
         );
         let value = self.expression();
         Some(Stmt::Let { name, value })
+    }
+
+    fn assignment_statement(&mut self) -> Option<Stmt> {
+        let name = self.consume_identifier("Expected variable name before '='.")?;
+        self.consume(
+            &Token::Equal,
+            "Invalid assignment: expected '='.",
+            "Use syntax like: name = value",
+        );
+        let value = self.expression();
+        Some(Stmt::Assign { name, value })
     }
 
     fn print_statement(&mut self) -> Option<Stmt> {
@@ -580,6 +592,15 @@ impl Parser {
         std::mem::discriminant(self.peek()) == std::mem::discriminant(expected)
     }
 
+    fn check_next(&self, expected: &Token) -> bool {
+        if self.current + 1 >= self.tokens.len() {
+            return false;
+        }
+
+        std::mem::discriminant(&self.tokens[self.current + 1].token)
+            == std::mem::discriminant(expected)
+    }
+
     fn advance(&mut self) -> Token {
         if !self.is_at_end() {
             self.current += 1;
@@ -617,5 +638,53 @@ impl Parser {
             message.to_string(),
             hint.to_string(),
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Parser;
+    use crate::ast::Stmt;
+    use crate::lexer::lex;
+
+    fn parse(source: &str) -> Result<Vec<Stmt>, Vec<crate::diagnostics::Diagnostic>> {
+        let mut parser = Parser::new(lex(source));
+        parser.parse()
+    }
+
+    #[test]
+    fn parses_assignment_functions_loops_arrays_and_objects() {
+        let ast = parse(
+            r#"
+let user = { name: "Saiid", scores: [1, 2] }
+let count = 0
+count = count + 1
+fn first(values) {
+    return values[0]
+}
+while count < 2 {
+    count = count + 1
+}
+print(user.name)
+"#,
+        )
+        .expect("parse succeeds");
+
+        assert!(matches!(ast[0], Stmt::Let { .. }));
+        assert!(matches!(ast[2], Stmt::Assign { .. }));
+        assert!(matches!(ast[3], Stmt::Function { .. }));
+        assert!(matches!(ast[4], Stmt::While { .. }));
+        assert!(matches!(ast[5], Stmt::Print(_)));
+    }
+
+    #[test]
+    fn returns_diagnostics_for_parser_failures() {
+        let errors = parse("print(add(1, 2)\n").expect_err("parse should fail");
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("Invalid print statement"))
+        );
     }
 }

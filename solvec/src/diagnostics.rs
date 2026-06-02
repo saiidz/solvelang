@@ -7,7 +7,12 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn new(line: usize, column: usize, message: impl Into<String>, hint: impl Into<String>) -> Self {
+    pub fn new(
+        line: usize,
+        column: usize,
+        message: impl Into<String>,
+        hint: impl Into<String>,
+    ) -> Self {
         Self {
             line,
             column,
@@ -19,12 +24,8 @@ impl Diagnostic {
     pub fn format(&self, source_line: &str) -> String {
         let pointer_padding = " ".repeat(self.column.saturating_sub(1));
         format!(
-            "SolveLang Error on line {}, column {}:\n{}\n{}^\nHint: {}",
-            self.line,
-            self.column,
-            self.message,
-            format!("{}{}", pointer_padding, source_line),
-            self.hint
+            "SolveLang Error on line {}, column {}:\n{}\n{}\n{}^\nHint: {}",
+            self.line, self.column, self.message, source_line, pointer_padding, self.hint
         )
     }
 }
@@ -76,7 +77,12 @@ fn check_quotes(line: &str, line_number: usize, diagnostics: &mut Vec<Diagnostic
     }
 }
 
-fn check_statement_shape(line: &str, trimmed: &str, line_number: usize, diagnostics: &mut Vec<Diagnostic>) {
+fn check_statement_shape(
+    line: &str,
+    trimmed: &str,
+    line_number: usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
     if trimmed.starts_with("let ") && !trimmed.contains('=') {
         diagnostics.push(Diagnostic::new(
             line_number,
@@ -141,15 +147,13 @@ fn check_braces(
     for (index, character) in line.chars().enumerate() {
         match character {
             '{' => brace_stack.push((line_number, index + 1)),
-            '}' => {
-                if brace_stack.pop().is_none() {
-                    diagnostics.push(Diagnostic::new(
-                        line_number,
-                        index + 1,
-                        "Unexpected closing brace '}'.",
-                        "Remove this brace or add a matching opening brace '{' before it.",
-                    ));
-                }
+            '}' if brace_stack.pop().is_none() => {
+                diagnostics.push(Diagnostic::new(
+                    line_number,
+                    index + 1,
+                    "Unexpected closing brace '}'.",
+                    "Remove this brace or add a matching opening brace '{' before it.",
+                ));
             }
             _ => {}
         }
@@ -158,4 +162,20 @@ fn check_braces(
 
 fn column_of(line: &str, needle: &str) -> usize {
     line.find(needle).map(|index| index + 1).unwrap_or(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Diagnostic;
+
+    #[test]
+    fn formats_diagnostics_with_source_pointer_and_hint() {
+        let diagnostic = Diagnostic::new(2, 7, "Expected expression.", "Add a value here.");
+        let formatted = diagnostic.format("print()");
+
+        assert!(formatted.contains("SolveLang Error on line 2, column 7"));
+        assert!(formatted.contains("print()"));
+        assert!(formatted.lines().any(|line| line.trim() == "^"));
+        assert!(formatted.contains("Hint: Add a value here."));
+    }
 }

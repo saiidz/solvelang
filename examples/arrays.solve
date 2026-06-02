@@ -1,5 +1,4 @@
-let names = ["Saiid", "Mira", "Alex"]
+let artists = ["Mira", "Saiid", "Nova"]
 
-print(names[0])
-print(names[1])
-print(names[2])
+print(artists[0])
+print(artists[2])

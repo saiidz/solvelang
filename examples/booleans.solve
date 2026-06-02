@@ -1,0 +1,6 @@
+let active = true
+let paid = false
+
+print(active and not paid)
+print(active or paid)
+print(active == true)

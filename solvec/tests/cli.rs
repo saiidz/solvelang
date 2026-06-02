@@ -38,6 +38,19 @@ fn run_solvec_error(args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stderr).to_string()
 }
 
+fn run_solvec_with_status(args: &[&str]) -> (bool, String, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .args(args)
+        .output()
+        .expect("failed to run solvec");
+
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
 #[test]
 fn run_executes_math_functions_arrays_loops_and_agents() {
     let file = write_temp_solve_file(
@@ -178,4 +191,96 @@ fn missing_call_paren_reports_parser_error() {
     assert!(stderr.contains("SolveLang Error"));
     assert!(stderr.contains("Invalid print statement: expected ')'"));
     assert!(stderr.contains("Close the print call"));
+}
+
+#[test]
+fn reassignment_updates_existing_variable() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_reassign.solve",
+        r#"
+let x = 0
+x = x + 1
+print(x)
+"#,
+    );
+
+    let output = run_solvec(&["run", &file]);
+
+    assert_eq!(output.trim(), "1");
+}
+
+#[test]
+fn unknown_variable_exits_with_runtime_error() {
+    let file = write_temp_solve_file("solvelang_cli_unknown_variable.solve", "print(missing)\n");
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("unknown variable 'missing'"));
+}
+
+#[test]
+fn unknown_function_exits_with_runtime_error() {
+    let file = write_temp_solve_file("solvelang_cli_unknown_function.solve", "print(nope())\n");
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("unknown function 'nope'"));
+}
+
+#[test]
+fn divide_by_zero_exits_with_runtime_error() {
+    let file = write_temp_solve_file("solvelang_cli_divide_by_zero.solve", "print(10 / 0)\n");
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("divide by zero"));
+}
+
+#[test]
+fn builtin_type_errors_exit_with_runtime_error() {
+    let file = write_temp_solve_file("solvelang_cli_bad_builtin.solve", "print(json_parse(1))\n");
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("json_parse expects a text value"));
+}
+
+#[test]
+fn file_builtins_read_and_write_temp_files() {
+    let mut path = std::env::temp_dir();
+    path.push("solvelang_cli_file_builtin.txt");
+    let file = write_temp_solve_file(
+        "solvelang_cli_file_builtins.solve",
+        &format!(
+            r#"
+write_file("{}", "hello file")
+print(read_file("{}"))
+"#,
+            path.display(),
+            path.display()
+        ),
+    );
+
+    let output = run_solvec(&["run", &file]);
+
+    assert_eq!(output.trim(), "hello file");
+}
+
+#[test]
+fn http_get_reports_network_errors_without_external_internet() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_http_get_error.solve",
+        r#"
+print(http_get("http://127.0.0.1:9"))
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("http_get failed"));
 }
