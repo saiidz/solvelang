@@ -1,6 +1,12 @@
 use std::fs;
 use std::process::Command;
 
+const AI_ENV_KEYS: [&str; 3] = [
+    "SOLVELANG_AI_PROVIDER",
+    "OPENAI_API_KEY",
+    "SOLVELANG_AI_MODEL",
+];
+
 fn write_temp_solve_file(name: &str, content: &str) -> String {
     let mut path = std::env::temp_dir();
     path.push(name);
@@ -9,10 +15,10 @@ fn write_temp_solve_file(name: &str, content: &str) -> String {
 }
 
 fn run_solvec(args: &[&str]) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
-        .args(args)
-        .output()
-        .expect("failed to run solvec");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solvec"));
+    command.args(args);
+    force_local_ai_mode(&mut command);
+    let output = command.output().expect("failed to run solvec");
 
     assert!(
         output.status.success(),
@@ -24,10 +30,10 @@ fn run_solvec(args: &[&str]) -> String {
 }
 
 fn run_solvec_error(args: &[&str]) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
-        .args(args)
-        .output()
-        .expect("failed to run solvec");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solvec"));
+    command.args(args);
+    force_local_ai_mode(&mut command);
+    let output = command.output().expect("failed to run solvec");
 
     assert!(
         !output.status.success(),
@@ -39,10 +45,10 @@ fn run_solvec_error(args: &[&str]) -> String {
 }
 
 fn run_solvec_with_status(args: &[&str]) -> (bool, String, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
-        .args(args)
-        .output()
-        .expect("failed to run solvec");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solvec"));
+    command.args(args);
+    force_local_ai_mode(&mut command);
+    let output = command.output().expect("failed to run solvec");
 
     (
         output.status.success(),
@@ -58,6 +64,7 @@ fn run_solvec_with_env(
 ) -> (bool, String, String) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_solvec"));
     command.args(args);
+    force_local_ai_mode(&mut command);
 
     for name in removed_envs {
         command.env_remove(name);
@@ -74,6 +81,14 @@ fn run_solvec_with_env(
         String::from_utf8_lossy(&output.stdout).to_string(),
         String::from_utf8_lossy(&output.stderr).to_string(),
     )
+}
+
+fn force_local_ai_mode(command: &mut Command) {
+    for name in AI_ENV_KEYS {
+        command.env_remove(name);
+    }
+
+    command.env("SOLVELANG_AI_PROVIDER", "local");
 }
 
 #[test]
