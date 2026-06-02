@@ -1,6 +1,6 @@
 # SolveLang
 
-SolveLang is an early Rust interpreter/prototype for readable automation scripts. The current implementation lives in `solvec/` and includes a lexer, parser, AST runtime, diagnostics, imports, JSON helpers, HTTP helpers, file I/O, environment access, arrays, objects, functions, loops, and placeholder AI-agent syntax.
+SolveLang is an early Rust interpreter/prototype for readable automation scripts. The current implementation lives in `solvec/` and includes a lexer, parser, AST runtime, diagnostics, imports, JSON helpers, HTTP helpers, file I/O, environment access, arrays, objects, functions, loops, and AI-agent syntax with local fallback plus optional OpenAI-backed responses.
 
 This is not a production language runtime yet. It is an MVP-stage prototype meant to make the language shape testable and easy to evolve.
 
@@ -58,13 +58,13 @@ solvec <file.solve> --legacy
 - File read/write helpers
 - Environment variable reads
 - JSON parse/stringify conversion between SolveLang values and JSON
-- `agent`, `instruction`, `tool`, and `ask` syntax
+- `agent`, `instruction`, `tool`, and `ask` syntax with local fallback and optional OpenAI provider mode
 
-AI agent support is currently a local placeholder/prototype. `ask` prints a deterministic local response using the declared agent metadata. It does not call an AI provider until one is connected in a future runtime integration.
+AI agent support defaults to local placeholder mode. Set `SOLVELANG_AI_PROVIDER=openai` and `OPENAI_API_KEY` to generate real model responses.
 
 ### Planned
 
-- Real AI provider integration for agents
+- Additional AI providers and tool execution for agents
 - More complete type checking and runtime type errors
 - Packages/modules beyond simple file imports
 - Richer standard library
@@ -145,7 +145,69 @@ print(env("HOME"))
 - `write_file` can overwrite files.
 - `env` can expose secrets such as tokens, API keys, or deployment credentials.
 - `http_get` and `http_post` make network requests from your machine and may send data to external services.
+- OpenAI-backed agent calls send the agent instruction, approved tool names, and user message to OpenAI.
+- Never print, hardcode, or commit `OPENAI_API_KEY`.
+- External AI calls may cost money.
 - HTTP examples may require internet access. Automated tests avoid external internet.
+
+## AI Agent Support
+
+SolveLang supports:
+
+```solve
+agent SupportBot {
+  instruction "Answer clearly using approved tools only."
+  tool searchDocs
+}
+
+ask SupportBot("How can SolveLang help with automation?")
+```
+
+### Local Mode
+
+Local mode is the default. If `SOLVELANG_AI_PROVIDER` is missing, empty, or set to `local`, `ask` prints a deterministic placeholder response. This mode does not require internet access or API keys.
+
+```bash
+cd solvec
+cargo run -- run ../examples/agent.solve
+```
+
+You can force local mode explicitly:
+
+```bash
+export SOLVELANG_AI_PROVIDER=local
+cargo run -- run ../examples/agent.solve
+```
+
+### OpenAI Mode
+
+OpenAI mode calls the OpenAI Chat Completions API using the declared agent instruction as the developer message and the `ask` text as the user message. Tool names are included as approved tool context. SolveLang does not execute external tools for the model yet.
+
+Required environment variables:
+
+- `SOLVELANG_AI_PROVIDER=openai`
+- `OPENAI_API_KEY`
+
+Optional environment variable:
+
+- `SOLVELANG_AI_MODEL`, defaulting to `gpt-4.1-mini`
+
+Example:
+
+```bash
+cd solvec
+export SOLVELANG_AI_PROVIDER=openai
+export OPENAI_API_KEY="..."
+export SOLVELANG_AI_MODEL="gpt-4.1-mini"
+cargo run -- run ../examples/agent.solve
+```
+
+Safety notes:
+
+- Do not put real API keys in `.solve` files.
+- Do not commit API keys.
+- External AI calls may cost money.
+- Provider, network, HTTP, API, and malformed-response failures return structured SolveLang runtime errors.
 
 ## Examples
 
