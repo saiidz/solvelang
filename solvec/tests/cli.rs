@@ -51,6 +51,31 @@ fn run_solvec_with_status(args: &[&str]) -> (bool, String, String) {
     )
 }
 
+fn run_solvec_with_env(
+    args: &[&str],
+    envs: &[(&str, &str)],
+    removed_envs: &[&str],
+) -> (bool, String, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_solvec"));
+    command.args(args);
+
+    for name in removed_envs {
+        command.env_remove(name);
+    }
+
+    for (name, value) in envs {
+        command.env(name, value);
+    }
+
+    let output = command.output().expect("failed to run solvec");
+
+    (
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).to_string(),
+        String::from_utf8_lossy(&output.stderr).to_string(),
+    )
+}
+
 #[test]
 fn run_executes_math_functions_arrays_loops_and_agents() {
     let file = write_temp_solve_file(
@@ -283,4 +308,75 @@ print(http_get("http://127.0.0.1:9"))
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("http_get failed"));
+}
+
+#[test]
+fn local_ai_provider_keeps_placeholder_response() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_agent_local.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly using approved tools only."
+    tool searchDocs
+}
+
+ask SupportBot("How can SolveLang help with automation?")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", &file],
+        &[("SOLVELANG_AI_PROVIDER", "local")],
+        &["OPENAI_API_KEY", "SOLVELANG_AI_MODEL"],
+    );
+
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert!(stdout.contains("[SupportBot AI Agent]"));
+    assert!(stdout.contains("local SolveLang agent prototype"));
+}
+
+#[test]
+fn openai_provider_without_api_key_returns_runtime_error() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_agent_openai_missing_key.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly."
+    tool searchDocs
+}
+
+ask SupportBot("Help")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", &file],
+        &[("SOLVELANG_AI_PROVIDER", "openai")],
+        &["OPENAI_API_KEY"],
+    );
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("OPENAI_API_KEY is required"));
+}
+
+#[test]
+fn unknown_ai_provider_returns_runtime_error() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_agent_unknown_provider.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly."
+}
+
+ask SupportBot("Help")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", &file],
+        &[("SOLVELANG_AI_PROVIDER", "mystery")],
+        &["OPENAI_API_KEY"],
+    );
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("unknown AI provider 'mystery'"));
 }

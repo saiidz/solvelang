@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
+use crate::ai;
 use crate::ast::{BinaryOp, Expr, Stmt, UnaryOp};
 use crate::value::Value;
 
@@ -136,7 +137,7 @@ impl AstRuntime {
             }
             Stmt::Ask { agent, message } => {
                 let message_value = self.eval(message)?;
-                println!("{}", self.ask_agent(agent, &message_value));
+                println!("{}", self.ask_agent(agent, &message_value)?);
                 Ok(None)
             }
             Stmt::Expr(expr) => {
@@ -559,22 +560,14 @@ impl AstRuntime {
         }
     }
 
-    fn ask_agent(&self, name: &str, message: &Value) -> String {
+    fn ask_agent(&self, name: &str, message: &Value) -> Result<String, RuntimeError> {
         let agent = match self.agents.get(name) {
             Some(agent) => agent,
-            None => return format!("Error: unknown agent '{}'", name),
+            None => return Err(RuntimeError::new(format!("unknown agent '{}'", name))),
         };
 
-        let tools = if agent.tools.is_empty() {
-            "none".to_string()
-        } else {
-            agent.tools.join(", ")
-        };
-
-        format!(
-            "[{} AI Agent]\nInstruction: {}\nTools: {}\nUser: {}\nResponse: This is a local SolveLang agent prototype. Connect an AI provider later to generate live answers.",
-            name, agent.instruction, tools, message
-        )
+        ai::ask_agent(name, &agent.instruction, &agent.tools, &message.to_string())
+            .map_err(|error| RuntimeError::new(error.to_string()))
     }
 }
 

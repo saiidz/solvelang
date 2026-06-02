@@ -1,7 +1,15 @@
-// Agent support is currently a local placeholder.
-// Connect an AI provider later to generate live answers.
+// By default, agent calls use local placeholder mode.
+// This runs without internet or API keys:
+//   cargo run -- run ../examples/agent.solve
+//
+// To enable OpenAI-backed responses, set these environment variables first:
+//   export SOLVELANG_AI_PROVIDER=openai
+//   export OPENAI_API_KEY="..."
+//   export SOLVELANG_AI_MODEL="gpt-4.1-mini"
+//
+// Do not put real API keys in SolveLang files or commit them to git.
 agent Helper {
-    instruction "Answer clearly and briefly."
+    instruction "Answer clearly and briefly using approved tools only."
     tool docs
 }
 

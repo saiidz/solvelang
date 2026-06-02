@@ -1,3 +1,4 @@
+mod ai;
 mod ast;
 mod ast_runtime;
 mod diagnostics;
