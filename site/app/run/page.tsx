@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { runSolveLangPreview } from "./browserRunner";
+
 const starterCode = `let priority = "high"
 let channel = "email"
 
@@ -18,14 +20,19 @@ export default function RunPage() {
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
 
-  async function runCode() {
+  function runCode() {
     setRunning(true);
     setOutput("");
     setError("");
-    setError(
-      "The hosted runner API is disabled for this static preview. The editor is available for demo scripts while the backend runner is moved to a server deployment."
-    );
-    setOutput(code);
+    const result = runSolveLangPreview(code);
+
+    if (result.ok) {
+      setOutput(result.output);
+    } else {
+      setOutput(result.output);
+      setError(result.error || "Unsupported syntax in hosted preview.");
+    }
+
     setRunning(false);
   }
 
@@ -40,8 +47,8 @@ export default function RunPage() {
             Run SolveLang in the browser.
           </h1>
           <p className="mt-5 max-w-3xl text-lg text-slate-300">
-            This is the first hosted workflow runner preview. It supports a safe
-            subset of SolveLang while the full Rust runtime is prepared for hosted execution.
+            This browser preview supports a safe subset of SolveLang. Full Rust runtime hosting is
+            coming later.
           </p>
         </div>
 
@@ -76,8 +83,8 @@ export default function RunPage() {
         </div>
 
         <div className="mt-8 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5 text-sm text-cyan-100">
-          Static export mode is enabled for Amplify hosting. The hosted runner API is preserved in
-          disabled-routes for a future server deployment.
+          Supported in this browser preview: let variables, text and number values, print
+          statements, comments, blank lines, and simple if blocks using ==.
         </div>
       </div>
     </main>
