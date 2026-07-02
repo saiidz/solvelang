@@ -4,14 +4,19 @@ import { useState } from "react";
 
 import { runSolveLangPreview } from "./browserRunner";
 
-const starterCode = `let priority = "high"
-let channel = "email"
+const starterCode = `let ticket_type = "billing"
+let priority = "urgent"
+let lead_intent = "demo"
 
-print("Running SolveLang hosted preview")
-print(channel)
+print("Review incoming workflow")
+print(ticket_type)
 
-if priority == "high" {
-  print("Escalate immediately")
+if priority == "urgent" {
+  print("Escalate support ticket")
+}
+
+if lead_intent == "demo" {
+  print("Create founder follow-up task")
 }`;
 
 export default function RunPage() {
@@ -41,14 +46,14 @@ export default function RunPage() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-10">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-cyan-300">
-            Hosted preview
+            Browser-safe preview
           </p>
           <h1 className="mt-4 text-4xl font-bold tracking-tight md:text-6xl">
-            Run SolveLang in the browser.
+            Preview an operator workflow script.
           </h1>
           <p className="mt-5 max-w-3xl text-lg text-slate-300">
-            This browser preview supports a safe subset of SolveLang. Full Rust runtime hosting is
-            coming later.
+            This static browser preview runs a safe subset of SolveLang for support and lead
+            routing demos. Full Rust runtime hosting comes later.
           </p>
         </div>
 
@@ -84,7 +89,8 @@ export default function RunPage() {
 
         <div className="mt-8 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-5 text-sm text-cyan-100">
           Supported in this browser preview: let variables, text and number values, print
-          statements, comments, blank lines, and simple if blocks using ==.
+          statements, comments, blank lines, and simple if blocks using ==. It does not call a
+          server.
         </div>
       </div>
     </main>

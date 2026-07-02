@@ -1,29 +1,83 @@
 export default function Page() {
   const features = [
     {
-      title: "Readable workflow code",
+      title: "Readable workflow scripts",
       description:
-        "Write automations in simple, readable syntax instead of stitching together brittle scripts.",
+        "Write the business rules, AI steps, and routing decisions in a script an operator can review.",
     },
     {
-      title: "AI-native by design",
+      title: "Built for founder-led ops",
       description:
-        "Define agents, instructions, and tool-enabled workflows in one place with a language built for AI operations.",
+        "Model support, intake, lead qualification, and reporting without turning every workflow into custom glue code.",
     },
     {
-      title: "Built for real business tasks",
+      title: "Early beta, clear boundaries",
       description:
-        "Support triage, lead routing, intake forms, content approvals, internal reporting, and API-powered workflows.",
+        "Use the browser-safe preview and local runtime to shape pilots while full hosted runtime infrastructure comes later.",
     },
   ];
 
-  const useCases = [
-    "Triage support tickets and escalate urgent issues",
-    "Qualify inbound leads and route them to sales",
-    "Turn intake forms into tasks, CRM updates, and follow-ups",
-    "Run content briefs, drafts, reviews, and approval workflows",
-    "Connect APIs, files, prompts, and business rules in one script",
-    "Generate internal reports, checklists, and ops workflows faster",
+  const examples = [
+    {
+      title: "Support ticket triage",
+      file: "support-triage.solve",
+      useCase:
+        "A founder or support lead can separate urgent billing issues from routine tickets before they become a backlog.",
+      script: `let ticket_type = "billing"
+let priority = "urgent"
+
+print("Create support task")
+print(ticket_type)
+
+if priority == "urgent" {
+  print("Escalate to founder")
+}`,
+    },
+    {
+      title: "Lead qualification",
+      file: "lead-qualification.solve",
+      useCase:
+        "An operator can score inbound leads and route qualified accounts to a fast follow-up motion.",
+      script: `let company_size = "midmarket"
+let intent = "demo"
+
+print("Review inbound lead")
+print(company_size)
+
+if intent == "demo" {
+  print("Route to sales follow-up")
+}`,
+    },
+    {
+      title: "Intake-to-task routing",
+      file: "intake-routing.solve",
+      useCase:
+        "Turn a customer, partner, or internal intake form into the next task without burying the rule in a spreadsheet.",
+      script: `let request_area = "implementation"
+let owner = "ops"
+
+print("Create intake task")
+print(request_area)
+
+if owner == "ops" {
+  print("Assign to operations queue")
+}`,
+    },
+    {
+      title: "Simple ops reporting",
+      file: "ops-report.solve",
+      useCase:
+        "Summarize simple weekly status signals so a small team can see what needs attention first.",
+      script: `let overdue_tasks = "yes"
+let report_type = "weekly"
+
+print("Prepare ops report")
+print(report_type)
+
+if overdue_tasks == "yes" {
+  print("Flag blocked work")
+}`,
+    },
   ];
 
   const pricing = [
@@ -45,7 +99,7 @@ export default function Page() {
       price: "$29/mo",
       subtitle: "For solo builders and operators",
       items: [
-        "Early hosted workflow runner",
+        "Browser-safe workflow preview",
         "Hosted preview access",
         "Basic run output",
         "Integration examples coming soon",
@@ -71,15 +125,15 @@ export default function Page() {
   const faqs = [
     {
       q: "What is SolveLang?",
-      a: "SolveLang is a readable scripting language for AI automations, workflows, and business logic.",
+      a: "SolveLang is an early beta language for readable AI workflow scripts that combine business rules, routing decisions, and AI-assisted steps.",
     },
     {
       q: "Who is it for?",
-      a: "Early-stage teams, founders, operators, and agencies who want faster ways to build AI-powered automations.",
+      a: "Right now, it is for founders, operators, and technical founders who want to make support, intake, lead routing, and internal ops easier to inspect. Agencies and consultants are a later go-to-market path.",
     },
     {
       q: "Is this production-ready?",
-      a: "Not yet. SolveLang is in early beta, which is why the best fit today is pilot projects, prototypes, and guided setups.",
+      a: "Not yet. SolveLang is in early beta, so the best fit today is local experimentation, browser-safe previews, pilot scripts, and guided setup conversations.",
     },
     {
       q: "How do I get started?",
@@ -97,13 +151,13 @@ export default function Page() {
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
           <div className="mx-auto max-w-4xl text-center">
             <div className="mb-6 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm shadow-sm">
-              Early beta • AI automation language • Built for business workflows
+              Early beta • Founder/operator workflows • Browser-safe preview
             </div>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
-              Build AI automations in clear, readable code.
+              Readable AI workflow scripts for founder-led operations.
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600 sm:text-xl">
-              SolveLang helps teams script workflows, agents, and business logic with simple readable syntax.
+              Turn support, intake, lead qualification, and internal ops into readable AI workflows.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
@@ -113,10 +167,10 @@ export default function Page() {
                 Book a Demo
               </a>
               <a
-                href="#pricing"
+                href="/run/"
                 className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
               >
-                Try Hosted Runner
+                Try Browser Preview
               </a>
             </div>
           </div>
@@ -131,16 +185,15 @@ export default function Page() {
               </div>
               <pre className="overflow-x-auto p-6 text-sm leading-7 text-slate-100">
 {`agent SupportBot {
-  instruction "Summarize the ticket and route it to the right team."
-  tool classifyTicket
+  instruction "Classify support tickets and route urgent issues."
   tool createTask
 }
 
 let priority = "high"
-let channel = "email"
+let queue = "support"
 
 if priority == "high" {
-  print("Escalate immediately")
+  print("Escalate billing portal issue")
 }
 
 ask SupportBot("Customer cannot access billing portal")`}
@@ -162,20 +215,28 @@ ask SupportBot("Customer cannot access billing portal")`}
       </section>
 
       <section className="border-y border-slate-200 bg-slate-50">
-        <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-2 lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Why this matters</p>
+        <div className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Practical examples</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Faster than building custom glue code for every workflow.
+              Scripts for the workflows small teams repeat every week.
             </h2>
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              Instead of mixing prompts, API calls, and business rules across scattered scripts, SolveLang gives you one readable layer for AI-powered automations.
+              SolveLang is meant to make the workflow readable first: what came in, how it should be classified, and what should happen next.
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {useCases.map((item) => (
-              <div key={item} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <p className="font-medium">{item}</p>
+
+          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+            {examples.map((example) => (
+              <div key={example.title} className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{example.file}</p>
+                  <h3 className="mt-3 text-xl font-semibold">{example.title}</h3>
+                  <p className="mt-3 leading-7 text-slate-600">{example.useCase}</p>
+                </div>
+                <pre className="overflow-x-auto bg-slate-950 p-6 text-sm leading-7 text-slate-100">
+{example.script}
+                </pre>
               </div>
             ))}
           </div>
@@ -186,10 +247,10 @@ ask SupportBot("Customer cannot access billing portal")`}
         <div className="mx-auto max-w-3xl text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Pricing</p>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Start with a pilot, then scale into a platform.
+            Start with a readable pilot, then shape the runtime around real workflows.
           </h2>
           <p className="mt-4 text-lg leading-8 text-slate-600">
-            Early-stage pricing designed to help you land custom setups now and evolve into recurring SaaS revenue later.
+            Early beta options are designed for experimentation, browser-safe previews, and scoped workflow setup conversations.
           </p>
         </div>
 
@@ -248,7 +309,7 @@ ask SupportBot("Customer cannot access billing portal")`}
               Get a custom AI workflow built with SolveLang.
             </h2>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-              Start with a paid pilot. We’ll help define the workflow, script the automation, connect the tools, and get it working for your business.
+              Start with a focused pilot. We’ll help define the workflow, write the readable script, and identify which tools it should connect to when full runtime hosting is ready.
             </p>
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-slate-300">
               <span className="rounded-full border border-white/10 px-4 py-2">Support workflows</span>
@@ -314,4 +375,3 @@ ask SupportBot("Customer cannot access billing portal")`}
     </div>
   );
 }
-
