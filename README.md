@@ -4,6 +4,14 @@ SolveLang is an early Rust interpreter/prototype for readable automation scripts
 
 This is not a production language runtime yet. It is an MVP-stage prototype meant to make the language shape testable and easy to evolve.
 
+## Who SolveLang Is For Right Now
+
+SolveLang is currently aimed at founders and operators who want readable AI workflow scripts for business automation. The clearest early workflows are support ticket triage, intake routing, lead qualification, and simple internal ops reporting.
+
+Technical founders are also a strong early fit because they can inspect the language, run the local Rust runtime, and help shape practical workflow examples. Agencies and consultants are a later go-to-market path once the first founder/operator use cases are tighter.
+
+The hosted runner is currently a browser-safe preview for simple scripts. Full runtime hosting, production integrations, and a managed automation platform are later work.
+
 ## Install And Run
 
 ```bash
