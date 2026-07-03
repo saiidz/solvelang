@@ -80,6 +80,36 @@ if overdue_tasks == "yes" {
     },
   ];
 
+  const automations = [
+    {
+      title: "Support triage",
+      description:
+        "Classify incoming issues, flag urgent customers, and make the next owner obvious.",
+    },
+    {
+      title: "Lead qualification",
+      description:
+        "Turn messy inbound interest into a readable fit, priority, and follow-up path.",
+    },
+    {
+      title: "Client intake routing",
+      description:
+        "Convert intake forms, email notes, or kickoff details into the right operations task.",
+    },
+    {
+      title: "Simple ops reporting",
+      description:
+        "Summarize weekly signals so founders can see blocked work, open loops, and next actions.",
+    },
+  ];
+
+  const workflowSteps = [
+    "Send us one messy process from support, sales, intake, or internal ops.",
+    "We turn it into a readable SolveLang workflow your team can inspect.",
+    "We validate the script against the current Rust CLI syntax before running it.",
+    "We prepare the workflow for future integrations as the hosted runtime matures.",
+  ];
+
   const pricing = [
     {
       name: "Free",
@@ -110,14 +140,14 @@ if overdue_tasks == "yes" {
     {
       name: "Custom Setup",
       price: "$500+",
-      subtitle: "Fastest path to revenue",
+      subtitle: "For one focused workflow audit",
       items: [
-        "Done-for-you automation setup",
-        "Workflow design help",
-        "Custom integrations",
-        "Launch support",
+        "Custom AI workflow setup",
+        "One messy process mapped",
+        "Readable SolveLang draft",
+        "Future integration plan",
       ],
-      cta: "Book a Demo",
+      cta: "Book a workflow audit",
       featured: false,
     },
   ];
@@ -137,7 +167,7 @@ if overdue_tasks == "yes" {
     },
     {
       q: "How do I get started?",
-      a: "Book a demo, join the beta waitlist, or start with a custom workflow setup tailored to your business.",
+      a: "Start with one messy workflow. Email the process or book a workflow audit, and we will shape it into a readable SolveLang script.",
     },
   ];
 
@@ -161,10 +191,10 @@ if overdue_tasks == "yes" {
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
-                href="#demo"
+                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
                 className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
               >
-                Book a Demo
+                Book a workflow audit
               </a>
               <a
                 href="/run/"
@@ -204,6 +234,43 @@ ask SupportBot("Customer cannot access billing portal")`}
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+        <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Custom setup</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Custom AI workflow setup for founders/operators.
+            </h2>
+            <p className="mt-6 text-lg leading-8 text-slate-600">
+              SolveLang is early, so the first paid path is guided: bring one workflow that is stuck in email, spreadsheets, support notes, or founder memory, and turn it into a readable automation draft.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
+              >
+                Book a workflow audit
+              </a>
+              <a
+                href="mailto:hello@solve-lang.com?subject=My%20workflow"
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                Email us your workflow
+              </a>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {automations.map((automation) => (
+              <div key={automation.title} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-lg font-semibold">{automation.title}</h3>
+                <p className="mt-3 leading-7 text-slate-600">{automation.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
         <div className="grid gap-6 md:grid-cols-3">
           {features.map((feature) => (
             <div key={feature.title} className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
@@ -211,6 +278,47 @@ ask SupportBot("Customer cannot access billing portal")`}
               <p className="mt-3 leading-7 text-slate-600">{feature.description}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Start with one workflow</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+              Send one messy process. Get one readable workflow.
+            </h2>
+            <p className="mt-6 text-lg leading-8 text-slate-600">
+              The goal is not a big platform rollout. It is one practical workflow your team can understand, validate, and improve before deeper integrations exist.
+            </p>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-8 shadow-sm">
+            <ol className="space-y-5">
+              {workflowSteps.map((step, index) => (
+                <li key={step} className="flex gap-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                    {index + 1}
+                  </span>
+                  <span className="pt-1 leading-7 text-slate-700">{step}</span>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
+              >
+                Book a workflow audit
+              </a>
+              <a
+                href="mailto:hello@solve-lang.com?subject=My%20workflow"
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                Email us your workflow
+              </a>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -306,52 +414,38 @@ ask SupportBot("Customer cannot access billing portal")`}
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Early access</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Get a custom AI workflow built with SolveLang.
+              Custom AI workflow setup for founders/operators.
             </h2>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-              Start with a focused pilot. We’ll help define the workflow, write the readable script, and identify which tools it should connect to when full runtime hosting is ready.
+              Send one messy process. We will map the rules, write a readable SolveLang workflow, validate it, and prepare it for future integrations.
             </p>
             <div className="mt-8 flex flex-wrap gap-3 text-sm text-slate-300">
-              <span className="rounded-full border border-white/10 px-4 py-2">Support workflows</span>
-              <span className="rounded-full border border-white/10 px-4 py-2">Lead routing</span>
-              <span className="rounded-full border border-white/10 px-4 py-2">Ops automation</span>
-              <span className="rounded-full border border-white/10 px-4 py-2">API integrations</span>
+              <span className="rounded-full border border-white/10 px-4 py-2">Support triage</span>
+              <span className="rounded-full border border-white/10 px-4 py-2">Lead qualification</span>
+              <span className="rounded-full border border-white/10 px-4 py-2">Client intake routing</span>
+              <span className="rounded-full border border-white/10 px-4 py-2">Simple ops reporting</span>
             </div>
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
-            <h3 className="text-xl font-semibold">Book a demo</h3>
+            <h3 className="text-xl font-semibold">Start with one workflow</h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              This form is connected with Formspree for demo requests.
+              Use a placeholder email link for now. It is static-export safe and easy to replace with a real booking flow later.
             </p>
-            <form action="https://formspree.io/f/xjkabcde" method="POST" className="mt-8 space-y-4">
-              <input
-                type="text"
-                placeholder="Your name"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-slate-500"
-              />
-              <input
-                type="email"
-                placeholder="Email address"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-slate-500"
-              />
-              <input
-                type="text"
-                placeholder="Company"
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-slate-500"
-              />
-              <textarea
-                placeholder="What workflow do you want to automate?"
-                rows={5}
-                className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none placeholder:text-slate-500"
-              />
-              <button
-                type="button"
-                className="w-full rounded-2xl bg-white px-5 py-3 text-sm font-medium text-slate-900 transition hover:-translate-y-0.5"
+            <div className="mt-8 space-y-4">
+              <a
+                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                className="block rounded-2xl bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 transition hover:-translate-y-0.5"
               >
-                Request demo
-              </button>
-            </form>
+                Book a workflow audit
+              </a>
+              <a
+                href="mailto:hello@solve-lang.com?subject=My%20workflow"
+                className="block rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-center text-sm font-medium text-white transition hover:-translate-y-0.5"
+              >
+                Email us your workflow
+              </a>
+            </div>
           </div>
         </div>
       </section>
