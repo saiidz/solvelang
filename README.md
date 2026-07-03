@@ -235,6 +235,10 @@ Examples live in `examples/`:
 - `http.solve`
 - `files.solve`
 - `agent.solve`
+- `support_triage.solve`
+- `lead_qualification.solve`
+- `intake_to_task.solve`
+- `ops_report.solve`
 
 Run one with:
 
@@ -242,6 +246,25 @@ Run one with:
 cd solvec
 cargo run -- run ../examples/loops.solve
 ```
+
+### Try these examples
+
+The operator workflow examples are runnable with the Rust CLI runtime:
+
+```bash
+cd solvec
+cargo run -- run ../examples/support_triage.solve
+cargo run -- run ../examples/lead_qualification.solve
+cargo run -- run ../examples/intake_to_task.solve
+cargo run -- run ../examples/ops_report.solve
+```
+
+- `support_triage.solve` shows how a founder/operator can classify an urgent support ticket, pick an owner, and decide whether it needs same-day escalation.
+- `lead_qualification.solve` turns an inbound demo request into a simple qualification decision based on intent and budget.
+- `intake_to_task.solve` routes an intake form into an operations task and sets a lightweight due-date expectation.
+- `ops_report.solve` summarizes weekly operations signals and flags blocked work that needs review.
+
+These examples use the Rust CLI runtime because it supports objects, property access, numeric comparisons, `else` branches, and string joining. The browser preview at `/run` is intentionally smaller: it supports `let`, `print`, simple text/number values, and basic `if` blocks using `==`.
 
 Inspect tokens or AST:
 

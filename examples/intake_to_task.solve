@@ -1,0 +1,24 @@
+// Intake-to-task routing for customer or internal requests.
+// Run with: cargo run -- run ../examples/intake_to_task.solve
+let intake = {
+    source: "customer form",
+    request_type: "implementation",
+    urgency: "normal",
+    owner: "ops"
+}
+
+print("Intake routing")
+print("Source: " .. intake.source)
+print("Request: " .. intake.request_type)
+
+if intake.owner == "ops" {
+    print("Create task in operations queue")
+} else {
+    print("Create task in general inbox")
+}
+
+if intake.urgency == "urgent" {
+    print("Due: today")
+} else {
+    print("Due: this week")
+}
