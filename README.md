@@ -67,6 +67,8 @@ Validation does not execute the script. It does not run AI agents, HTTP calls, f
 
 ## Features
 
+For exact syntax supported today, see [docs/language-reference.md](docs/language-reference.md).
+
 ### What Works Now
 
 - Variables with `let`
