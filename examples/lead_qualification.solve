@@ -1,0 +1,24 @@
+// Lead qualification for inbound demo requests.
+// Run with: cargo run -- run ../examples/lead_qualification.solve
+let lead = {
+    company: "Northstar Studio",
+    team_size: 18,
+    intent: "demo",
+    budget: 12000
+}
+
+print("Lead qualification")
+print("Company: " .. lead.company)
+
+if lead.intent == "demo" {
+    print("Intent: high")
+} else {
+    print("Intent: nurture")
+}
+
+if lead.budget >= 5000 {
+    print("Fit: qualified account")
+    print("Next step: founder follow-up")
+} else {
+    print("Fit: send lightweight resources")
+}

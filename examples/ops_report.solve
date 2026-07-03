@@ -1,0 +1,22 @@
+// Simple weekly ops report for a small team.
+// Run with: cargo run -- run ../examples/ops_report.solve
+let report = {
+    week: "2026-07-03",
+    open_tickets: 14,
+    overdue_tasks: 3,
+    qualified_leads: 5
+}
+
+print("Weekly ops report")
+print("Week: " .. report.week)
+print("Open tickets:")
+print(report.open_tickets)
+print("Qualified leads:")
+print(report.qualified_leads)
+
+if report.overdue_tasks > 0 {
+    print("Attention: blocked work needs review")
+    print(report.overdue_tasks)
+} else {
+    print("No overdue work")
+}

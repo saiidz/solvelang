@@ -1,0 +1,24 @@
+// Support ticket triage for a founder-led team.
+// Run with: cargo run -- run ../examples/support_triage.solve
+let ticket = {
+    customer: "Acme Labs",
+    topic: "billing",
+    priority: "urgent",
+    plan: "pro"
+}
+
+print("Support triage")
+print("Customer: " .. ticket.customer)
+print("Topic: " .. ticket.topic)
+
+if ticket.priority == "urgent" {
+    print("Action: escalate to founder today")
+} else {
+    print("Action: add to normal support queue")
+}
+
+if ticket.topic == "billing" {
+    print("Owner: finance operations")
+} else {
+    print("Owner: support operations")
+}
