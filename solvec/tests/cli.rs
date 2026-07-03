@@ -153,6 +153,98 @@ fn legacy_command_still_runs_old_runtime() {
 }
 
 #[test]
+fn validate_succeeds_for_operator_workflow_examples() {
+    for example in [
+        "../examples/support_triage.solve",
+        "../examples/lead_qualification.solve",
+        "../examples/intake_to_task.solve",
+        "../examples/ops_report.solve",
+    ] {
+        let output = run_solvec(&["validate", example]);
+
+        assert!(output.contains("✓ SolveLang validation passed"));
+        assert!(output.contains(&format!("file: {}", example)));
+    }
+}
+
+#[test]
+fn validate_reports_syntax_errors() {
+    let file = write_temp_solve_file("solvelang_cli_validate_bad_syntax.solve", "let name\n");
+    let stderr = run_solvec_error(&["validate", &file]);
+
+    assert!(stderr.contains("SolveLang Error on line 1"));
+    assert!(stderr.contains("Invalid variable declaration"));
+    assert!(stderr.contains("let name = value"));
+}
+
+#[test]
+fn validate_does_not_call_ai_provider() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_validate_agent.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly."
+    tool searchDocs
+}
+
+ask SupportBot("Help")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["validate", &file],
+        &[
+            ("SOLVELANG_AI_PROVIDER", "openai"),
+            ("OPENAI_API_KEY", "not-a-real-key"),
+        ],
+        &[],
+    );
+
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert!(stdout.contains("✓ SolveLang validation passed"));
+    assert!(!stdout.contains("[SupportBot AI Agent]"));
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn validate_does_not_execute_file_or_http_side_effects() {
+    let mut side_effect_path = std::env::temp_dir();
+    side_effect_path.push(format!(
+        "solvelang_validate_side_effect_{}.txt",
+        std::process::id()
+    ));
+    let _ = fs::remove_file(&side_effect_path);
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_validate_side_effects.solve",
+        &format!(
+            r#"
+write_file("{}", "created by runtime")
+let response = http_get("http://127.0.0.1:9")
+print(response.status)
+"#,
+            side_effect_path.display()
+        ),
+    );
+    let (success, stdout, stderr) = run_solvec_with_status(&["validate", &file]);
+
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert!(stdout.contains("✓ SolveLang validation passed"));
+    assert!(
+        !side_effect_path.exists(),
+        "validate should not run write_file"
+    );
+}
+
+#[test]
+fn validate_exits_nonzero_on_missing_file() {
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("failed to resolve"));
+}
+
+#[test]
 fn backwards_compatible_ast_flag_still_works() {
     let file = write_temp_solve_file("solvelang_cli_flag_ast.solve", "let x = 1\n");
     let output = run_solvec(&[&file, "--ast"]);

@@ -19,6 +19,7 @@ The hosted `/run` page is a browser-safe preview for simple scripts. It does not
 ```bash
 git clone https://github.com/saiidz/solvelang.git
 cd solvelang/solvec
+cargo run -- validate ../examples/support_triage.solve
 cargo run -- run ../examples/hello.solve
 ```
 
@@ -39,6 +40,7 @@ cargo build --release
 ## CLI Commands
 
 - `solvec run <file.solve>` runs a SolveLang file with the AST runtime.
+- `solvec validate <file.solve>` checks syntax without running the script.
 - `solvec tokens <file.solve>` prints lexer tokens.
 - `solvec ast <file.solve>` prints the parsed AST.
 - `solvec legacy <file.solve>` runs the older legacy runtime.
@@ -51,6 +53,17 @@ solvec <file.solve> --tokens
 solvec <file.solve> --ast
 solvec <file.solve> --legacy
 ```
+
+## Validate Before Running
+
+Use `validate` to check that a script can be lexed and parsed before running it:
+
+```bash
+cd solvec
+cargo run -- validate ../examples/support_triage.solve
+```
+
+Validation does not execute the script. It does not run AI agents, HTTP calls, file writes, or other runtime side effects.
 
 ## Features
 
