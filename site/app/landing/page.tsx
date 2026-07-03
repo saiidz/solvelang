@@ -110,6 +110,13 @@ if overdue_tasks == "yes" {
     "We prepare the workflow for future integrations as the hosted runtime matures.",
   ];
 
+  const whatToSend = [
+    "The workflow you want automated",
+    "The tools involved",
+    "What happens manually today",
+    "What a successful outcome looks like",
+  ];
+
   const pricing = [
     {
       name: "Free",
@@ -243,6 +250,9 @@ ask SupportBot("Customer cannot access billing portal")`}
             <p className="mt-6 text-lg leading-8 text-slate-600">
               SolveLang is early, so the first paid path is guided: bring one workflow that is stuck in email, spreadsheets, support notes, or founder memory, and turn it into a readable automation draft.
             </p>
+            <p className="mt-4 text-base leading-7 text-slate-600">
+              Send one messy workflow. We’ll reply with next steps for turning it into a readable SolveLang workflow.
+            </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
                 href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
@@ -304,6 +314,9 @@ ask SupportBot("Customer cannot access billing portal")`}
                 </li>
               ))}
             </ol>
+            <p className="mt-8 text-base leading-7 text-slate-700">
+              Send one messy workflow. We’ll reply with next steps for turning it into a readable SolveLang workflow.
+            </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
                 href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
@@ -395,7 +408,11 @@ ask SupportBot("Customer cannot access billing portal")`}
                 ))}
               </ul>
               <a
-                href="#demo"
+                href={
+                  plan.cta === "Book a workflow audit"
+                    ? "mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                    : "#demo"
+                }
                 className={`mt-8 inline-flex rounded-2xl px-5 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${
                   plan.featured
                     ? "bg-white text-slate-900"
@@ -430,8 +447,19 @@ ask SupportBot("Customer cannot access billing portal")`}
           <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
             <h3 className="text-xl font-semibold">Start with one workflow</h3>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Use a placeholder email link for now. It is static-export safe and easy to replace with a real booking flow later.
+              Send one messy workflow. We’ll reply with next steps for turning it into a readable SolveLang workflow.
             </p>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+              <p className="text-sm font-semibold text-white">What to send</p>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+                {whatToSend.map((item) => (
+                  <li key={item} className="flex gap-3">
+                    <span className="mt-2 h-2 w-2 rounded-full bg-white" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
             <div className="mt-8 space-y-4">
               <a
                 href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
