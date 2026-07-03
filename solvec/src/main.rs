@@ -17,6 +17,7 @@ use std::process;
 #[derive(Debug, PartialEq)]
 enum Command {
     Run,
+    Validate,
     Tokens,
     Ast,
     Legacy,
@@ -59,7 +60,7 @@ fn main() {
         process::exit(1);
     }
 
-    run_command(command, &content);
+    run_command(command, &content, &filename);
 }
 
 fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
@@ -70,6 +71,7 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
     match args[0].as_str() {
         "help" | "--help" | "-h" => Ok((Command::Help, None)),
         "run" => Ok((Command::Run, args.get(1).cloned())),
+        "validate" => Ok((Command::Validate, args.get(1).cloned())),
         "tokens" => Ok((Command::Tokens, args.get(1).cloned())),
         "ast" => Ok((Command::Ast, args.get(1).cloned())),
         "legacy" => Ok((Command::Legacy, args.get(1).cloned())),
@@ -89,14 +91,21 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
     }
 }
 
-fn run_command(command: Command, content: &str) {
+fn run_command(command: Command, content: &str, filename: &str) {
     match command {
         Command::Run => run_ast_runtime(content),
+        Command::Validate => validate_script(content, filename),
         Command::Tokens => print_tokens(content),
         Command::Ast => print_ast(content),
         Command::Legacy => runtime::run(content),
         Command::Help => print_usage(),
     }
+}
+
+fn validate_script(content: &str, filename: &str) {
+    parse_source(content);
+    println!("✓ SolveLang validation passed");
+    println!("file: {}", filename);
 }
 
 fn print_tokens(content: &str) {
@@ -211,6 +220,7 @@ fn print_usage() {
     println!();
     println!("Usage:");
     println!("  solvec run <file.solve>       Run with the AST runtime");
+    println!("  solvec validate <file.solve>  Validate syntax without running");
     println!("  solvec tokens <file.solve>    Print lexer tokens");
     println!("  solvec ast <file.solve>       Print parsed AST");
     println!("  solvec legacy <file.solve>    Run with the legacy runtime");
