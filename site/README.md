@@ -12,6 +12,10 @@ The `/run` page is a browser-safe preview for simple scripts. It does not call a
 
 For fuller founder/operator workflow examples, use the Rust CLI examples in `../examples/`: support triage, lead qualification, intake-to-task routing, and ops reporting.
 
+## MCP Preview
+
+`site/mcp/solvelang-mcp.mjs` is an early MCP server for AI assistants. It can report status, return a simple example, and run a safe preview subset of SolveLang syntax. It is not the full Rust runtime and should not be expanded into risky script execution without a separate design pass.
+
 ## Static Export
 
 The site is configured for static export with `output: "export"` in `next.config.ts`.

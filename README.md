@@ -1,25 +1,37 @@
 # SolveLang
 
-SolveLang is an early Rust interpreter/prototype for readable automation scripts. The current implementation lives in `solvec/` and includes a lexer, parser, AST runtime, diagnostics, imports, JSON helpers, HTTP helpers, file I/O, environment access, arrays, objects, functions, loops, and AI-agent syntax with local fallback plus optional OpenAI-backed responses.
+SolveLang is a readable scripting language for AI-assisted business workflows.
 
-This is not a production language runtime yet. It is an MVP-stage prototype meant to make the language shape testable and easy to evolve.
+The current implementation is an early Rust interpreter/prototype in `solvec/`. It includes a lexer, parser, AST runtime, diagnostics, imports, JSON helpers, HTTP helpers, file I/O, environment access, arrays, objects, functions, loops, and AI-agent syntax with local fallback plus optional OpenAI-backed responses.
+
+SolveLang is not a production language runtime yet. It is an early beta meant to make the language shape testable, readable, and easy to evolve.
 
 ## Who SolveLang Is For Right Now
 
-SolveLang is currently aimed at founders and operators who want readable AI workflow scripts for business automation. The clearest early workflows are support ticket triage, intake routing, lead qualification, and simple internal ops reporting.
+SolveLang is currently for founders, operators, and technical founders who want readable workflow scripts for business automation. The clearest early workflows are support ticket triage, intake routing, lead qualification, and simple internal ops reporting.
 
-Technical founders are also a strong early fit because they can inspect the language, run the local Rust runtime, and help shape practical workflow examples. Agencies and consultants are a later go-to-market path once the first founder/operator use cases are tighter.
+Agencies and consultants are a later go-to-market path once the first founder/operator use cases are tighter.
 
-The hosted runner is currently a browser-safe preview for simple scripts. Full runtime hosting, production integrations, and a managed automation platform are later work.
+The hosted `/run` page is a browser-safe preview for simple scripts. It does not call a server and supports a smaller syntax subset than the Rust CLI runtime. Full Rust runtime hosting, production integrations, and a managed automation platform are later work.
 
-## Install And Run
+## Quick Start
 
 ```bash
 git clone https://github.com/saiidz/solvelang.git
 cd solvelang/solvec
 cargo run -- run ../examples/hello.solve
+```
+
+Inspect tokens or the parsed AST:
+
+```bash
 cargo run -- tokens ../examples/hello.solve
 cargo run -- ast ../examples/hello.solve
+```
+
+Build a release binary:
+
+```bash
 cargo build --release
 ./target/release/solvec run ../examples/hello.solve
 ```
@@ -42,7 +54,7 @@ solvec <file.solve> --legacy
 
 ## Features
 
-### Working Now
+### What Works Now
 
 - Variables with `let`
 - Variable reassignment with `name = value`
@@ -70,13 +82,15 @@ solvec <file.solve> --legacy
 
 AI agent support defaults to local placeholder mode. Set `SOLVELANG_AI_PROVIDER=openai` and `OPENAI_API_KEY` to generate real model responses.
 
-### Planned
+### What Comes Later
 
 - Additional AI providers and tool execution for agents
 - More complete type checking and runtime type errors
 - Packages/modules beyond simple file imports
 - Richer standard library
 - Better HTTP configuration and request options
+- Full Rust runtime hosting
+- Production integrations and managed workflow execution
 - Stable language specification
 - Release packaging
 
@@ -247,9 +261,9 @@ cd solvec
 cargo run -- run ../examples/loops.solve
 ```
 
-### Try these examples
+### Try Examples
 
-The operator workflow examples are runnable with the Rust CLI runtime:
+These operator workflow examples are runnable with the Rust CLI runtime:
 
 ```bash
 cd solvec
@@ -259,12 +273,58 @@ cargo run -- run ../examples/intake_to_task.solve
 cargo run -- run ../examples/ops_report.solve
 ```
 
-- `support_triage.solve` shows how a founder/operator can classify an urgent support ticket, pick an owner, and decide whether it needs same-day escalation.
-- `lead_qualification.solve` turns an inbound demo request into a simple qualification decision based on intent and budget.
-- `intake_to_task.solve` routes an intake form into an operations task and sets a lightweight due-date expectation.
-- `ops_report.solve` summarizes weekly operations signals and flags blocked work that needs review.
+`support_triage.solve` classifies an urgent support ticket, chooses an owner, and decides whether same-day founder escalation is needed.
 
-These examples use the Rust CLI runtime because it supports objects, property access, numeric comparisons, `else` branches, and string joining. The browser preview at `/run` is intentionally smaller: it supports `let`, `print`, simple text/number values, and basic `if` blocks using `==`.
+Expected output:
+
+```text
+Support triage
+Customer: Acme Labs
+Topic: billing
+Action: escalate to founder today
+Owner: finance operations
+```
+
+`lead_qualification.solve` turns an inbound demo request into a simple qualification decision based on intent and budget.
+
+Expected output:
+
+```text
+Lead qualification
+Company: Northstar Studio
+Intent: high
+Fit: qualified account
+Next step: founder follow-up
+```
+
+`intake_to_task.solve` routes a customer or internal intake form into an operations task and sets a lightweight due-date expectation.
+
+Expected output:
+
+```text
+Intake routing
+Source: customer form
+Request: implementation
+Create task in operations queue
+Due: this week
+```
+
+`ops_report.solve` summarizes weekly operations signals and flags blocked work that needs review.
+
+Expected output:
+
+```text
+Weekly ops report
+Week: 2026-07-03
+Open tickets:
+14
+Qualified leads:
+5
+Attention: blocked work needs review
+3
+```
+
+These examples use Rust CLI runtime features such as objects, property access, numeric comparisons, `else` branches, and string joining. The browser preview at `/run` is intentionally smaller: it supports `let`, `print`, simple text/number values, and basic `if` blocks using `==`.
 
 Inspect tokens or AST:
 
@@ -272,6 +332,26 @@ Inspect tokens or AST:
 cargo run -- tokens ../examples/loops.solve
 cargo run -- ast ../examples/loops.solve
 ```
+
+## MCP Direction
+
+SolveLang's MCP direction is to make `.solve` scripts easier for AI assistants to inspect, explain, validate, and draft without turning the early runtime into unsafe remote execution.
+
+The current MCP server lives at `site/mcp/solvelang-mcp.mjs`. It exposes:
+
+- `solvelang_status` to explain current MCP capabilities.
+- `solvelang_examples` to return a small preview-compatible example.
+- `solvelang_run_preview` to run a safe subset of SolveLang syntax in-process.
+
+This MCP preview runner is intentionally limited. It supports simple variables, `print(...)`, string/number/boolean values, and basic `if` blocks using `==` or `!=`. It is not the full Rust runtime.
+
+The roadmap is for AI assistants to:
+
+- Inspect `.solve` scripts and summarize their workflow intent.
+- Explain workflow steps in plain English for founders and operators.
+- Validate scripts against the currently supported syntax.
+- Generate first drafts of workflow scripts from business-process descriptions.
+- Safely run local examples later, with explicit boundaries and no risky script execution by default.
 
 ## Development
 
