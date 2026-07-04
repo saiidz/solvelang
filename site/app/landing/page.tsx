@@ -2,8 +2,6 @@ import Link from "next/link";
 
 const workflowAuditGmailUrl =
   "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
-const workflowAuditEmailAppUrl =
-  "mailto:hello@solve-lang.com?subject=Workflow%20audit";
 
 export default function Page() {
   const features = [
@@ -212,12 +210,6 @@ if overdue_tasks == "yes" {
               >
                 Open Gmail draft
               </a>
-              <a
-                href={workflowAuditEmailAppUrl}
-                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
-              >
-                Use default email app
-              </a>
               <Link
                 href="/audit/"
                 className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
@@ -289,12 +281,6 @@ ask SupportBot("Customer cannot access billing portal")`}
                 className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
               >
                 Open Gmail draft
-              </a>
-              <a
-                href={workflowAuditEmailAppUrl}
-                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
-              >
-                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -374,12 +360,6 @@ ask SupportBot("Customer cannot access billing portal")`}
                 className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
               >
                 Open Gmail draft
-              </a>
-              <a
-                href={workflowAuditEmailAppUrl}
-                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
-              >
-                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -496,11 +476,6 @@ ask SupportBot("Customer cannot access billing portal")`}
               {plan.cta === "Book a workflow audit" && (
                 <div className="mt-4 text-sm leading-6 text-slate-500">
                   <p>
-                    <a className="font-medium text-slate-800 underline" href={workflowAuditEmailAppUrl}>
-                      Use default email app
-                    </a>
-                  </p>
-                  <p>
                     <Link className="font-medium text-slate-800 underline" href="/audit/">
                       See what to send
                     </Link>{" "}
@@ -560,12 +535,6 @@ ask SupportBot("Customer cannot access billing portal")`}
                 className="block rounded-2xl bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 transition hover:-translate-y-0.5"
               >
                 Open Gmail draft
-              </a>
-              <a
-                href={workflowAuditEmailAppUrl}
-                className="block rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-center text-sm font-medium text-white transition hover:-translate-y-0.5"
-              >
-                Use default email app
               </a>
               <Link
                 href="/audit/"

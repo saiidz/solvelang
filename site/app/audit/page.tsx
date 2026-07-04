@@ -9,8 +9,6 @@ export const metadata: Metadata = {
 
 const workflowAuditGmailUrl =
   "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
-const workflowAuditEmailAppUrl =
-  "mailto:hello@solve-lang.com?subject=Workflow%20audit";
 
 const whatToSend = [
   {
@@ -101,12 +99,6 @@ export default function AuditPage() {
                 className="rounded-2xl bg-slate-900 px-6 py-3 text-center text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
               >
                 Open Gmail draft
-              </a>
-              <a
-                href={workflowAuditEmailAppUrl}
-                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
-              >
-                Use default email app
               </a>
               <Link
                 href="/run/"
@@ -282,12 +274,6 @@ Thanks.`}
             className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
           >
             Open Gmail draft
-          </a>
-          <a
-            href={workflowAuditEmailAppUrl}
-            className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
-          >
-            Use default email app
           </a>
           <Link
             href="/"
