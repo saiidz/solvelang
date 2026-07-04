@@ -7,7 +7,10 @@ export const metadata: Metadata = {
     "Send one messy workflow and get next steps for turning it into a readable SolveLang workflow.",
 };
 
-const workflowAuditEmail = "mailto:hello@solve-lang.com?subject=Workflow%20audit";
+const workflowAuditGmailUrl =
+  "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
+const workflowAuditEmailAppUrl =
+  "mailto:hello@solve-lang.com?subject=Workflow%20audit";
 
 const whatToSend = [
   {
@@ -92,10 +95,18 @@ export default function AuditPage() {
             </p>
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
               <a
-                href={workflowAuditEmail}
+                href={workflowAuditGmailUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="rounded-2xl bg-slate-900 px-6 py-3 text-center text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
               >
-                Email your workflow
+                Open Gmail draft
+              </a>
+              <a
+                href={workflowAuditEmailAppUrl}
+                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                Use default email app
               </a>
               <Link
                 href="/run/"
@@ -106,7 +117,7 @@ export default function AuditPage() {
             </div>
             <div className="mt-4 max-w-2xl text-sm leading-6 text-slate-500">
               <p>
-                If the button does not open your email app, email us directly at{" "}
+                Or copy:{" "}
                 <span className="select-all font-medium text-slate-800">
                   hello@solve-lang.com
                 </span>
@@ -265,10 +276,18 @@ Thanks.`}
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
           <a
-            href={workflowAuditEmail}
+            href={workflowAuditGmailUrl}
+            target="_blank"
+            rel="noreferrer"
             className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
           >
-            Email your workflow
+            Open Gmail draft
+          </a>
+          <a
+            href={workflowAuditEmailAppUrl}
+            className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+          >
+            Use default email app
           </a>
           <Link
             href="/"
