@@ -69,6 +69,12 @@ Validation does not execute the script. It does not run AI agents, HTTP calls, f
 
 For exact syntax supported today, see [docs/language-reference.md](docs/language-reference.md).
 
+For the current workflow-audit motion, see:
+
+- [docs/outreach.md](docs/outreach.md)
+- [docs/first-audit-playbook.md](docs/first-audit-playbook.md)
+- [docs/offer.md](docs/offer.md)
+
 ### What Works Now
 
 - Variables with `let`
