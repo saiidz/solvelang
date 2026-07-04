@@ -210,6 +210,13 @@ if overdue_tasks == "yes" {
                 Try Browser Preview
               </a>
             </div>
+            <div className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-500">
+              <p>
+                If the button does not open your email app, email us directly at{" "}
+                <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
+              </p>
+              <p>Mail links require a default email app. You can also copy the address.</p>
+            </div>
           </div>
 
           <div className="mx-auto mt-16 max-w-5xl">
@@ -266,6 +273,13 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Email us your workflow
               </a>
+            </div>
+            <div className="mt-4 text-sm leading-6 text-slate-500">
+              <p>
+                If the button does not open your email app, email us directly at{" "}
+                <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
+              </p>
+              <p>Mail links require a default email app. You can also copy the address.</p>
             </div>
           </div>
 
@@ -330,6 +344,13 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Email us your workflow
               </a>
+            </div>
+            <div className="mt-4 text-sm leading-6 text-slate-500">
+              <p>
+                If the button does not open your email app, email us directly at{" "}
+                <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
+              </p>
+              <p>Mail links require a default email app. You can also copy the address.</p>
             </div>
           </div>
         </div>
@@ -421,6 +442,15 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 {plan.cta}
               </a>
+              {plan.cta === "Book a workflow audit" && (
+                <div className="mt-4 text-sm leading-6 text-slate-500">
+                  <p>
+                    If the button does not open your email app, email us directly at{" "}
+                    <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
+                  </p>
+                  <p>Mail links require a default email app. You can also copy the address.</p>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -473,6 +503,13 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Email us your workflow
               </a>
+            </div>
+            <div className="mt-5 text-sm leading-6 text-slate-300">
+              <p>
+                If the button does not open your email app, email us directly at{" "}
+                <span className="select-all font-medium text-white">hello@solve-lang.com</span>.
+              </p>
+              <p>Mail links require a default email app. You can also copy the address.</p>
             </div>
           </div>
         </div>
