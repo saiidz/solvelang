@@ -1,5 +1,10 @@
 import Link from "next/link";
 
+const workflowAuditGmailUrl =
+  "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
+const workflowAuditEmailAppUrl =
+  "mailto:hello@solve-lang.com?subject=Workflow%20audit";
+
 export default function Page() {
   const features = [
     {
@@ -200,10 +205,18 @@ if overdue_tasks == "yes" {
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
-                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                href={workflowAuditGmailUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
               >
-                Book a workflow audit
+                Open Gmail draft
+              </a>
+              <a
+                href={workflowAuditEmailAppUrl}
+                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
+              >
+                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -220,7 +233,7 @@ if overdue_tasks == "yes" {
             </div>
             <div className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-500">
               <p>
-                If the button does not open your email app, email us directly at{" "}
+                Or copy:{" "}
                 <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
               </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
@@ -270,10 +283,18 @@ ask SupportBot("Customer cannot access billing portal")`}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                href={workflowAuditGmailUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
               >
-                Book a workflow audit
+                Open Gmail draft
+              </a>
+              <a
+                href={workflowAuditEmailAppUrl}
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -290,7 +311,7 @@ ask SupportBot("Customer cannot access billing portal")`}
             </div>
             <div className="mt-4 text-sm leading-6 text-slate-500">
               <p>
-                If the button does not open your email app, email us directly at{" "}
+                Or copy:{" "}
                 <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
               </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
@@ -347,10 +368,18 @@ ask SupportBot("Customer cannot access billing portal")`}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                href={workflowAuditGmailUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-medium text-white shadow-sm transition hover:-translate-y-0.5"
               >
-                Book a workflow audit
+                Open Gmail draft
+              </a>
+              <a
+                href={workflowAuditEmailAppUrl}
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -367,7 +396,7 @@ ask SupportBot("Customer cannot access billing portal")`}
             </div>
             <div className="mt-4 text-sm leading-6 text-slate-500">
               <p>
-                If the button does not open your email app, email us directly at{" "}
+                Or copy:{" "}
                 <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
               </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
@@ -451,19 +480,26 @@ ask SupportBot("Customer cannot access billing portal")`}
               <a
                 href={
                   plan.cta === "Book a workflow audit"
-                    ? "mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                    ? workflowAuditGmailUrl
                     : "#demo"
                 }
+                target={plan.cta === "Book a workflow audit" ? "_blank" : undefined}
+                rel={plan.cta === "Book a workflow audit" ? "noreferrer" : undefined}
                 className={`mt-8 inline-flex rounded-2xl px-5 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${
                   plan.featured
                     ? "bg-white text-slate-900"
                     : "border border-slate-300 bg-white text-slate-900"
                 }`}
               >
-                {plan.cta}
+                {plan.cta === "Book a workflow audit" ? "Open Gmail draft" : plan.cta}
               </a>
               {plan.cta === "Book a workflow audit" && (
                 <div className="mt-4 text-sm leading-6 text-slate-500">
+                  <p>
+                    <a className="font-medium text-slate-800 underline" href={workflowAuditEmailAppUrl}>
+                      Use default email app
+                    </a>
+                  </p>
                   <p>
                     <Link className="font-medium text-slate-800 underline" href="/audit/">
                       See what to send
@@ -471,7 +507,7 @@ ask SupportBot("Customer cannot access billing portal")`}
                     before emailing your workflow.
                   </p>
                   <p>
-                    If the button does not open your email app, email us directly at{" "}
+                    Or copy:{" "}
                     <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
                   </p>
                   <p>Mail links require a default email app. You can also copy the address.</p>
@@ -518,10 +554,18 @@ ask SupportBot("Customer cannot access billing portal")`}
             </div>
             <div className="mt-8 space-y-4">
               <a
-                href="mailto:hello@solve-lang.com?subject=Workflow%20audit"
+                href={workflowAuditGmailUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="block rounded-2xl bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 transition hover:-translate-y-0.5"
               >
-                Book a workflow audit
+                Open Gmail draft
+              </a>
+              <a
+                href={workflowAuditEmailAppUrl}
+                className="block rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-center text-sm font-medium text-white transition hover:-translate-y-0.5"
+              >
+                Use default email app
               </a>
               <Link
                 href="/audit/"
@@ -538,7 +582,7 @@ ask SupportBot("Customer cannot access billing portal")`}
             </div>
             <div className="mt-5 text-sm leading-6 text-slate-300">
               <p>
-                If the button does not open your email app, email us directly at{" "}
+                Or copy:{" "}
                 <span className="select-all font-medium text-white">hello@solve-lang.com</span>.
               </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
