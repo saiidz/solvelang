@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Page() {
   const features = [
     {
@@ -203,6 +205,12 @@ if overdue_tasks == "yes" {
               >
                 Book a workflow audit
               </a>
+              <Link
+                href="/audit/"
+                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
+              >
+                See what to send
+              </Link>
               <a
                 href="/run/"
                 className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium shadow-sm transition hover:-translate-y-0.5"
@@ -267,6 +275,12 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Book a workflow audit
               </a>
+              <Link
+                href="/audit/"
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                See what to send
+              </Link>
               <a
                 href="mailto:hello@solve-lang.com?subject=My%20workflow"
                 className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
@@ -338,6 +352,12 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Book a workflow audit
               </a>
+              <Link
+                href="/audit/"
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                See what to send
+              </Link>
               <a
                 href="mailto:hello@solve-lang.com?subject=My%20workflow"
                 className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
@@ -445,6 +465,12 @@ ask SupportBot("Customer cannot access billing portal")`}
               {plan.cta === "Book a workflow audit" && (
                 <div className="mt-4 text-sm leading-6 text-slate-500">
                   <p>
+                    <Link className="font-medium text-slate-800 underline" href="/audit/">
+                      See what to send
+                    </Link>{" "}
+                    before emailing your workflow.
+                  </p>
+                  <p>
                     If the button does not open your email app, email us directly at{" "}
                     <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
                   </p>
@@ -497,6 +523,12 @@ ask SupportBot("Customer cannot access billing portal")`}
               >
                 Book a workflow audit
               </a>
+              <Link
+                href="/audit/"
+                className="block rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-center text-sm font-medium text-white transition hover:-translate-y-0.5"
+              >
+                See what to send
+              </Link>
               <a
                 href="mailto:hello@solve-lang.com?subject=My%20workflow"
                 className="block rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-center text-sm font-medium text-white transition hover:-translate-y-0.5"

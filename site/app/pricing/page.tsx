@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 type PlanKey = "pro" | "api_starter" | "api_growth" | "custom_setup";
@@ -190,6 +191,12 @@ export default function PricingPage() {
               <p className="mt-2 text-sm text-slate-600">
                 $500+ one-time setup for done-for-you workflow design, custom
                 integrations, implementation support, and launch assistance.
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Not sure what you need?{" "}
+                <Link className="font-semibold text-slate-950 underline" href="/audit/">
+                  Start with a workflow audit.
+                </Link>
               </p>
             </div>
 
