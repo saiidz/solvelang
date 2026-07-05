@@ -300,6 +300,12 @@ ask SupportBot("Customer cannot access billing portal")`}
                 Or copy:{" "}
                 <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
               </p>
+              <p>
+                <Link className="font-medium text-slate-800 underline" href="/demo/support-triage/">
+                  See support triage demo
+                </Link>{" "}
+                before sending your workflow.
+              </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
             </div>
           </div>
