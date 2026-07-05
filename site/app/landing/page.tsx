@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { JsonLd } from "../components/JsonLd";
 
 const workflowAuditGmailUrl =
   "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
@@ -183,8 +184,22 @@ if overdue_tasks == "yes" {
     },
   ];
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqs.map((faq) => ({
+      "@type": "Question",
+      name: faq.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faq.a,
+      },
+    })),
+  };
+
   return (
     <div className="min-h-screen bg-white text-slate-900">
+      <JsonLd id="homepage-faq-json-ld" data={faqJsonLd} />
       <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
         <div className="absolute inset-0 opacity-40">
           <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-slate-200 blur-3xl" />
@@ -229,6 +244,12 @@ if overdue_tasks == "yes" {
                 <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>.
               </p>
               <p>Mail links require a default email app. You can also copy the address.</p>
+              <p>
+                <Link className="font-medium text-slate-800 underline" href="/resources/">
+                  Browse SolveLang resources
+                </Link>
+                .
+              </p>
             </div>
           </div>
 

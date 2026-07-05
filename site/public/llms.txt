@@ -1,0 +1,29 @@
+# SolveLang
+
+SolveLang is an early beta readable scripting language and workflow-mapping service for AI-assisted business workflows.
+
+SolveLang helps founders, operators, and technical founders turn messy support, intake, lead routing, and internal operations workflows into readable automation blueprints, human review points, and SolveLang-style workflow drafts.
+
+## Key Pages
+
+- Website: https://www.solve-lang.com/
+- Workflow X-Ray Audit Intake: https://www.solve-lang.com/audit/
+- Support Triage Demo: https://www.solve-lang.com/demo/support-triage/
+- Browser Preview: https://www.solve-lang.com/run/
+- Pricing: https://www.solve-lang.com/pricing/
+- Resources: https://www.solve-lang.com/resources/
+- GitHub: https://github.com/saiidz/solvelang
+
+## Current Boundaries
+
+- SolveLang is early beta.
+- The browser preview is a safe static preview and does not call a server.
+- The Rust CLI runtime exists for local experimentation.
+- Full hosted Rust runtime execution, production integrations, managed automation hosting, auth, and payment flows are later work.
+- SolveLang should not be described as production-ready or fully hosted yet.
+
+## Main Call To Action
+
+Send one messy workflow for a Workflow X-Ray Audit. SolveLang can map the trigger, decisions, missing branches, human review points, SolveLang-style workflow draft, automation path, and setup recommendation.
+
+Contact: hello@solve-lang.com

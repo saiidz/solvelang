@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "../../components/JsonLd";
 
 export const metadata: Metadata = {
-  title: "Support Triage Demo | SolveLang",
+  title: "Support Triage Demo — SolveLang",
   description:
     "See how SolveLang maps a messy support inbox into ownership, priority, reply drafts, and next steps.",
 };
@@ -131,6 +132,31 @@ output
   status
   reply`;
 
+const supportTriageBreadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://www.solve-lang.com/",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Resources",
+      item: "https://www.solve-lang.com/resources/",
+    },
+    {
+      "@type": "ListItem",
+      position: 3,
+      name: "Support Triage Demo",
+      item: "https://www.solve-lang.com/demo/support-triage/",
+    },
+  ],
+};
+
 function EmailFallback({ tone = "light" }: { tone?: "light" | "dark" }) {
   const textColor = tone === "dark" ? "text-slate-300" : "text-slate-500";
   const strongColor = tone === "dark" ? "text-white" : "text-slate-800";
@@ -148,6 +174,10 @@ function EmailFallback({ tone = "light" }: { tone?: "light" | "dark" }) {
 export default function SupportTriageDemoPage() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
+      <JsonLd
+        id="support-triage-breadcrumb-json-ld"
+        data={supportTriageBreadcrumbJsonLd}
+      />
       <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
         <div className="absolute inset-0 opacity-40">
           <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-slate-200 blur-3xl" />

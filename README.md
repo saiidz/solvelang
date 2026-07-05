@@ -78,6 +78,14 @@ For the current workflow-audit motion, see:
 - [docs/offer.md](docs/offer.md)
 - [docs/sales-script.md](docs/sales-script.md)
 
+Live resources:
+
+- [Resources](https://www.solve-lang.com/resources/)
+- [Support Triage Demo](https://www.solve-lang.com/demo/support-triage/)
+- [Workflow X-Ray Audit Intake](https://www.solve-lang.com/audit/)
+- [llms.txt](https://www.solve-lang.com/llms.txt)
+- [sitemap.xml](https://www.solve-lang.com/sitemap.xml)
+
 ### What Works Now
 
 - Variables with `let`
