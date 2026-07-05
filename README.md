@@ -72,8 +72,11 @@ For exact syntax supported today, see [docs/language-reference.md](docs/language
 For the current workflow-audit motion, see:
 
 - [docs/outreach.md](docs/outreach.md)
+- [docs/outreach-tracker.md](docs/outreach-tracker.md)
+- [docs/first-sale-checklist.md](docs/first-sale-checklist.md)
 - [docs/first-audit-playbook.md](docs/first-audit-playbook.md)
 - [docs/offer.md](docs/offer.md)
+- [docs/sales-script.md](docs/sales-script.md)
 
 ### What Works Now
 
