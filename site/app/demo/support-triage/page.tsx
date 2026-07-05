@@ -48,7 +48,7 @@ const outputs = [
   ["Status", "needs-human-review"],
   [
     "Reply draft",
-    "Thanks - we received your billing request and a finance specialist is reviewing it.",
+    "Thanks — we received your billing request and a finance specialist is reviewing it.",
   ],
   ["Slack alert", "#support-escalations"],
   ["Task", "created in billing_queue"],
@@ -62,31 +62,59 @@ const riskItems = [
   "Human review for risky cases",
 ];
 
-const supportTriageScript = `// support_triage.solve
-// Readable workflow draft. Integrations are mapped before production wiring.
+const supportTriageScript = `workflow "support_triage_demo"
 
-let customer_domain = "acme-labs.com"
-let subject = "Urgent billing issue"
-let body = "We were charged twice and need this fixed before renewal."
+on email.received
+  where inbox == "support@acme.com"
 
-let topic = "billing"
-let urgency = "urgent"
-let owner = "finance_operations"
-let queue = "billing"
-let status = "needs-human-review"
+extract
+  customer_email
+  subject
+  body
+  received_at
 
-print("Support inbox triage")
-print(customer_domain)
-print(topic)
-print(urgency)
+classify topic using ["billing", "bug", "onboarding", "account", "general"]
+classify urgency using ["normal", "high", "urgent"]
 
-if urgency == "urgent" {
-  print("Alert #support-escalations")
-}
+when topic == "billing"
+  set owner = "finance_operations"
+  set queue = "billing"
+  draft reply = "Thanks — we received your billing request and a finance specialist is reviewing it."
+  create task in "billing_queue"
 
-print("Create task in billing_queue")
-print("Draft reply: Thanks - we received your billing request and a finance specialist is reviewing it.")
-print(status)`;
+when topic == "bug"
+  set owner = "product_support"
+  set queue = "bug_triage"
+  draft reply = "Thanks — we received your report and are validating the issue now."
+  create task in "bug_queue"
+
+when topic == "onboarding"
+  set owner = "customer_success"
+  set queue = "onboarding_help"
+  draft reply = "Thanks — we received your onboarding question and will guide you through the next step."
+  create task in "success_queue"
+
+otherwise
+  set owner = "support_generalist"
+  set queue = "general_support"
+  draft reply = "Thanks — we received your request and will reply shortly."
+  create task in "support_queue"
+
+when urgency == "urgent"
+  notify slack "#support-escalations"
+  mark status = "needs-human-review"
+
+otherwise
+  mark status = "queued"
+
+output
+  customer_email
+  topic
+  urgency
+  owner
+  queue
+  status
+  reply`;
 
 function EmailFallback({ tone = "light" }: { tone?: "light" | "dark" }) {
   const textColor = tone === "dark" ? "text-slate-300" : "text-slate-500";
@@ -130,7 +158,7 @@ export default function SupportTriageDemoPage() {
                 rel="noreferrer"
                 className="rounded-2xl bg-slate-900 px-6 py-3 text-center text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
               >
-                Send your workflow
+                Open Gmail draft
               </a>
               <Link
                 href="/run/"
