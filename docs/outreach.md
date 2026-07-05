@@ -43,7 +43,7 @@ Look for public posts, comments, newsletters, job posts, or founder updates that
 
 The strongest signal is a specific workflow complaint, not a broad statement like "we need automation."
 
-## Short DM template
+## Shortest DM Template
 
 Use this for LinkedIn, X, community messages, or warm intros. Keep it short and adjust the first line to the actual pain signal.
 
@@ -163,7 +163,7 @@ Position it as a practical workflow audit and setup recommendation. Do not promi
 
 - Personalize the first line around a real pain signal.
 - Keep the message short.
-- Ask for one workflow, not a meeting.
+- Ask for one workflow, not a meeting first.
 - Link to https://www.solve-lang.com/audit/ when the person needs structure.
 - Use `hello@solve-lang.com` as the lead-capture email.
 - Do not use fake urgency.
