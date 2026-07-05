@@ -55,11 +55,26 @@ const outputs = [
 ];
 
 const riskItems = [
-  "Unclear ownership",
-  "Manual triage",
-  "Duplicated reading",
-  "Missed follow-ups",
-  "Human review for risky cases",
+  {
+    title: "Unclear ownership",
+    body: "Support requests stop bouncing between people because the owner rule is written down.",
+  },
+  {
+    title: "Manual triage",
+    body: "The first read becomes a structured decision instead of a repeated judgment call.",
+  },
+  {
+    title: "Duplicated reading",
+    body: "Everyone can see why the request was routed instead of re-reading the whole thread.",
+  },
+  {
+    title: "Missed follow-ups",
+    body: "The workflow names the next task, queue, and review point before the customer waits too long.",
+  },
+  {
+    title: "Human review for risky cases",
+    body: "Urgent or sensitive cases are flagged for a person instead of being treated as fully automatic.",
+  },
 ];
 
 const supportTriageScript = `workflow "support_triage_demo"
@@ -359,14 +374,11 @@ export default function SupportTriageDemoPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             {riskItems.map((item) => (
               <div
-                key={item}
+                key={item.title}
                 className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm"
               >
-                <h3 className="text-lg font-semibold">{item}</h3>
-                <p className="mt-3 leading-7 text-slate-600">
-                  Make the rule visible, decide where automation helps, and keep
-                  a person in the loop where judgment is needed.
-                </p>
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <p className="mt-3 leading-7 text-slate-600">{item.body}</p>
               </div>
             ))}
           </div>
