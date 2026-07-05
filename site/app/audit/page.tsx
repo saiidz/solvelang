@@ -106,6 +106,12 @@ export default function AuditPage() {
               >
                 Try Browser Preview
               </Link>
+              <Link
+                href="/demo/support-triage/"
+                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+              >
+                See support triage demo
+              </Link>
             </div>
             <div className="mt-4 max-w-2xl text-sm leading-6 text-slate-500">
               <p>
