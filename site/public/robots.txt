@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /account/
+Disallow: /search/
+
+Sitemap: https://www.solve-lang.com/sitemap.xml

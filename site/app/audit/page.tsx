@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "../components/JsonLd";
 
 export const metadata: Metadata = {
-  title: "Workflow Audit Intake | SolveLang",
+  title: "Workflow X-Ray Audit — SolveLang",
   description:
-    "Send one messy workflow and get next steps for turning it into a readable SolveLang workflow.",
+    "Send one messy workflow and get next steps for turning it into a readable SolveLang workflow map, draft, and automation path.",
 };
 
 const workflowAuditGmailUrl =
@@ -70,9 +71,29 @@ const deliverables = [
   "An optional custom setup quote if it makes sense",
 ];
 
+const auditBreadcrumbJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: "https://www.solve-lang.com/",
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: "Workflow X-Ray Audit",
+      item: "https://www.solve-lang.com/audit/",
+    },
+  ],
+};
+
 export default function AuditPage() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
+      <JsonLd id="audit-breadcrumb-json-ld" data={auditBreadcrumbJsonLd} />
       <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
         <div className="absolute inset-0 opacity-40">
           <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-slate-200 blur-3xl" />
