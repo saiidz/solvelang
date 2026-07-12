@@ -1,4 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
+use std::io::Read;
+use std::path::{Component, Path, PathBuf};
+use std::time::Duration;
 
 use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
@@ -38,16 +41,77 @@ struct Agent {
     tools: Vec<String>,
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug)]
+pub struct ExecutionPolicy {
+    pub allow_network: bool,
+    pub allow_file_read: bool,
+    pub allow_file_write: bool,
+    pub allow_env: bool,
+    pub allowed_roots: Vec<PathBuf>,
+    pub restrict_filesystem_roots: bool,
+    pub http_connect_timeout: Duration,
+    pub http_request_timeout: Duration,
+    pub http_max_body_bytes: usize,
+}
+
+impl ExecutionPolicy {
+    pub const DEFAULT_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+    pub const DEFAULT_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+    pub const DEFAULT_HTTP_MAX_BODY_BYTES: usize = 1_048_576;
+
+    pub fn unrestricted() -> Self {
+        Self {
+            allow_network: true,
+            allow_file_read: true,
+            allow_file_write: true,
+            allow_env: true,
+            allowed_roots: Vec::new(),
+            restrict_filesystem_roots: false,
+            http_connect_timeout: Self::DEFAULT_HTTP_CONNECT_TIMEOUT,
+            http_request_timeout: Self::DEFAULT_HTTP_REQUEST_TIMEOUT,
+            http_max_body_bytes: Self::DEFAULT_HTTP_MAX_BODY_BYTES,
+        }
+    }
+
+    pub fn safe(allowed_roots: Vec<PathBuf>) -> Self {
+        Self {
+            allow_network: false,
+            allow_file_read: false,
+            allow_file_write: false,
+            allow_env: false,
+            allowed_roots,
+            restrict_filesystem_roots: true,
+            http_connect_timeout: Self::DEFAULT_HTTP_CONNECT_TIMEOUT,
+            http_request_timeout: Self::DEFAULT_HTTP_REQUEST_TIMEOUT,
+            http_max_body_bytes: Self::DEFAULT_HTTP_MAX_BODY_BYTES,
+        }
+    }
+}
+
 pub struct AstRuntime {
     vars: HashMap<String, Value>,
     functions: HashMap<String, Function>,
     agents: HashMap<String, Agent>,
+    policy: ExecutionPolicy,
+}
+
+impl Default for AstRuntime {
+    fn default() -> Self {
+        Self {
+            vars: HashMap::new(),
+            functions: HashMap::new(),
+            agents: HashMap::new(),
+            policy: ExecutionPolicy::unrestricted(),
+        }
+    }
 }
 
 impl AstRuntime {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn with_policy(policy: ExecutionPolicy) -> Self {
+        Self {
+            policy,
+            ..Self::default()
+        }
     }
 
     pub fn run(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
@@ -396,6 +460,11 @@ impl AstRuntime {
 
                 match input {
                     Ok(Value::Text(name)) => {
+                        if !self.policy.allow_env {
+                            return Some(Err(RuntimeError::new(
+                                "environment-variable access is disabled by execution policy",
+                            )));
+                        }
                         let value = std::env::var(&name).unwrap_or_default();
                         Some(Ok(Value::Text(value)))
                     }
@@ -408,7 +477,17 @@ impl AstRuntime {
     }
 
     fn http_get(&self, url: &str) -> Result<Value, RuntimeError> {
-        let client = match Client::builder().build() {
+        if !self.policy.allow_network {
+            return Err(RuntimeError::new(
+                "network access is disabled by execution policy",
+            ));
+        }
+
+        let client = match Client::builder()
+            .connect_timeout(self.policy.http_connect_timeout)
+            .timeout(self.policy.http_request_timeout)
+            .build()
+        {
             Ok(client) => client,
             Err(error) => {
                 return Err(RuntimeError::new(format!(
@@ -421,56 +500,55 @@ impl AstRuntime {
         let response = match client.get(url).send() {
             Ok(response) => response,
             Err(error) => {
-                return Err(RuntimeError::new(format!("http_get failed: {}", error)));
+                return Err(self.http_request_error("http_get", &error));
             }
         };
 
-        let status = response.status().as_u16() as i32;
-        let final_url = response.url().to_string();
-
-        let mut headers = BTreeMap::new();
-        for (name, value) in response.headers().iter() {
-            headers.insert(
-                name.to_string(),
-                Value::Text(value.to_str().unwrap_or("").to_string()),
-            );
-        }
-
-        let body = match response.text() {
-            Ok(body) => body,
-            Err(error) => {
-                return Err(RuntimeError::new(format!(
-                    "could not read HTTP response body: {}",
-                    error
-                )));
-            }
-        };
-
-        let mut result = BTreeMap::new();
-        result.insert("status".to_string(), Value::Number(status));
-        result.insert("url".to_string(), Value::Text(final_url));
-        result.insert("body".to_string(), Value::Text(body));
-        result.insert("headers".to_string(), Value::Object(headers));
-
-        Ok(Value::Object(result))
+        self.http_response_to_value(response, "http_get")
     }
 
     fn read_file(&self, path: &str) -> Result<Value, RuntimeError> {
-        match std::fs::read_to_string(path) {
+        if !self.policy.allow_file_read {
+            return Err(RuntimeError::new(
+                "file read access is disabled by execution policy",
+            ));
+        }
+
+        let path = self.resolve_existing_allowed_path(path)?;
+
+        match std::fs::read_to_string(&path) {
             Ok(content) => Ok(Value::Text(content)),
             Err(error) => Err(RuntimeError::new(format!("read_file failed: {}", error))),
         }
     }
 
     fn write_file(&self, path: &str, body: &str) -> Result<Value, RuntimeError> {
-        match std::fs::write(path, body) {
+        if !self.policy.allow_file_write {
+            return Err(RuntimeError::new(
+                "file write access is disabled by execution policy",
+            ));
+        }
+
+        let path = self.resolve_writable_allowed_path(path)?;
+
+        match std::fs::write(&path, body) {
             Ok(_) => Ok(Value::Bool(true)),
             Err(error) => Err(RuntimeError::new(format!("write_file failed: {}", error))),
         }
     }
 
     fn http_post(&self, url: &str, body: &str) -> Result<Value, RuntimeError> {
-        let client = match Client::builder().build() {
+        if !self.policy.allow_network {
+            return Err(RuntimeError::new(
+                "network access is disabled by execution policy",
+            ));
+        }
+
+        let client = match Client::builder()
+            .connect_timeout(self.policy.http_connect_timeout)
+            .timeout(self.policy.http_request_timeout)
+            .build()
+        {
             Ok(client) => client,
             Err(error) => {
                 return Err(RuntimeError::new(format!(
@@ -488,10 +566,18 @@ impl AstRuntime {
         {
             Ok(response) => response,
             Err(error) => {
-                return Err(RuntimeError::new(format!("http_post failed: {}", error)));
+                return Err(self.http_request_error("http_post", &error));
             }
         };
 
+        self.http_response_to_value(response, "http_post")
+    }
+
+    fn http_response_to_value(
+        &self,
+        mut response: reqwest::blocking::Response,
+        builtin: &str,
+    ) -> Result<Value, RuntimeError> {
         let status = response.status().as_u16() as i32;
         let final_url = response.url().to_string();
 
@@ -503,8 +589,13 @@ impl AstRuntime {
             );
         }
 
-        let body = match response.text() {
-            Ok(body) => body,
+        let mut limited = response
+            .by_ref()
+            .take((self.policy.http_max_body_bytes + 1) as u64);
+        let mut body_bytes = Vec::new();
+
+        match limited.read_to_end(&mut body_bytes) {
+            Ok(_) => {}
             Err(error) => {
                 return Err(RuntimeError::new(format!(
                     "could not read HTTP response body: {}",
@@ -513,6 +604,15 @@ impl AstRuntime {
             }
         };
 
+        if body_bytes.len() > self.policy.http_max_body_bytes {
+            return Err(RuntimeError::new(format!(
+                "{} response body exceeded {} bytes",
+                builtin, self.policy.http_max_body_bytes
+            )));
+        }
+
+        let body = String::from_utf8_lossy(&body_bytes).to_string();
+
         let mut result = BTreeMap::new();
         result.insert("status".to_string(), Value::Number(status));
         result.insert("url".to_string(), Value::Text(final_url));
@@ -520,6 +620,88 @@ impl AstRuntime {
         result.insert("headers".to_string(), Value::Object(headers));
 
         Ok(Value::Object(result))
+    }
+
+    fn http_request_error(&self, builtin: &str, error: &reqwest::Error) -> RuntimeError {
+        if error.is_timeout() {
+            RuntimeError::new(format!(
+                "{} timed out after {} ms",
+                builtin,
+                self.policy.http_request_timeout.as_millis()
+            ))
+        } else {
+            RuntimeError::new(format!("{} failed: {}", builtin, error))
+        }
+    }
+
+    fn resolve_existing_allowed_path(&self, path: &str) -> Result<PathBuf, RuntimeError> {
+        self.reject_path_traversal(path)?;
+        let canonical = std::fs::canonicalize(path).map_err(|error| {
+            RuntimeError::new(format!("failed to resolve '{}': {}", path, error))
+        })?;
+        self.ensure_path_in_allowed_roots(&canonical)?;
+        Ok(canonical)
+    }
+
+    fn resolve_writable_allowed_path(&self, path: &str) -> Result<PathBuf, RuntimeError> {
+        self.reject_path_traversal(path)?;
+        let path = PathBuf::from(path);
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        let canonical_parent = std::fs::canonicalize(parent).map_err(|error| {
+            RuntimeError::new(format!(
+                "failed to resolve parent directory '{}': {}",
+                parent.display(),
+                error
+            ))
+        })?;
+        self.ensure_path_in_allowed_roots(&canonical_parent)?;
+
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| RuntimeError::new(format!("invalid file path '{}'", path.display())))?;
+
+        Ok(canonical_parent.join(file_name))
+    }
+
+    fn reject_path_traversal(&self, path: &str) -> Result<(), RuntimeError> {
+        if self.policy.restrict_filesystem_roots
+            && Path::new(path)
+                .components()
+                .any(|component| matches!(component, Component::ParentDir))
+        {
+            Err(RuntimeError::new(format!(
+                "path traversal is not allowed: '{}'",
+                path
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn ensure_path_in_allowed_roots(&self, path: &Path) -> Result<(), RuntimeError> {
+        if !self.policy.restrict_filesystem_roots {
+            return Ok(());
+        }
+
+        if self.policy.allowed_roots.is_empty() {
+            return Err(RuntimeError::new(
+                "filesystem access requires at least one allowed root",
+            ));
+        }
+
+        if self
+            .policy
+            .allowed_roots
+            .iter()
+            .any(|root| path.starts_with(root))
+        {
+            Ok(())
+        } else {
+            Err(RuntimeError::new(format!(
+                "path '{}' is outside allowed filesystem roots",
+                path.display()
+            )))
+        }
     }
 
     fn json_to_value(json: JsonValue) -> Value {
@@ -566,6 +748,22 @@ impl AstRuntime {
             None => return Err(RuntimeError::new(format!("unknown agent '{}'", name))),
         };
 
+        if !self.policy.allow_env {
+            return Err(RuntimeError::new(
+                "environment-variable access is disabled by execution policy",
+            ));
+        }
+
+        if !self.policy.allow_network
+            && std::env::var("SOLVELANG_AI_PROVIDER")
+                .map(|provider| provider.trim().eq_ignore_ascii_case("openai"))
+                .unwrap_or(false)
+        {
+            return Err(RuntimeError::new(
+                "network access is disabled by execution policy",
+            ));
+        }
+
         ai::ask_agent(name, &agent.instruction, &agent.tools, &message.to_string())
             .map_err(|error| RuntimeError::new(error.to_string()))
     }
@@ -607,20 +805,20 @@ if user.active {
 }
 "#,
         );
-        let mut runtime = AstRuntime::new();
+        let mut runtime = AstRuntime::default();
 
         runtime.run(&statements).expect("runtime succeeds");
     }
 
     #[test]
     fn reports_unknown_variables_and_divide_by_zero() {
-        let mut runtime = AstRuntime::new();
+        let mut runtime = AstRuntime::default();
         let unknown = runtime
             .run(&parse("print(missing)\n"))
             .expect_err("unknown variable should fail");
         assert!(unknown.to_string().contains("unknown variable 'missing'"));
 
-        let mut runtime = AstRuntime::new();
+        let mut runtime = AstRuntime::default();
         let divide = runtime
             .run(&parse("print(10 / 0)\n"))
             .expect_err("divide by zero should fail");
