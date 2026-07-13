@@ -43,7 +43,6 @@ pub fn validate_source(source: &str) -> Result<(), Vec<Diagnostic>> {
         }
 
         check_quotes(line, line_number, &mut diagnostics);
-        check_statement_shape(line, trimmed, line_number, &mut diagnostics);
         check_braces(line, line_number, &mut brace_stack, &mut diagnostics);
     }
 
@@ -77,67 +76,6 @@ fn check_quotes(line: &str, line_number: usize, diagnostics: &mut Vec<Diagnostic
     }
 }
 
-fn check_statement_shape(
-    line: &str,
-    trimmed: &str,
-    line_number: usize,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    if trimmed.starts_with("let ") && !trimmed.contains('=') {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "let"),
-            "Invalid variable declaration: expected '='.",
-            "Use syntax like: let name = value",
-        ));
-    }
-
-    if trimmed.starts_with("print") && !trimmed.starts_with("print(") {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "print"),
-            "Invalid print statement.",
-            "Use syntax like: print(value)",
-        ));
-    }
-
-    if trimmed.starts_with("if ") && !trimmed.ends_with('{') {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "if"),
-            "Invalid if statement: missing opening '{'.",
-            "Use syntax like: if condition {",
-        ));
-    }
-
-    if trimmed.starts_with("while ") && !trimmed.ends_with('{') {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "while"),
-            "Invalid while statement: missing opening '{'.",
-            "Use syntax like: while condition {",
-        ));
-    }
-
-    if trimmed.starts_with("fn ") && !trimmed.ends_with('{') {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "fn"),
-            "Invalid function declaration: missing opening '{'.",
-            "Use syntax like: fn name(arg) {",
-        ));
-    }
-
-    if trimmed.starts_with("agent ") && !trimmed.ends_with('{') {
-        diagnostics.push(Diagnostic::new(
-            line_number,
-            column_of(line, "agent"),
-            "Invalid agent declaration: missing opening '{'.",
-            "Use syntax like: agent SupportBot {",
-        ));
-    }
-}
-
 fn check_braces(
     line: &str,
     line_number: usize,
@@ -158,10 +96,6 @@ fn check_braces(
             _ => {}
         }
     }
-}
-
-fn column_of(line: &str, needle: &str) -> usize {
-    line.find(needle).map(|index| index + 1).unwrap_or(1)
 }
 
 #[cfg(test)]

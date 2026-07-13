@@ -7,25 +7,96 @@ use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
 use crate::ai;
-use crate::ast::{BinaryOp, Expr, Stmt, UnaryOp};
+use crate::ast::{BinaryOp, Expr, ExprKind, SourceLocation, Stmt, UnaryOp};
 use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuntimeError {
     message: String,
+    context: Option<Box<RuntimeErrorContext>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct RuntimeErrorContext {
+    location: SourceLocation,
+    source_line: Option<String>,
+    filename: Option<String>,
+    hint: Option<String>,
 }
 
 impl RuntimeError {
     fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            context: None,
         }
+    }
+
+    fn at(
+        message: impl Into<String>,
+        location: SourceLocation,
+        source_line: Option<String>,
+        filename: Option<String>,
+        hint: Option<String>,
+    ) -> Self {
+        Self {
+            message: message.into(),
+            context: Some(Box::new(RuntimeErrorContext {
+                location,
+                source_line,
+                filename,
+                hint,
+            })),
+        }
+    }
+
+    fn with_context(
+        mut self,
+        location: SourceLocation,
+        source_line: Option<String>,
+        filename: Option<String>,
+    ) -> Self {
+        if self.context.is_none() {
+            self.context = Some(Box::new(RuntimeErrorContext {
+                location,
+                source_line,
+                filename,
+                hint: None,
+            }));
+        }
+        self
     }
 }
 
 impl std::fmt::Display for RuntimeError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "SolveLang Runtime Error: {}", self.message)
+        if let Some(context) = &self.context {
+            let location = context.location;
+            write!(
+                formatter,
+                "SolveLang Runtime Error on line {}, column {}",
+                location.line, location.column
+            )?;
+            if let Some(filename) = &context.filename {
+                write!(formatter, " in {}", filename)?;
+            }
+            if let Some(source_line) = &context.source_line {
+                let padding = " ".repeat(location.column.saturating_sub(1));
+                write!(
+                    formatter,
+                    "\n{:>3} | {}\n    | {}^\n{}",
+                    location.line, source_line, padding, self.message
+                )?;
+            } else {
+                write!(formatter, "\n{}", self.message)?;
+            }
+            if let Some(hint) = &context.hint {
+                write!(formatter, "\nHint: {}", hint)?;
+            }
+            Ok(())
+        } else {
+            write!(formatter, "SolveLang Runtime Error: {}", self.message)
+        }
     }
 }
 
@@ -93,6 +164,8 @@ pub struct AstRuntime {
     functions: HashMap<String, Function>,
     agents: HashMap<String, Agent>,
     policy: ExecutionPolicy,
+    source_lines: Vec<String>,
+    filename: Option<String>,
 }
 
 impl Default for AstRuntime {
@@ -102,16 +175,47 @@ impl Default for AstRuntime {
             functions: HashMap::new(),
             agents: HashMap::new(),
             policy: ExecutionPolicy::unrestricted(),
+            source_lines: Vec::new(),
+            filename: None,
         }
     }
 }
 
 impl AstRuntime {
-    pub fn with_policy(policy: ExecutionPolicy) -> Self {
+    pub fn with_source(policy: ExecutionPolicy, source: &str, filename: &str) -> Self {
         Self {
+            source_lines: source.lines().map(str::to_owned).collect(),
+            filename: Some(filename.to_string()),
             policy,
             ..Self::default()
         }
+    }
+
+    fn error_at(
+        &self,
+        location: SourceLocation,
+        message: impl Into<String>,
+        hint: Option<String>,
+    ) -> RuntimeError {
+        RuntimeError::at(
+            message,
+            location,
+            self.source_lines
+                .get(location.line.saturating_sub(1))
+                .cloned(),
+            self.filename.clone(),
+            hint,
+        )
+    }
+
+    fn attach_location(&self, error: RuntimeError, location: SourceLocation) -> RuntimeError {
+        error.with_context(
+            location,
+            self.source_lines
+                .get(location.line.saturating_sub(1))
+                .cloned(),
+            self.filename.clone(),
+        )
     }
 
     pub fn run(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
@@ -130,25 +234,35 @@ impl AstRuntime {
 
     fn execute(&mut self, statement: &Stmt) -> Result<Option<Value>, RuntimeError> {
         match statement {
-            Stmt::Let { name, value } => {
+            Stmt::Let { name, value, .. } => {
                 let value = self.eval(value)?;
                 self.vars.insert(name.clone(), value);
                 Ok(None)
             }
-            Stmt::Assign { name, value } => {
+            Stmt::Assign {
+                name,
+                value,
+                location,
+            } => {
                 if !self.vars.contains_key(name) {
-                    return Err(RuntimeError::new(format!("unknown variable '{}'", name)));
+                    return Err(self.error_at(
+                        *location,
+                        format!("unknown variable '{}'", name),
+                        None,
+                    ));
                 }
                 let value = self.eval(value)?;
                 self.vars.insert(name.clone(), value);
                 Ok(None)
             }
-            Stmt::Print(expr) => {
-                println!("{}", self.eval(expr)?);
+            Stmt::Print { value, .. } => {
+                println!("{}", self.eval(value)?);
                 Ok(None)
             }
-            Stmt::Return(expr) => Ok(Some(self.eval(expr)?)),
-            Stmt::Function { name, params, body } => {
+            Stmt::Return { value, .. } => Ok(Some(self.eval(value)?)),
+            Stmt::Function {
+                name, params, body, ..
+            } => {
                 self.functions.insert(
                     name.clone(),
                     Function {
@@ -162,6 +276,7 @@ impl AstRuntime {
                 condition,
                 then_branch,
                 else_branch,
+                ..
             } => {
                 if self.eval(condition)?.is_truthy() {
                     self.execute_block(then_branch)
@@ -169,7 +284,11 @@ impl AstRuntime {
                     self.execute_block(else_branch)
                 }
             }
-            Stmt::While { condition, body } => {
+            Stmt::While {
+                condition,
+                body,
+                location,
+            } => {
                 let mut safety_counter = 0;
 
                 while self.eval(condition)?.is_truthy() {
@@ -179,7 +298,14 @@ impl AstRuntime {
 
                     safety_counter += 1;
                     if safety_counter > 10_000 {
-                        return Err(RuntimeError::new("loop stopped after 10000 iterations"));
+                        return Err(self.error_at(
+                            *location,
+                            "loop stopped after 10000 iterations",
+                            Some(
+                                "Review the loop condition or add a terminating update."
+                                    .to_string(),
+                            ),
+                        ));
                     }
                 }
 
@@ -189,6 +315,7 @@ impl AstRuntime {
                 name,
                 instruction,
                 tools,
+                ..
             } => {
                 self.agents.insert(
                     name.clone(),
@@ -199,9 +326,13 @@ impl AstRuntime {
                 );
                 Ok(None)
             }
-            Stmt::Ask { agent, message } => {
+            Stmt::Ask {
+                agent,
+                message,
+                location,
+            } => {
                 let message_value = self.eval(message)?;
-                println!("{}", self.ask_agent(agent, &message_value)?);
+                println!("{}", self.ask_agent(agent, &message_value, *location)?);
                 Ok(None)
             }
             Stmt::Expr(expr) => {
@@ -212,68 +343,96 @@ impl AstRuntime {
     }
 
     fn eval(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
-        match expr {
-            Expr::Number(value) => Ok(Value::Number(*value)),
-            Expr::Text(value) => Ok(Value::Text(value.clone())),
-            Expr::Bool(value) => Ok(Value::Bool(*value)),
-            Expr::Variable(name) => self
-                .vars
-                .get(name)
-                .cloned()
-                .ok_or_else(|| RuntimeError::new(format!("unknown variable '{}'", name))),
-            Expr::Array(values) => {
+        match &expr.kind {
+            ExprKind::Number(value) => Ok(Value::Number(*value)),
+            ExprKind::Text(value) => Ok(Value::Text(value.clone())),
+            ExprKind::Bool(value) => Ok(Value::Bool(*value)),
+            ExprKind::Variable(name) => self.vars.get(name).cloned().ok_or_else(|| {
+                self.error_at(expr.location, format!("unknown variable '{}'", name), None)
+            }),
+            ExprKind::Array(values) => {
                 let mut result = Vec::new();
                 for value in values {
                     result.push(self.eval(value)?);
                 }
                 Ok(Value::Array(result))
             }
-            Expr::Object(entries) => {
+            ExprKind::Object(entries) => {
                 let mut result = BTreeMap::new();
                 for (key, value_expr) in entries {
                     result.insert(key.clone(), self.eval(value_expr)?);
                 }
                 Ok(Value::Object(result))
             }
-            Expr::Property(target, property) => {
+            ExprKind::Property(target, property) => {
                 let target = self.eval(target)?;
                 match target {
                     Value::Object(entries) => {
                         Ok(entries.get(property).cloned().unwrap_or(Value::Null))
                     }
-                    _ => Ok(Value::Null),
+                    value => Err(self.error_at(
+                        expr.location,
+                        format!(
+                            "Property access requires an object, got {}.",
+                            value.type_name()
+                        ),
+                        Some("Use property access only with an object value.".to_string()),
+                    )),
                 }
             }
-            Expr::Index(target, index) => {
+            ExprKind::Index(target, index) => {
                 let target = self.eval(target)?;
                 let index_value = self.eval(index)?;
 
                 match target {
-                    Value::Array(values) => {
-                        let index = index_value.as_number().unwrap_or(0) as usize;
-                        Ok(values.get(index).cloned().unwrap_or(Value::Null))
-                    }
+                    Value::Array(values) => match index_value {
+                        Value::Number(index_number) if index_number < 0 => Err(self.error_at(
+                            index.location,
+                            "Array index cannot be negative.",
+                            Some("Use an index starting at 0.".to_string()),
+                        )),
+                        Value::Number(index_number) => values.get(index_number as usize).cloned().ok_or_else(|| {
+                            self.error_at(
+                                index.location,
+                                format!("Array index {} is out of bounds for an array of length {}.", index_number, values.len()),
+                                Some(if values.is_empty() { "The array is empty, so no index is valid.".to_string() } else { format!("Use an index between 0 and {}.", values.len() - 1) }),
+                            )
+                        }),
+                        value => Err(self.error_at(
+                            index.location,
+                            format!("Array index must be a number, got {}.", value.type_name()),
+                            Some("Use a numeric array index.".to_string()),
+                        )),
+                    },
                     Value::Object(entries) => match index_value {
                         Value::Text(key) => Ok(entries.get(&key).cloned().unwrap_or(Value::Null)),
-                        _ => Ok(Value::Null),
+                        value => Err(self.error_at(
+                            index.location,
+                            format!("Object index must be text, got {}.", value.type_name()),
+                            Some("Use a quoted object key.".to_string()),
+                        )),
                     },
-                    _ => Ok(Value::Null),
+                    value => Err(self.error_at(
+                        expr.location,
+                        format!("Index access requires an array or object, got {}.", value.type_name()),
+                        Some("Use [index] with an array or object value.".to_string()),
+                    )),
                 }
             }
-            Expr::Unary { operator, expr } => {
+            ExprKind::Unary { operator, expr } => {
                 let value = self.eval(expr)?;
                 Ok(self.eval_unary(operator, value))
             }
-            Expr::Binary {
+            ExprKind::Binary {
                 left,
                 operator,
                 right,
             } => {
                 let left = self.eval(left)?;
                 let right = self.eval(right)?;
-                self.eval_binary(left, operator, right)
+                self.eval_binary(left, operator, right, expr.location)
             }
-            Expr::Call { name, args } => self.call_function(name, args),
+            ExprKind::Call { name, args } => self.call_function(name, args, expr.location),
         }
     }
 
@@ -288,23 +447,23 @@ impl AstRuntime {
         left: Value,
         operator: &BinaryOp,
         right: Value,
+        location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
         match operator {
-            BinaryOp::Add => Ok(Value::Number(
-                left.as_number().unwrap_or(0) + right.as_number().unwrap_or(0),
-            )),
-            BinaryOp::Subtract => Ok(Value::Number(
-                left.as_number().unwrap_or(0) - right.as_number().unwrap_or(0),
-            )),
-            BinaryOp::Multiply => Ok(Value::Number(
-                left.as_number().unwrap_or(0) * right.as_number().unwrap_or(0),
-            )),
+            BinaryOp::Add => self.numeric_binary(left, right, location, "+", |a, b| a + b),
+            BinaryOp::Subtract => self.numeric_binary(left, right, location, "-", |a, b| a - b),
+            BinaryOp::Multiply => self.numeric_binary(left, right, location, "*", |a, b| a * b),
             BinaryOp::Divide => {
-                let right_number = right.as_number().unwrap_or(0);
+                let (left_number, right_number) =
+                    self.numeric_operands(left, right, location, "/")?;
                 if right_number == 0 {
-                    Err(RuntimeError::new("divide by zero"))
+                    Err(self.error_at(
+                        location,
+                        "divide by zero",
+                        Some("Use a non-zero divisor.".to_string()),
+                    ))
                 } else {
-                    Ok(Value::Number(left.as_number().unwrap_or(0) / right_number))
+                    Ok(Value::Number(left_number / right_number))
                 }
             }
             BinaryOp::Join => Ok(Value::Text(format!("{}{}", left, right))),
@@ -312,38 +471,97 @@ impl AstRuntime {
             BinaryOp::Or => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
             BinaryOp::Equal => Ok(Value::Bool(left == right)),
             BinaryOp::NotEqual => Ok(Value::Bool(left != right)),
-            BinaryOp::Greater => Ok(Value::Bool(
-                left.as_number().unwrap_or(0) > right.as_number().unwrap_or(0),
-            )),
-            BinaryOp::GreaterEqual => Ok(Value::Bool(
-                left.as_number().unwrap_or(0) >= right.as_number().unwrap_or(0),
-            )),
-            BinaryOp::Less => Ok(Value::Bool(
-                left.as_number().unwrap_or(0) < right.as_number().unwrap_or(0),
-            )),
-            BinaryOp::LessEqual => Ok(Value::Bool(
-                left.as_number().unwrap_or(0) <= right.as_number().unwrap_or(0),
+            BinaryOp::Greater => self.numeric_comparison(left, right, location, ">", |a, b| a > b),
+            BinaryOp::GreaterEqual => {
+                self.numeric_comparison(left, right, location, ">=", |a, b| a >= b)
+            }
+            BinaryOp::Less => self.numeric_comparison(left, right, location, "<", |a, b| a < b),
+            BinaryOp::LessEqual => {
+                self.numeric_comparison(left, right, location, "<=", |a, b| a <= b)
+            }
+        }
+    }
+
+    fn numeric_binary(
+        &self,
+        left: Value,
+        right: Value,
+        location: SourceLocation,
+        operator: &str,
+        operation: impl FnOnce(i32, i32) -> i32,
+    ) -> Result<Value, RuntimeError> {
+        let (left, right) = self.numeric_operands(left, right, location, operator)?;
+        Ok(Value::Number(operation(left, right)))
+    }
+
+    fn numeric_comparison(
+        &self,
+        left: Value,
+        right: Value,
+        location: SourceLocation,
+        operator: &str,
+        comparison: impl FnOnce(i32, i32) -> bool,
+    ) -> Result<Value, RuntimeError> {
+        let (left, right) = self.numeric_operands(left, right, location, operator)?;
+        Ok(Value::Bool(comparison(left, right)))
+    }
+
+    fn numeric_operands(
+        &self,
+        left: Value,
+        right: Value,
+        location: SourceLocation,
+        operator: &str,
+    ) -> Result<(i32, i32), RuntimeError> {
+        match (&left, &right) {
+            (Value::Number(left), Value::Number(right)) => Ok((*left, *right)),
+            _ => Err(self.error_at(
+                location,
+                format!(
+                    "operator '{}' requires number operands, got {} and {}",
+                    operator,
+                    left.type_name(),
+                    right.type_name()
+                ),
+                Some("Use numbers with arithmetic and ordered comparison operators.".to_string()),
             )),
         }
     }
 
-    fn call_function(&mut self, name: &str, args: &[Expr]) -> Result<Value, RuntimeError> {
-        if let Some(value) = self.call_builtin(name, args) {
-            return value;
+    fn call_function(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        if let Some(value) = self.call_builtin(name, args, location) {
+            return value.map_err(|error| self.attach_location(error, location));
         }
 
         let function = match self.functions.get(name) {
             Some(function) => function.clone(),
-            None => return Err(RuntimeError::new(format!("unknown function '{}'", name))),
+            None => {
+                return Err(self.error_at(location, format!("unknown function '{}'", name), None));
+            }
         };
+
+        if args.len() != function.params.len() {
+            return Err(self.error_at(
+                location,
+                format!(
+                    "Function '{}' expects {} arguments but received {}.",
+                    name,
+                    function.params.len(),
+                    args.len()
+                ),
+                Some("Pass exactly the parameters declared by the function.".to_string()),
+            ));
+        }
 
         let saved_vars = self.vars.clone();
 
         for (index, param) in function.params.iter().enumerate() {
-            let value = match args.get(index) {
-                Some(arg) => self.eval(arg)?,
-                None => Value::Null,
-            };
+            let value = self.eval(&args[index])?;
             self.vars.insert(param.clone(), value);
         }
 
@@ -352,7 +570,12 @@ impl AstRuntime {
         Ok(result)
     }
 
-    fn call_builtin(&mut self, name: &str, args: &[Expr]) -> Option<Result<Value, RuntimeError>> {
+    fn call_builtin(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        location: SourceLocation,
+    ) -> Option<Result<Value, RuntimeError>> {
         match name {
             "json_parse" => {
                 let input = args
@@ -363,11 +586,17 @@ impl AstRuntime {
                 match input {
                     Ok(Value::Text(text)) => match serde_json::from_str::<JsonValue>(&text) {
                         Ok(json) => Some(Ok(Self::json_to_value(json))),
-                        Err(error) => {
-                            Some(Err(RuntimeError::new(format!("invalid JSON: {}", error))))
-                        }
+                        Err(error) => Some(Err(self.error_at(
+                            location,
+                            format!("invalid JSON: {}", error),
+                            None,
+                        ))),
                     },
-                    Ok(_) => Some(Err(RuntimeError::new("json_parse expects a text value"))),
+                    Ok(_) => Some(Err(self.error_at(
+                        location,
+                        "json_parse expects a text value",
+                        None,
+                    ))),
                     Err(error) => Some(Err(error)),
                 }
             }
@@ -389,8 +618,12 @@ impl AstRuntime {
                     .unwrap_or(Ok(Value::Null));
 
                 match input {
-                    Ok(Value::Text(url)) => Some(self.http_get(&url)),
-                    Ok(_) => Some(Err(RuntimeError::new("http_get expects a text URL"))),
+                    Ok(Value::Text(url)) => Some(self.http_get(&url, location)),
+                    Ok(_) => Some(Err(self.error_at(
+                        location,
+                        "http_get expects a text URL",
+                        None,
+                    ))),
                     Err(error) => Some(Err(error)),
                 }
             }
@@ -407,12 +640,18 @@ impl AstRuntime {
 
                 match (url, body) {
                     (Ok(Value::Text(url)), Ok(Value::Text(body))) => {
-                        Some(self.http_post(&url, &body))
+                        Some(self.http_post(&url, &body, location))
                     }
-                    (Ok(Value::Text(_)), Ok(_)) => {
-                        Some(Err(RuntimeError::new("http_post expects a text body")))
-                    }
-                    (Ok(_), Ok(_)) => Some(Err(RuntimeError::new("http_post expects a text URL"))),
+                    (Ok(Value::Text(_)), Ok(_)) => Some(Err(self.error_at(
+                        location,
+                        "http_post expects a text body",
+                        None,
+                    ))),
+                    (Ok(_), Ok(_)) => Some(Err(self.error_at(
+                        location,
+                        "http_post expects a text URL",
+                        None,
+                    ))),
                     (Err(error), _) | (_, Err(error)) => Some(Err(error)),
                 }
             }
@@ -423,8 +662,12 @@ impl AstRuntime {
                     .unwrap_or(Ok(Value::Null));
 
                 match input {
-                    Ok(Value::Text(path)) => Some(self.read_file(&path)),
-                    Ok(_) => Some(Err(RuntimeError::new("read_file expects a text path"))),
+                    Ok(Value::Text(path)) => Some(self.read_file(&path, location)),
+                    Ok(_) => Some(Err(self.error_at(
+                        location,
+                        "read_file expects a text path",
+                        None,
+                    ))),
                     Err(error) => Some(Err(error)),
                 }
             }
@@ -441,14 +684,18 @@ impl AstRuntime {
 
                 match (path, body) {
                     (Ok(Value::Text(path)), Ok(Value::Text(body))) => {
-                        Some(self.write_file(&path, &body))
+                        Some(self.write_file(&path, &body, location))
                     }
-                    (Ok(Value::Text(_)), Ok(_)) => {
-                        Some(Err(RuntimeError::new("write_file expects a text body")))
-                    }
-                    (Ok(_), Ok(_)) => {
-                        Some(Err(RuntimeError::new("write_file expects a text path")))
-                    }
+                    (Ok(Value::Text(_)), Ok(_)) => Some(Err(self.error_at(
+                        location,
+                        "write_file expects a text body",
+                        None,
+                    ))),
+                    (Ok(_), Ok(_)) => Some(Err(self.error_at(
+                        location,
+                        "write_file expects a text path",
+                        None,
+                    ))),
                     (Err(error), _) | (_, Err(error)) => Some(Err(error)),
                 }
             }
@@ -461,14 +708,20 @@ impl AstRuntime {
                 match input {
                     Ok(Value::Text(name)) => {
                         if !self.policy.allow_env {
-                            return Some(Err(RuntimeError::new(
+                            return Some(Err(self.error_at(
+                                location,
                                 "environment-variable access is disabled by execution policy",
+                                None,
                             )));
                         }
                         let value = std::env::var(&name).unwrap_or_default();
                         Some(Ok(Value::Text(value)))
                     }
-                    Ok(_) => Some(Err(RuntimeError::new("env expects a text variable name"))),
+                    Ok(_) => Some(Err(self.error_at(
+                        location,
+                        "env expects a text variable name",
+                        None,
+                    ))),
                     Err(error) => Some(Err(error)),
                 }
             }
@@ -476,10 +729,12 @@ impl AstRuntime {
         }
     }
 
-    fn http_get(&self, url: &str) -> Result<Value, RuntimeError> {
+    fn http_get(&self, url: &str, location: SourceLocation) -> Result<Value, RuntimeError> {
         if !self.policy.allow_network {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "network access is disabled by execution policy",
+                None,
             ));
         }
 
@@ -490,27 +745,30 @@ impl AstRuntime {
         {
             Ok(client) => client,
             Err(error) => {
-                return Err(RuntimeError::new(format!(
-                    "could not create HTTP client: {}",
-                    error
-                )));
+                return Err(self.error_at(
+                    location,
+                    format!("could not create HTTP client: {}", error),
+                    None,
+                ));
             }
         };
 
         let response = match client.get(url).send() {
             Ok(response) => response,
             Err(error) => {
-                return Err(self.http_request_error("http_get", &error));
+                return Err(self.http_request_error("http_get", &error, location));
             }
         };
 
-        self.http_response_to_value(response, "http_get")
+        self.http_response_to_value(response, "http_get", location)
     }
 
-    fn read_file(&self, path: &str) -> Result<Value, RuntimeError> {
+    fn read_file(&self, path: &str, location: SourceLocation) -> Result<Value, RuntimeError> {
         if !self.policy.allow_file_read {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "file read access is disabled by execution policy",
+                None,
             ));
         }
 
@@ -518,14 +776,23 @@ impl AstRuntime {
 
         match std::fs::read_to_string(&path) {
             Ok(content) => Ok(Value::Text(content)),
-            Err(error) => Err(RuntimeError::new(format!("read_file failed: {}", error))),
+            Err(error) => {
+                Err(self.error_at(location, format!("read_file failed: {}", error), None))
+            }
         }
     }
 
-    fn write_file(&self, path: &str, body: &str) -> Result<Value, RuntimeError> {
+    fn write_file(
+        &self,
+        path: &str,
+        body: &str,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
         if !self.policy.allow_file_write {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "file write access is disabled by execution policy",
+                None,
             ));
         }
 
@@ -533,14 +800,23 @@ impl AstRuntime {
 
         match std::fs::write(&path, body) {
             Ok(_) => Ok(Value::Bool(true)),
-            Err(error) => Err(RuntimeError::new(format!("write_file failed: {}", error))),
+            Err(error) => {
+                Err(self.error_at(location, format!("write_file failed: {}", error), None))
+            }
         }
     }
 
-    fn http_post(&self, url: &str, body: &str) -> Result<Value, RuntimeError> {
+    fn http_post(
+        &self,
+        url: &str,
+        body: &str,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
         if !self.policy.allow_network {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "network access is disabled by execution policy",
+                None,
             ));
         }
 
@@ -551,10 +827,11 @@ impl AstRuntime {
         {
             Ok(client) => client,
             Err(error) => {
-                return Err(RuntimeError::new(format!(
-                    "could not create HTTP client: {}",
-                    error
-                )));
+                return Err(self.error_at(
+                    location,
+                    format!("could not create HTTP client: {}", error),
+                    None,
+                ));
             }
         };
 
@@ -566,17 +843,18 @@ impl AstRuntime {
         {
             Ok(response) => response,
             Err(error) => {
-                return Err(self.http_request_error("http_post", &error));
+                return Err(self.http_request_error("http_post", &error, location));
             }
         };
 
-        self.http_response_to_value(response, "http_post")
+        self.http_response_to_value(response, "http_post", location)
     }
 
     fn http_response_to_value(
         &self,
         mut response: reqwest::blocking::Response,
         builtin: &str,
+        location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
         let status = response.status().as_u16() as i32;
         let final_url = response.url().to_string();
@@ -597,18 +875,23 @@ impl AstRuntime {
         match limited.read_to_end(&mut body_bytes) {
             Ok(_) => {}
             Err(error) => {
-                return Err(RuntimeError::new(format!(
-                    "could not read HTTP response body: {}",
-                    error
-                )));
+                return Err(self.error_at(
+                    location,
+                    format!("could not read HTTP response body: {}", error),
+                    None,
+                ));
             }
         };
 
         if body_bytes.len() > self.policy.http_max_body_bytes {
-            return Err(RuntimeError::new(format!(
-                "{} response body exceeded {} bytes",
-                builtin, self.policy.http_max_body_bytes
-            )));
+            return Err(self.error_at(
+                location,
+                format!(
+                    "{} response body exceeded {} bytes",
+                    builtin, self.policy.http_max_body_bytes
+                ),
+                None,
+            ));
         }
 
         let body = String::from_utf8_lossy(&body_bytes).to_string();
@@ -622,15 +905,24 @@ impl AstRuntime {
         Ok(Value::Object(result))
     }
 
-    fn http_request_error(&self, builtin: &str, error: &reqwest::Error) -> RuntimeError {
+    fn http_request_error(
+        &self,
+        builtin: &str,
+        error: &reqwest::Error,
+        location: SourceLocation,
+    ) -> RuntimeError {
         if error.is_timeout() {
-            RuntimeError::new(format!(
-                "{} timed out after {} ms",
-                builtin,
-                self.policy.http_request_timeout.as_millis()
-            ))
+            self.error_at(
+                location,
+                format!(
+                    "{} timed out after {} ms",
+                    builtin,
+                    self.policy.http_request_timeout.as_millis()
+                ),
+                None,
+            )
         } else {
-            RuntimeError::new(format!("{} failed: {}", builtin, error))
+            self.error_at(location, format!("{} failed: {}", builtin, error), None)
         }
     }
 
@@ -742,15 +1034,24 @@ impl AstRuntime {
         }
     }
 
-    fn ask_agent(&self, name: &str, message: &Value) -> Result<String, RuntimeError> {
+    fn ask_agent(
+        &self,
+        name: &str,
+        message: &Value,
+        location: SourceLocation,
+    ) -> Result<String, RuntimeError> {
         let agent = match self.agents.get(name) {
             Some(agent) => agent,
-            None => return Err(RuntimeError::new(format!("unknown agent '{}'", name))),
+            None => {
+                return Err(self.error_at(location, format!("unknown agent '{}'", name), None));
+            }
         };
 
         if !self.policy.allow_env {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "environment-variable access is disabled by execution policy",
+                None,
             ));
         }
 
@@ -759,13 +1060,15 @@ impl AstRuntime {
                 .map(|provider| provider.trim().eq_ignore_ascii_case("openai"))
                 .unwrap_or(false)
         {
-            return Err(RuntimeError::new(
+            return Err(self.error_at(
+                location,
                 "network access is disabled by execution policy",
+                None,
             ));
         }
 
         ai::ask_agent(name, &agent.instruction, &agent.tools, &message.to_string())
-            .map_err(|error| RuntimeError::new(error.to_string()))
+            .map_err(|error| self.error_at(location, error.to_string(), None))
     }
 }
 

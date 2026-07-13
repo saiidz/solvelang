@@ -84,6 +84,13 @@ Supported arithmetic operators:
 
 Division by zero is a runtime error.
 
+Arithmetic requires number operands. SolveLang does not coerce text, booleans, arrays, objects, or `null` to zero:
+
+```solve
+print(true + 1) // Runtime error: '+' requires number operands
+print("5" - 2) // Runtime error: '-' requires number operands
+```
+
 ### Booleans
 
 Use `true` and `false`.
@@ -111,7 +118,7 @@ print(owners[0])
 print(owners[2])
 ```
 
-Out-of-range array access currently returns `null`.
+Array indexes must be non-negative numbers within the array bounds. A negative, non-number, or out-of-range index is a runtime error with the index location. For example, `owners["first"]` and `owners[8]` fail clearly instead of returning `null`.
 
 ## Objects
 
@@ -141,7 +148,7 @@ String-key indexing also works:
 print(ticket["topic"])
 ```
 
-Missing properties currently return `null`.
+Bracket keys must be text. `ticket[0]` is a runtime error. Missing properties and missing text keys continue to return `null` for compatibility. Property access on a non-object, and index access on a value that is neither an array nor object, are runtime errors.
 
 ## Print
 
@@ -174,7 +181,7 @@ if tickets > threshold {
 }
 ```
 
-Numeric comparisons compare numbers. Equality and inequality compare full values.
+Ordered comparisons require number operands. Equality and inequality compare full values and remain backward compatible.
 
 ## If / Else
 
@@ -224,7 +231,7 @@ let status = qualify("high", 7500)
 print(status)
 ```
 
-Function calls use `name(arg1, arg2)`. Missing arguments currently become `null`.
+Function calls use `name(arg1, arg2)` and must provide exactly the declared number of arguments. Too few or too many arguments are source-located runtime errors that name the function and show the expected and received counts.
 
 ## Imports
 
@@ -237,7 +244,21 @@ print(user_name)
 print(user_plan)
 ```
 
-Imports are resolved relative to the importing file. Circular imports are rejected.
+Imports are resolved relative to the importing file. Circular imports are rejected. The current loader flattens imported source before parsing, so diagnostics for imported content use the combined source line number and the top-level filename. Preserving original imported-file filenames is a remaining limitation.
+
+## Runtime Errors
+
+The Rust CLI reports runtime errors with a file when available, line and column, source text, a caret, and a hint when appropriate:
+
+```text
+SolveLang Runtime Error on line 2, column 13 in workflow.solve
+  2 | print(items[8])
+    |             ^
+Array index 8 is out of bounds for an array of length 2.
+Hint: Use an index between 0 and 1.
+```
+
+Parser recovery uses statement boundaries so one malformed statement generally yields one primary diagnostic while later malformed statements can still be reported.
 
 ## Builtins
 

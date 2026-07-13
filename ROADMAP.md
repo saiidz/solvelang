@@ -1,6 +1,6 @@
 # SolveLang Roadmap
 
-SolveLang is an early language prototype written in Rust. The project now has a working lexer, parser, AST, and default AST runtime, with the older line-based runtime kept only as a legacy fallback.
+SolveLang is an early language prototype written in Rust. The project has a working lexer, parser, AST, and one canonical AST runtime. The former line-based runtime files and public legacy CLI entry points have been removed.
 
 ## Current Baseline
 
@@ -42,25 +42,21 @@ Completed:
    - `while`
    - arrays
    - agent prototype blocks
-- The old string-based runtime remains available through `solvec legacy`
+- Runtime-relevant AST nodes retain source locations from lexer tokens
+- Runtime errors render source line, column, caret, and hints where available
+- Invalid numeric arithmetic and ordered comparisons return structured errors instead of coercing values to zero
+- Invalid array/object/property access returns structured errors instead of silently returning `null`
+- User-defined function calls validate argument counts
+- Parser recovery synchronizes at statement boundaries to limit cascading diagnostics
+- Deterministic golden tests cover the shipped examples without external internet
 
-Remaining cleanup:
+Remaining limitation:
 
-- Lexer tokens now carry line and column metadata, and parser errors are surfaced as structured diagnostics in the CLI
-- Decide when to remove `runtime.rs` and `eval.rs`, or keep them as a compatibility fallback
-- Add focused tests for any legacy behavior that must stay supported before deleting duplicated logic
-- Rename or document `runtime.rs` clearly as legacy-only if it remains in the tree
+- Imported files are flattened before parsing, so a diagnostic in imported content currently reports the combined source line and top-level filename rather than the original imported filename.
 
 ## Phase 2: Tighten Language Semantics
 
-After AST execution is the default path:
-
-- Better parse and runtime error messages
-- Line and token location tracking
-- Clear truthiness and comparison rules
-- Consistent function scope rules
-- Cleaner array bounds and invalid index errors
-- Better handling for unsupported operations and divide-by-zero
+The first correctness and diagnostics milestone is complete. Future semantic work should build on the source-located AST runtime without changing the documented compatibility behavior for missing object properties (`null`) unless a deliberate language-version change is made.
 
 ## Phase 3: Expand The Language
 
@@ -90,7 +86,7 @@ Tooling should follow the stabilized interpreter, not lead it.
 
 - `cargo test` coverage for lexer, parser, evaluator, and runtime
 - golden tests for example programs
-- `solvec check file.solve`
+- `solvec validate file.solve`
 - `solvec run file.solve`
 - formatter
 - linter
@@ -123,11 +119,10 @@ The current agent syntax is only a local prototype. A real AI-native runtime nee
 
 The next concrete implementation steps should be:
 
-1. Add runtime errors for unknown variables, invalid index access, unsupported operations, and divide-by-zero
-2. Decide whether the legacy runtime should be removed or explicitly documented as compatibility mode
-3. Add golden output tests for `examples/hello.solve`, `functions.solve`, `arrays.solve`, and `agent.solve`
-4. Expand parser recovery so one malformed statement does not cascade into duplicate diagnostics
-5. Start tracking source spans on AST nodes for runtime error locations
+1. Preserve original filenames and line mappings for imported source diagnostics
+2. Add more standard-library behavior tests as built-ins grow
+3. Evaluate static type checks only after runtime semantics have stabilized
+4. Keep examples and language reference tests synchronized with the AST runtime
 
 ## Long-Term Direction
 

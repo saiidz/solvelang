@@ -12,13 +12,14 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn as_number(&self) -> Option<i32> {
+    pub fn type_name(&self) -> &'static str {
         match self {
-            Value::Number(value) => Some(*value),
-            Value::Text(value) => value.parse::<i32>().ok(),
-            Value::Bool(true) => Some(1),
-            Value::Bool(false) => Some(0),
-            _ => None,
+            Value::Number(_) => "number",
+            Value::Text(_) => "text",
+            Value::Bool(_) => "bool",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+            Value::Null => "null",
         }
     }
 
