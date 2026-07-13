@@ -43,7 +43,6 @@ cargo build --release
 - `solvec validate <file.solve>` checks syntax without running the script.
 - `solvec tokens <file.solve>` prints lexer tokens.
 - `solvec ast <file.solve>` prints the parsed AST.
-- `solvec legacy <file.solve>` runs the older legacy runtime.
 - `solvec help`, `solvec --help`, or `solvec -h` prints command help.
 
 Backward-compatible flags are still available:
@@ -51,8 +50,9 @@ Backward-compatible flags are still available:
 ```bash
 solvec <file.solve> --tokens
 solvec <file.solve> --ast
-solvec <file.solve> --legacy
 ```
+
+The AST runtime is the canonical runtime. The public `solvec legacy` command and `--legacy` flag have been removed.
 
 ## Validate Before Running
 
@@ -64,6 +64,48 @@ cargo run -- validate ../examples/support_triage.solve
 ```
 
 Validation does not execute the script. It does not run AI agents, HTTP calls, file writes, or other runtime side effects.
+
+## Runtime Safety
+
+By default, `solvec run` executes trusted local scripts with the full current runtime. That includes HTTP helpers, file helpers, environment reads, and AI-agent provider configuration.
+
+Use safe mode when you want to execute a script while denying side-effecting capabilities by default:
+
+```bash
+cd solvec
+cargo run -- run --safe ../examples/hello.solve
+```
+
+Safe mode denies:
+
+- network access through `http_get`, `http_post`, and OpenAI-backed `ask`
+- file reads through `read_file`
+- file writes through `write_file`
+- environment-variable access through `env` and AI provider configuration
+
+You can allow only the capabilities a script needs:
+
+```bash
+cargo run -- run --safe --allow-env ../examples/agent.solve
+cargo run -- run --safe --allow-network ./workflow.solve
+cargo run -- run --safe --allow-file-read --allow-root /tmp/solvelang-inputs ./workflow.solve
+```
+
+Allowed filesystem roots restrict file builtins to specific directories. Paths containing `..` are rejected when filesystem roots are enforced, and paths outside allowed roots fail with a SolveLang Runtime Error.
+
+HTTP helpers use explicit limits:
+
+- connection timeout: 5 seconds
+- request timeout: 15 seconds
+- maximum response body: 1 MB
+
+These can be adjusted for a run:
+
+```bash
+cargo run -- run --http-connect-timeout-ms 5000 --http-timeout-ms 15000 --http-max-body-bytes 1048576 ./workflow.solve
+```
+
+For more detail, see [docs/runtime-safety.md](docs/runtime-safety.md).
 
 ## Features
 
@@ -200,6 +242,7 @@ print(env("HOME"))
 - `env` can expose secrets such as tokens, API keys, or deployment credentials.
 - `http_get` and `http_post` make network requests from your machine and may send data to external services.
 - OpenAI-backed agent calls send the agent instruction, approved tool names, and user message to OpenAI.
+- Use `solvec run --safe` for scripts that should not access network, files, or environment variables.
 - Never print, hardcode, or commit `OPENAI_API_KEY`.
 - External AI calls may cost money.
 - HTTP examples may require internet access. Automated tests avoid external internet.

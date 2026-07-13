@@ -17,7 +17,9 @@ cargo run -- run ../examples/support_triage.solve
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
 - `ast` prints the parsed AST.
-- `legacy` runs the older runtime and should not be used as the primary reference for new scripts.
+- `run --safe` executes with network, file, and environment access denied by default.
+
+The AST runtime is canonical. The public `legacy` command and `--legacy` flag have been removed.
 
 ## Comments
 
@@ -277,7 +279,7 @@ let body = read_file("../examples/sample_input.json")
 print(body)
 ```
 
-Safety warning: `read_file` can read any path available to the running process.
+Safety warning: `read_file` can read any path available to the running process unless safe mode or allowed roots deny it.
 
 ### `write_file(path, body)`
 
@@ -288,7 +290,7 @@ let ok = write_file("/tmp/solvelang-note.txt", "hello")
 print(ok)
 ```
 
-Safety warning: `write_file` can create or overwrite files available to the running process. Do not run untrusted scripts.
+Safety warning: `write_file` can create or overwrite files available to the running process unless safe mode or allowed roots deny it. Do not run untrusted scripts.
 
 ### `http_get(url)`
 
@@ -305,7 +307,7 @@ print(response.status)
 print(response.url)
 ```
 
-Safety warning: `http_get` makes a network request from your machine.
+Safety warning: `http_get` makes a network request from your machine unless safe mode denies network access. HTTP requests have a default 5 second connect timeout, 15 second request timeout, and 1 MB response-body limit.
 
 ### `http_post(url, body)`
 
@@ -316,7 +318,7 @@ let response = http_post("https://httpbin.org/post", "{\"hello\":\"world\"}")
 print(response.status)
 ```
 
-Safety warning: `http_post` sends data to a remote server from your machine.
+Safety warning: `http_post` sends data to a remote server from your machine unless safe mode denies network access. HTTP requests have a default 5 second connect timeout, 15 second request timeout, and 1 MB response-body limit.
 
 ## Agents And Ask
 
@@ -342,6 +344,34 @@ cargo run -- run ../examples/agent.solve
 ```
 
 OpenAI-backed `ask` sends the agent instruction, approved tool names, and user message to OpenAI. It may cost money. SolveLang does not execute external tools for the model yet.
+
+## Runtime Safety
+
+Use safe mode to run a script while denying side-effecting capabilities by default:
+
+```bash
+cargo run -- run --safe ../examples/hello.solve
+```
+
+Safe mode denies:
+
+- network access through `http_get`, `http_post`, and OpenAI-backed `ask`
+- file reads through `read_file`
+- file writes through `write_file`
+- environment-variable access through `env` and AI provider configuration
+
+Allow only the capabilities the script needs:
+
+```bash
+cargo run -- run --safe --allow-network ./workflow.solve
+cargo run -- run --safe --allow-env ./workflow.solve
+cargo run -- run --safe --allow-file-read --allow-root /tmp/solvelang-inputs ./workflow.solve
+cargo run -- run --safe --allow-file-write --allow-root /tmp/solvelang-output ./workflow.solve
+```
+
+Allowed filesystem roots reject paths containing `..` and reject resolved paths outside the configured roots. Passing `--allow-root` without `--safe` also restricts file builtins to the provided roots.
+
+For details, see [runtime-safety.md](runtime-safety.md).
 
 ## Validate Vs Run
 
@@ -369,6 +399,8 @@ cargo run -- run ../examples/support_triage.solve
 ```
 
 `run` can execute builtins, file I/O, HTTP requests, environment reads, and AI calls depending on the script.
+
+Use `run --safe` when you want execution with network, file, and environment access denied by default.
 
 ## Browser Preview Vs Rust CLI
 

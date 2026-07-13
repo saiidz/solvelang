@@ -1,5 +1,9 @@
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 fn write_temp_solve_file(name: &str, content: &str) -> String {
     let mut path = std::env::temp_dir();
@@ -76,6 +80,31 @@ fn run_solvec_with_env(
     )
 }
 
+fn start_local_http_server(body: &'static str, delay_ms: u64) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind local test server");
+    let address = listener.local_addr().expect("missing local address");
+
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer);
+
+            if delay_ms > 0 {
+                thread::sleep(Duration::from_millis(delay_ms));
+            }
+
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    format!("http://{}", address)
+}
+
 #[test]
 fn run_executes_math_functions_arrays_loops_and_agents() {
     let file = write_temp_solve_file(
@@ -145,11 +174,14 @@ print(names[0])
 }
 
 #[test]
-fn legacy_command_still_runs_old_runtime() {
-    let file = write_temp_solve_file("solvelang_cli_legacy.solve", "print(\"Hello\")\n");
-    let output = run_solvec(&["legacy", &file]);
+fn legacy_command_and_flag_are_removed_from_public_cli() {
+    let file = write_temp_solve_file("solvelang_cli_legacy_removed.solve", "print(\"Hello\")\n");
 
-    assert!(output.contains("Hello"));
+    let legacy_stderr = run_solvec_error(&["legacy", &file]);
+    assert!(legacy_stderr.contains("legacy runtime has been removed"));
+
+    let legacy_flag_stderr = run_solvec_error(&[&file, "--legacy"]);
+    assert!(legacy_flag_stderr.contains("--legacy has been removed"));
 }
 
 #[test]
@@ -388,6 +420,27 @@ print(read_file("{}"))
 }
 
 #[test]
+fn http_get_uses_local_http_server_without_external_internet() {
+    let url = start_local_http_server("local ok", 0);
+    let file = write_temp_solve_file(
+        "solvelang_cli_http_get_local.solve",
+        &format!(
+            r#"
+let response = http_get("{}")
+print(response.status)
+print(response.body)
+"#,
+            url
+        ),
+    );
+
+    let output = run_solvec(&["run", &file]);
+
+    assert!(output.contains("200"));
+    assert!(output.contains("local ok"));
+}
+
+#[test]
 fn http_get_reports_network_errors_without_external_internet() {
     let file = write_temp_solve_file(
         "solvelang_cli_http_get_error.solve",
@@ -400,6 +453,289 @@ print(http_get("http://127.0.0.1:9"))
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("http_get failed"));
+}
+
+#[test]
+fn http_get_times_out_with_readable_runtime_error() {
+    let url = start_local_http_server("too late", 500);
+    let file = write_temp_solve_file(
+        "solvelang_cli_http_timeout.solve",
+        &format!(
+            r#"
+print(http_get("{}"))
+"#,
+            url
+        ),
+    );
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--http-timeout-ms", "100", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("http_get timed out"));
+}
+
+#[test]
+fn http_get_rejects_oversized_response_body() {
+    let url = start_local_http_server("this response is too large", 0);
+    let file = write_temp_solve_file(
+        "solvelang_cli_http_oversized.solve",
+        &format!(
+            r#"
+print(http_get("{}"))
+"#,
+            url
+        ),
+    );
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--http-max-body-bytes", "8", &file]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("SolveLang Runtime Error"));
+    assert!(stderr.contains("http_get response body exceeded 8 bytes"));
+}
+
+#[test]
+fn http_post_uses_local_http_server_without_external_internet() {
+    let url = start_local_http_server("posted ok", 0);
+    let file = write_temp_solve_file(
+        "solvelang_cli_http_post_local.solve",
+        &format!(
+            r#"
+let response = http_post("{}", "{{\"hello\":\"world\"}}")
+print(response.status)
+print(response.body)
+"#,
+            url
+        ),
+    );
+
+    let output = run_solvec(&["run", &file]);
+
+    assert!(output.contains("200"));
+    assert!(output.contains("posted ok"));
+}
+
+#[test]
+fn safe_mode_denies_network_file_and_env_builtins() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_http.solve",
+        r#"print(http_get("http://127.0.0.1:9"))"#,
+    );
+    let (_, _, stderr) = run_solvec_with_status(&["run", "--safe", &file]);
+    assert!(stderr.contains("network access is disabled by execution policy"));
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_read.solve",
+        r#"print(read_file("/tmp/nope.txt"))"#,
+    );
+    let (_, _, stderr) = run_solvec_with_status(&["run", "--safe", &file]);
+    assert!(stderr.contains("file read access is disabled by execution policy"));
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_write.solve",
+        r#"write_file("/tmp/nope.txt", "no")"#,
+    );
+    let (_, _, stderr) = run_solvec_with_status(&["run", "--safe", &file]);
+    assert!(stderr.contains("file write access is disabled by execution policy"));
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_env.solve",
+        r#"print(env("SOLVELANG_TEST_SECRET"))"#,
+    );
+    let (_, _, stderr) = run_solvec_with_env(
+        &["run", "--safe", &file],
+        &[("SOLVELANG_TEST_SECRET", "secret")],
+        &[],
+    );
+    assert!(stderr.contains("environment-variable access is disabled by execution policy"));
+}
+
+#[test]
+fn safe_mode_flag_can_follow_filename() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_after_filename.solve",
+        r#"print("safe ordering works")"#,
+    );
+
+    let output = run_solvec(&["run", &file, "--safe"]);
+
+    assert!(output.contains("safe ordering works"));
+}
+
+#[test]
+fn safe_mode_can_allow_env_explicitly() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_allows_env.solve",
+        r#"print(env("SOLVELANG_SAFE_ALLOWED"))"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", "--safe", "--allow-env", &file],
+        &[("SOLVELANG_SAFE_ALLOWED", "visible")],
+        &[],
+    );
+
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert_eq!(stdout.trim(), "visible");
+}
+
+#[test]
+fn safe_mode_can_allow_network_explicitly() {
+    let url = start_local_http_server("safe network ok", 0);
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_allows_network.solve",
+        &format!(
+            r#"
+let response = http_get("{}")
+print(response.body)
+"#,
+            url
+        ),
+    );
+
+    let output = run_solvec(&["run", "--safe", "--allow-network", &file]);
+
+    assert!(output.contains("safe network ok"));
+}
+
+#[test]
+fn allowed_roots_control_safe_file_reads_and_writes() {
+    let mut root = std::env::temp_dir();
+    root.push(format!("solvelang_allowed_root_{}", std::process::id()));
+    fs::create_dir_all(&root).expect("failed to create allowed root");
+    let root_arg = root.to_string_lossy().to_string();
+
+    let input_path = root.join("input.txt");
+    let output_path = root.join("output.txt");
+    fs::write(&input_path, "allowed content").expect("failed to write input");
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_allowed_roots.solve",
+        &format!(
+            r#"
+print(read_file("{}"))
+write_file("{}", "created")
+"#,
+            input_path.display(),
+            output_path.display()
+        ),
+    );
+
+    let output = run_solvec(&[
+        "run",
+        "--safe",
+        "--allow-file-read",
+        "--allow-file-write",
+        "--allow-root",
+        &root_arg,
+        &file,
+    ]);
+
+    assert!(output.contains("allowed content"));
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("missing output file"),
+        "created"
+    );
+}
+
+#[test]
+fn allowed_roots_reject_paths_outside_root_and_traversal() {
+    let mut root = std::env::temp_dir();
+    root.push(format!(
+        "solvelang_allowed_root_reject_{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&root).expect("failed to create allowed root");
+    let root_arg = root.to_string_lossy().to_string();
+
+    let mut outside = std::env::temp_dir();
+    outside.push(format!("solvelang_outside_{}.txt", std::process::id()));
+    fs::write(&outside, "outside").expect("failed to write outside file");
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_outside_root.solve",
+        &format!(r#"print(read_file("{}"))"#, outside.display()),
+    );
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--safe",
+        "--allow-file-read",
+        "--allow-root",
+        &root_arg,
+        &file,
+    ]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("outside allowed filesystem roots"));
+
+    let traversal = write_temp_solve_file(
+        "solvelang_cli_safe_traversal.solve",
+        r#"print(read_file("../secret.txt"))"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--safe",
+        "--allow-file-read",
+        "--allow-root",
+        &root_arg,
+        &traversal,
+    ]);
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("path traversal is not allowed"));
+}
+
+#[test]
+fn safe_mode_denies_ask_before_ai_provider_access() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_ask.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly."
+}
+
+ask SupportBot("Help")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", "--safe", &file],
+        &[
+            ("SOLVELANG_AI_PROVIDER", "openai"),
+            ("OPENAI_API_KEY", "not-a-real-key"),
+        ],
+        &[],
+    );
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("environment-variable access is disabled by execution policy"));
+    assert!(!stderr.contains("OPENAI_API_KEY"));
+}
+
+#[test]
+fn safe_mode_denies_openai_ask_when_network_is_not_allowed() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_safe_denies_openai_network.solve",
+        r#"
+agent SupportBot {
+    instruction "Answer clearly."
+}
+
+ask SupportBot("Help")
+"#,
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", "--safe", "--allow-env", &file],
+        &[
+            ("SOLVELANG_AI_PROVIDER", "openai"),
+            ("OPENAI_API_KEY", "not-a-real-key"),
+        ],
+        &[],
+    );
+
+    assert!(!success, "unexpected stdout: {}", stdout);
+    assert!(stderr.contains("network access is disabled by execution policy"));
 }
 
 #[test]
