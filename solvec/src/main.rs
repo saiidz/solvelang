@@ -214,7 +214,7 @@ fn parse_usize_option(value: Option<&String>, name: &str) -> Result<usize, Strin
 
 fn run_command(command: Command, content: &str, filename: &str) {
     match command {
-        Command::Run(options) => run_ast_runtime(content, options),
+        Command::Run(options) => run_ast_runtime(content, filename, options),
         Command::Validate => validate_script(content, filename),
         Command::Tokens => print_tokens(content),
         Command::Ast => print_ast(content),
@@ -238,13 +238,13 @@ fn print_ast(content: &str) {
     println!("{:#?}", ast);
 }
 
-fn run_ast_runtime(content: &str, options: RunOptions) {
+fn run_ast_runtime(content: &str, filename: &str, options: RunOptions) {
     let ast = parse_source(content);
     let policy = build_execution_policy(options).unwrap_or_else(|error| {
         eprintln!("Error: {}", error);
         process::exit(1);
     });
-    let mut ast_runtime = ast_runtime::AstRuntime::with_policy(policy);
+    let mut ast_runtime = ast_runtime::AstRuntime::with_source(policy, content, filename);
     if let Err(error) = ast_runtime.run(&ast) {
         eprintln!("{}", error);
         process::exit(1);

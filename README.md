@@ -54,6 +54,22 @@ solvec <file.solve> --ast
 
 The AST runtime is the canonical runtime. The public `solvec legacy` command and `--legacy` flag have been removed.
 
+## Runtime Diagnostics
+
+Runtime errors include the source line, column, source snippet, caret, and a hint when SolveLang can provide one. For example, an invalid array lookup reports the exact index expression instead of returning `null` silently.
+
+```text
+SolveLang Runtime Error on line 2, column 13 in workflow.solve
+  2 | print(items[8])
+    |             ^
+Array index 8 is out of bounds for an array of length 2.
+Hint: Use an index between 0 and 1.
+```
+
+Arithmetic operators (`+`, `-`, `*`, `/`) and ordered comparisons (`>`, `>=`, `<`, `<=`) require number operands. `==` and `!=` retain value equality behavior, while `..` remains text joining.
+
+Arrays require a non-negative numeric index within bounds. Objects require a text bracket key; missing object properties and keys still return `null` for compatibility. Property access on a non-object and index access on a non-array/non-object are runtime errors. User-defined function calls must provide exactly the declared number of arguments.
+
 ## Validate Before Running
 
 Use `validate` to check that a script can be lexed and parsed before running it:
@@ -143,7 +159,7 @@ Live resources:
 - Objects/maps, property access, and string-key indexing
 - String joining with `..`
 - Imports with `import "relative/path.solve"`
-- Runtime errors for unknown variables, unknown functions, divide by zero, and invalid built-in argument types
+- Source-located runtime errors for unknown variables/functions, invalid operands, invalid indexing/property access, wrong function arity, divide by zero, and invalid built-in argument types
 - Parser and diagnostic messages with line/column output
 
 ### Prototype/Experimental

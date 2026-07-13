@@ -739,6 +739,188 @@ ask SupportBot("Help")
 }
 
 #[test]
+fn runtime_errors_include_source_location_source_line_pointer_and_hint() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_runtime_location.solve",
+        "let items = [\"one\", \"two\"]\nprint(items[8])\n",
+    );
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("SolveLang Runtime Error on line 2, column 13"));
+    assert!(stderr.contains("2 | print(items[8])"));
+    assert!(stderr.contains("^"));
+    assert!(stderr.contains("Array index 8 is out of bounds for an array of length 2."));
+    assert!(stderr.contains("Hint: Use an index between 0 and 1."));
+}
+
+#[test]
+fn invalid_arithmetic_and_ordered_comparisons_are_runtime_errors() {
+    for (name, source, expected) in [
+        (
+            "bool_add",
+            "print(true + 1)\n",
+            "operator '+' requires number operands, got bool and number",
+        ),
+        (
+            "text_subtract",
+            "print(\"5\" - 2)\n",
+            "operator '-' requires number operands, got text and number",
+        ),
+        (
+            "array_multiply",
+            "print([1] * 2)\n",
+            "operator '*' requires number operands, got array and number",
+        ),
+        (
+            "invalid_compare",
+            "print(\"5\" > 2)\n",
+            "operator '>' requires number operands, got text and number",
+        ),
+    ] {
+        let file = write_temp_solve_file(&format!("solvelang_cli_{}.solve", name), source);
+        let stderr = run_solvec_error(&["run", &file]);
+
+        assert!(
+            stderr.contains("SolveLang Runtime Error"),
+            "{} produced stderr: {}",
+            name,
+            stderr
+        );
+        assert!(stderr.contains(expected), "stderr was: {}", stderr);
+    }
+}
+
+#[test]
+fn invalid_array_object_property_and_index_access_are_runtime_errors() {
+    for (name, source, expected) in [
+        (
+            "negative_array_index",
+            "let negative = 0 - 1\nprint([\"a\"][negative])\n",
+            "Array index cannot be negative.",
+        ),
+        (
+            "array_text_index",
+            "print([\"a\"][\"zero\"])\n",
+            "Array index must be a number, got text.",
+        ),
+        (
+            "object_number_index",
+            "print({ answer: 42 }[0])\n",
+            "Object index must be text, got number.",
+        ),
+        (
+            "property_on_number",
+            "print(1.name)\n",
+            "Property access requires an object, got number.",
+        ),
+        (
+            "index_on_bool",
+            "print(true[0])\n",
+            "Index access requires an array or object, got bool.",
+        ),
+    ] {
+        let file = write_temp_solve_file(&format!("solvelang_cli_{}.solve", name), source);
+        let stderr = run_solvec_error(&["run", &file]);
+
+        assert!(
+            stderr.contains("SolveLang Runtime Error"),
+            "{} produced stderr: {}",
+            name,
+            stderr
+        );
+        assert!(stderr.contains(expected), "stderr was: {}", stderr);
+    }
+}
+
+#[test]
+fn function_calls_require_the_declared_argument_count() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_function_arity.solve",
+        r#"
+fn route(owner, queue) {
+    print(owner .. queue)
+}
+
+route("support")
+"#,
+    );
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(stderr.contains("Function 'route' expects 2 arguments but received 1."));
+    assert!(stderr.contains("SolveLang Runtime Error on line 6, column 1"));
+
+    let file = write_temp_solve_file(
+        "solvelang_cli_function_extra_arity.solve",
+        "fn route(owner, queue) {\n    print(owner)\n}\nroute(\"support\", \"priority\", \"extra\")\n",
+    );
+    let stderr = run_solvec_error(&["run", &file]);
+    assert!(stderr.contains("Function 'route' expects 2 arguments but received 3."));
+}
+
+#[test]
+fn missing_object_properties_remain_null() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_missing_property.solve",
+        "let ticket = { owner: \"support\" }\nprint(ticket.missing)\n",
+    );
+
+    assert_eq!(run_solvec(&["run", &file]).trim(), "null");
+}
+
+#[test]
+fn parser_recovery_reports_one_primary_error_per_malformed_statement() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_parser_recovery.solve",
+        "let first\nprint(\nlet second\nprint(\n",
+    );
+    let stderr = run_solvec_error(&["validate", &file]);
+
+    assert_eq!(
+        stderr.matches("Invalid variable declaration").count(),
+        2,
+        "stderr was: {}",
+        stderr
+    );
+    assert_eq!(
+        stderr.matches("Expected expression").count(),
+        2,
+        "stderr was: {}",
+        stderr
+    );
+}
+
+#[test]
+fn golden_examples_have_deterministic_stdout() {
+    for (example, expected) in [
+        ("../examples/hello.solve", "Hello, SolveLang\n"),
+        ("../examples/functions.solve", "5\nHello, Saiid\n"),
+        ("../examples/arrays.solve", "Mira\nNova\n"),
+        (
+            "../examples/support_triage.solve",
+            "Support triage\nCustomer: Acme Labs\nTopic: billing\nAction: escalate to founder today\nOwner: finance operations\n",
+        ),
+    ] {
+        assert_eq!(
+            run_solvec(&["run", example]),
+            expected,
+            "example: {}",
+            example
+        );
+    }
+
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["run", "../examples/agent.solve"],
+        &[("SOLVELANG_AI_PROVIDER", "local")],
+        &["OPENAI_API_KEY"],
+    );
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert_eq!(
+        stdout,
+        "[Helper AI Agent]\nInstruction: Answer clearly and briefly using approved tools only.\nTools: docs\nUser: What can SolveLang run today?\nResponse: This is a local SolveLang agent prototype. Connect an AI provider later to generate live answers.\n"
+    );
+}
+
+#[test]
 fn local_ai_provider_keeps_placeholder_response() {
     let file = write_temp_solve_file(
         "solvelang_cli_agent_local.solve",
