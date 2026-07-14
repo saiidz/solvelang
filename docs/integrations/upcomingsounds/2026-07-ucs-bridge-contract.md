@@ -29,9 +29,10 @@ Malformed input, unsafe capabilities, policy-invalid imports, parser failures, a
 
 - `--input <file>` reads one explicit, regular JSON file with a bounded size. The parsed value is injected as read-only `input`.
 - `--json` emits exactly one deterministic advisory JSON envelope.
-- `--safe` denies runtime network, file, and environment capabilities by default, preserving existing explicit capability flags outside dry-run.
-- `--dry-run` evaluates pure workflow logic after a static capability preflight. It implies the strict safe policy and rejects capability-enabling flags.
-- `--no-network` forces network denial and rejects a conflicting network allowance.
+- `--safe`, `--dry-run`, and `--no-network` each enable the same strict hardened capability policy.
+- `--dry-run` evaluates pure workflow logic after a static capability preflight.
+- Hardened execution rejects every capability-enabling `--allow-*` flag. It denies HTTP, AI/agent use, runtime file reads and writes, environment reads, shell/process/plugin actions, mutation tools, and unknown function calls.
+- Local entry-source reads, confined `.solve` import reads, and the one explicit JSON input read are admitted by the CLI source policy; they do not enable runtime file builtins.
 
 ## Source and import safety
 
@@ -74,4 +75,3 @@ SolveLang currently has no shell, plugin, database, payment, email, queue, or Li
 ## Dependency boundary
 
 UpcomingSounds must remain validator-only until the draft CLI contract PR from branch `codex/upcomingsounds-safe-cli-contract` is merged and the merged commit is reverified. A draft, local branch, or passing pre-merge test run is not sufficient authorization to execute SolveLang from UpcomingSounds.
-

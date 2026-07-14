@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Number(i32),
@@ -12,6 +14,49 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn from_json(json: JsonValue) -> Result<Self, String> {
+        match json {
+            JsonValue::Null => Ok(Self::Null),
+            JsonValue::Bool(value) => Ok(Self::Bool(value)),
+            JsonValue::Number(value) => {
+                let integer = value
+                    .as_i64()
+                    .ok_or_else(|| "JSON numbers must be signed 32-bit integers".to_string())?;
+                let integer = i32::try_from(integer)
+                    .map_err(|_| "JSON numbers must be signed 32-bit integers".to_string())?;
+                Ok(Self::Number(integer))
+            }
+            JsonValue::String(value) => Ok(Self::Text(value)),
+            JsonValue::Array(values) => values
+                .into_iter()
+                .map(Self::from_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::Array),
+            JsonValue::Object(entries) => entries
+                .into_iter()
+                .map(|(key, value)| Ok((key, Self::from_json(value)?)))
+                .collect::<Result<BTreeMap<_, _>, String>>()
+                .map(Self::Object),
+        }
+    }
+
+    pub fn to_json(&self) -> JsonValue {
+        match self {
+            Self::Null => JsonValue::Null,
+            Self::Bool(value) => JsonValue::Bool(*value),
+            Self::Number(value) => JsonValue::Number(JsonNumber::from(*value)),
+            Self::Text(value) => JsonValue::String(value.clone()),
+            Self::Array(values) => JsonValue::Array(values.iter().map(Self::to_json).collect()),
+            Self::Object(entries) => {
+                let mut map = JsonMap::new();
+                for (key, value) in entries {
+                    map.insert(key.clone(), value.to_json());
+                }
+                JsonValue::Object(map)
+            }
+        }
+    }
+
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::Number(_) => "number",

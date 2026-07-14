@@ -5,6 +5,8 @@ use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
+const ADVISORY_LABEL: &str = "NON-PRODUCTION ADVISORY ONLY";
+
 fn write_temp_solve_file(name: &str, content: &str) -> String {
     let mut path = std::env::temp_dir();
     path.push(name);
@@ -53,6 +55,21 @@ fn run_solvec_with_status(args: &[&str]) -> (bool, String, String) {
         String::from_utf8_lossy(&output.stdout).to_string(),
         String::from_utf8_lossy(&output.stderr).to_string(),
     )
+}
+
+fn parse_json_output(stdout: &str) -> serde_json::Value {
+    assert_eq!(stdout.matches('\n').count(), 1, "stdout was: {stdout:?}");
+    serde_json::from_str(stdout).unwrap_or_else(|error| {
+        panic!("stdout was not one JSON document: {error}; stdout={stdout:?}")
+    })
+}
+
+fn create_temp_workflow_dir(name: &str) -> std::path::PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!("{}_{}", name, std::process::id()));
+    let _ = fs::remove_dir_all(&path);
+    fs::create_dir_all(&path).expect("failed to create temp workflow directory");
+    path
 }
 
 fn run_solvec_with_env(
@@ -566,42 +583,40 @@ fn safe_mode_flag_can_follow_filename() {
 }
 
 #[test]
-fn safe_mode_can_allow_env_explicitly() {
-    let file = write_temp_solve_file(
-        "solvelang_cli_safe_allows_env.solve",
-        r#"print(env("SOLVELANG_SAFE_ALLOWED"))"#,
-    );
-    let (success, stdout, stderr) = run_solvec_with_env(
-        &["run", "--safe", "--allow-env", &file],
-        &[("SOLVELANG_SAFE_ALLOWED", "visible")],
-        &[],
-    );
-
-    assert!(success, "unexpected stderr: {}", stderr);
-    assert_eq!(stdout.trim(), "visible");
+fn hardened_modes_reject_capability_allow_flags_before_source_loading() {
+    for args in [
+        vec!["run", "--safe", "--allow-env", "missing.solve"],
+        vec!["run", "--safe", "--allow-file-write", "missing.solve"],
+        vec!["run", "--no-network", "--allow-file-read", "missing.solve"],
+        vec!["run", "--no-network", "--allow-env", "missing.solve"],
+        vec!["run", "--dry-run", "--allow-network", "missing.solve"],
+        vec!["run", "--safe", "--allow-root", "/tmp", "missing.solve"],
+    ] {
+        let (success, stdout, stderr) = run_solvec_with_status(&args);
+        assert!(!success, "unexpected stdout: {stdout}");
+        assert!(
+            stderr.contains("capability allow flags cannot be used in hardened mode"),
+            "stderr was: {stderr}"
+        );
+        assert!(
+            !stderr.contains("failed to resolve"),
+            "stderr was: {stderr}"
+        );
+    }
 }
 
 #[test]
-fn safe_mode_can_allow_network_explicitly() {
-    let url = start_local_http_server("safe network ok", 0);
-    let file = write_temp_solve_file(
-        "solvelang_cli_safe_allows_network.solve",
-        &format!(
-            r#"
-let response = http_get("{}")
-print(response.body)
-"#,
-            url
-        ),
-    );
+fn no_network_rejects_allow_network_before_source_loading() {
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--no-network", "--allow-network", "missing.solve"]);
 
-    let output = run_solvec(&["run", "--safe", "--allow-network", &file]);
-
-    assert!(output.contains("safe network ok"));
+    assert!(!success, "unexpected stdout: {stdout}");
+    assert!(stderr.contains("capability allow flags cannot be used in hardened mode"));
+    assert!(!stderr.contains("failed to resolve"));
 }
 
 #[test]
-fn allowed_roots_control_safe_file_reads_and_writes() {
+fn allowed_roots_control_unhardened_file_reads_and_writes() {
     let mut root = std::env::temp_dir();
     root.push(format!("solvelang_allowed_root_{}", std::process::id()));
     fs::create_dir_all(&root).expect("failed to create allowed root");
@@ -623,15 +638,7 @@ write_file("{}", "created")
         ),
     );
 
-    let output = run_solvec(&[
-        "run",
-        "--safe",
-        "--allow-file-read",
-        "--allow-file-write",
-        "--allow-root",
-        &root_arg,
-        &file,
-    ]);
+    let output = run_solvec(&["run", "--allow-root", &root_arg, &file]);
 
     assert!(output.contains("allowed content"));
     assert_eq!(
@@ -658,14 +665,8 @@ fn allowed_roots_reject_paths_outside_root_and_traversal() {
         "solvelang_cli_safe_outside_root.solve",
         &format!(r#"print(read_file("{}"))"#, outside.display()),
     );
-    let (success, stdout, stderr) = run_solvec_with_status(&[
-        "run",
-        "--safe",
-        "--allow-file-read",
-        "--allow-root",
-        &root_arg,
-        &file,
-    ]);
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--allow-root", &root_arg, &file]);
 
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("outside allowed filesystem roots"));
@@ -674,14 +675,8 @@ fn allowed_roots_reject_paths_outside_root_and_traversal() {
         "solvelang_cli_safe_traversal.solve",
         r#"print(read_file("../secret.txt"))"#,
     );
-    let (success, stdout, stderr) = run_solvec_with_status(&[
-        "run",
-        "--safe",
-        "--allow-file-read",
-        "--allow-root",
-        &root_arg,
-        &traversal,
-    ]);
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--allow-root", &root_arg, &traversal]);
 
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("path traversal is not allowed"));
@@ -709,12 +704,14 @@ ask SupportBot("Help")
     );
 
     assert!(!success, "unexpected stdout: {}", stdout);
-    assert!(stderr.contains("environment-variable access is disabled by execution policy"));
+    assert!(
+        stderr.contains("agent declarations and tools are disabled by hardened execution policy")
+    );
     assert!(!stderr.contains("OPENAI_API_KEY"));
 }
 
 #[test]
-fn safe_mode_denies_openai_ask_when_network_is_not_allowed() {
+fn safe_mode_rejects_ask_without_reading_provider_environment() {
     let file = write_temp_solve_file(
         "solvelang_cli_safe_denies_openai_network.solve",
         r#"
@@ -726,7 +723,7 @@ ask SupportBot("Help")
 "#,
     );
     let (success, stdout, stderr) = run_solvec_with_env(
-        &["run", "--safe", "--allow-env", &file],
+        &["run", "--safe", &file],
         &[
             ("SOLVELANG_AI_PROVIDER", "openai"),
             ("OPENAI_API_KEY", "not-a-real-key"),
@@ -735,7 +732,9 @@ ask SupportBot("Help")
     );
 
     assert!(!success, "unexpected stdout: {}", stdout);
-    assert!(stderr.contains("network access is disabled by execution policy"));
+    assert!(
+        stderr.contains("agent declarations and tools are disabled by hardened execution policy")
+    );
 }
 
 #[test]
@@ -989,4 +988,488 @@ ask SupportBot("Help")
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("unknown AI provider 'mystery'"));
+}
+
+#[test]
+fn json_input_and_output_are_typed_deterministic_and_advisory_only() {
+    let root = create_temp_workflow_dir("solvelang_json_contract");
+    let workflow = root.join("workflow.solve");
+    let input = root.join("input.json");
+    fs::write(
+        &workflow,
+        r#"
+print("classification prepared")
+print({ readiness: input.readiness, count: input.count, active: input.active, delta: input.delta, items: input.items, nested: input.nested })
+"#,
+    )
+    .expect("failed to write workflow");
+    fs::write(
+        &input,
+        r#"{"readiness":"ready","count":7,"active":true,"delta":-4,"items":[1,"two",null],"nested":{"z":1,"a":2}}"#,
+    )
+    .expect("failed to write input");
+
+    let workflow_arg = workflow.to_string_lossy().to_string();
+    let input_arg = input.to_string_lossy().to_string();
+    let args = [
+        "run",
+        "--input",
+        input_arg.as_str(),
+        "--json",
+        "--safe",
+        "--dry-run",
+        "--no-network",
+        workflow_arg.as_str(),
+    ];
+    let (first_success, first_stdout, first_stderr) = run_solvec_with_status(&args);
+    let (second_success, second_stdout, second_stderr) = run_solvec_with_status(&args);
+
+    assert!(first_success, "unexpected stderr: {first_stderr}");
+    assert!(second_success, "unexpected stderr: {second_stderr}");
+    assert!(first_stderr.is_empty());
+    assert!(second_stderr.is_empty());
+    assert_eq!(first_stdout, second_stdout);
+
+    let output = parse_json_output(&first_stdout);
+    assert_eq!(output["ok"], true);
+    assert_eq!(output["advisory"], ADVISORY_LABEL);
+    assert_eq!(output["advisory_only"], true);
+    assert_eq!(output["dry_run"], true);
+    assert_eq!(output["outputs"][0], "classification prepared");
+    assert_eq!(output["outputs"][1]["count"], 7);
+    assert_eq!(output["outputs"][1]["delta"], -4);
+    assert_eq!(output["outputs"][1]["active"], true);
+    assert_eq!(output["outputs"][1]["items"][2], serde_json::Value::Null);
+    assert_eq!(
+        output["outputs"][1]["nested"],
+        serde_json::json!({"a": 2, "z": 1})
+    );
+}
+
+#[test]
+fn input_equals_form_is_supported() {
+    let root = create_temp_workflow_dir("solvelang_json_input_equals");
+    let workflow = root.join("workflow.solve");
+    let input = root.join("input.json");
+    fs::write(&workflow, "print(input.value)\n").expect("failed to write workflow");
+    fs::write(&input, r#"{"value":"equals works"}"#).expect("failed to write input");
+
+    let input_flag = format!("--input={}", input.display());
+    let workflow_arg = workflow.to_string_lossy().to_string();
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        &input_flag,
+        "--json",
+        "--safe",
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    assert_eq!(parse_json_output(&stdout)["outputs"][0], "equals works");
+}
+
+#[test]
+fn malformed_decimal_and_out_of_range_input_fail_before_imports() {
+    let root = create_temp_workflow_dir("solvelang_json_invalid_input");
+    let workflow = root.join("workflow.solve");
+    fs::write(
+        &workflow,
+        "import \"missing-before-input-validation.solve\"\nprint(\"source-secret-marker\")\n",
+    )
+    .expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    for (name, body) in [
+        ("malformed", "{not-json"),
+        (
+            "decimal",
+            r#"{"count":1.5,"private":"fixture-secret-marker"}"#,
+        ),
+        (
+            "out_of_range",
+            r#"{"count":2147483648,"private":"fixture-secret-marker"}"#,
+        ),
+    ] {
+        let input = root.join(format!("{name}.json"));
+        fs::write(&input, body).expect("failed to write invalid input");
+        let input_arg = input.to_string_lossy().to_string();
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--input",
+            input_arg.as_str(),
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "invalid input unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty(), "stderr was: {stderr}");
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["ok"], false);
+        assert_eq!(error["advisory"], ADVISORY_LABEL);
+        assert_eq!(error["errors"][0]["code"], "invalid_input");
+        assert!(!stdout.contains("missing-before-input-validation"));
+        assert!(!stdout.contains("fixture-secret-marker"));
+        assert!(!stdout.contains("source-secret-marker"));
+        assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+    }
+}
+
+#[test]
+fn oversized_input_fails_closed_before_source_loading() {
+    let root = create_temp_workflow_dir("solvelang_json_oversized_input");
+    let workflow = root.join("missing-workflow.solve");
+    let input = root.join("oversized.json");
+    fs::write(&input, vec![b' '; 1_048_577]).expect("failed to write oversized input");
+
+    let workflow_arg = workflow.to_string_lossy().to_string();
+    let input_arg = input.to_string_lossy().to_string();
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--safe",
+        "--input",
+        input_arg.as_str(),
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "input_too_large");
+    assert!(!stdout.contains("missing-workflow"));
+}
+
+#[test]
+fn injected_input_is_read_only_and_cannot_be_shadowed() {
+    let root = create_temp_workflow_dir("solvelang_json_read_only_input");
+    let input = root.join("input.json");
+    fs::write(&input, r#"{"value":1}"#).expect("failed to write input");
+    let input_arg = input.to_string_lossy().to_string();
+
+    for (name, source) in [
+        ("let", "let input = 2\n"),
+        ("assign", "input = 2\n"),
+        ("parameter", "fn change(input) {\n return input\n}\n"),
+    ] {
+        let workflow = root.join(format!("{name}.solve"));
+        fs::write(&workflow, source).expect("failed to write workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--dry-run",
+            "--input",
+            input_arg.as_str(),
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "input mutation unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty());
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["errors"][0]["code"], "read_only_input");
+    }
+}
+
+#[test]
+fn json_runtime_failures_are_atomic_and_do_not_echo_source() {
+    let root = create_temp_workflow_dir("solvelang_json_atomic_error");
+    let workflow = root.join("workflow.solve");
+    fs::write(
+        &workflow,
+        "print(\"partial-output-secret\")\nprint(10 / 0)\n",
+    )
+    .expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--safe",
+        "--dry-run",
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["ok"], false);
+    assert_eq!(error["errors"][0]["code"], "runtime_error");
+    assert!(error.get("outputs").is_none());
+    assert!(!stdout.contains("partial-output-secret"));
+    assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn json_parser_failures_are_one_atomic_sanitized_document() {
+    let root = create_temp_workflow_dir("solvelang_json_parser_error");
+    let workflow = root.join("workflow.solve");
+    fs::write(&workflow, "print(\"source-secret-marker\"\n").expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--safe",
+        "--dry-run",
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "invalid_workflow");
+    assert!(!stdout.contains("source-secret-marker"));
+    assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn dry_run_preflights_unreachable_side_effects_before_any_output() {
+    let root = create_temp_workflow_dir("solvelang_dry_run_preflight");
+    let marker = root.join("must-not-exist.txt");
+    let workflow = root.join("workflow.solve");
+    fs::write(
+        &workflow,
+        format!(
+            "print(\"must-not-be-emitted\")\nif false {{\n write_file(\"{}\", \"created\")\n}}\n",
+            marker.display()
+        ),
+    )
+    .expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--dry-run", workflow_arg.as_str()]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    assert!(!marker.exists());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "capability_denied");
+    assert!(!stdout.contains("must-not-be-emitted"));
+}
+
+#[test]
+fn hardened_preflight_rejects_unknown_mutation_tools_and_agent_tools() {
+    let root = create_temp_workflow_dir("solvelang_hardened_unsafe_tools");
+
+    for (name, source) in [
+        ("call", "if false {\n shell_exec(\"no\")\n}\n"),
+        (
+            "agent",
+            "if false {\n agent Mutator {\n  instruction \"do not run\"\n  tool stripeCharge\n }\n}\n",
+        ),
+    ] {
+        let workflow = root.join(format!("{name}.solve"));
+        fs::write(&workflow, source).expect("failed to write workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--dry-run",
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "unsafe workflow unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty());
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["errors"][0]["code"], "capability_denied");
+    }
+}
+
+#[test]
+fn pure_dry_run_evaluates_without_side_effects() {
+    let root = create_temp_workflow_dir("solvelang_pure_dry_run");
+    let workflow = root.join("workflow.solve");
+    fs::write(
+        &workflow,
+        "fn classify(count) {\n if count > 2 { return \"review\" } else { return \"nurture\" }\n}\nprint(classify(3))\n",
+    )
+    .expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--dry-run",
+        "--no-network",
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    let output = parse_json_output(&stdout);
+    assert_eq!(output["outputs"], serde_json::json!(["review"]));
+    assert_eq!(output["dry_run"], true);
+}
+
+#[test]
+fn no_network_preflights_imported_network_calls_before_execution() {
+    let root = create_temp_workflow_dir("solvelang_no_network_import");
+    let workflow = root.join("workflow.solve");
+    let imported = root.join("network.solve");
+    fs::write(
+        &workflow,
+        "import \"network.solve\"\nprint(\"entry-output\")\n",
+    )
+    .expect("failed to write workflow");
+    fs::write(
+        &imported,
+        "print(\"import-output\")\nif false {\n http_get(\"http://127.0.0.1:9/private?token=hidden\")\n}\n",
+    )
+    .expect("failed to write imported workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--no-network", workflow_arg.as_str()]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "capability_denied");
+    assert!(!stdout.contains("entry-output"));
+    assert!(!stdout.contains("import-output"));
+    assert!(!stdout.contains("token=hidden"));
+}
+
+#[test]
+fn hardened_import_policy_allows_only_confined_relative_solve_files() {
+    let root = create_temp_workflow_dir("solvelang_hardened_imports");
+    let confined = root.join("confined");
+    fs::create_dir_all(&confined).expect("failed to create confined directory");
+    let input = confined.join("input.json");
+    fs::write(&input, r#"{"value":"confined"}"#).expect("failed to write input");
+    fs::write(confined.join("allowed.solve"), "print(input.value)\n")
+        .expect("failed to write imported workflow");
+    let entry = confined.join("entry.solve");
+    fs::write(&entry, "import \"allowed.solve\"\n").expect("failed to write entry workflow");
+    let entry_arg = entry.to_string_lossy().to_string();
+    let input_arg = input.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--safe",
+        "--input",
+        input_arg.as_str(),
+        entry_arg.as_str(),
+    ]);
+    assert!(success, "unexpected stderr: {stderr}");
+    assert_eq!(parse_json_output(&stdout)["outputs"][0], "confined");
+
+    let outside = root.join("outside.solve");
+    fs::write(&outside, "print(\"outside-secret\")\n").expect("failed to write outside file");
+    let cases = [
+        ("parent", "import \"../outside.solve\"\n".to_string()),
+        (
+            "absolute",
+            format!("import \"{}\"\n", outside.to_string_lossy()),
+        ),
+        ("extension", "import \"allowed.txt\"\n".to_string()),
+    ];
+
+    for (name, source) in cases {
+        let workflow = confined.join(format!("{name}.solve"));
+        fs::write(&workflow, source).expect("failed to write rejecting workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+        let (success, stdout, stderr) =
+            run_solvec_with_status(&["run", "--json", "--safe", workflow_arg.as_str()]);
+        assert!(!success, "unsafe import unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty());
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["errors"][0]["code"], "import_denied");
+        assert!(!stdout.contains("outside-secret"));
+        assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn hardened_import_policy_rejects_symlink_escape() {
+    use std::os::unix::fs::symlink;
+
+    let root = create_temp_workflow_dir("solvelang_hardened_symlink_import");
+    let confined = root.join("confined");
+    fs::create_dir_all(&confined).expect("failed to create confined directory");
+    let outside = root.join("outside.solve");
+    fs::write(&outside, "print(\"outside-secret\")\n").expect("failed to write outside file");
+    symlink(&outside, confined.join("linked.solve")).expect("failed to create symlink");
+    let entry = confined.join("entry.solve");
+    fs::write(&entry, "import \"linked.solve\"\n").expect("failed to write entry");
+    let entry_arg = entry.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--safe", entry_arg.as_str()]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "import_denied");
+    assert!(!stdout.contains("outside-secret"));
+    assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn duplicate_and_misplaced_input_flags_fail_closed_in_json_mode() {
+    let root = create_temp_workflow_dir("solvelang_json_input_flags");
+    let workflow = root.join("workflow.solve");
+    let first = root.join("first.json");
+    let second = root.join("second.json");
+    fs::write(&workflow, "print(input.value)\n").expect("failed to write workflow");
+    fs::write(&first, r#"{"value":1}"#).expect("failed to write input");
+    fs::write(&second, r#"{"value":2}"#).expect("failed to write input");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+    let first_arg = first.to_string_lossy().to_string();
+    let second_arg = second.to_string_lossy().to_string();
+
+    let cases = [
+        vec![
+            "run",
+            "--json",
+            "--input",
+            first_arg.as_str(),
+            "--input",
+            second_arg.as_str(),
+            workflow_arg.as_str(),
+        ],
+        vec![
+            "validate",
+            workflow_arg.as_str(),
+            "--json",
+            "--input",
+            first_arg.as_str(),
+        ],
+    ];
+
+    for args in cases {
+        let (success, stdout, stderr) = run_solvec_with_status(&args);
+        assert!(!success, "invalid flags unexpectedly succeeded");
+        assert!(stderr.is_empty());
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["ok"], false);
+        assert_eq!(error["errors"][0]["code"], "invalid_arguments");
+    }
+}
+
+#[test]
+fn upcomingsounds_cli_contract_example_runs_with_every_hardened_flag() {
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--input",
+        "../examples/upcomingsounds/cli-contract-input.json",
+        "--json",
+        "--safe",
+        "--dry-run",
+        "--no-network",
+        "../examples/upcomingsounds/cli-contract.solve",
+    ]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    assert!(stderr.is_empty());
+    let output = parse_json_output(&stdout);
+    assert_eq!(output["advisory"], ADVISORY_LABEL);
+    assert_eq!(output["outputs"][0]["decision"], "review");
+    assert_eq!(output["outputs"][0]["owner"], "human-owner");
+    assert_eq!(output["outputs"][0]["action_taken"], false);
 }

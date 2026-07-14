@@ -6,13 +6,19 @@ mod lexer;
 mod parser;
 mod value;
 
+use ast::{Expr, ExprKind, Stmt};
 use ast_runtime::ExecutionPolicy;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::Read;
+use std::path::{Component, Path, PathBuf};
 use std::process;
 use std::time::Duration;
+use value::Value;
+
+const ADVISORY_LABEL: &str = "NON-PRODUCTION ADVISORY ONLY";
+const MAX_INPUT_BYTES: u64 = 1_048_576;
 
 #[derive(Debug, PartialEq)]
 enum Command {
@@ -26,6 +32,10 @@ enum Command {
 #[derive(Clone, Debug, PartialEq)]
 struct RunOptions {
     safe: bool,
+    dry_run: bool,
+    no_network: bool,
+    json: bool,
+    input_path: Option<PathBuf>,
     allow_network: bool,
     allow_file_read: bool,
     allow_file_write: bool,
@@ -36,10 +46,20 @@ struct RunOptions {
     http_max_body_bytes: usize,
 }
 
+impl RunOptions {
+    fn hardened(&self) -> bool {
+        self.safe || self.dry_run || self.no_network
+    }
+}
+
 impl Default for RunOptions {
     fn default() -> Self {
         Self {
             safe: false,
+            dry_run: false,
+            no_network: false,
+            json: false,
+            input_path: None,
             allow_network: false,
             allow_file_read: false,
             allow_file_write: false,
@@ -54,43 +74,192 @@ impl Default for RunOptions {
     }
 }
 
+#[derive(Debug)]
+struct CliFailure {
+    code: &'static str,
+    public_message: &'static str,
+    human_message: String,
+    show_usage: bool,
+}
+
+impl CliFailure {
+    fn arguments(message: impl Into<String>) -> Self {
+        Self {
+            code: "invalid_arguments",
+            public_message: "invalid command arguments",
+            human_message: format!("Error: {}", message.into()),
+            show_usage: true,
+        }
+    }
+
+    fn source(message: impl Into<String>) -> Self {
+        Self {
+            code: "source_load_error",
+            public_message: "workflow source could not be loaded",
+            human_message: format!("Error: {}", message.into()),
+            show_usage: false,
+        }
+    }
+
+    fn import(message: impl Into<String>) -> Self {
+        Self {
+            code: "import_denied",
+            public_message: "workflow import was denied by source policy",
+            human_message: format!("Error: {}", message.into()),
+            show_usage: false,
+        }
+    }
+
+    fn input(code: &'static str, public_message: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            public_message,
+            human_message: format!("Error: {}", message.into()),
+            show_usage: false,
+        }
+    }
+
+    fn invalid_workflow(human_message: impl Into<String>) -> Self {
+        Self {
+            code: "invalid_workflow",
+            public_message: "workflow syntax or structure is invalid",
+            human_message: human_message.into(),
+            show_usage: false,
+        }
+    }
+
+    fn preflight(
+        code: &'static str,
+        public_message: &'static str,
+        human_message: impl Into<String>,
+    ) -> Self {
+        Self {
+            code,
+            public_message,
+            human_message: format!("Error: {}", human_message.into()),
+            show_usage: false,
+        }
+    }
+
+    fn runtime(human_message: impl Into<String>) -> Self {
+        Self {
+            code: "runtime_error",
+            public_message: "workflow evaluation failed",
+            human_message: human_message.into(),
+            show_usage: false,
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    let json_requested = args.iter().any(|arg| arg == "--json");
 
-    let (command, filename) = match parse_args(&args) {
-        Ok(parsed) => parsed,
-        Err(message) => {
-            eprintln!("Error: {}", message);
-            print_usage();
-            process::exit(1);
+    if let Err(error) = dispatch(&args) {
+        if json_requested {
+            emit_json_error(&error);
+        } else {
+            eprintln!("{}", error.human_message);
+            if error.show_usage {
+                print_usage();
+            }
         }
-    };
+        process::exit(1);
+    }
+}
+
+fn dispatch(args: &[String]) -> Result<(), CliFailure> {
+    let (command, filename) = parse_args(args).map_err(CliFailure::arguments)?;
 
     if matches!(command, Command::Help) {
         print_usage();
-        return;
+        return Ok(());
     }
 
-    let filename = match filename {
-        Some(filename) => filename,
-        None => {
-            eprintln!("Error: missing SolveLang file");
-            print_usage();
-            process::exit(1);
+    let filename = filename.ok_or_else(|| CliFailure::arguments("missing SolveLang file"))?;
+
+    match command {
+        Command::Run(options) => execute_run(&filename, options),
+        Command::Validate => {
+            let content = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&content)?;
+            parse_source(&content)?;
+            println!("✓ SolveLang validation passed");
+            println!("file: {}", filename);
+            Ok(())
         }
-    };
+        Command::Tokens => {
+            let content = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&content)?;
+            println!("{:#?}", lexer::lex(&content));
+            Ok(())
+        }
+        Command::Ast => {
+            let content = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&content)?;
+            println!("{:#?}", parse_source(&content)?);
+            Ok(())
+        }
+        Command::Help => Ok(()),
+    }
+}
 
-    let content = load_source_with_imports(&filename).unwrap_or_else(|error| {
-        eprintln!("Error: {}", error);
-        process::exit(1);
-    });
+fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
+    validate_run_options(&options)?;
 
-    if let Err(diagnostics) = diagnostics::validate_source(&content) {
-        print_diagnostics(&content, diagnostics);
-        process::exit(1);
+    // The effective runtime policy is deliberately constructed before any explicit
+    // JSON input, workflow source, or workflow import is read.
+    let policy = build_execution_policy(&options)
+        .map_err(|message| CliFailure::arguments(format!("invalid execution policy: {message}")))?;
+    let input = load_explicit_input(options.input_path.as_deref())?;
+    let content = load_source_with_imports(filename, options.hardened())?;
+
+    validate_diagnostics(&content)?;
+    let statements = parse_source(&content)?;
+    preflight_workflow(&statements, input.is_some(), options.hardened())?;
+
+    let mut runtime =
+        ast_runtime::AstRuntime::with_input(policy, &content, filename, input, options.json);
+    runtime
+        .run(&statements)
+        .map_err(|error| CliFailure::runtime(error.to_string()))?;
+
+    if options.json {
+        let outputs = runtime
+            .outputs()
+            .iter()
+            .map(Value::to_json)
+            .collect::<Vec<_>>();
+        let envelope = serde_json::json!({
+            "advisory": ADVISORY_LABEL,
+            "advisory_only": true,
+            "dry_run": options.dry_run,
+            "ok": true,
+            "outputs": outputs,
+        });
+        println!(
+            "{}",
+            serde_json::to_string(&envelope).expect("JSON envelope serialization cannot fail")
+        );
     }
 
-    run_command(command, &content, &filename);
+    Ok(())
+}
+
+fn emit_json_error(error: &CliFailure) {
+    let envelope = serde_json::json!({
+        "advisory": ADVISORY_LABEL,
+        "advisory_only": true,
+        "errors": [{
+            "code": error.code,
+            "message": error.public_message,
+        }],
+        "ok": false,
+    });
+    println!(
+        "{}",
+        serde_json::to_string(&envelope).expect("JSON envelope serialization cannot fail")
+    );
 }
 
 fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
@@ -99,19 +268,25 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
     }
 
     match args[0].as_str() {
-        "help" | "--help" | "-h" => Ok((Command::Help, None)),
+        "help" | "--help" | "-h" => {
+            if args.len() == 1 {
+                Ok((Command::Help, None))
+            } else {
+                Err("help does not accept extra arguments".to_string())
+            }
+        }
         "run" => parse_run_args(&args[1..]),
-        "validate" => Ok((Command::Validate, args.get(1).cloned())),
-        "tokens" => Ok((Command::Tokens, args.get(1).cloned())),
-        "ast" => Ok((Command::Ast, args.get(1).cloned())),
+        "validate" => parse_file_command(Command::Validate, &args[1..]),
+        "tokens" => parse_file_command(Command::Tokens, &args[1..]),
+        "ast" => parse_file_command(Command::Ast, &args[1..]),
         "legacy" => Err(
             "legacy runtime has been removed from the public CLI; use 'solvec run <file.solve>'"
                 .to_string(),
         ),
         file => {
-            if args.iter().any(|arg| arg == "--tokens") {
+            if args.len() == 2 && args[1] == "--tokens" {
                 Ok((Command::Tokens, Some(file.to_string())))
-            } else if args.iter().any(|arg| arg == "--ast") {
+            } else if args.len() == 2 && args[1] == "--ast" {
                 Ok((Command::Ast, Some(file.to_string())))
             } else if args.iter().any(|arg| arg == "--legacy") {
                 Err(
@@ -120,10 +295,23 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
                 )
             } else if file.starts_with('-') {
                 Err(format!("unknown option '{}'", file))
-            } else {
+            } else if args.len() == 1 {
                 Ok((Command::Run(RunOptions::default()), Some(file.to_string())))
+            } else {
+                Err("run options require the explicit 'solvec run' command".to_string())
             }
         }
+    }
+}
+
+fn parse_file_command(
+    command: Command,
+    args: &[String],
+) -> Result<(Command, Option<String>), String> {
+    match args {
+        [filename] if !filename.starts_with('-') => Ok((command, Some(filename.clone()))),
+        [] => Ok((command, None)),
+        _ => Err("command accepts exactly one SolveLang file".to_string()),
     }
 }
 
@@ -137,6 +325,27 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
 
         match arg.as_str() {
             "--safe" => options.safe = true,
+            "--dry-run" => options.dry_run = true,
+            "--no-network" => options.no_network = true,
+            "--json" => {
+                if options.json {
+                    return Err("--json may only be provided once".to_string());
+                }
+                options.json = true;
+            }
+            "--input" => {
+                if options.input_path.is_some() {
+                    return Err("--input may only be provided once".to_string());
+                }
+                index += 1;
+                let path = args
+                    .get(index)
+                    .ok_or_else(|| "--input requires a file".to_string())?;
+                if path.starts_with('-') {
+                    return Err("--input requires a file".to_string());
+                }
+                options.input_path = Some(PathBuf::from(path));
+            }
             "--allow-network" => options.allow_network = true,
             "--allow-file-read" => options.allow_file_read = true,
             "--allow-file-write" => options.allow_file_write = true,
@@ -163,10 +372,22 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
                 options.http_max_body_bytes =
                     parse_usize_option(args.get(index), "--http-max-body-bytes")?;
             }
+            value if value.starts_with("--input=") => {
+                if options.input_path.is_some() {
+                    return Err("--input may only be provided once".to_string());
+                }
+                let path = &value["--input=".len()..];
+                if path.is_empty() {
+                    return Err("--input requires a file".to_string());
+                }
+                options.input_path = Some(PathBuf::from(path));
+            }
             value if value.starts_with("--allow-root=") => {
-                options
-                    .allowed_roots
-                    .push(PathBuf::from(&value["--allow-root=".len()..]));
+                let path = &value["--allow-root=".len()..];
+                if path.is_empty() {
+                    return Err("--allow-root requires a path".to_string());
+                }
+                options.allowed_roots.push(PathBuf::from(path));
             }
             value if value.starts_with("--http-connect-timeout-ms=") => {
                 options.http_connect_timeout_ms = value["--http-connect-timeout-ms=".len()..]
@@ -212,48 +433,24 @@ fn parse_usize_option(value: Option<&String>, name: &str) -> Result<usize, Strin
         .map_err(|_| format!("{} expects a number", name))
 }
 
-fn run_command(command: Command, content: &str, filename: &str) {
-    match command {
-        Command::Run(options) => run_ast_runtime(content, filename, options),
-        Command::Validate => validate_script(content, filename),
-        Command::Tokens => print_tokens(content),
-        Command::Ast => print_ast(content),
-        Command::Help => print_usage(),
+fn validate_run_options(options: &RunOptions) -> Result<(), CliFailure> {
+    if options.hardened()
+        && (options.allow_network
+            || options.allow_file_read
+            || options.allow_file_write
+            || options.allow_env
+            || !options.allowed_roots.is_empty())
+    {
+        return Err(CliFailure::arguments(
+            "capability allow flags cannot be used in hardened mode",
+        ));
     }
+    Ok(())
 }
 
-fn validate_script(content: &str, filename: &str) {
-    parse_source(content);
-    println!("✓ SolveLang validation passed");
-    println!("file: {}", filename);
-}
-
-fn print_tokens(content: &str) {
-    let tokens = lexer::lex(content);
-    println!("{:#?}", tokens);
-}
-
-fn print_ast(content: &str) {
-    let ast = parse_source(content);
-    println!("{:#?}", ast);
-}
-
-fn run_ast_runtime(content: &str, filename: &str, options: RunOptions) {
-    let ast = parse_source(content);
-    let policy = build_execution_policy(options).unwrap_or_else(|error| {
-        eprintln!("Error: {}", error);
-        process::exit(1);
-    });
-    let mut ast_runtime = ast_runtime::AstRuntime::with_source(policy, content, filename);
-    if let Err(error) = ast_runtime.run(&ast) {
-        eprintln!("{}", error);
-        process::exit(1);
-    }
-}
-
-fn build_execution_policy(options: RunOptions) -> Result<ExecutionPolicy, String> {
-    let mut policy = if options.safe {
-        ExecutionPolicy::safe(canonicalize_roots(&options.allowed_roots)?)
+fn build_execution_policy(options: &RunOptions) -> Result<ExecutionPolicy, String> {
+    let mut policy = if options.hardened() {
+        ExecutionPolicy::safe(Vec::new())
     } else {
         let mut policy = ExecutionPolicy::unrestricted();
         if !options.allowed_roots.is_empty() {
@@ -263,17 +460,9 @@ fn build_execution_policy(options: RunOptions) -> Result<ExecutionPolicy, String
         policy
     };
 
-    if options.safe {
-        policy.allow_network = options.allow_network;
-        policy.allow_file_read = options.allow_file_read;
-        policy.allow_file_write = options.allow_file_write;
-        policy.allow_env = options.allow_env;
-    }
-
     policy.http_connect_timeout = Duration::from_millis(options.http_connect_timeout_ms);
     policy.http_request_timeout = Duration::from_millis(options.http_request_timeout_ms);
     policy.http_max_body_bytes = options.http_max_body_bytes;
-
     Ok(policy)
 }
 
@@ -292,66 +481,167 @@ fn canonicalize_roots(roots: &[PathBuf]) -> Result<Vec<PathBuf>, String> {
         .collect()
 }
 
-fn parse_source(content: &str) -> Vec<ast::Stmt> {
-    let tokens = lexer::lex(content);
-    let mut parser = parser::Parser::new(tokens);
-    match parser.parse() {
-        Ok(ast) => ast,
-        Err(diagnostics) => {
-            print_diagnostics(content, diagnostics);
-            process::exit(1);
-        }
+fn load_explicit_input(path: Option<&Path>) -> Result<Option<Value>, CliFailure> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        CliFailure::input(
+            "invalid_input",
+            "input JSON could not be read",
+            format!(
+                "failed to inspect input file '{}': {}",
+                path.display(),
+                error
+            ),
+        )
+    })?;
+    if !metadata.file_type().is_file() {
+        return Err(CliFailure::input(
+            "invalid_input",
+            "input must be an explicit regular JSON file",
+            "input must be a regular file and may not be a symlink",
+        ));
     }
-}
-
-fn print_diagnostics(content: &str, diagnostics: Vec<diagnostics::Diagnostic>) {
-    let lines: Vec<&str> = content.lines().collect();
-
-    for diagnostic in diagnostics {
-        let source_line = lines
-            .get(diagnostic.line.saturating_sub(1))
-            .copied()
-            .unwrap_or("");
-        eprintln!("{}", diagnostic.format(source_line));
-        eprintln!();
-    }
-}
-
-fn load_source_with_imports(filename: &str) -> Result<String, String> {
-    let path = PathBuf::from(filename);
-    let mut visited = HashSet::new();
-    load_file_recursive(&path, &mut visited)
-}
-
-fn load_file_recursive(path: &Path, visited: &mut HashSet<PathBuf>) -> Result<String, String> {
-    let canonical = fs::canonicalize(path)
-        .map_err(|error| format!("failed to resolve '{}': {}", path.display(), error))?;
-
-    if !visited.insert(canonical.clone()) {
-        return Err(format!(
-            "circular import detected for '{}'",
-            canonical.display()
+    if metadata.len() > MAX_INPUT_BYTES {
+        return Err(CliFailure::input(
+            "input_too_large",
+            "input JSON exceeds the 1 MiB limit",
+            "input JSON exceeds the 1 MiB limit",
         ));
     }
 
-    let content = fs::read_to_string(&canonical)
-        .map_err(|error| format!("failed to read '{}': {}", canonical.display(), error))?;
-
-    let parent = canonical.parent().ok_or_else(|| {
-        format!(
-            "could not determine parent directory for '{}'",
-            canonical.display()
+    let file = fs::File::open(path).map_err(|error| {
+        CliFailure::input(
+            "invalid_input",
+            "input JSON could not be read",
+            format!("failed to read input file '{}': {}", path.display(), error),
         )
     })?;
+    let mut bytes = Vec::with_capacity((metadata.len().min(MAX_INPUT_BYTES) + 1) as usize);
+    file.take(MAX_INPUT_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| {
+            CliFailure::input(
+                "invalid_input",
+                "input JSON could not be read",
+                format!("failed to read input file '{}': {}", path.display(), error),
+            )
+        })?;
+    if bytes.len() as u64 > MAX_INPUT_BYTES {
+        return Err(CliFailure::input(
+            "input_too_large",
+            "input JSON exceeds the 1 MiB limit",
+            "input JSON exceeds the 1 MiB limit",
+        ));
+    }
 
+    let json = serde_json::from_slice(&bytes).map_err(|_| {
+        CliFailure::input(
+            "invalid_input",
+            "input JSON is malformed or contains an unsupported number",
+            "input JSON is malformed",
+        )
+    })?;
+    Value::from_json(json).map(Some).map_err(|message| {
+        CliFailure::input(
+            "invalid_input",
+            "input JSON is malformed or contains an unsupported number",
+            message,
+        )
+    })
+}
+
+fn validate_diagnostics(content: &str) -> Result<(), CliFailure> {
+    diagnostics::validate_source(content).map_err(|diagnostics| {
+        CliFailure::invalid_workflow(format_diagnostics(content, diagnostics))
+    })
+}
+
+fn parse_source(content: &str) -> Result<Vec<Stmt>, CliFailure> {
+    let tokens = lexer::lex(content);
+    let mut parser = parser::Parser::new(tokens);
+    parser.parse().map_err(|diagnostics| {
+        CliFailure::invalid_workflow(format_diagnostics(content, diagnostics))
+    })
+}
+
+fn format_diagnostics(content: &str, diagnostics: Vec<diagnostics::Diagnostic>) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    diagnostics
+        .into_iter()
+        .map(|diagnostic| {
+            let source_line = lines
+                .get(diagnostic.line.saturating_sub(1))
+                .copied()
+                .unwrap_or("");
+            diagnostic.format(source_line)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn load_source_with_imports(filename: &str, hardened: bool) -> Result<String, CliFailure> {
+    let entry = fs::canonicalize(filename).map_err(|error| {
+        CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
+    })?;
+    let metadata = fs::metadata(&entry).map_err(|error| {
+        CliFailure::source(format!(
+            "failed to inspect '{}': {}",
+            entry.display(),
+            error
+        ))
+    })?;
+    if !metadata.is_file() {
+        return Err(CliFailure::source(
+            "SolveLang entry source is not a regular file",
+        ));
+    }
+
+    let source_root = entry
+        .parent()
+        .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
+        .to_path_buf();
+    let mut visited = HashSet::new();
+    load_file_recursive(&entry, &source_root, hardened, &mut visited, true)
+}
+
+fn load_file_recursive(
+    canonical: &Path,
+    source_root: &Path,
+    hardened: bool,
+    visited: &mut HashSet<PathBuf>,
+    is_entry: bool,
+) -> Result<String, CliFailure> {
+    if !visited.insert(canonical.to_path_buf()) {
+        let message = format!("circular import detected for '{}'", canonical.display());
+        return Err(if hardened && !is_entry {
+            CliFailure::import(message)
+        } else {
+            CliFailure::source(message)
+        });
+    }
+
+    let content = fs::read_to_string(canonical).map_err(|error| {
+        let message = format!("failed to read '{}': {}", canonical.display(), error);
+        if hardened && !is_entry {
+            CliFailure::import(message)
+        } else {
+            CliFailure::source(message)
+        }
+    })?;
+    let parent = canonical
+        .parent()
+        .ok_or_else(|| CliFailure::source("could not determine source parent directory"))?;
     let mut output = String::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
-
         if let Some(import_path) = parse_import_line(trimmed) {
-            let imported_path = parent.join(import_path);
-            let imported_content = load_file_recursive(&imported_path, visited)?;
+            let imported = resolve_import(parent, source_root, import_path, hardened)?;
+            let imported_content =
+                load_file_recursive(&imported, source_root, hardened, visited, false)?;
             output.push_str(&imported_content);
             if !imported_content.ends_with('\n') {
                 output.push('\n');
@@ -362,8 +652,70 @@ fn load_file_recursive(path: &Path, visited: &mut HashSet<PathBuf>) -> Result<St
         }
     }
 
-    visited.remove(&canonical);
+    visited.remove(canonical);
     Ok(output)
+}
+
+fn resolve_import(
+    parent: &Path,
+    source_root: &Path,
+    import_path: &str,
+    hardened: bool,
+) -> Result<PathBuf, CliFailure> {
+    let path = Path::new(import_path);
+
+    if hardened {
+        let invalid_component = path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        });
+        if import_path.is_empty()
+            || import_path.contains('\0')
+            || import_path.contains('\\')
+            || path.is_absolute()
+            || invalid_component
+            || path.extension().and_then(|extension| extension.to_str()) != Some("solve")
+        {
+            return Err(CliFailure::import(
+                "hardened imports require a relative .solve path without parent traversal",
+            ));
+        }
+    }
+
+    let candidate = parent.join(path);
+    let canonical = fs::canonicalize(&candidate).map_err(|error| {
+        let message = format!("failed to resolve import '{}': {}", import_path, error);
+        if hardened {
+            CliFailure::import(message)
+        } else {
+            CliFailure::source(message)
+        }
+    })?;
+
+    if hardened && !canonical.starts_with(source_root) {
+        return Err(CliFailure::import(
+            "import resolves outside the entry workflow source root",
+        ));
+    }
+    let metadata = fs::metadata(&canonical).map_err(|error| {
+        let message = format!("failed to inspect import '{}': {}", import_path, error);
+        if hardened {
+            CliFailure::import(message)
+        } else {
+            CliFailure::source(message)
+        }
+    })?;
+    if !metadata.is_file() {
+        return Err(if hardened {
+            CliFailure::import("import target is not a regular file")
+        } else {
+            CliFailure::source("import target is not a regular file")
+        });
+    }
+
+    Ok(canonical)
 }
 
 fn parse_import_line(line: &str) -> Option<&str> {
@@ -372,12 +724,208 @@ fn parse_import_line(line: &str) -> Option<&str> {
     }
 
     let rest = line["import ".len()..].trim();
-
     if rest.len() >= 2 && rest.starts_with('"') && rest.ends_with('"') {
         Some(&rest[1..rest.len() - 1])
     } else {
         None
     }
+}
+
+fn preflight_workflow(
+    statements: &[Stmt],
+    input_injected: bool,
+    hardened: bool,
+) -> Result<(), CliFailure> {
+    let mut function_names = HashSet::new();
+    collect_function_names(statements, &mut function_names);
+
+    preflight_statements(statements, input_injected, hardened, &function_names)
+}
+
+fn collect_function_names<'a>(statements: &'a [Stmt], names: &mut HashSet<&'a str>) {
+    for statement in statements {
+        match statement {
+            Stmt::Function { name, body, .. } => {
+                names.insert(name.as_str());
+                collect_function_names(body, names);
+            }
+            Stmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_function_names(then_branch, names);
+                collect_function_names(else_branch, names);
+            }
+            Stmt::While { body, .. } => collect_function_names(body, names),
+            _ => {}
+        }
+    }
+}
+
+fn preflight_statements(
+    statements: &[Stmt],
+    input_injected: bool,
+    hardened: bool,
+    function_names: &HashSet<&str>,
+) -> Result<(), CliFailure> {
+    for statement in statements {
+        match statement {
+            Stmt::Let { name, value, .. } | Stmt::Assign { name, value, .. } => {
+                if input_injected && name == "input" {
+                    return Err(read_only_input_failure());
+                }
+                preflight_expr(value, hardened, function_names)?;
+            }
+            Stmt::Print { value, .. } | Stmt::Return { value, .. } | Stmt::Expr(value) => {
+                preflight_expr(value, hardened, function_names)?;
+            }
+            Stmt::Function {
+                name, params, body, ..
+            } => {
+                if input_injected
+                    && (name == "input" || params.iter().any(|param| param == "input"))
+                {
+                    return Err(read_only_input_failure());
+                }
+                if hardened && is_explicitly_unsafe_name(name) {
+                    return Err(capability_failure(
+                        "unsafe function declarations are disabled by hardened execution policy",
+                    ));
+                }
+                preflight_statements(body, input_injected, hardened, function_names)?;
+            }
+            Stmt::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                preflight_expr(condition, hardened, function_names)?;
+                preflight_statements(then_branch, input_injected, hardened, function_names)?;
+                preflight_statements(else_branch, input_injected, hardened, function_names)?;
+            }
+            Stmt::While {
+                condition, body, ..
+            } => {
+                preflight_expr(condition, hardened, function_names)?;
+                preflight_statements(body, input_injected, hardened, function_names)?;
+            }
+            Stmt::Agent { .. } if hardened => {
+                return Err(capability_failure(
+                    "agent declarations and tools are disabled by hardened execution policy",
+                ));
+            }
+            Stmt::Agent { .. } => {}
+            Stmt::Ask { message, .. } => {
+                if hardened {
+                    return Err(capability_failure(
+                        "ask is disabled by hardened execution policy",
+                    ));
+                }
+                preflight_expr(message, hardened, function_names)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn preflight_expr(
+    expr: &Expr,
+    hardened: bool,
+    function_names: &HashSet<&str>,
+) -> Result<(), CliFailure> {
+    match &expr.kind {
+        ExprKind::Array(values) => {
+            for value in values {
+                preflight_expr(value, hardened, function_names)?;
+            }
+        }
+        ExprKind::Object(entries) => {
+            for value in entries.values() {
+                preflight_expr(value, hardened, function_names)?;
+            }
+        }
+        ExprKind::Property(target, _) | ExprKind::Unary { expr: target, .. } => {
+            preflight_expr(target, hardened, function_names)?;
+        }
+        ExprKind::Index(target, index) => {
+            preflight_expr(target, hardened, function_names)?;
+            preflight_expr(index, hardened, function_names)?;
+        }
+        ExprKind::Binary { left, right, .. } => {
+            preflight_expr(left, hardened, function_names)?;
+            preflight_expr(right, hardened, function_names)?;
+        }
+        ExprKind::Call { name, args } => {
+            for arg in args {
+                preflight_expr(arg, hardened, function_names)?;
+            }
+            if hardened {
+                if let Some(message) = denied_builtin_message(name) {
+                    return Err(capability_failure(message));
+                }
+                let allowed = matches!(name.as_str(), "json_parse" | "json_stringify")
+                    || (function_names.contains(name.as_str()) && !is_explicitly_unsafe_name(name));
+                if !allowed {
+                    return Err(capability_failure(
+                        "unknown or unsafe function calls are disabled by hardened execution policy",
+                    ));
+                }
+            }
+        }
+        ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {}
+    }
+    Ok(())
+}
+
+fn denied_builtin_message(name: &str) -> Option<&'static str> {
+    match name {
+        "http_get" | "http_post" => {
+            Some("network access is disabled by execution policy (hardened mode)")
+        }
+        "read_file" => Some("file read access is disabled by execution policy (hardened mode)"),
+        "write_file" => Some("file write access is disabled by execution policy (hardened mode)"),
+        "env" => {
+            Some("environment-variable access is disabled by execution policy (hardened mode)")
+        }
+        _ => None,
+    }
+}
+
+fn is_explicitly_unsafe_name(name: &str) -> bool {
+    matches!(
+        name,
+        "shell"
+            | "shell_exec"
+            | "exec"
+            | "process"
+            | "spawn"
+            | "plugin"
+            | "load_plugin"
+            | "stripe"
+            | "stripe_charge"
+            | "send_email"
+            | "linear_create_issue"
+            | "db_write"
+            | "delete_file"
+    )
+}
+
+fn capability_failure(human_message: &'static str) -> CliFailure {
+    CliFailure::preflight(
+        "capability_denied",
+        "workflow contains a capability disabled by hardened execution policy",
+        human_message,
+    )
+}
+
+fn read_only_input_failure() -> CliFailure {
+    CliFailure::preflight(
+        "read_only_input",
+        "the injected input value is read-only",
+        "the injected input value cannot be declared, assigned, or shadowed",
+    )
 }
 
 fn print_usage() {
@@ -389,13 +937,19 @@ fn print_usage() {
     println!("  solvec tokens <file.solve>         Print lexer tokens");
     println!("  solvec ast <file.solve>            Print parsed AST");
     println!();
-    println!("Run safety options:");
-    println!("  --safe                             Deny network, file, and env access by default");
-    println!("  --allow-network                    Allow http_get/http_post in safe mode");
-    println!("  --allow-file-read                  Allow read_file in safe mode");
-    println!("  --allow-file-write                 Allow write_file in safe mode");
-    println!("  --allow-env                        Allow env in safe mode");
-    println!("  --allow-root <path>                Restrict file access to an allowed root");
+    println!("Local structured-run options:");
+    println!("  --input <file>                     Inject strict JSON as read-only 'input'");
+    println!("  --json                             Emit one deterministic JSON envelope");
+    println!("  --safe                             Deny runtime capabilities and unsafe tools");
+    println!("  --dry-run                          Evaluate pure logic after static preflight");
+    println!("  --no-network                       Enable strict hardened execution");
+    println!();
+    println!("Unhardened capability options:");
+    println!("  --allow-network                    Accepted only outside hardened modes");
+    println!("  --allow-file-read                  Accepted only outside hardened modes");
+    println!("  --allow-file-write                 Accepted only outside hardened modes");
+    println!("  --allow-env                        Accepted only outside hardened modes");
+    println!("  --allow-root <path>                Restrict unhardened file access to a root");
     println!("  --http-connect-timeout-ms <ms>     HTTP connect timeout, default 5000");
     println!("  --http-timeout-ms <ms>             HTTP request timeout, default 15000");
     println!("  --http-max-body-bytes <bytes>      HTTP response body limit, default 1048576");

@@ -85,26 +85,25 @@ Validation does not execute the script. It does not run AI agents, HTTP calls, f
 
 By default, `solvec run` executes trusted local scripts with the full current runtime. That includes HTTP helpers, file helpers, environment reads, and AI-agent provider configuration.
 
-Use safe mode when you want to execute a script while denying side-effecting capabilities by default:
+Use a hardened mode when a script must be limited to pure in-memory evaluation. Any of `--safe`, `--dry-run`, or `--no-network` enables the strict policy:
 
 ```bash
 cd solvec
 cargo run -- run --safe ../examples/hello.solve
 ```
 
-Safe mode denies:
+Hardened execution denies before evaluation, including in unreachable branches and function bodies:
 
-- network access through `http_get`, `http_post`, and OpenAI-backed `ask`
+- network access through `http_get`, `http_post`, and all `ask`/agent use
 - file reads through `read_file`
 - file writes through `write_file`
 - environment-variable access through `env` and AI provider configuration
+- agent tools, unknown functions, and known shell/process/plugin/mutation-style actions
 
-You can allow only the capabilities a script needs:
+Capability-enabling `--allow-*` flags are rejected when any hardened flag is active. They remain available only for explicitly trusted, unhardened local runs. `--allow-root` can still constrain file builtins in such an unhardened run:
 
 ```bash
-cargo run -- run --safe --allow-env ../examples/agent.solve
-cargo run -- run --safe --allow-network ./workflow.solve
-cargo run -- run --safe --allow-file-read --allow-root /tmp/solvelang-inputs ./workflow.solve
+cargo run -- run --allow-root /tmp/solvelang-inputs ./trusted-workflow.solve
 ```
 
 Allowed filesystem roots restrict file builtins to specific directories. Paths containing `..` are rejected when filesystem roots are enforced, and paths outside allowed roots fail with a SolveLang Runtime Error.
@@ -120,6 +119,17 @@ These can be adjusted for a run:
 ```bash
 cargo run -- run --http-connect-timeout-ms 5000 --http-timeout-ms 15000 --http-max-body-bytes 1048576 ./workflow.solve
 ```
+
+For a deterministic local advisory run, provide strict JSON input and request one JSON output envelope:
+
+```bash
+cargo run -- run \
+  --input ../examples/upcomingsounds/cli-contract-input.json \
+  --json --safe --dry-run --no-network \
+  ../examples/upcomingsounds/cli-contract.solve
+```
+
+`--input` accepts one explicit regular JSON file up to 1 MiB and injects it as read-only `input`. JSON numbers must fit a signed 32-bit integer; decimals and larger integers fail closed. JSON mode buffers typed `print(...)` values, emits one byte-deterministic document, and labels it `NON-PRODUCTION ADVISORY ONLY`. Failures emit one sanitized JSON error document without source, input, query-string, or full-path content.
 
 For more detail, see [docs/runtime-safety.md](docs/runtime-safety.md).
 
@@ -258,7 +268,7 @@ print(env("HOME"))
 - `env` can expose secrets such as tokens, API keys, or deployment credentials.
 - `http_get` and `http_post` make network requests from your machine and may send data to external services.
 - OpenAI-backed agent calls send the agent instruction, approved tool names, and user message to OpenAI.
-- Use `solvec run --safe` for scripts that should not access network, files, or environment variables.
+- Use `solvec run --json --safe --dry-run --no-network` for deterministic advisory-only evaluation with runtime capabilities denied.
 - Never print, hardcode, or commit `OPENAI_API_KEY`.
 - External AI calls may cost money.
 - HTTP examples may require internet access. Automated tests avoid external internet.
