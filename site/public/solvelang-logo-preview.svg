@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 956 200" role="img" aria-labelledby="title desc">
+  <title id="title">SolveLang</title>
+  <desc id="desc">SolveLang wordmark with a geometric triangular maze and blue solution path.</desc>
+  <defs>
+    <linearGradient id="navy-logo" x1="20" y1="190" x2="180" y2="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#071B36"/>
+      <stop offset="1" stop-color="#17335A"/>
+    </linearGradient>
+    <linearGradient id="blue-logo" x1="75" y1="180" x2="130" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1768FF"/>
+      <stop offset="1" stop-color="#2F82FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 5) scale(.19)">
+    <path fill="url(#navy-logo)" fill-rule="evenodd" d="M500 70 930 835H70ZM500 250 748 700H252Z"/>
+    <path fill="url(#blue-logo)" d="M500 70 650 336H557L500 235 443 336H350Z"/>
+    <path d="M275 706H505V585H410L500 430H617L548 310H660" fill="none" stroke="url(#navy-logo)" stroke-width="72" stroke-linejoin="miter" stroke-linecap="square"/>
+    <path d="M392 706 550 500 485 392 555 278 500 185" fill="none" stroke="url(#blue-logo)" stroke-width="58" stroke-linejoin="miter" stroke-linecap="square"/>
+    <path d="M500 112 445 214H555Z" fill="url(#blue-logo)"/>
+  </g>
+  <text x="226" y="137" fill="#071B36" font-family="Eurostile, 'Arial Rounded MT Bold', 'Trebuchet MS', Arial, Helvetica, sans-serif" font-size="112" font-weight="700" letter-spacing="-5">Solve</text>
+  <text x="550" y="137" fill="#2477FF" font-family="Eurostile, 'Arial Rounded MT Bold', 'Trebuchet MS', Arial, Helvetica, sans-serif" font-size="112" font-weight="700" letter-spacing="-5">Lang</text>
+</svg>
