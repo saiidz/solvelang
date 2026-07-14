@@ -1,10 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title">
-  <title id="title">SolveLang triangle riddle mark</title>
-  <path fill="#fff" fill-rule="evenodd"
-    d="M500 70 930 835H70ZM500 250 748 700H252Z"/>
-  <path d="M275 706H505V585H410L500 430H617L548 310H660"
-    fill="none" stroke="#fff" stroke-width="72" stroke-linejoin="miter" stroke-linecap="square"/>
-  <path d="M392 706 550 500 485 392 555 278 500 185"
-    fill="none" stroke="#fff" stroke-width="58" stroke-linejoin="miter" stroke-linecap="square"/>
-  <path d="M500 112 445 214H555Z" fill="#fff"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title"><title id="title">SolveLang triangle riddle mark</title><g transform="translate(9.000 22.299) scale(0.458574)"><path d="M260.0,219.0L204.0,220.0L101.0,400.0L233.0,400.0L233.0,368.0L162.0,368.0L161.0,365.0L224.0,254.0L279.0,254.0ZM300.0,143.0L458.0,423.0L457.0,426.0L354.0,426.0L352.0,422.0L352.0,393.0L319.0,393.0L318.0,460.0L518.0,460.0L340.0,144.0ZM418.0,399.0L379.0,333.0L260.0,333.0L260.0,422.0L258.0,426.0L61.0,425.0L190.0,194.0L246.0,193.0L229.0,159.0L208.0,158.0L224.0,119.0L193.0,119.0L0.0,460.0L293.0,460.0L294.0,367.0L360.0,367.0L380.0,400.0Z" fill="#fff" fill-rule="evenodd"/><path d="M255.0,107.0L236.0,143.0L246.0,144.0L315.0,278.0L236.0,279.0L201.0,343.0L231.0,343.0L251.0,307.0L362.0,307.0L277.0,147.0L277.0,140.0ZM259.0,0.0L193.0,118.0L225.0,119.0L257.0,62.0L260.0,61.0L295.0,119.0L325.0,119.0L322.0,110.0Z" fill="#fff" fill-rule="evenodd"/></g></svg>
