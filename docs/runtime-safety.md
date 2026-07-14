@@ -11,7 +11,7 @@ Any of these flags enables the same strict capability policy:
 - `--no-network`
 - `--json`
 
-For the strongest and most explicit local contract, pass all three:
+For the strongest and most explicit local contract, pass all four hardened flags:
 
 ```bash
 cd solvec

@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 Status: draft local-only contract
-Base commit: `f4f5cff9d0e7a84e67aa6447096e450860282e80`
+Base commit: `a5b71dd783850dc21335646053127c9459822c57`
 
 ## Purpose
 
