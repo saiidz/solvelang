@@ -1,5 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">SolveLang triangular riddle mark</title>
-  <path fill="#FFFFFF" fill-rule="evenodd" d="M32 4 61 56H3L32 4Zm0 12.5L14.1 48h35.8L32 16.5Z"/>
-  <path fill="#FFFFFF" d="m31 19 6.7 11.6h-6.8L20.4 48H36v-7.2h-9.3l5.8-10.1 4.1 7.1h9.8L32.5 13.7 31 19Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-labelledby="title">
+  <title id="title">SolveLang triangle riddle mark</title>
+  <path fill="#fff" fill-rule="evenodd"
+    d="M500 70 930 835H70ZM500 250 748 700H252Z"/>
+  <path d="M275 706H505V585H410L500 430H617L548 310H660"
+    fill="none" stroke="#fff" stroke-width="72" stroke-linejoin="miter" stroke-linecap="square"/>
+  <path d="M392 706 550 500 485 392 555 278 500 185"
+    fill="none" stroke="#fff" stroke-width="58" stroke-linejoin="miter" stroke-linecap="square"/>
+  <path d="M500 112 445 214H555Z" fill="#fff"/>
 </svg>
