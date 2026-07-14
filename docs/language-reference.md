@@ -17,7 +17,7 @@ cargo run -- run ../examples/support_triage.solve
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
 - `ast` prints the parsed AST.
-- `run --safe`, `run --dry-run`, and `run --no-network` each select strict hardened execution. Hardened runs deny network, agents/tools, runtime file reads/writes, environment reads, and unknown or mutation-style calls.
+- `run --safe`, `run --dry-run`, `run --no-network`, and `run --json` each select strict hardened execution. Hardened runs deny network, agents/tools, runtime file reads/writes, environment reads, and unknown or mutation-style calls.
 
 For deterministic local JSON input and advisory JSON output:
 
@@ -77,7 +77,7 @@ print("Customer: " .. customer)
 
 ### Numbers
 
-Numbers are signed 32-bit integer values at runtime, but the lexer currently supports integer literals made of digits.
+Numbers are signed 32-bit integer values at runtime, while source literals currently consist of digits. A source literal above `2147483647` is a source-located validation error; it is never converted to zero. Unknown characters outside strings and comments are also validation errors rather than being ignored.
 
 ```solve
 let tickets = 12
@@ -93,7 +93,7 @@ Supported arithmetic operators:
 - `*`
 - `/`
 
-Division by zero is a runtime error.
+Division by zero and arithmetic results outside the signed 32-bit range are runtime errors.
 
 Arithmetic requires number operands. SolveLang does not coerce text, booleans, arrays, objects, or `null` to zero:
 
@@ -385,7 +385,7 @@ Use hardened execution for pure, side-effect-free evaluation:
 cargo run -- run --safe ../examples/hello.solve
 ```
 
-Any of `--safe`, `--dry-run`, or `--no-network` enables one strict policy that denies:
+Any of `--safe`, `--dry-run`, `--no-network`, or `--json` enables one strict policy that denies:
 
 - network access through `http_get` and `http_post`
 - all agent declarations, tools, and `ask` statements
@@ -395,6 +395,8 @@ Any of `--safe`, `--dry-run`, or `--no-network` enables one strict policy that d
 - unknown, shell/process/plugin, and mutation-style calls
 
 Denied capabilities are found by a complete AST preflight before execution, including in imported source, function bodies, and unreachable branches. Capability-enabling `--allow-*` flags are rejected in hardened mode.
+
+Successful non-JSON hardened runs print `NON-PRODUCTION ADVISORY ONLY` before workflow output. JSON mode is always hardened and includes that label in its one output document. Its `dry_run` field is `true` only when `--dry-run` was explicitly supplied.
 
 A trusted unhardened run remains capability-enabled. `--allow-root` can constrain its file builtins:
 

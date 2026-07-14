@@ -28,15 +28,15 @@ Malformed input, unsafe capabilities, policy-invalid imports, parser failures, a
 ## Flag semantics
 
 - `--input <file>` reads one explicit, regular JSON file with a bounded size. The parsed value is injected as read-only `input`.
-- `--json` emits exactly one deterministic advisory JSON envelope.
-- `--safe`, `--dry-run`, and `--no-network` each enable the same strict hardened capability policy.
+- `--json` enables strict hardened execution and emits exactly one deterministic advisory JSON envelope.
+- `--safe`, `--dry-run`, and `--no-network` each enable the same strict hardened capability policy. Successful non-JSON hardened runs emit `NON-PRODUCTION ADVISORY ONLY` before workflow output.
 - `--dry-run` evaluates pure workflow logic after a static capability preflight.
 - Hardened execution rejects every capability-enabling `--allow-*` flag. It denies HTTP, AI/agent use, runtime file reads and writes, environment reads, shell/process/plugin actions, mutation tools, and unknown function calls.
 - Local entry-source reads, confined `.solve` import reads, and the one explicit JSON input read are admitted by the CLI source policy; they do not enable runtime file builtins.
 
 ## Source and import safety
 
-For `--safe`, `--dry-run`, or `--no-network` runs, execution and source-loading policies are built before the entry file or any import is read. The entry workflow establishes a canonical source root. Imports must be relative regular `.solve` files whose canonical paths remain below that root. Absolute imports, parent traversal, symlink escapes, and circular imports fail closed.
+For `--safe`, `--dry-run`, `--no-network`, or `--json` runs, execution and source-loading policies are built before the entry file or any import is read. The entry workflow establishes a canonical source root. Imports must be relative regular `.solve` files whose canonical paths remain below that root. Absolute imports, parent traversal, symlink escapes, and circular imports fail closed.
 
 Imported workflow statements are included in the same static capability preflight. An imported `http_get`, `http_post`, `ask`, `read_file`, `write_file`, or `env` action cannot execute when its capability is denied.
 

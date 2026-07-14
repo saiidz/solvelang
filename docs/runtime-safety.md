@@ -9,6 +9,7 @@ Any of these flags enables the same strict capability policy:
 - `--safe`
 - `--dry-run`
 - `--no-network`
+- `--json`
 
 For the strongest and most explicit local contract, pass all three:
 
@@ -35,6 +36,8 @@ The CLI statically inspects the complete flattened AST before the first statemen
 
 Capability-enabling `--allow-network`, `--allow-file-read`, `--allow-file-write`, `--allow-env`, and `--allow-root` flags are rejected when any hardened flag is active. There is no capability override inside hardened mode.
 
+A successful hardened run without `--json` prints `NON-PRODUCTION ADVISORY ONLY` as its first stdout line before workflow output.
+
 ## Structured JSON Input
 
 `--input <file>` reads one explicit regular JSON file and injects its parsed value as the read-only global `input`.
@@ -52,7 +55,7 @@ Decimals, integers outside the signed 32-bit range, malformed JSON, symlink inpu
 
 ## Deterministic JSON Output
 
-`--json` captures typed values passed to `print(...)` instead of writing human output as statements execute. A successful run emits exactly one compact JSON document with:
+`--json` always activates hardened execution. It captures typed values passed to `print(...)` instead of writing human output as statements execute. A successful run emits exactly one compact JSON document with:
 
 - `ok: true`;
 - `advisory: "NON-PRODUCTION ADVISORY ONLY"`;
@@ -61,6 +64,8 @@ Decimals, integers outside the signed 32-bit range, malformed JSON, symlink inpu
 - a typed `outputs` array.
 
 There are no timestamps or random identifiers. Object keys are deterministic. Runtime output is buffered, so a later error discards earlier captured values.
+
+The `dry_run` field records whether `--dry-run` was explicitly supplied. A JSON-only run therefore reports `dry_run: false` while remaining strictly side-effect-free and advisory-only.
 
 Failures emit exactly one parseable JSON error document and exit nonzero. The public error envelope does not echo source text, input contents, query strings, secret values, or full local paths.
 
@@ -98,6 +103,8 @@ HTTP helpers in trusted unhardened runs retain their defaults:
 ## Host Limitations
 
 Hardened mode is an interpreter policy, not an operating-system sandbox. A caller that needs defense against interpreter defects must also supply host controls such as process isolation, CPU/time limits, memory limits, environment clearing, and stdout/stderr caps. The CLI does not provide those host controls in this release.
+
+Input and import admission uses metadata checks, canonicalization, and bounded reads, but those checks and reads are not one atomic operating-system operation. A concurrently replaced local path can create a time-of-check/time-of-use race. Only run against directories and input files controlled by the local caller, and use host isolation when mutually untrusted local processes can replace them.
 
 No hosted runtime, production integration, database access, payment action, email action, issue creation, deployment action, or remote tool execution is added by this contract.
 

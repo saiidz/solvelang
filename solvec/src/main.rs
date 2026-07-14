@@ -48,7 +48,7 @@ struct RunOptions {
 
 impl RunOptions {
     fn hardened(&self) -> bool {
-        self.safe || self.dry_run || self.no_network
+        self.safe || self.dry_run || self.no_network || self.json
     }
 }
 
@@ -220,6 +220,9 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
 
     let mut runtime =
         ast_runtime::AstRuntime::with_input(policy, &content, filename, input, options.json);
+    if options.hardened() && !options.json {
+        println!("{}", ADVISORY_LABEL);
+    }
     runtime
         .run(&statements)
         .map_err(|error| CliFailure::runtime(error.to_string()))?;
@@ -355,6 +358,9 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
                 let root = args
                     .get(index)
                     .ok_or_else(|| "--allow-root requires a path".to_string())?;
+                if root.is_empty() || root.starts_with('-') {
+                    return Err("--allow-root requires a path".to_string());
+                }
                 options.allowed_roots.push(PathBuf::from(root));
             }
             "--http-connect-timeout-ms" => {
@@ -384,7 +390,7 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
             }
             value if value.starts_with("--allow-root=") => {
                 let path = &value["--allow-root=".len()..];
-                if path.is_empty() {
+                if path.is_empty() || path.starts_with('-') {
                     return Err("--allow-root requires a path".to_string());
                 }
                 options.allowed_roots.push(PathBuf::from(path));
@@ -434,6 +440,14 @@ fn parse_usize_option(value: Option<&String>, name: &str) -> Result<usize, Strin
 }
 
 fn validate_run_options(options: &RunOptions) -> Result<(), CliFailure> {
+    if options
+        .http_max_body_bytes
+        .checked_add(1)
+        .and_then(|limit| u64::try_from(limit).ok())
+        .is_none()
+    {
+        return Err(CliFailure::arguments("--http-max-body-bytes is too large"));
+    }
     if options.hardened()
         && (options.allow_network
             || options.allow_file_read
@@ -939,7 +953,7 @@ fn print_usage() {
     println!();
     println!("Local structured-run options:");
     println!("  --input <file>                     Inject strict JSON as read-only 'input'");
-    println!("  --json                             Emit one deterministic JSON envelope");
+    println!("  --json                             Emit one hardened deterministic JSON envelope");
     println!("  --safe                             Deny runtime capabilities and unsafe tools");
     println!("  --dry-run                          Evaluate pure logic after static preflight");
     println!("  --no-network                       Enable strict hardened execution");

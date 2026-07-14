@@ -946,9 +946,19 @@ impl AstRuntime {
             );
         }
 
-        let mut limited = response
-            .by_ref()
-            .take((self.policy.http_max_body_bytes + 1) as u64);
+        let read_limit = self
+            .policy
+            .http_max_body_bytes
+            .checked_add(1)
+            .and_then(|limit| u64::try_from(limit).ok())
+            .ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "HTTP response body limit is too large",
+                    Some("Use a smaller --http-max-body-bytes value.".to_string()),
+                )
+            })?;
+        let mut limited = response.by_ref().take(read_limit);
         let mut body_bytes = Vec::new();
 
         match limited.read_to_end(&mut body_bytes) {

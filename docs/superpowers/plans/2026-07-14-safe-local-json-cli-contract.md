@@ -70,7 +70,7 @@ Add `input_path`, `json`, `dry_run`, and `no_network` to `RunOptions`. Support s
 
 - [ ] **Step 2: Build hardened policies first**
 
-Make any of safe, dry-run, or no-network select one strict hardened policy. Reject all capability-enabling `--allow-*` flags in hardened mode, and construct execution and canonical source-loading policies immediately after argument parsing.
+Make any of safe, dry-run, no-network, or JSON mode select one strict hardened policy. Reject all capability-enabling `--allow-*` flags in hardened mode, and construct execution and canonical source-loading policies immediately after argument parsing.
 
 - [ ] **Step 3: Constrain imports before reading**
 

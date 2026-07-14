@@ -85,7 +85,7 @@ Validation does not execute the script. It does not run AI agents, HTTP calls, f
 
 By default, `solvec run` executes trusted local scripts with the full current runtime. That includes HTTP helpers, file helpers, environment reads, and AI-agent provider configuration.
 
-Use a hardened mode when a script must be limited to pure in-memory evaluation. Any of `--safe`, `--dry-run`, or `--no-network` enables the strict policy:
+Use a hardened mode when a script must be limited to pure in-memory evaluation. Any of `--safe`, `--dry-run`, `--no-network`, or `--json` enables the strict policy:
 
 ```bash
 cd solvec
@@ -99,6 +99,8 @@ Hardened execution denies before evaluation, including in unreachable branches a
 - file writes through `write_file`
 - environment-variable access through `env` and AI provider configuration
 - agent tools, unknown functions, and known shell/process/plugin/mutation-style actions
+
+A successful non-JSON hardened run prints `NON-PRODUCTION ADVISORY ONLY` as its first stdout line. JSON mode is always hardened and carries the same label in its single machine-readable envelope; `dry_run` remains `false` when `--json` is used without `--dry-run`.
 
 Capability-enabling `--allow-*` flags are rejected when any hardened flag is active. They remain available only for explicitly trusted, unhardened local runs. `--allow-root` can still constrain file builtins in such an unhardened run:
 
@@ -129,7 +131,7 @@ cargo run -- run \
   ../examples/upcomingsounds/cli-contract.solve
 ```
 
-`--input` accepts one explicit regular JSON file up to 1 MiB and injects it as read-only `input`. JSON numbers must fit a signed 32-bit integer; decimals and larger integers fail closed. JSON mode buffers typed `print(...)` values, emits one byte-deterministic document, and labels it `NON-PRODUCTION ADVISORY ONLY`. Failures emit one sanitized JSON error document without source, input, query-string, or full-path content.
+`--input` accepts one explicit regular JSON file up to 1 MiB and injects it as read-only `input`. JSON numbers must fit a signed 32-bit integer; decimals and larger integers fail closed. JSON mode itself activates hardened execution, buffers typed `print(...)` values, emits one byte-deterministic document, and labels it `NON-PRODUCTION ADVISORY ONLY`. Failures emit one sanitized JSON error document without source, input, query-string, or full-path content.
 
 For more detail, see [docs/runtime-safety.md](docs/runtime-safety.md).
 

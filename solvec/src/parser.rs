@@ -467,6 +467,25 @@ impl Parser {
         let location = SourceLocation::new(token.line, token.column);
         match token.token {
             Token::Number(value) => Expr::new(ExprKind::Number(value), location),
+            Token::InvalidInteger(literal) => {
+                self.error_at(
+                    location,
+                    &format!(
+                        "Integer literal '{}' is outside the signed 32-bit integer range.",
+                        literal
+                    ),
+                    "Use an integer from -2147483648 through 2147483647.",
+                );
+                Expr::new(ExprKind::Number(0), location)
+            }
+            Token::InvalidCharacter(character) => {
+                self.error_at(
+                    location,
+                    &format!("unknown character '{}'.", character),
+                    "Remove the character or replace it with valid SolveLang punctuation.",
+                );
+                Expr::new(ExprKind::Text(String::new()), location)
+            }
             Token::Text(value) => Expr::new(ExprKind::Text(value), location),
             Token::True => Expr::new(ExprKind::Bool(true), location),
             Token::False => Expr::new(ExprKind::Bool(false), location),
@@ -704,5 +723,20 @@ print(user.name)
                 .count(),
             2
         );
+    }
+
+    #[test]
+    fn rejects_out_of_range_integer_literals_and_unknown_characters() {
+        let errors = parse("print(2147483648)\nprint(1) @\n")
+            .expect_err("invalid lexer tokens must fail parsing");
+
+        assert!(errors.iter().any(|error| {
+            error.line == 1
+                && error.column == 7
+                && error.message.contains("signed 32-bit integer range")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.line == 2 && error.column == 10 && error.message.contains("unknown character '@'")
+        }));
     }
 }

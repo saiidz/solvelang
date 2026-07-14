@@ -1254,6 +1254,231 @@ fn hardened_json_arithmetic_overflow_is_an_atomic_runtime_error() {
 }
 
 #[test]
+fn hardened_json_rejects_invalid_source_tokens_atomically() {
+    let root = create_temp_workflow_dir("solvelang_json_invalid_tokens");
+
+    for (name, invalid_source, private_fragment) in [
+        (
+            "integer_overflow",
+            "print(\"partial-output-secret\")\nprint(2147483648)\n// source-secret-marker\n",
+            "2147483648",
+        ),
+        (
+            "long_integer_overflow",
+            "print(\"partial-output-secret\")\nprint(999999999999999999999999999999999999)\n// source-secret-marker\n",
+            "999999999999999999999999999999999999",
+        ),
+        (
+            "unknown_character",
+            "print(\"partial-output-secret\") @\n// source-secret-marker\n",
+            "@",
+        ),
+    ] {
+        let workflow = root.join(format!("{name}.solve"));
+        fs::write(&workflow, invalid_source).expect("failed to write invalid workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--dry-run",
+            "--no-network",
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "invalid source unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty(), "stderr for {name} was: {stderr}");
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["ok"], false);
+        assert_eq!(error["errors"][0]["code"], "invalid_workflow");
+        assert!(error.get("outputs").is_none());
+        assert!(!stdout.contains("partial-output-secret"));
+        assert!(!stdout.contains("source-secret-marker"));
+        assert!(!stdout.contains(private_fragment));
+        assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+    }
+}
+
+#[test]
+fn invalid_source_tokens_have_source_located_human_diagnostics() {
+    let workflow = write_temp_solve_file(
+        "solvelang_invalid_token_diagnostics.solve",
+        "print(2147483648)\nprint(1) @\n",
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", workflow.as_str()]);
+
+    assert!(!success, "invalid source unexpectedly succeeded");
+    assert!(stdout.is_empty(), "stdout was: {stdout}");
+    assert!(stderr.contains("SolveLang Error on line 1, column 7"));
+    assert!(stderr.contains("outside the signed 32-bit integer range"));
+    assert!(stderr.contains("SolveLang Error on line 2, column 10"));
+    assert!(stderr.contains("unknown character '@'"));
+}
+
+#[test]
+fn json_mode_is_hardened_and_side_effect_free_without_extra_safety_flags() {
+    let root = create_temp_workflow_dir("solvelang_json_implies_hardened");
+    let marker = root.join("must-not-exist.txt");
+    let workflow = root.join("workflow.solve");
+    fs::write(
+        &workflow,
+        format!(
+            "print(\"must-not-be-emitted\")\nif false {{\n write_file(\"{}\", \"created\")\n}}\n",
+            marker.display()
+        ),
+    )
+    .expect("failed to write workflow");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", workflow_arg.as_str()]);
+
+    assert!(!success);
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    assert!(!marker.exists());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["ok"], false);
+    assert_eq!(error["advisory_only"], true);
+    assert_eq!(error["errors"][0]["code"], "capability_denied");
+    assert!(error.get("outputs").is_none());
+    assert!(!stdout.contains("must-not-be-emitted"));
+    assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn json_mode_rejects_capability_allow_flags_before_source_loading() {
+    for allow_flag in ["--allow-network", "--allow-file-write", "--allow-env"] {
+        let (success, stdout, stderr) =
+            run_solvec_with_status(&["run", "--json", allow_flag, "missing.solve"]);
+
+        assert!(
+            !success,
+            "capability flag unexpectedly succeeded: {allow_flag}"
+        );
+        assert!(stderr.is_empty(), "stderr was: {stderr}");
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["ok"], false);
+        assert_eq!(error["errors"][0]["code"], "invalid_arguments");
+        assert!(!stdout.contains("missing.solve"));
+    }
+}
+
+#[test]
+fn allow_root_rejects_option_like_values_without_swallowing_safety_flags() {
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--allow-root", "--safe", "missing.solve"]);
+    assert!(!success, "option-like root unexpectedly succeeded");
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "invalid_arguments");
+    assert!(!stdout.contains("missing.solve"));
+
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--allow-root", "--safe", "missing.solve"]);
+    assert!(!success, "option-like root unexpectedly succeeded");
+    assert!(stdout.contains("SolveLang Compiler"));
+    assert!(stderr.contains("--allow-root requires a path"));
+    assert!(!stderr.contains("failed to resolve"));
+    assert!(!stderr.contains("invalid execution policy"));
+}
+
+#[test]
+fn every_hardened_human_mode_starts_with_the_advisory_label() {
+    let workflow = write_temp_solve_file(
+        "solvelang_hardened_human_advisory.solve",
+        "print(\"classification prepared\")\n",
+    );
+
+    for flag in ["--safe", "--dry-run", "--no-network"] {
+        let (success, stdout, stderr) = run_solvec_with_status(&["run", flag, workflow.as_str()]);
+
+        assert!(success, "{flag} failed with stderr: {stderr}");
+        assert!(stderr.is_empty());
+        assert_eq!(
+            stdout.lines().collect::<Vec<_>>(),
+            vec![ADVISORY_LABEL, "classification prepared"],
+            "stdout for {flag} was: {stdout:?}"
+        );
+    }
+}
+
+#[test]
+fn maximum_http_body_limit_is_rejected_before_source_loading() {
+    let max = usize::MAX.to_string();
+    let option = format!("--http-max-body-bytes={max}");
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", option.as_str(), "missing.solve"]);
+
+    assert!(!success, "overflowing HTTP limit unexpectedly succeeded");
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "invalid_arguments");
+    assert!(!stdout.contains("missing.solve"));
+    assert!(!stdout.contains(max.as_str()));
+}
+
+#[test]
+fn exact_one_mib_input_is_accepted() {
+    let root = create_temp_workflow_dir("solvelang_exact_input_limit");
+    let input = root.join("input.json");
+    let workflow = root.join("workflow.solve");
+    let json = format!("\"{}\"", "a".repeat(1_048_576 - 2));
+    assert_eq!(json.len(), 1_048_576);
+    fs::write(&input, json).expect("failed to write exact-boundary input");
+    fs::write(&workflow, "print(\"boundary accepted\")\n").expect("failed to write workflow");
+    let input_arg = input.to_string_lossy().to_string();
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--input",
+        input_arg.as_str(),
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    assert!(stderr.is_empty());
+    assert_eq!(
+        parse_json_output(&stdout)["outputs"][0],
+        "boundary accepted"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn input_symlinks_fail_closed_without_path_disclosure() {
+    use std::os::unix::fs::symlink;
+
+    let root = create_temp_workflow_dir("solvelang_symlink_input");
+    let target = root.join("target.json");
+    let input = root.join("linked.json");
+    let workflow = root.join("workflow.solve");
+    fs::write(&target, r#"{"synthetic":true}"#).expect("failed to write target input");
+    symlink(&target, &input).expect("failed to create input symlink");
+    fs::write(&workflow, "print(\"must-not-run\")\n").expect("failed to write workflow");
+    let input_arg = input.to_string_lossy().to_string();
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--input",
+        input_arg.as_str(),
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(!success);
+    assert!(stderr.is_empty(), "stderr was: {stderr}");
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "invalid_input");
+    assert!(!stdout.contains("must-not-run"));
+    assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
 fn json_parser_failures_are_one_atomic_sanitized_document() {
     let root = create_temp_workflow_dir("solvelang_json_parser_error");
     let workflow = root.join("workflow.solve");
