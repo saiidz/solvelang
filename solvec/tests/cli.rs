@@ -1202,6 +1202,58 @@ fn json_runtime_failures_are_atomic_and_do_not_echo_source() {
 }
 
 #[test]
+fn hardened_json_arithmetic_overflow_is_an_atomic_runtime_error() {
+    let root = create_temp_workflow_dir("solvelang_json_arithmetic_overflow");
+    let input = root.join("input.json");
+    fs::write(
+        &input,
+        r#"{"max":2147483647,"min":-2147483648,"minus_one":-1,"two":2}"#,
+    )
+    .expect("failed to write input");
+    let input_arg = input.to_string_lossy().to_string();
+
+    for (name, expression) in [
+        ("add", "input.max + 1"),
+        ("subtract", "input.min - 1"),
+        ("multiply", "input.max * input.two"),
+        ("divide", "input.min / input.minus_one"),
+    ] {
+        let workflow = root.join(format!("{name}.solve"));
+        fs::write(
+            &workflow,
+            format!(
+                "print(\"partial-output-secret\")\nprint({expression})\n// source-secret-marker\n"
+            ),
+        )
+        .expect("failed to write workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--dry-run",
+            "--no-network",
+            "--input",
+            input_arg.as_str(),
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "overflow unexpectedly succeeded: {name}");
+        assert!(stderr.is_empty(), "stderr for {name} was: {stderr}");
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["ok"], false);
+        assert_eq!(error["errors"][0]["code"], "runtime_error");
+        assert!(error.get("outputs").is_none());
+        assert!(!stdout.contains("partial-output-secret"));
+        assert!(!stdout.contains("source-secret-marker"));
+        assert!(!stdout.contains("2147483647"));
+        assert!(!stdout.contains("-2147483648"));
+        assert!(!stdout.contains(root.to_string_lossy().as_ref()));
+    }
+}
+
+#[test]
 fn json_parser_failures_are_one_atomic_sanitized_document() {
     let root = create_temp_workflow_dir("solvelang_json_parser_error");
     let workflow = root.join("workflow.solve");

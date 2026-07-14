@@ -508,9 +508,15 @@ impl AstRuntime {
         location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
         match operator {
-            BinaryOp::Add => self.numeric_binary(left, right, location, "+", |a, b| a + b),
-            BinaryOp::Subtract => self.numeric_binary(left, right, location, "-", |a, b| a - b),
-            BinaryOp::Multiply => self.numeric_binary(left, right, location, "*", |a, b| a * b),
+            BinaryOp::Add => {
+                self.checked_numeric_binary(left, right, location, "+", i32::checked_add)
+            }
+            BinaryOp::Subtract => {
+                self.checked_numeric_binary(left, right, location, "-", i32::checked_sub)
+            }
+            BinaryOp::Multiply => {
+                self.checked_numeric_binary(left, right, location, "*", i32::checked_mul)
+            }
             BinaryOp::Divide => {
                 let (left_number, right_number) =
                     self.numeric_operands(left, right, location, "/")?;
@@ -521,7 +527,10 @@ impl AstRuntime {
                         Some("Use a non-zero divisor.".to_string()),
                     ))
                 } else {
-                    Ok(Value::Number(left_number / right_number))
+                    left_number
+                        .checked_div(right_number)
+                        .map(Value::Number)
+                        .ok_or_else(|| self.integer_overflow_error(location, "/"))
                 }
             }
             BinaryOp::Join => Ok(Value::Text(format!("{}{}", left, right))),
@@ -540,16 +549,26 @@ impl AstRuntime {
         }
     }
 
-    fn numeric_binary(
+    fn checked_numeric_binary(
         &self,
         left: Value,
         right: Value,
         location: SourceLocation,
         operator: &str,
-        operation: impl FnOnce(i32, i32) -> i32,
+        operation: impl FnOnce(i32, i32) -> Option<i32>,
     ) -> Result<Value, RuntimeError> {
         let (left, right) = self.numeric_operands(left, right, location, operator)?;
-        Ok(Value::Number(operation(left, right)))
+        operation(left, right)
+            .map(Value::Number)
+            .ok_or_else(|| self.integer_overflow_error(location, operator))
+    }
+
+    fn integer_overflow_error(&self, location: SourceLocation, operator: &str) -> RuntimeError {
+        self.error_at(
+            location,
+            format!("integer overflow for operator '{}'", operator),
+            Some("Keep arithmetic results within the signed 32-bit integer range.".to_string()),
+        )
     }
 
     fn numeric_comparison(
@@ -1096,9 +1115,12 @@ impl AstRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::AstRuntime;
+    use std::collections::BTreeMap;
+
+    use super::{AstRuntime, ExecutionPolicy};
     use crate::lexer::lex;
     use crate::parser::Parser;
+    use crate::value::Value;
 
     fn parse(source: &str) -> Vec<crate::ast::Stmt> {
         let mut parser = Parser::new(lex(source));
@@ -1148,5 +1170,41 @@ if user.active {
             .run(&parse("print(10 / 0)\n"))
             .expect_err("divide by zero should fail");
         assert!(divide.to_string().contains("divide by zero"));
+    }
+
+    #[test]
+    fn reports_checked_integer_overflow_for_every_arithmetic_operator() {
+        let input = Value::Object(BTreeMap::from([
+            ("max".to_string(), Value::Number(i32::MAX)),
+            ("min".to_string(), Value::Number(i32::MIN)),
+            ("minus_one".to_string(), Value::Number(-1)),
+            ("two".to_string(), Value::Number(2)),
+        ]));
+
+        for (operator, source) in [
+            ("+", "print(input.max + 1)\n"),
+            ("-", "print(input.min - 1)\n"),
+            ("*", "print(input.max * input.two)\n"),
+            ("/", "print(input.min / input.minus_one)\n"),
+        ] {
+            let mut runtime = AstRuntime::with_input(
+                ExecutionPolicy::safe(Vec::new()),
+                source,
+                "overflow.solve",
+                Some(input.clone()),
+                true,
+            );
+            let error = runtime
+                .run(&parse(source))
+                .expect_err("overflow must return a runtime error");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("integer overflow for operator '{}'", operator)),
+                "unexpected error: {error}"
+            );
+            assert!(runtime.outputs().is_empty());
+        }
     }
 }
