@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { JsonLd } from "../components/JsonLd";
 
 const workflowAuditGmailUrl =
@@ -207,6 +208,30 @@ if overdue_tasks == "yes" {
 
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
           <div className="mx-auto max-w-4xl text-center">
+            <header className="mb-10 flex justify-center">
+              <Link
+                href="/"
+                aria-label="SolveLang home"
+                className="inline-flex items-center"
+              >
+                <Image
+                  src="/solvelang-mark.svg"
+                  alt="SolveLang"
+                  width={36}
+                  height={36}
+                  className="sm:hidden"
+                  priority
+                />
+                <Image
+                  src="/solvelang-logo.svg"
+                  alt="SolveLang"
+                  width={196}
+                  height={41}
+                  className="hidden sm:block"
+                  priority
+                />
+              </Link>
+            </header>
             <div className="mb-6 inline-flex items-center rounded-full border border-slate-300 bg-white px-4 py-2 text-sm shadow-sm">
               Early beta • Founder/operator workflows • Browser-safe preview
             </div>

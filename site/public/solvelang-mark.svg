@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">SolveLang triangular riddle mark</title>
+  <path fill="#10233F" fill-rule="evenodd" d="M32 4 61 56H3L32 4Zm0 12.5L14.1 48h35.8L32 16.5Z"/>
+  <path fill="#10233F" d="m31 19 6.7 11.6h-6.8L20.4 48H36v-7.2h-9.3l5.8-10.1 4.1 7.1h9.8L32.5 13.7 31 19Z"/>
+  <path fill="#2563EB" d="m32 16 11.5 20H35l-4.1-7.1-9.7 16.8H35v5H12.4l17.8-30.8L32 16Z"/>
+</svg>
