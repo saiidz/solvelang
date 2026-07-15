@@ -32,6 +32,12 @@ The explicit JSON file becomes the read-only global `input`. It may contain null
 
 The AST runtime is canonical. The public `legacy` command and `--legacy` flag have been removed.
 
+## Studio model versus executable syntax
+
+Workflow Intelligence Studio uses a broader canonical workflow model for triggers, decisions, policies, approvals, human review, timers, exceptions, notifications, systems, and evidence. These concepts support deterministic analysis and simulation in the browser, but they are not all executable SolveLang syntax.
+
+Studio exports a clearly labeled preliminary `.solve` draft and preserves unsupported concepts as comments. Validate any generated draft with `solvec validate` and review it before `solvec run`. The Rust CLI remains the canonical source for executable language behavior.
+
 ## Comments
 
 Line comments start with `//` and continue to the end of the line.

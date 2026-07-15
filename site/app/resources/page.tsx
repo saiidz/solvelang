@@ -9,6 +9,23 @@ export const metadata: Metadata = {
 
 const resourceGroups = [
   {
+    title: "Workflow Intelligence Studio",
+    description:
+      "Model, analyze, simulate, compare, and export workflows locally without sending workflow data to a server.",
+    links: [
+      {
+        label: "Open Workflow Studio",
+        href: "/studio/",
+        note: "Use the local-first visual workspace for deterministic workflow analysis and scenario simulation.",
+      },
+      {
+        label: "Browser Script Preview",
+        href: "/run/",
+        note: "Preview the smaller browser-safe SolveLang script subset separately from Studio.",
+      },
+    ],
+  },
+  {
     title: "Workflow X-Ray resources",
     description:
       "Understand how SolveLang turns a messy process into a readable workflow map before production automation is wired.",

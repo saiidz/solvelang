@@ -22,6 +22,13 @@ Completed and working today:
 - Functions with parameters and return values
 - Arrays and index access
 - Agent prototype syntax: `agent`, `tool`, `instruction`, `ask`
+- Local-first Workflow Intelligence Studio for canonical workflow modeling, deterministic analysis, scenario simulation, traces, analytics, versions, and exports
+
+## Workflow Intelligence Studio
+
+Studio v1 is a static, browser-local product surface. It provides pre-automation workflow analysis, policy visibility, scenario simulation, and human-review design without replacing the Rust runtime. The Studio model intentionally supports operational concepts that are not all executable SolveLang syntax.
+
+Future Studio work may add opt-in hosted collaboration, larger graph performance, richer condition expressions, and server-side Rust validation. Those capabilities require explicit privacy, authentication, and runtime design and are not implied by v1.
 
 ## Phase 1: Core Interpreter
 

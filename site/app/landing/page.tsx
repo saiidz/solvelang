@@ -131,10 +131,10 @@ export default function Page() {
               GitHub
             </a>
             <Link
-              href="/audit/"
+              href="/studio/"
               className="rounded-xl bg-[#146cff] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#075be4]"
             >
-              Map a workflow
+              Open Studio
             </Link>
           </div>
         </nav>
@@ -161,24 +161,24 @@ export default function Page() {
 
               <div className="mt-10 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href="/demo/support-triage/"
+                  href="/studio/"
                   className="inline-flex items-center justify-center rounded-2xl bg-[#2477ff] px-6 py-3.5 text-sm font-semibold text-white shadow-[0_18px_50px_rgba(36,119,255,0.28)] transition hover:-translate-y-0.5 hover:bg-[#1768f5]"
                 >
-                  See a workflow in action
+                  Open Workflow Studio
                   <span aria-hidden="true" className="ml-2">
                     →
                   </span>
                 </Link>
                 <Link
-                  href="/run/"
+                  href="/demo/support-triage/"
                   className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/5 px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10"
                 >
-                  Try the browser preview
+                  See a workflow in action
                 </Link>
               </div>
 
               <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-400">
-                <span>Open-source Rust CLI</span>
+                <span>Studio runs locally in your browser</span>
                 <span>Human-review checkpoints</span>
                 <span>Safe local validation</span>
               </div>
