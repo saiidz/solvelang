@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import LandingPage from "./landing/page";
 
 export const metadata: Metadata = {
-  title: "SolveLang — Workflow X-Ray for Founder-Led Operations",
+  title: "SolveLang — See the System Before You Automate It",
   description:
-    "SolveLang turns messy support, intake, lead routing, and internal ops workflows into readable automation blueprints, human review points, and SolveLang-style workflow drafts.",
+    "SolveLang is a workflow analysis and automation language for support, intake, lead routing, approvals, and internal operations. Map decisions, exceptions, ownership, and human review before software runs the workflow.",
+  alternates: {
+    canonical: "https://www.solve-lang.com/",
+  },
 };
 
 export default function HomePage() {
