@@ -18,6 +18,8 @@ pub enum Token {
     Not,
     Identifier(String),
     Number(i32),
+    InvalidInteger(String),
+    InvalidCharacter(char),
     Text(String),
     Plus,
     Minus,
@@ -89,11 +91,11 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                         break;
                     }
                 }
-                tokens.push(LocatedToken::new(
-                    Token::Number(number.parse::<i32>().unwrap_or(0)),
-                    token_line,
-                    token_column,
-                ));
+                let token = number
+                    .parse::<i32>()
+                    .map(Token::Number)
+                    .unwrap_or_else(|_| Token::InvalidInteger(number));
+                tokens.push(LocatedToken::new(token, token_line, token_column));
             }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut word = character.to_string();
@@ -259,7 +261,11 @@ pub fn lex(source: &str) -> Vec<LocatedToken> {
                 token_column,
             )),
             ',' => tokens.push(LocatedToken::new(Token::Comma, token_line, token_column)),
-            _ => {}
+            _ => tokens.push(LocatedToken::new(
+                Token::InvalidCharacter(character),
+                token_line,
+                token_column,
+            )),
         }
     }
 
@@ -312,5 +318,64 @@ print("ok" .. "!")
         assert!(kinds.contains(&Token::Print));
         assert!(kinds.contains(&Token::Join));
         assert!(kinds.contains(&Token::Text("ok".to_string())));
+    }
+
+    #[test]
+    fn preserves_invalid_numeric_literals_and_unknown_characters_for_diagnostics() {
+        let tokens = lex("2147483648 @\n");
+        let rendered = format!("{tokens:?}");
+
+        assert!(
+            rendered.contains("InvalidInteger"),
+            "tokens were: {rendered}"
+        );
+        assert!(
+            rendered.contains("InvalidCharacter"),
+            "tokens were: {rendered}"
+        );
+        assert!(!tokens.iter().any(|token| token.token == Token::Number(0)));
+    }
+
+    #[test]
+    fn accepts_existing_operators_punctuation_and_comments() {
+        let tokens = lex(
+            "// @ and 2147483648 stay inside this comment\n+ - * / .. . : = == != > >= < <= ( ) { } [ ] ,\n",
+        );
+        let kinds = tokens
+            .into_iter()
+            .map(|located| located.token)
+            .collect::<Vec<_>>();
+
+        for expected in [
+            Token::Plus,
+            Token::Minus,
+            Token::Star,
+            Token::Slash,
+            Token::Join,
+            Token::Dot,
+            Token::Colon,
+            Token::Equal,
+            Token::EqualEqual,
+            Token::BangEqual,
+            Token::Greater,
+            Token::GreaterEqual,
+            Token::Less,
+            Token::LessEqual,
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::RightBrace,
+            Token::LeftBracket,
+            Token::RightBracket,
+            Token::Comma,
+        ] {
+            assert!(kinds.contains(&expected), "missing token: {expected:?}");
+        }
+        assert!(
+            !kinds.iter().any(|token| matches!(
+                token,
+                Token::InvalidInteger(_) | Token::InvalidCharacter(_)
+            ))
+        );
     }
 }

@@ -4,7 +4,7 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
 use reqwest::blocking::Client;
-use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
+use serde_json::Value as JsonValue;
 
 use crate::ai;
 use crate::ast::{BinaryOp, Expr, ExprKind, SourceLocation, Stmt, UnaryOp};
@@ -166,6 +166,9 @@ pub struct AstRuntime {
     policy: ExecutionPolicy,
     source_lines: Vec<String>,
     filename: Option<String>,
+    capture_output: bool,
+    outputs: Vec<Value>,
+    input_injected: bool,
 }
 
 impl Default for AstRuntime {
@@ -177,17 +180,47 @@ impl Default for AstRuntime {
             policy: ExecutionPolicy::unrestricted(),
             source_lines: Vec::new(),
             filename: None,
+            capture_output: false,
+            outputs: Vec::new(),
+            input_injected: false,
         }
     }
 }
 
 impl AstRuntime {
-    pub fn with_source(policy: ExecutionPolicy, source: &str, filename: &str) -> Self {
+    pub fn with_input(
+        policy: ExecutionPolicy,
+        source: &str,
+        filename: &str,
+        input: Option<Value>,
+        capture_output: bool,
+    ) -> Self {
+        let mut vars = HashMap::new();
+        let input_injected = input.is_some();
+        if let Some(input) = input {
+            vars.insert("input".to_string(), input);
+        }
+
         Self {
+            vars,
             source_lines: source.lines().map(str::to_owned).collect(),
             filename: Some(filename.to_string()),
             policy,
+            capture_output,
+            input_injected,
             ..Self::default()
+        }
+    }
+
+    pub fn outputs(&self) -> &[Value] {
+        &self.outputs
+    }
+
+    fn emit(&mut self, value: Value) {
+        if self.capture_output {
+            self.outputs.push(value);
+        } else {
+            println!("{}", value);
         }
     }
 
@@ -234,7 +267,18 @@ impl AstRuntime {
 
     fn execute(&mut self, statement: &Stmt) -> Result<Option<Value>, RuntimeError> {
         match statement {
-            Stmt::Let { name, value, .. } => {
+            Stmt::Let {
+                name,
+                value,
+                location,
+            } => {
+                if self.input_injected && name == "input" {
+                    return Err(self.error_at(
+                        *location,
+                        "the injected input value is read-only",
+                        None,
+                    ));
+                }
                 let value = self.eval(value)?;
                 self.vars.insert(name.clone(), value);
                 Ok(None)
@@ -244,6 +288,13 @@ impl AstRuntime {
                 value,
                 location,
             } => {
+                if self.input_injected && name == "input" {
+                    return Err(self.error_at(
+                        *location,
+                        "the injected input value is read-only",
+                        None,
+                    ));
+                }
                 if !self.vars.contains_key(name) {
                     return Err(self.error_at(
                         *location,
@@ -256,13 +307,19 @@ impl AstRuntime {
                 Ok(None)
             }
             Stmt::Print { value, .. } => {
-                println!("{}", self.eval(value)?);
+                let value = self.eval(value)?;
+                self.emit(value);
                 Ok(None)
             }
             Stmt::Return { value, .. } => Ok(Some(self.eval(value)?)),
             Stmt::Function {
                 name, params, body, ..
             } => {
+                if self.input_injected && (name == "input" || params.iter().any(|p| p == "input")) {
+                    return Err(RuntimeError::new(
+                        "the injected input value cannot be shadowed by a function",
+                    ));
+                }
                 self.functions.insert(
                     name.clone(),
                     Function {
@@ -332,7 +389,8 @@ impl AstRuntime {
                 location,
             } => {
                 let message_value = self.eval(message)?;
-                println!("{}", self.ask_agent(agent, &message_value, *location)?);
+                let response = self.ask_agent(agent, &message_value, *location)?;
+                self.emit(Value::Text(response));
                 Ok(None)
             }
             Stmt::Expr(expr) => {
@@ -450,9 +508,15 @@ impl AstRuntime {
         location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
         match operator {
-            BinaryOp::Add => self.numeric_binary(left, right, location, "+", |a, b| a + b),
-            BinaryOp::Subtract => self.numeric_binary(left, right, location, "-", |a, b| a - b),
-            BinaryOp::Multiply => self.numeric_binary(left, right, location, "*", |a, b| a * b),
+            BinaryOp::Add => {
+                self.checked_numeric_binary(left, right, location, "+", i32::checked_add)
+            }
+            BinaryOp::Subtract => {
+                self.checked_numeric_binary(left, right, location, "-", i32::checked_sub)
+            }
+            BinaryOp::Multiply => {
+                self.checked_numeric_binary(left, right, location, "*", i32::checked_mul)
+            }
             BinaryOp::Divide => {
                 let (left_number, right_number) =
                     self.numeric_operands(left, right, location, "/")?;
@@ -463,7 +527,10 @@ impl AstRuntime {
                         Some("Use a non-zero divisor.".to_string()),
                     ))
                 } else {
-                    Ok(Value::Number(left_number / right_number))
+                    left_number
+                        .checked_div(right_number)
+                        .map(Value::Number)
+                        .ok_or_else(|| self.integer_overflow_error(location, "/"))
                 }
             }
             BinaryOp::Join => Ok(Value::Text(format!("{}{}", left, right))),
@@ -482,16 +549,26 @@ impl AstRuntime {
         }
     }
 
-    fn numeric_binary(
+    fn checked_numeric_binary(
         &self,
         left: Value,
         right: Value,
         location: SourceLocation,
         operator: &str,
-        operation: impl FnOnce(i32, i32) -> i32,
+        operation: impl FnOnce(i32, i32) -> Option<i32>,
     ) -> Result<Value, RuntimeError> {
         let (left, right) = self.numeric_operands(left, right, location, operator)?;
-        Ok(Value::Number(operation(left, right)))
+        operation(left, right)
+            .map(Value::Number)
+            .ok_or_else(|| self.integer_overflow_error(location, operator))
+    }
+
+    fn integer_overflow_error(&self, location: SourceLocation, operator: &str) -> RuntimeError {
+        self.error_at(
+            location,
+            format!("integer overflow for operator '{}'", operator),
+            Some("Keep arithmetic results within the signed 32-bit integer range.".to_string()),
+        )
     }
 
     fn numeric_comparison(
@@ -585,7 +662,9 @@ impl AstRuntime {
 
                 match input {
                     Ok(Value::Text(text)) => match serde_json::from_str::<JsonValue>(&text) {
-                        Ok(json) => Some(Ok(Self::json_to_value(json))),
+                        Ok(json) => Some(Value::from_json(json).map_err(|message| {
+                            self.error_at(location, format!("invalid JSON: {}", message), None)
+                        })),
                         Err(error) => Some(Err(self.error_at(
                             location,
                             format!("invalid JSON: {}", error),
@@ -607,7 +686,7 @@ impl AstRuntime {
                     .unwrap_or(Ok(Value::Null));
 
                 Some(value.map(|value| {
-                    let json = Self::value_to_json(&value);
+                    let json = value.to_json();
                     Value::Text(json.to_string())
                 }))
             }
@@ -867,9 +946,19 @@ impl AstRuntime {
             );
         }
 
-        let mut limited = response
-            .by_ref()
-            .take((self.policy.http_max_body_bytes + 1) as u64);
+        let read_limit = self
+            .policy
+            .http_max_body_bytes
+            .checked_add(1)
+            .and_then(|limit| u64::try_from(limit).ok())
+            .ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "HTTP response body limit is too large",
+                    Some("Use a smaller --http-max-body-bytes value.".to_string()),
+                )
+            })?;
+        let mut limited = response.by_ref().take(read_limit);
         let mut body_bytes = Vec::new();
 
         match limited.read_to_end(&mut body_bytes) {
@@ -996,44 +1085,6 @@ impl AstRuntime {
         }
     }
 
-    fn json_to_value(json: JsonValue) -> Value {
-        match json {
-            JsonValue::Null => Value::Null,
-            JsonValue::Bool(value) => Value::Bool(value),
-            JsonValue::Number(value) => Value::Number(value.as_i64().unwrap_or(0) as i32),
-            JsonValue::String(value) => Value::Text(value),
-            JsonValue::Array(values) => {
-                Value::Array(values.into_iter().map(Self::json_to_value).collect())
-            }
-            JsonValue::Object(entries) => {
-                let mut map = BTreeMap::new();
-                for (key, value) in entries {
-                    map.insert(key, Self::json_to_value(value));
-                }
-                Value::Object(map)
-            }
-        }
-    }
-
-    fn value_to_json(value: &Value) -> JsonValue {
-        match value {
-            Value::Null => JsonValue::Null,
-            Value::Bool(value) => JsonValue::Bool(*value),
-            Value::Number(value) => JsonValue::Number(JsonNumber::from(*value)),
-            Value::Text(value) => JsonValue::String(value.clone()),
-            Value::Array(values) => {
-                JsonValue::Array(values.iter().map(Self::value_to_json).collect())
-            }
-            Value::Object(entries) => {
-                let mut map = JsonMap::new();
-                for (key, value) in entries {
-                    map.insert(key.clone(), Self::value_to_json(value));
-                }
-                JsonValue::Object(map)
-            }
-        }
-    }
-
     fn ask_agent(
         &self,
         name: &str,
@@ -1074,9 +1125,12 @@ impl AstRuntime {
 
 #[cfg(test)]
 mod tests {
-    use super::AstRuntime;
+    use std::collections::BTreeMap;
+
+    use super::{AstRuntime, ExecutionPolicy};
     use crate::lexer::lex;
     use crate::parser::Parser;
+    use crate::value::Value;
 
     fn parse(source: &str) -> Vec<crate::ast::Stmt> {
         let mut parser = Parser::new(lex(source));
@@ -1126,5 +1180,41 @@ if user.active {
             .run(&parse("print(10 / 0)\n"))
             .expect_err("divide by zero should fail");
         assert!(divide.to_string().contains("divide by zero"));
+    }
+
+    #[test]
+    fn reports_checked_integer_overflow_for_every_arithmetic_operator() {
+        let input = Value::Object(BTreeMap::from([
+            ("max".to_string(), Value::Number(i32::MAX)),
+            ("min".to_string(), Value::Number(i32::MIN)),
+            ("minus_one".to_string(), Value::Number(-1)),
+            ("two".to_string(), Value::Number(2)),
+        ]));
+
+        for (operator, source) in [
+            ("+", "print(input.max + 1)\n"),
+            ("-", "print(input.min - 1)\n"),
+            ("*", "print(input.max * input.two)\n"),
+            ("/", "print(input.min / input.minus_one)\n"),
+        ] {
+            let mut runtime = AstRuntime::with_input(
+                ExecutionPolicy::safe(Vec::new()),
+                source,
+                "overflow.solve",
+                Some(input.clone()),
+                true,
+            );
+            let error = runtime
+                .run(&parse(source))
+                .expect_err("overflow must return a runtime error");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains(&format!("integer overflow for operator '{}'", operator)),
+                "unexpected error: {error}"
+            );
+            assert!(runtime.outputs().is_empty());
+        }
     }
 }

@@ -1,0 +1,12 @@
+// Synthetic local-only example. It cannot take action outside the interpreter.
+let decision = "nurture"
+
+if input.readiness == "high" and input.evidence_count >= 2 {
+    decision = "review"
+}
+
+print({
+    action_taken: false,
+    decision: decision,
+    owner: input.human_owner
+})

@@ -17,7 +17,18 @@ cargo run -- run ../examples/support_triage.solve
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
 - `ast` prints the parsed AST.
-- `run --safe` executes with network, file, and environment access denied by default.
+- `run --safe`, `run --dry-run`, `run --no-network`, and `run --json` each select strict hardened execution. Hardened runs deny network, agents/tools, runtime file reads/writes, environment reads, and unknown or mutation-style calls.
+
+For deterministic local JSON input and advisory JSON output:
+
+```bash
+cargo run -- run \
+  --input ../examples/upcomingsounds/cli-contract-input.json \
+  --json --safe --dry-run --no-network \
+  ../examples/upcomingsounds/cli-contract.solve
+```
+
+The explicit JSON file becomes the read-only global `input`. It may contain null, booleans, text, arrays, objects, and signed 32-bit integers. Decimals, out-of-range numbers, malformed JSON, and inputs over 1 MiB fail closed. Values passed to `print(...)` become the typed `outputs` array in one deterministic `NON-PRODUCTION ADVISORY ONLY` JSON envelope.
 
 The AST runtime is canonical. The public `legacy` command and `--legacy` flag have been removed.
 
@@ -66,7 +77,7 @@ print("Customer: " .. customer)
 
 ### Numbers
 
-Numbers are signed 32-bit integer values at runtime, but the lexer currently supports integer literals made of digits.
+Numbers are signed 32-bit integer values at runtime, while source literals currently consist of digits. A source literal above `2147483647` is a source-located validation error; it is never converted to zero. Unknown characters outside strings and comments are also validation errors rather than being ignored.
 
 ```solve
 let tickets = 12
@@ -82,7 +93,7 @@ Supported arithmetic operators:
 - `*`
 - `/`
 
-Division by zero is a runtime error.
+Division by zero and arithmetic results outside the signed 32-bit range are runtime errors.
 
 Arithmetic requires number operands. SolveLang does not coerce text, booleans, arrays, objects, or `null` to zero:
 
@@ -244,7 +255,7 @@ print(user_name)
 print(user_plan)
 ```
 
-Imports are resolved relative to the importing file. Circular imports are rejected. The current loader flattens imported source before parsing, so diagnostics for imported content use the combined source line number and the top-level filename. Preserving original imported-file filenames is a remaining limitation.
+Imports are resolved relative to the importing file. Circular imports are rejected. In hardened mode, imports must be relative regular `.solve` files whose canonical targets remain below the entry workflow's canonical parent. Absolute paths, parent traversal, non-`.solve` paths, and symlink escapes fail before imported content is read. The current loader flattens imported source before parsing, so diagnostics for imported content use the combined source line number and the top-level filename. Preserving original imported-file filenames is a remaining limitation.
 
 ## Runtime Errors
 
@@ -368,29 +379,32 @@ OpenAI-backed `ask` sends the agent instruction, approved tool names, and user m
 
 ## Runtime Safety
 
-Use safe mode to run a script while denying side-effecting capabilities by default:
+Use hardened execution for pure, side-effect-free evaluation:
 
 ```bash
 cargo run -- run --safe ../examples/hello.solve
 ```
 
-Safe mode denies:
+Any of `--safe`, `--dry-run`, `--no-network`, or `--json` enables one strict policy that denies:
 
-- network access through `http_get`, `http_post`, and OpenAI-backed `ask`
+- network access through `http_get` and `http_post`
+- all agent declarations, tools, and `ask` statements
 - file reads through `read_file`
 - file writes through `write_file`
 - environment-variable access through `env` and AI provider configuration
+- unknown, shell/process/plugin, and mutation-style calls
 
-Allow only the capabilities the script needs:
+Denied capabilities are found by a complete AST preflight before execution, including in imported source, function bodies, and unreachable branches. Capability-enabling `--allow-*` flags are rejected in hardened mode.
+
+Successful non-JSON hardened runs print `NON-PRODUCTION ADVISORY ONLY` before workflow output. JSON mode is always hardened and includes that label in its one output document. Its `dry_run` field is `true` only when `--dry-run` was explicitly supplied.
+
+A trusted unhardened run remains capability-enabled. `--allow-root` can constrain its file builtins:
 
 ```bash
-cargo run -- run --safe --allow-network ./workflow.solve
-cargo run -- run --safe --allow-env ./workflow.solve
-cargo run -- run --safe --allow-file-read --allow-root /tmp/solvelang-inputs ./workflow.solve
-cargo run -- run --safe --allow-file-write --allow-root /tmp/solvelang-output ./workflow.solve
+cargo run -- run --allow-root /tmp/solvelang-inputs ./trusted-workflow.solve
 ```
 
-Allowed filesystem roots reject paths containing `..` and reject resolved paths outside the configured roots. Passing `--allow-root` without `--safe` also restricts file builtins to the provided roots.
+Allowed filesystem roots reject paths containing `..` and reject resolved paths outside the configured roots.
 
 For details, see [runtime-safety.md](runtime-safety.md).
 
@@ -421,7 +435,7 @@ cargo run -- run ../examples/support_triage.solve
 
 `run` can execute builtins, file I/O, HTTP requests, environment reads, and AI calls depending on the script.
 
-Use `run --safe` when you want execution with network, file, and environment access denied by default.
+Use `run --json --safe --dry-run --no-network` when you want deterministic advisory output with runtime capabilities denied. Hardened execution is an interpreter policy, not an operating-system sandbox; callers remain responsible for process time, memory, environment clearing, and output caps.
 
 ## Browser Preview Vs Rust CLI
 
