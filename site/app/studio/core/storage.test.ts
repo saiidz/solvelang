@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createLocalAnalytics } from "./productAnalytics";
-import { createProjectRepository } from "./storage";
+import { createArtifactRepository, createProjectRepository } from "./storage";
 import { compareVersions, createVersionSnapshot } from "./versions";
 import { validSupportTriageFixture } from "./fixtures";
 
@@ -56,4 +56,15 @@ test("product analytics stores only aggregate counters", () => {
   const snapshot = analytics.snapshot();
   assert.equal(snapshot.studio_opened!.count, 2);
   assert.deepEqual(Object.keys(snapshot.studio_opened!).sort(), ["count", "lastOccurredAt"]);
+});
+
+test("artifact repository stores versions and traces by project", () => {
+  const storage = new MemoryStorage();
+  const repository = createArtifactRepository(storage);
+  const workflow = validSupportTriageFixture();
+  const versions = createVersionSnapshot(workflow, "Baseline", "Initial", []);
+  repository.saveVersions(workflow.id, versions);
+  repository.saveTraces(workflow.id, [{ id: "trace-1", scenarioId: "scenario-happy" }]);
+  assert.deepEqual(repository.loadVersions(workflow.id), versions);
+  assert.deepEqual(repository.loadTraces(workflow.id), [{ id: "trace-1", scenarioId: "scenario-happy" }]);
 });

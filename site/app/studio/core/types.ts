@@ -160,7 +160,7 @@ export interface ScenarioRun {
   trace: TraceEvent[];
 }
 
-export interface QualityScore extends ExplainableScore {}
+export type QualityScore = ExplainableScore;
 
 export interface WorkflowAnalytics {
   structural: Record<string, number> & {
