@@ -4,6 +4,7 @@ site/.next/
 site/out/
 site/dist/
 site/build/
+site/.studio-test-dist/
 site/.env.local
 site/.env*.local
 
