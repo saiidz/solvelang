@@ -51,6 +51,7 @@ export function createSupportTriageDocument(): WorkflowDocument {
       { id: "edge-5", source: "review-urgent", target: "notification-alert", condition: "", priority: 1, label: "approved", fallback: false, metadata: {} },
       { id: "edge-6", source: "notification-alert", target: "terminal-escalated", condition: "", priority: 1, label: "sent", fallback: false, metadata: {} },
       { id: "edge-7", source: "exception-routing", target: "terminal-error", condition: "", priority: 1, label: "recover", fallback: false, metadata: {} },
+      { id: "edge-8", source: "action-routine", target: "exception-routing", condition: "error", priority: 2, label: "error", fallback: false, metadata: {} },
     ],
     scenarios: scenarios("trigger-ticket", "decision-ticket-type", "terminal-resolved", "terminal-escalated", "review-urgent"),
     policies: [{ id: "policy-support-data", title: "Support data handling", description: "Customer details stay in approved systems.", owner: "operations", scope: "support", evidence: [], metadata: {} }],
@@ -58,12 +59,49 @@ export function createSupportTriageDocument(): WorkflowDocument {
   };
 }
 
-function themedTemplate(key: string, name: string, description: string): WorkflowDocument {
+const templateContent = {
+  "lead-qualification": {
+    titles: ["Lead received", "Check qualification", "Assign qualified lead", "Review strategic lead", "Notify account owner", "Lead routing failure", "Qualified follow-up", "Strategic review", "Manual lead recovery"],
+    owners: ["sales ops", "sales ops", "account executive", "sales lead", "sales lead", "sales ops", "account executive", "sales lead", "sales ops"],
+    systems: ["CRM", "CRM", "CRM", "CRM", "Slack", "CRM", "CRM", "CRM", "CRM"],
+    outputs: ["qualified", "strategic"], policy: "Lead data handling", scope: "sales",
+  },
+  "customer-intake": {
+    titles: ["Client intake received", "Check intake completeness", "Create client task", "Review incomplete intake", "Request missing details", "Intake routing failure", "Task created", "Details requested", "Manual intake recovery"],
+    owners: ["client ops", "client ops", "project manager", "client ops lead", "client ops", "client ops lead", "project manager", "client ops", "client ops lead"],
+    systems: ["intake form", "workspace", "Linear", "workspace", "Gmail", "workspace", "Linear", "Gmail", "workspace"],
+    outputs: ["task_created", "details_requested"], policy: "Client intake handling", scope: "client operations",
+  },
+  "invoice-approval": {
+    titles: ["Invoice received", "Check invoice risk", "Prepare approved invoice", "Approve high-risk invoice", "Notify finance owner", "Invoice routing failure", "Ready for payment", "Finance review complete", "Manual invoice recovery"],
+    owners: ["finance ops", "finance ops", "accounts payable", "finance lead", "finance lead", "finance ops", "accounts payable", "finance lead", "finance ops"],
+    systems: ["inbox", "accounting", "accounting", "accounting", "Slack", "accounting", "accounting", "accounting", "accounting"],
+    outputs: ["payment_ready", "finance_reviewed"], policy: "Invoice approval policy", scope: "finance",
+  },
+  "incident-escalation": {
+    titles: ["Incident reported", "Assess incident severity", "Open incident response", "Review critical incident", "Alert incident channel", "Incident routing failure", "Response active", "Critical escalation active", "Manual incident recovery"],
+    owners: ["operations", "incident commander", "operations", "incident commander", "incident commander", "operations", "operations", "incident commander", "operations"],
+    systems: ["monitoring", "incident tool", "incident tool", "incident tool", "Slack", "incident tool", "incident tool", "incident tool", "incident tool"],
+    outputs: ["response_active", "critical_escalation"], policy: "Incident response policy", scope: "reliability",
+  },
+} as const;
+
+function themedTemplate(key: keyof typeof templateContent, name: string, description: string): WorkflowDocument {
   const document = createSupportTriageDocument();
+  const content = templateContent[key];
   document.id = `template-${key}`;
   document.name = name;
   document.description = description;
   document.analytics.tags = key.split("-");
+  document.nodes = document.nodes.map((node, index) => ({
+    ...node, title: content.titles[index], owner: content.owners[index], system: content.systems[index],
+    outputs: node.id === "action-routine" ? [content.outputs[0]] : node.id === "notification-alert" ? [content.outputs[1]] : node.outputs,
+  }));
+  document.policies = [{ ...document.policies[0], title: content.policy, scope: content.scope }];
+  document.scenarios = document.scenarios.map((scenario) => ({
+    ...scenario,
+    expectedOutputs: scenario.expectedOutputs.map((output) => output === "resolved" ? content.outputs[0] : output === "escalated" ? content.outputs[1] : output),
+  }));
   return document;
 }
 

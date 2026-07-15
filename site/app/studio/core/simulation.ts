@@ -71,7 +71,7 @@ export function simulateScenario(workflow: WorkflowDocument, scenario: WorkflowS
     currentId = selectedEdge.target;
   }
 
-  if (path.length >= 200) failures.push("Simulation exceeded the 200-step safety limit.");
+  if (path.length >= 200 && !terminalResult && !failures.length) failures.push("Simulation exceeded the 200-step safety limit.");
   for (const check of policyChecks) if (check.result === "missing") failures.push(`Policy ${check.policyId} is not defined.`);
   if (scenario.expectedTerminalState && terminalResult !== scenario.expectedTerminalState) failures.push(`Expected terminal ${scenario.expectedTerminalState}, reached ${terminalResult ?? "none"}.`);
   for (const expected of scenario.expectedHumanReviewPoints) if (!humanReviewPauses.includes(expected)) failures.push(`Expected human review ${expected} was not reached.`);

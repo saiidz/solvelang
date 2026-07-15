@@ -1,5 +1,6 @@
-import { parseWorkflowDocument } from "./schema";
-import type { VersionSnapshot, WorkflowDocument } from "./types";
+import { ScenarioRunSchema, VersionSnapshotSchema, parseWorkflowDocument } from "./schema";
+import type { ScenarioRun, VersionSnapshot, WorkflowDocument } from "./types";
+import type { z } from "zod";
 
 const PROJECT_KEY = "solvelang.studio.projects.v1";
 const QUARANTINE_KEY = "solvelang.studio.quarantine.v1";
@@ -11,10 +12,12 @@ export function migrateStoredProjects(input: unknown): unknown {
 }
 
 export function createProjectRepository(storage: Storage) {
-  const loadAll = (): { status: "ok"; documents: WorkflowDocument[] } | { status: "corrupt"; documents: []; error: string } => {
-    const raw = storage.getItem(PROJECT_KEY);
-    if (!raw) return { status: "ok", documents: [] };
+  type LoadResult = { status: "ok"; documents: WorkflowDocument[] } | { status: "corrupt" | "unavailable"; documents: []; error: string };
+  const quarantine = (raw: string) => { try { storage.setItem(QUARANTINE_KEY, JSON.stringify({ capturedAt: new Date().toISOString(), raw })); } catch { /* Storage is unavailable; preserve the original key by doing nothing. */ } };
+  const loadAll = (): LoadResult => {
     try {
+      const raw = storage.getItem(PROJECT_KEY);
+      if (!raw) return { status: "ok", documents: [] };
       const parsed = migrateStoredProjects(JSON.parse(raw));
       if (!Array.isArray(parsed)) throw new Error("Stored project collection is incompatible.");
       const documents: WorkflowDocument[] = [];
@@ -23,43 +26,56 @@ export function createProjectRepository(storage: Storage) {
         if (!result.ok) throw new Error(result.error);
         documents.push(result.document);
       }
+      if (new Set(documents.map((document) => document.id)).size !== documents.length) throw new Error("Stored project collection contains duplicate project IDs.");
       return { status: "ok", documents };
     } catch (error) {
-      storage.setItem(QUARANTINE_KEY, JSON.stringify({ capturedAt: new Date().toISOString(), raw }));
+      let raw = "";
+      try { raw = storage.getItem(PROJECT_KEY) ?? ""; } catch { return { status: "unavailable", documents: [], error: "Browser storage is unavailable." }; }
+      quarantine(raw);
       return { status: "corrupt", documents: [], error: error instanceof Error ? error.message : "Stored data is corrupt." };
     }
   };
-  const saveAll = (documents: WorkflowDocument[]) => storage.setItem(PROJECT_KEY, JSON.stringify(documents));
+  const saveAll = (documents: WorkflowDocument[]) => { try { storage.setItem(PROJECT_KEY, JSON.stringify(documents)); return true; } catch { return false; } };
   return {
     loadAll,
+    recovery() {
+      try {
+        const raw = storage.getItem(QUARANTINE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { capturedAt?: unknown; raw?: unknown };
+        return typeof parsed.raw === "string" ? { capturedAt: typeof parsed.capturedAt === "string" ? parsed.capturedAt : "", raw: parsed.raw } : null;
+      } catch { return null; }
+    },
+    resetCorrupt() { try { storage.removeItem(PROJECT_KEY); storage.removeItem(QUARANTINE_KEY); return true; } catch { return false; } },
     list() { const result = loadAll(); return result.status === "ok" ? result.documents : []; },
     load(id: string) { const result = loadAll(); return { status: result.status, document: result.status === "ok" ? result.documents.find((item) => item.id === id) ?? null : null, ...("error" in result ? { error: result.error } : {}) }; },
-    save(document: WorkflowDocument) { const result = loadAll(); if (result.status === "corrupt") return result; const documents = [structuredClone(document), ...result.documents.filter((item) => item.id !== document.id)]; saveAll(documents); return { status: "ok" as const, document }; },
+    save(document: WorkflowDocument) { const result = loadAll(); if (result.status !== "ok") return result; const documents = [structuredClone(document), ...result.documents.filter((item) => item.id !== document.id)]; return saveAll(documents) ? { status: "ok" as const, document } : { status: "unavailable" as const, documents: [] as [], error: "Browser storage is full or unavailable." }; },
     delete(id: string) { const result = loadAll(); if (result.status === "ok") saveAll(result.documents.filter((item) => item.id !== id)); },
   };
 }
 
 export function createArtifactRepository(storage: Storage) {
-  const read = <T>(key: string): T[] => {
-    const raw = storage.getItem(key);
-    if (!raw) return [];
+  const read = <T>(key: string, schema: z.ZodType<T>): T[] => {
     try {
+      const raw = storage.getItem(key);
+      if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) throw new Error("Artifact collection is incompatible.");
-      return parsed as T[];
+      return parsed.map((item) => schema.parse(item));
     } catch {
-      storage.setItem(`${QUARANTINE_KEY}.${key}`, JSON.stringify({ capturedAt: new Date().toISOString(), raw }));
+      let raw = "";
+      try { raw = storage.getItem(key) ?? ""; storage.setItem(`${QUARANTINE_KEY}.${key}`, JSON.stringify({ capturedAt: new Date().toISOString(), raw })); } catch { /* Storage is unavailable. */ }
       return [];
     }
   };
+  const write = (key: string, value: unknown) => { try { storage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } };
   return {
-    loadVersions(projectId: string) { return read<VersionSnapshot>(`solvelang.studio.versions.v1.${projectId}`); },
-    saveVersions(projectId: string, versions: VersionSnapshot[]) { storage.setItem(`solvelang.studio.versions.v1.${projectId}`, JSON.stringify(versions)); },
-    loadTraces<T = unknown>(projectId: string) { return read<T>(`solvelang.studio.traces.v1.${projectId}`); },
-    saveTraces<T>(projectId: string, traces: T[]) { storage.setItem(`solvelang.studio.traces.v1.${projectId}`, JSON.stringify(traces)); },
+    loadVersions(projectId: string) { return read<VersionSnapshot>(`solvelang.studio.versions.v1.${projectId}`, VersionSnapshotSchema); },
+    saveVersions(projectId: string, versions: VersionSnapshot[]) { return write(`solvelang.studio.versions.v1.${projectId}`, versions); },
+    loadTraces(projectId: string) { return read<ScenarioRun>(`solvelang.studio.traces.v1.${projectId}`, ScenarioRunSchema); },
+    saveTraces(projectId: string, traces: ScenarioRun[]) { return write(`solvelang.studio.traces.v1.${projectId}`, traces); },
     deleteProjectArtifacts(projectId: string) {
-      storage.removeItem(`solvelang.studio.versions.v1.${projectId}`);
-      storage.removeItem(`solvelang.studio.traces.v1.${projectId}`);
+      try { storage.removeItem(`solvelang.studio.versions.v1.${projectId}`); storage.removeItem(`solvelang.studio.traces.v1.${projectId}`); } catch { /* Storage is unavailable. */ }
     },
   };
 }

@@ -3,9 +3,9 @@
 import { NODE_TYPES, type WorkflowDocument, type WorkflowEdge, type WorkflowNode } from "../core/types";
 import styles from "../studio.module.css";
 
-export default function Inspector({ workflow, selectedNodeId, onUpdateNode, onUpdateEdge, onSelectNode }: {
+export default function Inspector({ workflow, selectedNodeId, onUpdateNode, onUpdateEdge, onDeleteEdge, onSelectNode }: {
   workflow: WorkflowDocument; selectedNodeId: string | null; onUpdateNode: (node: WorkflowNode) => void;
-  onUpdateEdge: (edge: WorkflowEdge) => void; onSelectNode: (id: string) => void;
+  onUpdateEdge: (edge: WorkflowEdge) => void; onDeleteEdge: (id: string) => void; onSelectNode: (id: string) => void;
 }) {
   const node = workflow.nodes.find((item) => item.id === selectedNodeId) ?? null;
   const outgoing = workflow.edges.filter((edge) => edge.source === selectedNodeId);
@@ -37,8 +37,11 @@ export default function Inspector({ workflow, selectedNodeId, onUpdateNode, onUp
           <div className={styles.subsection}><h3>Outgoing branches</h3>{outgoing.length ? outgoing.map((edge) => (
             <div key={edge.id} className={styles.edgeEditor}>
               <button className={styles.edgeTarget} onClick={() => onSelectNode(edge.target)}>→ {workflow.nodes.find((item) => item.id === edge.target)?.title ?? edge.target}</button>
-              <label className={styles.field}><span>Condition / outcome</span><input value={edge.condition} onChange={(event) => onUpdateEdge({ ...edge, condition: event.target.value, label: event.target.value || edge.label })} /></label>
+              <label className={styles.field}><span>Label</span><input value={edge.label} onChange={(event) => onUpdateEdge({ ...edge, label: event.target.value })} /></label>
+              <label className={styles.field}><span>Condition / outcome</span><input value={edge.condition} onChange={(event) => onUpdateEdge({ ...edge, condition: event.target.value })} /></label>
+              <label className={styles.field}><span>Priority</span><input type="number" value={edge.priority} onChange={(event) => onUpdateEdge({ ...edge, priority: Number(event.target.value) })} /></label>
               <label className={styles.checkbox}><input type="checkbox" checked={edge.fallback} onChange={(event) => onUpdateEdge({ ...edge, fallback: event.target.checked })} /><span>Fallback branch</span></label>
+              <button className={styles.dangerButton} onClick={() => { if (window.confirm(`Delete branch ${edge.label || edge.id}?`)) onDeleteEdge(edge.id); }}>Delete branch</button>
             </div>
           )) : <p className={styles.muted}>No outgoing branches.</p>}</div>
         </div>

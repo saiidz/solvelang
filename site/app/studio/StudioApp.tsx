@@ -37,7 +37,7 @@ const views: Array<{ id: View; label: string; short: string }> = [
 function freshCopy(source: WorkflowDocument, suffix = "") {
   const copy = structuredClone(source);
   const now = new Date().toISOString();
-  copy.id = `workflow-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  copy.id = `workflow-${crypto.randomUUID()}`;
   copy.name = `${copy.name}${suffix}`; copy.createdAt = now; copy.updatedAt = now; copy.version = "0.1.0";
   return copy;
 }
@@ -53,6 +53,7 @@ export default function StudioApp() {
   const [activeRun, setActiveRun] = useState<ScenarioRun | null>(null);
   const [saveStatus, setSaveStatus] = useState("Preparing local workspace…");
   const [message, setMessage] = useState("Studio data stays in this browser.");
+  const [recoveryRaw, setRecoveryRaw] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [mounted, setMounted] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -68,15 +69,16 @@ export default function StudioApp() {
     if (!repository || !artifacts || !productAnalytics) return;
     productAnalytics.track("studio_opened");
     const loaded = repository.loadAll();
-    if (loaded.status === "corrupt") {
-      setMessage(`Stored project data could not be read and was quarantined: ${loaded.error}`);
-      setSaveStatus("Recovery needed");
+    if (loaded.status !== "ok") {
+      setMessage(loaded.status === "corrupt" ? `Stored project data could not be read and was quarantined: ${loaded.error}` : "Browser storage is unavailable. Changes cannot be persisted in this session.");
+      setSaveStatus(loaded.status === "corrupt" ? "Recovery needed" : "Storage unavailable");
+      if (loaded.status === "corrupt") setRecoveryRaw(repository.recovery()?.raw ?? null);
       return;
     }
     if (loaded.documents.length) {
       const first = loaded.documents[0];
       setProjects(loaded.documents); setWorkflow(first); setVersions(artifacts.loadVersions(first.id));
-      setTraces(artifacts.loadTraces<ScenarioRun>(first.id)); setSelectedScenarioId(first.scenarios[0]?.id ?? null);
+      setTraces(artifacts.loadTraces(first.id)); setSelectedScenarioId(first.scenarios[0]?.id ?? null);
     } else {
       repository.save(workflow); setProjects([workflow]); setVersions(createVersionSnapshot(workflow, "Initial model", "Created from support triage template", []));
     }
@@ -90,15 +92,28 @@ export default function StudioApp() {
     setSaveStatus("Saving locally…");
     const timer = window.setTimeout(() => {
       const result = repository.save(workflow);
-      if (result.status === "corrupt") { setSaveStatus("Save blocked"); setMessage(result.error); return; }
+      if (result.status !== "ok") { setSaveStatus("Save blocked"); setMessage(result.error); return; }
       const nextVersions = createVersionSnapshot(workflow, "Autosave", "Workflow edited in Studio", versions);
-      setVersions(nextVersions); artifacts.saveVersions(workflow.id, nextVersions); artifacts.saveTraces(workflow.id, traces);
+      if (!artifacts.saveVersions(workflow.id, nextVersions) || !artifacts.saveTraces(workflow.id, traces)) { setSaveStatus("Save blocked"); setMessage("Browser storage is full or unavailable. Export this workflow before leaving."); return; }
+      setVersions(nextVersions);
       setProjects(repository.list()); setSaveStatus("Saved locally");
     }, 550);
     return () => window.clearTimeout(timer);
   // Version updates are outputs of this autosave and must not retrigger it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflow, traces, mounted, repository, artifacts]);
+
+  useEffect(() => {
+    if (!mounted || !repository || !artifacts) return;
+    const flushPendingChanges = () => {
+      const result = repository.save(workflow);
+      if (result.status !== "ok") return;
+      artifacts.saveVersions(workflow.id, createVersionSnapshot(workflow, "Autosave", "Workflow edited in Studio", versions));
+      artifacts.saveTraces(workflow.id, traces);
+    };
+    window.addEventListener("pagehide", flushPendingChanges);
+    return () => window.removeEventListener("pagehide", flushPendingChanges);
+  }, [workflow, traces, versions, mounted, repository, artifacts]);
 
   const replaceWorkflow = (next: WorkflowDocument, status = "Workflow updated") => {
     setWorkflow({ ...next, updatedAt: new Date().toISOString() }); setSelectedNodeId(next.nodes[0]?.id ?? null);
@@ -109,7 +124,7 @@ export default function StudioApp() {
     if (event) productAnalytics?.track(event);
   };
   const openProject = (project: WorkflowDocument) => {
-    setWorkflow(project); setVersions(artifacts?.loadVersions(project.id) ?? []); setTraces(artifacts?.loadTraces<ScenarioRun>(project.id) ?? []);
+    setWorkflow(project); setVersions(artifacts?.loadVersions(project.id) ?? []); setTraces(artifacts?.loadTraces(project.id) ?? []);
     setSelectedNodeId(project.nodes[0]?.id ?? null); setSelectedScenarioId(project.scenarios[0]?.id ?? null); setActiveRun(null); setActiveView("canvas");
   };
   const createProject = (source: WorkflowDocument, sourceLabel: string) => {
@@ -129,13 +144,23 @@ export default function StudioApp() {
     repository?.delete(project.id); artifacts?.deleteProjectArtifacts(project.id); const remaining = repository?.list() ?? [];
     setProjects(remaining); if (project.id === workflow.id) { const next = remaining[0] ?? freshCopy(createBlankWorkflow()); replaceWorkflow(next, "Project exported and deleted locally."); }
   };
+  const resetCorruptStorage = () => {
+    if (!repository || !window.confirm("Delete the corrupt stored collection after downloading it?")) return;
+    if (recoveryRaw) downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain");
+    if (!repository.resetCorrupt()) { setMessage("Browser storage could not be reset."); return; }
+    const next = freshCopy(createSupportTriageDocument(), " workspace");
+    const result = repository.save(next);
+    if (result.status !== "ok") { setMessage(result.error); return; }
+    setRecoveryRaw(null); setProjects([next]); setVersions([]); setTraces([]); replaceWorkflow(next, "Corrupt storage was exported and reset locally."); setSaveStatus("Saved locally");
+  };
 
-  const addNode = () => mutate((current) => { const index = current.nodes.length; current.nodes.push(makeNode(`node-${Date.now()}`, "action" as NodeType, "New action", 220 + (index % 4) * 230, 120 + Math.floor(index / 4) * 150, { metadata: { errorPath: "define-exception" } })); return current; }, "node_created");
+  const addNode = () => mutate((current) => { const index = current.nodes.length; current.nodes.push(makeNode(`node-${crypto.randomUUID()}`, "action" as NodeType, "New action", 220 + (index % 4) * 230, 120 + Math.floor(index / 4) * 150, { metadata: { errorPath: "define-exception" } })); return current; }, "node_created");
   const updateNode = (node: WorkflowNode) => mutate((current) => { current.nodes = current.nodes.map((item) => item.id === node.id ? node : item); return current; }, "node_updated");
-  const duplicateNode = (id: string) => mutate((current) => { const source = current.nodes.find((node) => node.id === id); if (source) { const copy = structuredClone(source); copy.id = `${source.id}-copy-${Date.now()}`; copy.title = `${source.title} copy`; copy.position = { x: source.position.x + 36, y: source.position.y + 100 }; current.nodes.push(copy); setSelectedNodeId(copy.id); } return current; }, "node_created");
+  const duplicateNode = (id: string) => mutate((current) => { const source = current.nodes.find((node) => node.id === id); if (source) { const copy = structuredClone(source); copy.id = `${source.id}-copy-${crypto.randomUUID()}`; copy.title = `${source.title} copy`; copy.position = { x: source.position.x + 36, y: source.position.y + 100 }; current.nodes.push(copy); setSelectedNodeId(copy.id); } return current; }, "node_created");
   const deleteNode = (id: string) => { if (!window.confirm("Delete this node and all connected edges?")) return; mutate((current) => { current.nodes = current.nodes.filter((node) => node.id !== id); current.edges = current.edges.filter((edge) => edge.source !== id && edge.target !== id); return current; }); setSelectedNodeId(null); };
-  const connectNodes = (source: string, target: string) => mutate((current) => { current.edges.push({ id: `edge-${Date.now()}`, source, target, condition: "", priority: (current.edges.filter((edge) => edge.source === source).length + 1), label: "next", fallback: false, metadata: {} }); return current; }, "edge_created");
+  const connectNodes = (source: string, target: string) => mutate((current) => { current.edges.push({ id: `edge-${crypto.randomUUID()}`, source, target, condition: "", priority: (current.edges.filter((edge) => edge.source === source).length + 1), label: "next", fallback: false, metadata: {} }); return current; }, "edge_created");
   const updateEdge = (edge: WorkflowEdge) => mutate((current) => { current.edges = current.edges.map((item) => item.id === edge.id ? edge : item); return current; });
+  const deleteEdge = (id: string) => mutate((current) => { current.edges = current.edges.filter((edge) => edge.id !== id); return current; });
   const runScenario = (run: ScenarioRun) => { setActiveRun(run); setTraces((current) => [run, ...current.filter((item) => item.id !== run.id)].slice(0, 50)); productAnalytics?.track("scenario_run"); setActiveView("trace"); };
 
   const activeContent = activeView === "projects" ? (
@@ -146,10 +171,10 @@ export default function StudioApp() {
       <section className={styles.recentProjects}><div className={styles.groupTitle}><div><p className={styles.eyebrow}>This browser</p><h2>Projects</h2></div><span>{projects.length}</span></div>{projects.length ? projects.map((project) => <article key={project.id}><button onClick={() => openProject(project)}><strong>{project.name}</strong><span>{project.description || "No description"}</span><small>{project.nodes.length} nodes · updated {new Date(project.updatedAt).toLocaleString()}</small></button><button className={styles.textButton} onClick={() => deleteProject(project)}>Export & delete</button></article>) : <div className={styles.emptyState}><strong>No saved projects</strong><p>Create one above. It will remain in this browser.</p></div>}</section>
     </section>
   ) : activeView === "canvas" ? (
-    <div className={styles.canvasLayout}><div className={styles.canvasStack}><WorkflowCanvas workflow={workflow} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onMoveNode={(id, x, y) => mutate((current) => { const node = current.nodes.find((item) => item.id === id); if (node) node.position = { x, y }; return current; })} onAddNode={addNode} onDuplicateNode={duplicateNode} onDeleteNode={deleteNode} onConnect={connectNodes} /><TracePanel run={activeRun} compact onJumpToNode={(id) => setSelectedNodeId(id)} /></div><Inspector workflow={workflow} selectedNodeId={selectedNodeId} onUpdateNode={updateNode} onUpdateEdge={updateEdge} onSelectNode={setSelectedNodeId} /></div>
+    <div className={styles.canvasLayout}><div className={styles.canvasStack}><WorkflowCanvas workflow={workflow} selectedNodeId={selectedNodeId} onSelectNode={setSelectedNodeId} onMoveNode={(id, x, y) => mutate((current) => { const node = current.nodes.find((item) => item.id === id); if (node) node.position = { x, y }; return current; })} onAddNode={addNode} onDuplicateNode={duplicateNode} onDeleteNode={deleteNode} onConnect={connectNodes} /><TracePanel key={activeRun?.id ?? "empty-compact-trace"} run={activeRun} compact onJumpToNode={(id) => setSelectedNodeId(id)} /></div><Inspector workflow={workflow} selectedNodeId={selectedNodeId} onUpdateNode={updateNode} onUpdateEdge={updateEdge} onDeleteEdge={deleteEdge} onSelectNode={setSelectedNodeId} /></div>
   ) : activeView === "analysis" ? <AnalysisPanel analysis={analysis} onOpenFinding={(id) => { if (id) setSelectedNodeId(id); productAnalytics?.track("finding_opened"); setActiveView("canvas"); }} onToggleSuppression={(ruleId) => { mutate((current) => { current.suppressedRuleIds = current.suppressedRuleIds.includes(ruleId) ? current.suppressedRuleIds.filter((id) => id !== ruleId) : [...current.suppressedRuleIds, ruleId]; return current; }); productAnalytics?.track("finding_resolved"); }} />
   : activeView === "scenarios" ? <ScenarioLab workflow={workflow} selectedScenarioId={selectedScenarioId} onSelectScenario={setSelectedScenarioId} onUpdateScenarios={(scenarios: WorkflowScenario[]) => mutate((current) => { current.scenarios = scenarios; return current; }, "scenario_created")} onRun={runScenario} onOpenComparison={() => productAnalytics?.track("comparison_opened")} />
-  : activeView === "trace" ? <TracePanel run={activeRun ?? traces[0] ?? null} onJumpToNode={(id) => { setSelectedNodeId(id); setActiveView("canvas"); }} />
+  : activeView === "trace" ? <TracePanel key={(activeRun ?? traces[0])?.id ?? "empty-trace"} run={activeRun ?? traces[0] ?? null} onJumpToNode={(id) => { setSelectedNodeId(id); setActiveView("canvas"); }} />
   : activeView === "analytics" ? <AnalyticsPanel analytics={analytics} />
   : activeView === "versions" ? <VersionsPanel versions={versions} onRestore={(version) => { const preserved = createVersionSnapshot(workflow, "Before restore", `Before restoring ${version.label}`, versions); setVersions(preserved); replaceWorkflow(structuredClone(version.document), `${version.label} restored.`); }} onDuplicate={(version) => createProject(version.document, `${version.label} duplicate`)} />
   : <ExportPanel workflow={workflow} analysis={analysis} analytics={analytics} traces={traces} onExport={() => productAnalytics?.track("export_created")} />;
@@ -161,7 +186,7 @@ export default function StudioApp() {
       <nav className={styles.mobileTabs} aria-label="Studio views">{views.map((view) => <button key={view.id} aria-current={activeView === view.id ? "page" : undefined} onClick={() => { setActiveView(view.id); if (view.id === "analysis") productAnalytics?.track("analysis_run"); }}>{view.short}</button>)}</nav>
       <div className={styles.appBody}>
         <aside className={styles.sidebar}><div className={styles.sideTitle}><span>Workflow Intelligence</span><strong>Studio v1</strong></div><nav aria-label="Studio navigation">{views.map((view, index) => <button key={view.id} className={activeView === view.id ? styles.navActive : ""} onClick={() => { setActiveView(view.id); if (view.id === "analysis") productAnalytics?.track("analysis_run"); }}><span>{String(index + 1).padStart(2, "0")}</span>{view.label}{view.id === "analysis" ? <em>{analysis.findings.filter((item) => !item.suppressed).length}</em> : null}</button>)}</nav><div className={styles.privacyRail}><strong>Private by architecture</strong><p>Projects, traces, versions, and usage counters stay in browser storage.</p></div></aside>
-        <main id="studio-main" className={styles.main}><div className={styles.statusBar} role="status" aria-live="polite"><span>{message}</span><strong>{workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.scenarios.length} scenarios</strong></div>{activeContent}</main>
+        <main id="studio-main" className={styles.main} tabIndex={-1}><div className={styles.statusBar} role="status" aria-live="polite"><span>{message}</span>{recoveryRaw ? <span className={styles.recoveryActions}><button onClick={() => downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain")}>Download recovery data</button><button onClick={resetCorruptStorage}>Export & reset corrupt data</button></span> : <strong>{workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.scenarios.length} scenarios</strong>}</div>{activeContent}</main>
       </div>
       <input ref={fileInput} className={styles.hiddenInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
       {showWizard ? <WorkflowWizard onCancel={() => setShowWizard(false)} onComplete={(next) => { setShowWizard(false); createProject(next, "Structured workflow"); }} /> : null}

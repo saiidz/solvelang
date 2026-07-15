@@ -58,7 +58,7 @@ Milestone: Canvas and editing. Edit operational node fields, human-review state,
 
 Dependencies: SL-4.
 
-Acceptance: edits autosave and change analysis results; invalid graph references remain visible to analysis.
+Acceptance: edits autosave and change analysis results; invalid in-memory graph references remain visible to analysis while imports fail closed.
 
 ### SL-6 Implement graph integrity validation
 

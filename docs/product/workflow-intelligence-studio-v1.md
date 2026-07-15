@@ -33,7 +33,7 @@ Every node includes a stable ID, title, description, owner, system, inputs, outp
 
 Every edge includes a stable ID, source, target, condition, numeric priority, label, fallback flag, and string metadata. Conditions are labels resolved by scenario decision outcomes in v1; the Studio does not execute arbitrary expressions.
 
-Zod validates imported and stored documents. Semantic graph integrity is checked separately so invalid edge references and duplicate node IDs can still be reported as analysis evidence rather than being silently repaired.
+Zod strictly validates imported and stored documents, including unique IDs and node, policy, and scenario references. Semantic graph checks remain independently available to analyze in-memory fixtures and report integrity evidence; imports are rejected rather than silently repaired.
 
 ## 5. Static-analysis rule catalog
 

@@ -2,9 +2,11 @@
 
 import { copyText, downloadText, exportAnalyticsCsv, exportMarkdownReport, exportPrintableHtml, generateSolveLangDraft, serializeAnalytics, serializeFindings, serializeTraces, serializeWorkflow } from "../core/exports";
 import type { ScenarioRun, WorkflowAnalysis, WorkflowAnalytics, WorkflowDocument } from "../core/types";
+import { useState } from "react";
 import styles from "../studio.module.css";
 
 export default function ExportPanel({ workflow, analysis, analytics, traces, onExport }: { workflow: WorkflowDocument; analysis: WorkflowAnalysis; analytics: WorkflowAnalytics; traces: ScenarioRun[]; onExport: () => void }) {
+  const [status, setStatus] = useState("Exports are generated locally.");
   const slug = workflow.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "workflow";
   const exports = [
     ["Workflow JSON", "Canonical local workflow document.", `${slug}.json`, serializeWorkflow(workflow), "application/json"],
@@ -19,7 +21,8 @@ export default function ExportPanel({ workflow, analysis, analytics, traces, onE
   return (
     <section className={styles.viewPanel} aria-labelledby="export-title">
       <div className={styles.viewHeader}><div><p className={styles.eyebrow}>Exportable evidence</p><h1 id="export-title">Take the workflow with you</h1><p>Every file is generated locally. The SolveLang script is a draft; validate it with the Rust CLI before running.</p></div></div>
-      <div className={styles.exportList}>{exports.map(([title, note, filename, content, mime]) => <article key={title} className={styles.exportRow}><div><strong>{title}</strong><p>{note}</p></div><div className={styles.headerActions}><button className={styles.secondaryButton} onClick={async () => { await copyText(content); onExport(); }}>Copy</button><button className={styles.primaryButton} onClick={() => { downloadText(filename, content, mime); onExport(); }}>Download</button></div></article>)}</div>
+      <p className={styles.muted} role="status" aria-live="polite">{status}</p>
+      <div className={styles.exportList}>{exports.map(([title, note, filename, content, mime]) => <article key={title} className={styles.exportRow}><div><strong>{title}</strong><p>{note}</p></div><div className={styles.headerActions}><button className={styles.secondaryButton} onClick={async () => { try { await copyText(content); onExport(); setStatus(`${title} copied.`); } catch { setStatus("Clipboard access was blocked. Use Download instead."); } }}>Copy</button><button className={styles.primaryButton} onClick={() => { try { downloadText(filename, content, mime); onExport(); setStatus(`${title} downloaded.`); } catch { setStatus("Download could not start in this browser."); } }}>Download</button></div></article>)}</div>
       <div className={styles.boundaryNote}><strong>Runtime boundary</strong><p>Studio models are broader than the executable language. Full `.solve` validation and execution remain canonical in the local Rust CLI.</p><a href="/run/">Open the simple browser script preview →</a></div>
     </section>
   );

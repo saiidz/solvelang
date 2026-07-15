@@ -2,7 +2,7 @@ import { analyzeWorkflow } from "./analysis";
 import { buildGraphIndex, pathDepths } from "./graph";
 import type { QualityScore, ScenarioRun, WorkflowAnalytics, WorkflowDocument } from "./types";
 
-const percent = (value: number, total: number) => total ? Math.round((value / total) * 100) : 100;
+const percent = (value: number, total: number, emptyValue = 100) => total ? Math.max(0, Math.min(100, Math.round((value / total) * 100))) : emptyValue;
 
 function qualityScore(label: string, factors: Array<{ label: string; value: number; weight: number }>): QualityScore {
   const weight = factors.reduce((sum, factor) => sum + factor.weight, 0);
@@ -31,7 +31,8 @@ export function calculateWorkflowAnalytics(workflow: WorkflowDocument, runs: Sce
   const failures: Record<string, number> = {};
   for (const run of runs) for (const failure of run.failures) failures[failure] = (failures[failure] ?? 0) + 1;
   const passedRuns = runs.filter((run) => run.passed);
-  const expectedTerminalMatches = runs.filter((run) => workflow.scenarios.find((scenario) => scenario.id === run.scenarioId)?.expectedTerminalState === run.terminalResult);
+  const runsWithExpectedTerminal = runs.filter((run) => Boolean(workflow.scenarios.find((scenario) => scenario.id === run.scenarioId)?.expectedTerminalState));
+  const expectedTerminalMatches = runsWithExpectedTerminal.filter((run) => workflow.scenarios.find((scenario) => scenario.id === run.scenarioId)?.expectedTerminalState === run.terminalResult);
   const expectedReviews = workflow.scenarios.flatMap((scenario) => scenario.expectedHumanReviewPoints);
   const reachedReviews = new Set(runs.flatMap((run) => run.humanReviewPauses));
   const maxCycle = Math.max(0, ...runs.map((run) => run.elapsedSlaMinutes));
@@ -50,12 +51,12 @@ export function calculateWorkflowAnalytics(workflow: WorkflowDocument, runs: Sce
     exceptionCoverage,
   };
   const scenario = {
-    scenarioPassRate: percent(passedRuns.length, runs.length), expectedTerminalMatchRate: percent(expectedTerminalMatches.length, runs.length),
-    unresolvedDecisionRate: percent(runs.filter((run) => run.unresolvedDecisions.length > 0).length, runs.length),
+    scenarioPassRate: percent(passedRuns.length, runs.length, 0), expectedTerminalMatchRate: percent(expectedTerminalMatches.length, runsWithExpectedTerminal.length),
+    unresolvedDecisionRate: percent(runs.filter((run) => run.unresolvedDecisions.length > 0).length, runs.length, 0),
     humanReviewCoverage: percent(expectedReviews.filter((id) => reachedReviews.has(id)).length, expectedReviews.length),
     averageModeledCycleTime: avgCycle, maximumModeledCycleTime: maxCycle,
-    pathCoverage: percent(new Set(runs.map((run) => run.path.join("→"))).size, workflow.scenarios.length),
-    nodeCoverage: percent(new Set(traversedNodes).size, workflow.nodes.length), edgeCoverage: percent(new Set(traversedEdges).size, workflow.edges.length),
+    pathCoverage: percent(new Set(runs.map((run) => run.path.join("→"))).size, workflow.scenarios.length, 0),
+    nodeCoverage: percent(new Set(traversedNodes).size, workflow.nodes.length, 0), edgeCoverage: percent(new Set(traversedEdges).size, workflow.edges.length, 0),
     failureDistribution: failures,
     mostFrequentlyTraversedNodes: [...nodeFrequency.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id),
     neverTraversedNodes: workflow.nodes.filter((node) => !nodeFrequency.has(node.id)).map((node) => node.id),
