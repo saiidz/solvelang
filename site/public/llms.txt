@@ -11,6 +11,7 @@ Agent frameworks and integration platforms can execute model-driven actions or c
 ## Key Pages
 
 - Website: https://www.solve-lang.com/
+- Workflow Intelligence Studio: https://www.solve-lang.com/studio/
 - About SolveLang: https://www.solve-lang.com/about/
 - Workflow X-Ray Audit Intake: https://www.solve-lang.com/audit/
 - Support Triage Demo: https://www.solve-lang.com/demo/support-triage/
@@ -22,6 +23,9 @@ Agent frameworks and integration platforms can execute model-driven actions or c
 ## Available Today
 
 - Open-source Rust CLI
+- Local-first Workflow Intelligence Studio
+- Deterministic workflow analysis and scenario simulation
+- Local traces, analytics, versions, and evidence exports
 - Readable SolveLang workflow scripts
 - Safe local execution mode
 - Source-located validation diagnostics
@@ -32,6 +36,9 @@ Agent frameworks and integration platforms can execute model-driven actions or c
 ## Current Boundaries
 
 - The browser preview is a safe static preview and does not call a server.
+- The Workflow Intelligence Studio runs locally and does not send workflow data or analytics externally.
+- Studio analysis is deterministic static analysis, not AI analysis.
+- Studio-generated SolveLang scripts are drafts; the Rust CLI remains canonical for validation and execution.
 - The Rust CLI runtime exists for local validation and execution.
 - Full managed automation hosting and production integrations are still evolving.
 - SolveLang should not be described as a language-learning tool, general AI solver, or fully hosted enterprise automation platform.

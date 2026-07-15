@@ -14,6 +14,19 @@ Agencies and consultants are a later go-to-market path once the first founder/op
 
 The hosted `/run` page is a browser-safe preview for simple scripts. It does not call a server and supports a smaller syntax subset than the Rust CLI runtime. Full Rust runtime hosting, production integrations, and a managed automation platform are later work.
 
+## Workflow Intelligence Studio
+
+The static `/studio/` application is a local-first workspace for modeling business workflows, inspecting the graph, running 25 deterministic analysis rules, simulating scenarios, reviewing traces and quality analytics, comparing local versions, and exporting Workflow X-Ray evidence.
+
+No workflow data or product analytics leave the browser. Studio analysis is deterministic, not AI analysis. Generated `.solve` files are preliminary drafts because the Studio workflow model is broader than the executable language. Use the Rust CLI as the canonical validator and runtime:
+
+```bash
+cd solvec
+cargo run -- validate ../path/to/generated-draft.solve
+```
+
+See [the Studio product specification](docs/product/workflow-intelligence-studio-v1.md), [analysis rules](docs/product/workflow-analysis-rules.md), [analytics formulas](docs/product/workflow-analytics.md), and [privacy model](docs/product/studio-privacy.md).
+
 ## Quick Start
 
 ```bash
