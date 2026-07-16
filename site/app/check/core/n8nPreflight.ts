@@ -61,6 +61,10 @@ function includesAny(value: string, terms: string[]): boolean {
   return terms.some((term) => value.includes(term));
 }
 
+function isEnabled(node: N8nNode): boolean {
+  return node.disabled !== true;
+}
+
 function isWebhookResponseType(type: string): boolean {
   return includesAny(type, ["respondtowebhook", "webhookresponse"]);
 }
@@ -137,17 +141,17 @@ export function analyzeN8nWorkflow(workflow: N8nWorkflow, now = new Date()): Pre
   const connected = connectedNames(workflow);
   const connectionCount = countConnections(workflow);
 
-  const triggerIndexes = types
-    .map((type, index) => ({ type, index }))
-    .filter(({ type }) => isTriggerType(type));
+  const triggerIndexes = workflow.nodes
+    .map((node, index) => ({ node, type: types[index], index }))
+    .filter(({ node, type }) => isEnabled(node) && isTriggerType(type));
 
   if (triggerIndexes.length === 0) {
     findings.push({
       id: "N8N001",
       severity: "critical",
       title: "No trigger node detected",
-      detail: "The workflow has no recognizable trigger, webhook, schedule, or manual trigger node.",
-      recommendation: "Add and configure an explicit trigger so the workflow has a deterministic entry point.",
+      detail: "The workflow has no enabled recognizable trigger, webhook, schedule, or manual trigger node.",
+      recommendation: "Add and enable an explicit trigger so the workflow has a deterministic entry point.",
     });
   }
 
@@ -203,34 +207,36 @@ export function analyzeN8nWorkflow(workflow: N8nWorkflow, now = new Date()): Pre
     });
   }
 
-  const aiNodes = types
-    .map((type, index) => ({ type, index }))
-    .filter(({ type }) => includesAny(type, ["langchain", "openai", "agent", "llm", "anthropic"]))
+  const aiNodes = workflow.nodes
+    .map((node, index) => ({ node, type: types[index], index }))
+    .filter(({ node, type }) => isEnabled(node) && includesAny(type, ["langchain", "openai", "agent", "llm", "anthropic"]))
     .map(({ index }) => names[index]);
-  const reviewNodes = types.filter((type) => includesAny(type, ["wait", "form", "approval", "human"]));
+  const reviewNodes = workflow.nodes.filter(
+    (node, index) => isEnabled(node) && includesAny(types[index], ["wait", "form", "approval", "human"]),
+  );
   if (aiNodes.length > 0 && reviewNodes.length === 0) {
     findings.push({
       id: "N8N006",
       severity: "high",
       title: "AI actions have no recognizable human-review gate",
-      detail: "AI or agent nodes were found without a wait, approval, form, or human-review step.",
-      recommendation: "Add explicit review before irreversible, customer-facing, financial, legal, or destructive actions.",
+      detail: "Enabled AI or agent nodes were found without an enabled wait, approval, form, or human-review step.",
+      recommendation: "Add and enable explicit review before irreversible, customer-facing, financial, legal, or destructive actions.",
       nodeNames: aiNodes.slice(0, 12),
     });
   }
 
-  const httpNodes = types
-    .map((type, index) => ({ type, index }))
-    .filter(({ type }) => includesAny(type, ["httprequest", "graphql"]))
+  const httpNodes = workflow.nodes
+    .map((node, index) => ({ node, type: types[index], index }))
+    .filter(({ node, type }) => isEnabled(node) && includesAny(type, ["httprequest", "graphql"]))
     .map(({ index }) => names[index]);
-  const errorNodes = types.filter((type) => isErrorHandlerType(type));
+  const errorNodes = workflow.nodes.filter((node, index) => isEnabled(node) && isErrorHandlerType(types[index]));
   if (httpNodes.length > 0 && errorNodes.length === 0) {
     findings.push({
       id: "N8N007",
       severity: "medium",
       title: "External calls lack an explicit error path",
-      detail: "The workflow calls external services but no recognizable error trigger or stop-and-error node was found.",
-      recommendation: "Add retry limits, timeout handling, failure notification, and a deterministic fallback path.",
+      detail: "The workflow calls external services but no enabled recognizable error trigger or stop-and-error node was found.",
+      recommendation: "Add and enable retry limits, timeout handling, failure notification, and a deterministic fallback path.",
       nodeNames: httpNodes.slice(0, 12),
     });
   }
