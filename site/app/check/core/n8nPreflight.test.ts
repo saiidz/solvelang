@@ -79,6 +79,74 @@ test("Respond to Webhook does not satisfy external-call error handling", () => {
   assert.ok(ids.has("N8N007"));
 });
 
+test("disabled triggers do not satisfy the workflow entry-point requirement", () => {
+  const workflow = parseN8nWorkflow({
+    name: "Disabled trigger",
+    nodes: [{ name: "Webhook", type: "n8n-nodes-base.webhook", disabled: true }],
+    connections: {},
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(ids.has("N8N001"));
+  assert.ok(ids.has("N8N004"));
+});
+
+test("disabled review gates do not satisfy AI human-review requirements", () => {
+  const workflow = parseN8nWorkflow({
+    name: "Disabled approval",
+    nodes: [
+      { name: "Webhook", type: "n8n-nodes-base.webhook" },
+      { name: "AI Agent", type: "@n8n/n8n-nodes-langchain.agent" },
+      { name: "Approval", type: "n8n-nodes-base.approval", disabled: true },
+    ],
+    connections: {
+      Webhook: { main: [[{ node: "AI Agent" }]] },
+      "AI Agent": { main: [[{ node: "Approval" }]] },
+    },
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(ids.has("N8N006"));
+});
+
+test("disabled error handlers do not satisfy external-call failure handling", () => {
+  const workflow = parseN8nWorkflow({
+    name: "Disabled error gate",
+    nodes: [
+      { name: "Webhook", type: "n8n-nodes-base.webhook" },
+      { name: "Call API", type: "n8n-nodes-base.httpRequest" },
+      { name: "Stop on error", type: "n8n-nodes-base.stopAndError", disabled: true },
+    ],
+    connections: {
+      Webhook: { main: [[{ node: "Call API" }]] },
+      "Call API": { main: [[{ node: "Stop on error" }]] },
+    },
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(ids.has("N8N007"));
+});
+
+test("enabled trigger, review, and error nodes satisfy their respective gates", () => {
+  const workflow = parseN8nWorkflow({
+    name: "Enabled gates",
+    nodes: [
+      { name: "Webhook", type: "n8n-nodes-base.webhook" },
+      { name: "AI Agent", type: "@n8n/n8n-nodes-langchain.agent" },
+      { name: "Approval", type: "n8n-nodes-base.approval" },
+      { name: "Call API", type: "n8n-nodes-base.httpRequest" },
+      { name: "Stop on error", type: "n8n-nodes-base.stopAndError" },
+    ],
+    connections: {
+      Webhook: { main: [[{ node: "AI Agent" }]] },
+      "AI Agent": { main: [[{ node: "Approval" }]] },
+      Approval: { main: [[{ node: "Call API" }]] },
+      "Call API": { main: [[{ node: "Stop on error" }]] },
+    },
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(!ids.has("N8N001"));
+  assert.ok(!ids.has("N8N006"));
+  assert.ok(!ids.has("N8N007"));
+});
+
 test("generated HTML escapes workflow and finding text", () => {
   const workflow = parseN8nWorkflow({
     name: '<img src=x onerror="alert(1)">',
