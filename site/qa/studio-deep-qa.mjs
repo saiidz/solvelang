@@ -82,6 +82,114 @@ async function numericIntegrity(browserType, name) {
   return result;
 }
 
+async function storageDenial(browserType, name) {
+  const browser = await browserType.launch({ headless: true });
+  const attempts = [];
+  for (const source of ["blank", "template", "wizard", "version", "import"]) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(700);
+    const importDocument = await page.evaluate(() => JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]")[0]);
+    if (source === "version") await page.getByRole("button", { name: "Versions", exact: true }).first().click();
+    const before = {
+      name: await page.getByRole("textbox", { name: "Project name" }).inputValue(),
+      projects: await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1")),
+      analytics: await page.evaluate(() => localStorage.getItem("solvelang.studio.analytics.v1")),
+      view: await page.locator('nav[aria-label="Studio navigation"] button[aria-current="page"]').innerText(),
+    };
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === "solvelang.studio.projects.v1") throw new DOMException("quota", "QuotaExceededError");
+        return original.call(this, key, value);
+      };
+    });
+    if (source === "blank") {
+      await page.getByRole("button", { name: /Create blank workflow/ }).click();
+    } else if (source === "template") {
+      await page.getByRole("button", { name: /Lead qualification/ }).first().click();
+    } else if (source === "wizard") {
+      await page.getByRole("button", { name: /Describe workflow/ }).click();
+      await page.getByRole("button", { name: "Create workflow graph" }).click();
+    } else if (source === "version") {
+      await page.getByRole("button", { name: "Duplicate project" }).click();
+    } else {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "valid-workflow.json",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify(importDocument)),
+      });
+    }
+    await page.waitForTimeout(100);
+    const after = {
+      name: await page.getByRole("textbox", { name: "Project name" }).inputValue(),
+      projects: await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1")),
+      analytics: await page.evaluate(() => localStorage.getItem("solvelang.studio.analytics.v1")),
+      view: await page.locator('nav[aria-label="Studio navigation"] button[aria-current="page"]').innerText(),
+      status: await page.locator('[role="status"]').innerText(),
+      saveState: await page.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText(),
+      wizardStillOpen: source === "wizard" ? await page.getByRole("dialog").isVisible() : null,
+    };
+    await page.reload({ waitUntil: "networkidle" });
+    const reloaded = {
+      name: await page.getByRole("textbox", { name: "Project name" }).inputValue(),
+      projects: await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1")),
+      recoveryShown: (await page.locator('[role="status"]').innerText()).includes("Recovery needed"),
+    };
+    attempts.push({ source, before, after, reloaded, errors });
+    await context.close();
+  }
+
+  const seedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedContext.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "solvelang.studio.projects.v1") throw new DOMException("quota", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  const seedPage = await seedContext.newPage();
+  const seedErrors = [];
+  seedPage.on("pageerror", (error) => seedErrors.push(error.message));
+  await seedPage.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+  const emptySeed = {
+    saveBlocked: (await seedPage.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText()).includes("Save blocked"),
+    falseSuccess: (await seedPage.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText()).includes("Saved locally"),
+    projectStored: await seedPage.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1") !== null),
+    errors: seedErrors,
+  };
+  await seedContext.close();
+  await browser.close();
+  return { browser: name, attempts, emptySeed };
+}
+
+async function outputRenameIntegrity(browserType, name) {
+  const browser = await browserType.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Workflow Canvas/ }).click();
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]")[0]);
+  const source = stored.nodes.find((node) => node.outputs.includes("resolved"));
+  if (!source) throw new Error(`Referenced output fixture missing in ${name}`);
+  await page.locator('button[class*="workflowNode"]').filter({ hasText: source.title }).click();
+  const outputs = page.getByRole("textbox", { name: "Outputs (comma separated)" });
+  await outputs.fill((await outputs.inputValue()).replace("resolved", "resolution_recorded"));
+  await page.waitForTimeout(800);
+  const beforeReload = await page.evaluate(() => JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]")[0]);
+  await page.reload({ waitUntil: "networkidle" });
+  const afterReload = await page.evaluate(() => JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]")[0]);
+  const expected = afterReload.scenarios.filter((scenario) => scenario.expectedOutputs.includes("resolution_recorded")).length;
+  const stale = afterReload.scenarios.some((scenario) => scenario.expectedOutputs.includes("resolved"));
+  await browser.close();
+  return { browser: name, persistedBeforeReload: beforeReload.nodes.some((node) => node.outputs.includes("resolution_recorded")), persistedAfterReload: afterReload.nodes.some((node) => node.outputs.includes("resolution_recorded")), migratedScenarios: expected, stale, errors };
+}
+
 async function accessibilityAndResponsive() {
   const browser = await chromium.launch({ headless: true });
   const results = [];
@@ -101,17 +209,40 @@ async function accessibilityAndResponsive() {
 const browsers = [[chromium, "chromium"], [firefox, "firefox"], [webkit, "webkit"]];
 const scenario = [];
 const numeric = [];
+const storageDenialResults = [];
+const outputRenameResults = [];
 for (const [browserType, name] of browsers) {
   scenario.push(await scenarioIntegrity(browserType, name));
   numeric.push(await numericIntegrity(browserType, name));
+  storageDenialResults.push(await storageDenial(browserType, name));
+  outputRenameResults.push(await outputRenameIntegrity(browserType, name));
 }
-const evidence = { testedAt: new Date().toISOString(), baseUrl, scenario, numeric, accessibilityAndResponsive: await accessibilityAndResponsive() };
+const evidence = { testedAt: new Date().toISOString(), baseUrl, scenario, numeric, storageDenial: storageDenialResults, outputRename: outputRenameResults, accessibilityAndResponsive: await accessibilityAndResponsive() };
 
 for (const result of scenario) {
   if (!result.disabled || result.helper !== "Add a trigger node first." || result.scenarioCountBeforeReload !== 0 || result.scenarioCountAfterReload !== 0 || result.recoveryShown || result.errors.length) throw new Error(`Scenario integrity failed in ${result.browser}`);
 }
 for (const result of numeric) {
   if (result.priorityRejected !== "true" || result.decimalSlaRejected !== "true" || result.negativeSlaRejected !== "true" || result.storedPriorityBeforeReload !== Number(result.originalPriority) || result.storedSlaBeforeReload !== Number(result.originalSla) || result.storedPriorityAfterReload !== Number(result.originalPriority) || result.storedSlaAfterReload !== Number(result.originalSla) || result.recoveryShown || result.errors.length) throw new Error(`Numeric integrity failed in ${result.browser}`);
+}
+for (const result of storageDenialResults) {
+  for (const attempt of result.attempts) {
+    if (attempt.before.name !== attempt.after.name
+      || attempt.before.projects !== attempt.after.projects
+      || attempt.before.analytics !== attempt.after.analytics
+      || attempt.before.view !== attempt.after.view
+      || attempt.before.name !== attempt.reloaded.name
+      || attempt.before.projects !== attempt.reloaded.projects
+      || !attempt.after.saveState.includes("Save blocked")
+      || !attempt.after.status.includes("Browser storage is full or unavailable")
+      || (attempt.source === "wizard" && !attempt.after.wizardStillOpen)
+      || attempt.reloaded.recoveryShown
+      || attempt.errors.length) throw new Error(`Storage-denial ${attempt.source} activation failed in ${result.browser}`);
+  }
+  if (!result.emptySeed.saveBlocked || result.emptySeed.falseSuccess || result.emptySeed.projectStored || result.emptySeed.errors.length) throw new Error(`Storage-denial initial seed failed in ${result.browser}`);
+}
+for (const result of outputRenameResults) {
+  if (!result.persistedBeforeReload || !result.persistedAfterReload || result.migratedScenarios < 1 || result.stale || result.errors.length) throw new Error(`Output rename integrity failed in ${result.browser}`);
 }
 for (const result of evidence.accessibilityAndResponsive) {
   if (result.clientWidth !== result.scrollWidth || result.axeViolations.length) throw new Error(`Accessibility/responsive check failed at ${result.viewport.width}px`);

@@ -1,5 +1,5 @@
 {
-  "testedAt": "2026-07-16T06:06:34.945Z",
+  "testedAt": "2026-07-16T14:55:59.827Z",
   "baseUrl": "http://127.0.0.1:4173",
   "scenario": [
     {
@@ -71,6 +71,55 @@
       "storedPriorityAfterReload": 1,
       "storedSlaAfterReload": 10,
       "recoveryShown": false,
+      "errors": []
+    }
+  ],
+  "storageDenial": [
+    {
+      "browser": "chromium",
+      "before": "Support triage workspace",
+      "after": "Support triage workspace",
+      "saveBlocked": true,
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "before": "Support triage workspace",
+      "after": "Support triage workspace",
+      "saveBlocked": true,
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "before": "Support triage workspace",
+      "after": "Support triage workspace",
+      "saveBlocked": true,
+      "errors": []
+    }
+  ],
+  "outputRename": [
+    {
+      "browser": "chromium",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
       "errors": []
     }
   ],

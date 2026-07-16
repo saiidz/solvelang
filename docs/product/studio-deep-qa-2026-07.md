@@ -8,6 +8,7 @@
 - Audit branch: `codex/studio-deep-qa-hardening`
 - Baseline verdict: release blocked by reproducible S1 and S2 defects
 - Final verdict: no known S0, S1, or S2 defect remains from this audit
+- Corrective follow-up: the two new P2 durability findings below are covered by the corrective commit after `5a1d183`.
 
 ## Environments
 
@@ -46,6 +47,13 @@
 | SDQA-020 | S2 | A blank workflow could create and autosave a scenario with `startingTrigger: ""`; reload then quarantined the project. | Scenario creation did not require a trigger, while reload correctly enforced the semantic reference. | Scenario creation is disabled with the accessible explanation `Add a trigger node first.` and the state boundary rejects missing trigger references. Save/reload tests pass in all three browsers. |
 | SDQA-021 | S2 | Decimal edge priority and decimal/negative SLA values could enter state, autosave, and make the next reload quarantine an otherwise recoverable project. | Number inputs converted raw strings with `Number` without integer-domain validation. | All Studio numeric inputs were audited. Priority accepts finite integers; SLA accepts null or finite nonnegative integers; both use `step=1`, `aria-invalid`, and described validation messages. |
 | SDQA-022 | S1 | Locally constructed edits bypassed the semantic schema used by import and reload. | The shared React mutation function replaced current state before validation, and repository `save` trusted its typed input. | Every proposed edit now passes the canonical parser before state replacement, and repository saves independently fail closed. Rejected edits preserve the exact in-memory and persisted last-valid document. |
+
+### New P2 follow-up findings
+
+| Finding | Root cause | Correction | Regression evidence |
+| --- | --- | --- | --- |
+| P2-A: failed create/import saves still activated the new workflow | `StudioApp` ignored non-`ok` repository save results before replacing workflow state and emitting success analytics. | Shared `persistForActivation` checks availability and save status. Activation, project-list updates, version/trace resets, navigation, success analytics, and success copy occur only after persistence succeeds. Initial seeding reports an accessible `Save blocked` state. | Focused byte-preservation test; committed Chromium/Firefox/WebKit storage-denial evidence; every `repository.save` call in `StudioApp.tsx` is checked. |
+| P2-B: node-output renames were not atomic with scenario expectations | Inspector updates replaced a node without migrating `expectedOutputs`, so semantic validation could reject either edit order. | `updateNodeAndReferences` performs one validated mutation, maps outputs by position, migrates all scenarios, deduplicates expectations, rejects referenced removals/empty/duplicate/colliding names, and preserves the last valid document. | Atomic rename, multi-scenario, rejection, save/reload tests; committed browser output-rename persistence in Chromium/Firefox/WebKit. |
 
 All 22 defects above were first reproduced by source inspection, a focused failing test, or a browser failure. Corrections are covered by permanent Node tests where the behavior is pure and by committed browser evidence where it is interaction-specific.
 
@@ -110,7 +118,8 @@ cd ..
 git diff --check
 ```
 
-Corrective totals: 69 Studio tests and 84 Rust tests (15 unit and 69 CLI). Final command and GitHub check results are recorded on PR #39.
+Corrective totals: **73 Studio tests** and 84 Rust tests (15 unit and 69 CLI). The committed browser harness covers scenario integrity, numeric integrity, storage-denial create protection, atomic output rename/reload, Axe, and responsive overflow in Chromium, Firefox, and WebKit.
+Final corrective validation: `npm ci`, `npm run test:studio` (73/73), `npm run lint`, `npm run build`, `STUDIO_QA_NODE_MODULES=/private/tmp/solvelang-studio-qa-harness/node_modules node qa/studio-deep-qa.mjs`, `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `cargo build --release`, and `git diff --check`.
 
 ## Known limitations
 

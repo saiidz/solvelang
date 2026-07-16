@@ -17,11 +17,11 @@ import WorkflowWizard from "./components/WorkflowWizard";
 import { analyzeWorkflow } from "./core/analysis";
 import { calculateWorkflowAnalytics } from "./core/analytics";
 import { downloadText, serializeWorkflow } from "./core/exports";
-import { applyWorkflowMutation } from "./core/mutations";
+import { applyWorkflowMutation, updateNodeAndReferences } from "./core/mutations";
 import { createLocalAnalytics } from "./core/productAnalytics";
 import { parseWorkflowDocument } from "./core/schema";
 import { simulateScenario } from "./core/simulation";
-import { createArtifactRepository, createProjectRepository } from "./core/storage";
+import { createArtifactRepository, createProjectRepository, persistWorkflowForActivation } from "./core/storage";
 import { createBlankWorkflow, createSupportTriageDocument, makeNode, workflowTemplates } from "./core/templates";
 import type { NodeType, ScenarioRun, VersionSnapshot, WorkflowDocument, WorkflowEdge, WorkflowNode, WorkflowScenario } from "./core/types";
 import { createVersionSnapshot } from "./core/versions";
@@ -82,7 +82,9 @@ export default function StudioApp() {
       setProjects(loaded.documents); workflowRef.current = first; setWorkflow(first); setVersions(artifacts.loadVersions(first.id));
       setTraces(artifacts.loadTraces(first.id)); setSelectedScenarioId(first.scenarios[0]?.id ?? null);
     } else {
-      repository.save(workflow); setProjects([workflow]); setVersions(createVersionSnapshot(workflow, "Initial model", "Created from support triage template", []));
+      const saved = persistWorkflowForActivation(repository, workflow);
+      if (saved.status !== "ok") { setSaveStatus("Save blocked"); setMessage(`Workspace was not opened: ${saved.error}`); return; }
+      setProjects([workflow]); setVersions(createVersionSnapshot(workflow, "Initial model", "Created from support triage template", []));
     }
     setSaveStatus("Saved locally");
   // Initial load intentionally runs once after storage adapters exist.
@@ -134,15 +136,25 @@ export default function StudioApp() {
     workflowRef.current = project; setWorkflow(project); setVersions(artifacts?.loadVersions(project.id) ?? []); setTraces(artifacts?.loadTraces(project.id) ?? []);
     setSelectedNodeId(project.nodes[0]?.id ?? null); setSelectedScenarioId(project.scenarios[0]?.id ?? null); setActiveRun(null); setActiveView("canvas");
   };
+  const persistForActivation = (next: WorkflowDocument, action: string) => {
+    const saved = persistWorkflowForActivation(repository, next);
+    if (saved.status !== "ok") { setSaveStatus("Save blocked"); setMessage(`${action} was not opened: ${saved.error}`); return null; }
+    return saved.document;
+  };
   const createProject = (source: WorkflowDocument, sourceLabel: string) => {
-    const next = freshCopy(source); repository?.save(next); setProjects(repository?.list() ?? [next, ...projects]); setVersions([]); setTraces([]);
+    const next = persistForActivation(freshCopy(source), "Project");
+    if (!next) return false;
+    setProjects(repository?.list() ?? []); setVersions([]); setTraces([]);
     replaceWorkflow(next, `${sourceLabel} created locally.`); productAnalytics?.track(sourceLabel === "Blank workflow" ? "project_created" : "template_selected"); setActiveView("canvas");
+    return true;
   };
   const importFile = async (file: File) => {
     try {
       const result = parseWorkflowDocument(JSON.parse(await file.text()));
       if (!result.ok) { setMessage(`Import failed: ${result.error}`); return; }
-      const next = freshCopy(result.document, " imported"); repository?.save(next); productAnalytics?.track("workflow_imported"); openProject(next); setMessage("Workflow imported and saved locally.");
+      const next = persistForActivation(freshCopy(result.document, " imported"), "Import");
+      if (!next) return;
+      productAnalytics?.track("workflow_imported"); openProject(next); setMessage("Workflow imported and saved locally.");
     } catch (error) { setMessage(`Import failed: ${error instanceof Error ? error.message : "Invalid JSON file."}`); }
   };
   const deleteProject = (project: WorkflowDocument) => {
@@ -156,13 +168,17 @@ export default function StudioApp() {
     if (recoveryRaw) downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain");
     if (!repository.resetCorrupt()) { setMessage("Browser storage could not be reset."); return; }
     const next = freshCopy(createSupportTriageDocument(), " workspace");
-    const result = repository.save(next);
+    const result = persistWorkflowForActivation(repository, next);
     if (result.status !== "ok") { setMessage(result.error); return; }
     setRecoveryRaw(null); setProjects([next]); setVersions([]); setTraces([]); replaceWorkflow(next, "Corrupt storage was exported and reset locally."); setSaveStatus("Saved locally");
   };
 
   const addNode = () => mutate((current) => { const index = current.nodes.length; current.nodes.push(makeNode(`node-${crypto.randomUUID()}`, "action" as NodeType, "New action", 220 + (index % 4) * 230, 120 + Math.floor(index / 4) * 150, { metadata: { errorPath: "define-exception" } })); return current; }, "node_created");
-  const updateNode = (node: WorkflowNode) => mutate((current) => { current.nodes = current.nodes.map((item) => item.id === node.id ? node : item); return current; }, "node_updated");
+  const updateNode = (node: WorkflowNode) => {
+    const result = updateNodeAndReferences(workflowRef.current, node);
+    if (!result.ok) { setSaveStatus("Edit rejected"); setMessage(`Edit rejected: ${result.error}`); return false; }
+    workflowRef.current = result.document; setWorkflow(result.document); productAnalytics?.track("node_updated"); return true;
+  };
   const duplicateNode = (id: string) => mutate((current) => { const source = current.nodes.find((node) => node.id === id); if (source) { const copy = structuredClone(source); copy.id = `${source.id}-copy-${crypto.randomUUID()}`; copy.title = `${source.title} copy`; copy.position = { x: source.position.x + 36, y: source.position.y + 100 }; current.nodes.push(copy); setSelectedNodeId(copy.id); } return current; }, "node_created");
   const deleteNode = (id: string) => {
     if (workflow.scenarios.some((scenario) => scenario.startingTrigger === id)) { setMessage("Edit rejected: this trigger starts one or more scenarios. Change or delete those scenarios first."); return; }
@@ -201,7 +217,7 @@ export default function StudioApp() {
         <main id="studio-main" className={styles.main} tabIndex={-1}><div className={styles.statusBar} role="status" aria-live="polite"><span>{message}</span>{recoveryRaw ? <span className={styles.recoveryActions}><button onClick={() => downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain")}>Download recovery data</button><button onClick={resetCorruptStorage}>Export & reset corrupt data</button></span> : <strong>{workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.scenarios.length} scenarios</strong>}</div>{activeContent}</main>
       </div>
       <input ref={fileInput} className={styles.hiddenInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
-      {showWizard ? <WorkflowWizard onCancel={() => setShowWizard(false)} onComplete={(next) => { setShowWizard(false); createProject(next, "Structured workflow"); }} /> : null}
+      {showWizard ? <WorkflowWizard onCancel={() => setShowWizard(false)} onComplete={(next) => { if (createProject(next, "Structured workflow")) setShowWizard(false); }} /> : null}
     </div>
   );
 }

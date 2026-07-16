@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addScenarioToWorkflow, applyWorkflowMutation, parseFiniteInteger } from "./mutations";
-import { createProjectRepository } from "./storage";
+import { addScenarioToWorkflow, applyWorkflowMutation, parseFiniteInteger, updateNodeAndReferences } from "./mutations";
+import { createProjectRepository, persistWorkflowForActivation } from "./storage";
 import { createBlankWorkflow, createSupportTriageDocument, makeNode } from "./templates";
 
 class MemoryStorage implements Storage {
@@ -12,6 +12,14 @@ class MemoryStorage implements Storage {
   key(index: number) { return [...this.values.keys()][index] ?? null; }
   removeItem(key: string) { this.values.delete(key); }
   setItem(key: string, value: string) { this.values.set(key, value); }
+}
+
+class DeniedWriteStorage extends MemoryStorage {
+  writesBlocked = false;
+  override setItem(key: string, value: string) {
+    if (this.writesBlocked) throw new Error("quota");
+    super.setItem(key, value);
+  }
 }
 
 function savedFixture() {
@@ -122,4 +130,147 @@ test("project repository refuses invalid documents without replacing the last va
   const loaded = repository.load(document.id);
   assert.equal(loaded.status, "ok");
   assert.deepEqual(loaded.document, document);
+});
+
+test("referenced node outputs rename atomically and survive save and reload", () => {
+  const { repository, document } = savedFixture();
+  const node = structuredClone(document.nodes.find((item) => item.outputs.includes("resolved"))!);
+  node.outputs = node.outputs.map((output) => output === "resolved" ? "resolution_recorded" : output);
+  const result = updateNodeAndReferences(document, node);
+  assert.equal(result.ok, true);
+  assert.equal(result.document.scenarios.some((scenario) => scenario.expectedOutputs.includes("resolved")), false);
+  assert.equal(result.document.scenarios.some((scenario) => scenario.expectedOutputs.includes("resolution_recorded")), true);
+  assert.equal(repository.save(result.document).status, "ok");
+  const loaded = repository.load(document.id);
+  assert.equal(loaded.status, "ok");
+  assert.deepEqual(loaded.document, result.document);
+});
+
+test("multiple scenarios and outputs migrate by position and deduplicate expectations", () => {
+  const { document } = savedFixture();
+  const source = document.nodes.find((item) => item.outputs.includes("resolved"))!;
+  const renamed = structuredClone(source);
+  renamed.outputs = renamed.outputs.map((output) => output === "resolved" ? "resolution_recorded" : output);
+  const secondScenario = structuredClone(document.scenarios[0]);
+  secondScenario.id = "scenario-second";
+  secondScenario.expectedOutputs = ["resolved", "resolution_recorded"];
+  const current = { ...document, scenarios: [...document.scenarios, secondScenario] };
+  const result = updateNodeAndReferences(current, renamed);
+  assert.equal(result.ok, true);
+  assert.equal(result.document.scenarios.some((scenario) => scenario.expectedOutputs.includes("resolved")), false);
+  assert.equal(result.document.scenarios.filter((scenario) => scenario.expectedOutputs.includes("resolution_recorded")).length, 3);
+  assert.equal(result.document.scenarios.find((scenario) => scenario.id === "scenario-second")?.expectedOutputs.length, 1);
+});
+
+test("referenced output removal, empty names, duplicates, and cross-node collisions fail closed", () => {
+  const { repository, document } = savedFixture();
+  const source = document.nodes.find((item) => item.outputs.includes("resolved"))!;
+  const before = JSON.stringify(document);
+  for (const outputs of [source.outputs.filter((output) => output !== "resolved"), [""], ["resolved", "resolved"]]) {
+    const candidate = structuredClone(source); candidate.outputs = outputs;
+    const result = updateNodeAndReferences(document, candidate);
+    assert.equal(result.ok, false);
+    assert.equal(JSON.stringify(result.document), before);
+  }
+  const other = document.nodes.find((item) => item.id !== source.id)!;
+  const collision = structuredClone(source); collision.outputs = [...source.outputs.slice(0, -1), other.outputs[0] ?? "shared"];
+  const result = updateNodeAndReferences(document, collision);
+  assert.equal(result.ok, false);
+  assert.deepEqual(repository.load(document.id).document, document);
+});
+
+test("failed project save preserves the previous stored bytes", () => {
+  const { storage, repository, document } = savedFixture();
+  const before = storage.getItem("solvelang.studio.projects.v1");
+  const originalSetItem = storage.setItem.bind(storage);
+  storage.setItem = (key, value) => { if (key === "solvelang.studio.projects.v1") throw new Error("quota"); originalSetItem(key, value); };
+  const replacement = structuredClone(document); replacement.name = "Should not replace";
+  assert.equal(repository.save(replacement).status, "unavailable");
+  assert.equal(storage.getItem("solvelang.studio.projects.v1"), before);
+  assert.deepEqual(repository.load(document.id).document, document);
+});
+
+test("activation save fails closed for every project entry point", () => {
+  for (const source of ["blank", "template", "wizard", "version", "import"]) {
+    const storage = new DeniedWriteStorage();
+    const repository = createProjectRepository(storage);
+    const active = createSupportTriageDocument();
+    assert.equal(repository.save(active).status, "ok");
+    const before = storage.getItem("solvelang.studio.projects.v1");
+    const projects = [active];
+    const analytics: string[] = [];
+    storage.writesBlocked = true;
+
+    const candidate = createBlankWorkflow();
+    candidate.name = `${source} candidate`;
+    const result = persistWorkflowForActivation(repository, candidate);
+    if (result.status === "ok") {
+      projects.unshift(result.document);
+      analytics.push(`${source}_succeeded`);
+    }
+
+    assert.equal(result.status, "unavailable", source);
+    assert.deepEqual(projects, [active], source);
+    assert.deepEqual(analytics, [], source);
+    assert.equal(storage.getItem("solvelang.studio.projects.v1"), before, source);
+    assert.deepEqual(repository.load(active.id).document, active, source);
+  }
+});
+
+test("activation save rejects unavailable storage and persists valid workflows on success", () => {
+  const document = createSupportTriageDocument();
+  const unavailable = persistWorkflowForActivation(null, document);
+  assert.equal(unavailable.status, "unavailable");
+  assert.match(unavailable.error, /unavailable/i);
+
+  const storage = new MemoryStorage();
+  const repository = createProjectRepository(storage);
+  const saved = persistWorkflowForActivation(repository, document);
+  assert.equal(saved.status, "ok");
+  assert.deepEqual(repository.load(document.id).document, document);
+});
+
+test("multiple output renames preserve unrelated expectations in every scenario", () => {
+  const { document } = savedFixture();
+  const current = structuredClone(document);
+  const currentNode = current.nodes.find((item) => item.outputs.includes("resolved"))!;
+  currentNode.outputs = ["resolved", "follow_up"];
+  current.scenarios[0].expectedOutputs = ["resolved", "follow_up", "escalated"];
+  current.scenarios[1].expectedOutputs = ["follow_up", "escalated"];
+  const node = structuredClone(currentNode);
+  node.outputs = ["resolution_recorded", "follow_up_scheduled"];
+
+  const result = updateNodeAndReferences(current, node);
+  assert.equal(result.ok, true);
+  for (const scenario of result.document.scenarios.slice(0, 2)) {
+    assert.equal(scenario.expectedOutputs.includes("follow_up"), false);
+    assert.equal(scenario.expectedOutputs.includes("follow_up_scheduled"), true);
+    assert.equal(scenario.expectedOutputs.includes("escalated"), true);
+  }
+  assert.equal(result.document.scenarios[0].expectedOutputs.includes("resolution_recorded"), true);
+});
+
+test("removing an unreferenced output preserves referenced outputs", () => {
+  const { document } = savedFixture();
+  const current = structuredClone(document);
+  const currentNode = current.nodes.find((item) => item.outputs.includes("resolved"))!;
+  currentNode.outputs.push("unused_output");
+  const node = structuredClone(currentNode);
+  node.outputs = ["resolved"];
+
+  const result = updateNodeAndReferences(current, node);
+  assert.equal(result.ok, true);
+  assert.equal(result.document.scenarios.some((scenario) => scenario.expectedOutputs.includes("resolved")), true);
+});
+
+test("rejected output edits preserve stored bytes and remain reloadable", () => {
+  const { storage, repository, document } = savedFixture();
+  const before = storage.getItem("solvelang.studio.projects.v1");
+  const node = structuredClone(document.nodes.find((item) => item.outputs.includes("resolved"))!);
+  node.outputs = node.outputs.filter((output) => output !== "resolved");
+
+  const result = updateNodeAndReferences(document, node);
+  assert.equal(result.ok, false);
+  assert.equal(storage.getItem("solvelang.studio.projects.v1"), before);
+  assert.deepEqual(repository.load(document.id).document, document);
 });

@@ -61,6 +61,22 @@ export function createProjectRepository(storage: Storage) {
   };
 }
 
+export type ProjectRepository = ReturnType<typeof createProjectRepository>;
+
+export function persistWorkflowForActivation(
+  repository: ProjectRepository | null,
+  document: WorkflowDocument,
+) {
+  if (!repository) {
+    return {
+      status: "unavailable" as const,
+      documents: [] as [],
+      error: "Browser storage is unavailable.",
+    };
+  }
+  return repository.save(document);
+}
+
 export function createArtifactRepository(storage: Storage) {
   const read = <T>(key: string, schema: z.ZodType<T>): T[] => {
     try {
