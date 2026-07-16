@@ -14,6 +14,7 @@ export default function ScenarioLab({ workflow, selectedScenarioId, onSelectScen
   const scenario = workflow.scenarios.find((item) => item.id === selectedScenarioId) ?? workflow.scenarios[0] ?? null;
   const [baselineId, setBaselineId] = useState(workflow.scenarios[0]?.id ?? "");
   const decisions = workflow.nodes.filter((node) => node.type === "decision");
+  const firstTrigger = workflow.nodes.find((node) => node.type === "trigger") ?? null;
   const update = (patch: Partial<WorkflowScenario>) => scenario && onUpdateScenarios(workflow.scenarios.map((item) => item.id === scenario.id ? { ...item, ...patch } : item));
   const currentRun = useMemo(() => scenario ? simulateScenario(workflow, scenario) : null, [workflow, scenario]);
   const baseline = workflow.scenarios.find((item) => item.id === baselineId);
@@ -22,7 +23,8 @@ export default function ScenarioLab({ workflow, selectedScenarioId, onSelectScen
   const nextId = () => `scenario-${crypto.randomUUID()}`;
 
   const add = () => {
-    const next: WorkflowScenario = { id: nextId(), name: "New scenario", description: "", startingTrigger: workflow.nodes.find((node) => node.type === "trigger")?.id ?? "", inputVariables: {}, decisionOutcomes: {}, expectedTerminalState: "", expectedHumanReviewPoints: [], expectedOutputs: [] };
+    if (!firstTrigger) return;
+    const next: WorkflowScenario = { id: nextId(), name: "New scenario", description: "", startingTrigger: firstTrigger.id, inputVariables: {}, decisionOutcomes: {}, expectedTerminalState: "", expectedHumanReviewPoints: [], expectedOutputs: [] };
     onUpdateScenarios([...workflow.scenarios, next]); onSelectScenario(next.id);
   };
   const duplicate = () => { if (!scenario) return; const next = { ...structuredClone(scenario), id: nextId(), name: `${scenario.name} copy` }; onUpdateScenarios([...workflow.scenarios, next]); onSelectScenario(next.id); };
@@ -30,7 +32,7 @@ export default function ScenarioLab({ workflow, selectedScenarioId, onSelectScen
 
   return (
     <section className={styles.viewPanel} aria-labelledby="scenario-title">
-      <div className={styles.viewHeader}><div><p className={styles.eyebrow}>Scenario Lab</p><h1 id="scenario-title">Test the workflow before automation</h1><p>Choose explicit outcomes and inspect the path. The simulator never guesses.</p></div><div className={styles.headerActions}><button className={styles.secondaryButton} onClick={add}>+ Scenario</button><button className={styles.secondaryButton} disabled={!scenario} onClick={duplicate}>Duplicate</button><button className={styles.dangerButton} disabled={!scenario} onClick={remove}>Delete</button><button className={styles.primaryButton} disabled={!currentRun} onClick={() => currentRun && onRun(currentRun)}>Run scenario</button></div></div>
+      <div className={styles.viewHeader}><div><p className={styles.eyebrow}>Scenario Lab</p><h1 id="scenario-title">Test the workflow before automation</h1><p>Choose explicit outcomes and inspect the path. The simulator never guesses.</p></div><div className={styles.headerActions}><button className={styles.secondaryButton} disabled={!firstTrigger} aria-describedby={!firstTrigger ? "scenario-add-help" : undefined} onClick={add}>+ Scenario</button><button className={styles.secondaryButton} disabled={!scenario} onClick={duplicate}>Duplicate</button><button className={styles.dangerButton} disabled={!scenario} onClick={remove}>Delete</button><button className={styles.primaryButton} disabled={!currentRun} onClick={() => currentRun && onRun(currentRun)}>Run scenario</button>{!firstTrigger ? <small id="scenario-add-help" className={styles.validationMessage}>Add a trigger node first.</small> : null}</div></div>
       <div className={styles.scenarioLayout}>
         <nav className={styles.scenarioList} aria-label="Scenarios">{workflow.scenarios.map((item) => <button key={item.id} className={item.id === scenario?.id ? styles.scenarioSelected : ""} onClick={() => onSelectScenario(item.id)}><strong>{item.name}</strong><span>{item.description || "No description"}</span></button>)}</nav>
         {scenario ? <div className={styles.scenarioEditor}>

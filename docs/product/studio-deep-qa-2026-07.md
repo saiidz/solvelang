@@ -43,8 +43,11 @@
 | SDQA-017 | S2 | Analytics counted scenarios without an expected terminal as matches and showed success before any run. | Missing expectations and empty result sets were folded into successful ratios. | Match denominators include only explicit expectations; no-run metrics remain neutral and bounded. |
 | SDQA-018 | S2 | Serious axe color-contrast violations appeared in navigation and template numerals. | Muted foreground colors were too low contrast. | Tokens were adjusted; desktop and mobile axe runs report zero violations. |
 | SDQA-019 | S2 | Activating the skip link changed the hash but did not place keyboard focus on the workspace. | The main target was not programmatically focusable. | The main landmark accepts focus; browser evidence records active element `studio-main`. |
+| SDQA-020 | S2 | A blank workflow could create and autosave a scenario with `startingTrigger: ""`; reload then quarantined the project. | Scenario creation did not require a trigger, while reload correctly enforced the semantic reference. | Scenario creation is disabled with the accessible explanation `Add a trigger node first.` and the state boundary rejects missing trigger references. Save/reload tests pass in all three browsers. |
+| SDQA-021 | S2 | Decimal edge priority and decimal/negative SLA values could enter state, autosave, and make the next reload quarantine an otherwise recoverable project. | Number inputs converted raw strings with `Number` without integer-domain validation. | All Studio numeric inputs were audited. Priority accepts finite integers; SLA accepts null or finite nonnegative integers; both use `step=1`, `aria-invalid`, and described validation messages. |
+| SDQA-022 | S1 | Locally constructed edits bypassed the semantic schema used by import and reload. | The shared React mutation function replaced current state before validation, and repository `save` trusted its typed input. | Every proposed edit now passes the canonical parser before state replacement, and repository saves independently fail closed. Rejected edits preserve the exact in-memory and persisted last-valid document. |
 
-Every defect above was first reproduced by source inspection, a focused failing test, or a browser failure. Corrections are covered by permanent Node tests where the behavior is pure and by repeatable browser evidence where it is interaction-specific.
+All 22 defects above were first reproduced by source inspection, a focused failing test, or a browser failure. Corrections are covered by permanent Node tests where the behavior is pure and by committed browser evidence where it is interaction-specific.
 
 ## Functional and destructive coverage
 
@@ -52,6 +55,7 @@ Every defect above was first reproduced by source inspection, a focused failing 
 - Edited project metadata, nodes, edges, policies, and scenarios; ran analysis and scenarios; inspected traces; replayed and compared results; created/restored versions; exported JSON, Markdown, CSV, evidence, and draft scripts.
 - Verified delete cancellation, export-before-delete, active-project recovery, deletion of the last project, and reload into a usable blank project.
 - Verified corrupt-data quarantine, recovery access, storage denial messaging, quota-safe writes, malformed artifact quarantine, and project artifact isolation.
+- Verified blank workflow scenario prevention, trigger-plus-scenario save/reload, referenced-trigger deletion/type conversion rejection, invalid numeric edit rejection, and preservation of the last valid saved project.
 - Validated all five generated template drafts with the Rust CLI. Drafts remain review-required and are not executed by Studio.
 
 ## Browser, accessibility, privacy, and performance evidence
@@ -61,10 +65,17 @@ Every defect above was first reproduced by source inspection, a focused failing 
 - Axe reported zero violations on desktop and mobile reduced-motion/light-preference runs. Keyboard skip-link, dialog focus, Escape, focus restoration, and ordinary tab order were manually checked.
 - Hostile HTML/script project names remained inert. Export hardening tests cover HTML, CSV formula, source-line, filename, prototype-key, and oversized-input cases.
 - Runtime capture found no unexpected request in any local browser. The only Chromium failures were aborted same-origin Next prefetch `HEAD` requests to `/` and `/run/`; Firefox and WebKit had none. No workflow data was transmitted.
-- Linear 1,000-node results: 649.31 ms project load, 206.29 ms canvas render, all 1,000 nodes present, 20.25 ms analysis, 20.77 ms analytics, 30.17 ms version snapshot, and 10.51 ms storage save in the measured local run.
+- Corrective cross-browser evidence confirms that blank workflows remain at zero scenarios after reload and decimal priority plus decimal/negative SLA edits leave persisted values unchanged in Chromium, Firefox, and WebKit.
+- Linear 1,000-node corrective results: 617.24 ms project load, 191.09 ms canvas render, all 1,000 nodes present, 2.31 ms analysis, 4.04 ms analytics, 23.50 ms version snapshot, and 31.72 ms storage save in the measured local run.
 - At 6x CPU throttling: 1,186.71 ms load and 246.44 ms canvas switch. The 640 CSS-pixel zoom equivalent had zero horizontal document overflow.
 
-Raw local evidence and screenshots are retained outside the repository at `/private/tmp/solvelang-studio-qa-harness/evidence/` for this audit session, including `browser-audit.json`, `destructive.json`, `browser-modes.json`, `performance.json`, cross-browser screenshots, mobile, live, and zoom-equivalent captures.
+Durable evidence is committed under `docs/product/evidence/`:
+
+- `studio-deep-qa-browser-2026-07.json`: corrective scenario/numeric save-reload checks plus axe and responsive results.
+- `studio-deep-qa-full-browser-2026-07.json`: complete cross-browser workflows, viewport matrix, accessibility, storage failure, privacy capture, and live parity.
+- `studio-deep-qa-performance-2026-07.json`: measured 50, 200, 500, and 1,000-node stress results.
+
+The dependency-neutral harness is retained at `site/qa/studio-deep-qa.mjs`. It requires an explicitly supplied, separate QA module directory and does not change product packages.
 
 ## Validation
 
@@ -79,7 +90,27 @@ Baseline before production edits:
 - `cargo test`: 84 passed (15 unit, 69 CLI).
 - `cargo build --release`: passed.
 
-Final validation is recorded in the pull request after running the complete required command list from a clean dependency install.
+Corrective final validation commands:
+
+```bash
+cd site
+npm ci
+npm run test:studio
+npm run lint
+npm run build
+STUDIO_QA_NODE_MODULES=<qa-node-modules> node qa/studio-deep-qa.mjs
+
+cd ../solvec
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+cargo build --release
+
+cd ..
+git diff --check
+```
+
+Corrective totals: 69 Studio tests and 84 Rust tests (15 unit and 69 CLI). Final command and GitHub check results are recorded on PR #39.
 
 ## Known limitations
 

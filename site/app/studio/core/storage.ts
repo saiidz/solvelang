@@ -49,7 +49,14 @@ export function createProjectRepository(storage: Storage) {
     resetCorrupt() { try { storage.removeItem(PROJECT_KEY); storage.removeItem(QUARANTINE_KEY); return true; } catch { return false; } },
     list() { const result = loadAll(); return result.status === "ok" ? result.documents : []; },
     load(id: string) { const result = loadAll(); return { status: result.status, document: result.status === "ok" ? result.documents.find((item) => item.id === id) ?? null : null, ...("error" in result ? { error: result.error } : {}) }; },
-    save(document: WorkflowDocument) { const result = loadAll(); if (result.status !== "ok") return result; const documents = [structuredClone(document), ...result.documents.filter((item) => item.id !== document.id)]; return saveAll(documents) ? { status: "ok" as const, document } : { status: "unavailable" as const, documents: [] as [], error: "Browser storage is full or unavailable." }; },
+    save(document: WorkflowDocument) {
+      const parsed = parseWorkflowDocument(document);
+      if (!parsed.ok) return { status: "invalid" as const, documents: [] as [], error: `Invalid workflow was not saved: ${parsed.error}` };
+      const result = loadAll();
+      if (result.status !== "ok") return result;
+      const documents = [structuredClone(parsed.document), ...result.documents.filter((item) => item.id !== parsed.document.id)];
+      return saveAll(documents) ? { status: "ok" as const, document: parsed.document } : { status: "unavailable" as const, documents: [] as [], error: "Browser storage is full or unavailable." };
+    },
     delete(id: string) { const result = loadAll(); if (result.status === "ok") saveAll(result.documents.filter((item) => item.id !== id)); },
   };
 }

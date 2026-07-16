@@ -125,6 +125,7 @@
 .edgeTarget { border: 0; background: transparent; color: #6eb4ff; text-align: left; padding: 0; font-size: 11px; cursor: pointer; }
 .emptyState { padding: 30px; color: #91a7be; text-align: center; }
 .emptyState strong { display: block; color: #dce9f7; margin-bottom: 8px; }.emptyState p, .muted { color: #8299b0; line-height: 1.55; font-size: 12px; }
+.validationMessage { color: #ffb9c2; display: block; font-size: 10px; line-height: 1.4; margin-top: 2px; max-width: 28rem; }
 
 .viewPanel { min-height: calc(100vh - 108px); }
 .viewHeader { display: flex; justify-content: space-between; align-items: end; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }

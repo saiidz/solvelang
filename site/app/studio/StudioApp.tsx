@@ -17,6 +17,7 @@ import WorkflowWizard from "./components/WorkflowWizard";
 import { analyzeWorkflow } from "./core/analysis";
 import { calculateWorkflowAnalytics } from "./core/analytics";
 import { downloadText, serializeWorkflow } from "./core/exports";
+import { applyWorkflowMutation } from "./core/mutations";
 import { createLocalAnalytics } from "./core/productAnalytics";
 import { parseWorkflowDocument } from "./core/schema";
 import { simulateScenario } from "./core/simulation";
@@ -57,6 +58,7 @@ export default function StudioApp() {
   const [showWizard, setShowWizard] = useState(false);
   const [mounted, setMounted] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const workflowRef = useRef(workflow);
   const repository = useMemo(() => mounted ? createProjectRepository(window.localStorage) : null, [mounted]);
   const artifacts = useMemo(() => mounted ? createArtifactRepository(window.localStorage) : null, [mounted]);
   const productAnalytics = useMemo(() => mounted ? createLocalAnalytics(window.localStorage) : null, [mounted]);
@@ -77,7 +79,7 @@ export default function StudioApp() {
     }
     if (loaded.documents.length) {
       const first = loaded.documents[0];
-      setProjects(loaded.documents); setWorkflow(first); setVersions(artifacts.loadVersions(first.id));
+      setProjects(loaded.documents); workflowRef.current = first; setWorkflow(first); setVersions(artifacts.loadVersions(first.id));
       setTraces(artifacts.loadTraces(first.id)); setSelectedScenarioId(first.scenarios[0]?.id ?? null);
     } else {
       repository.save(workflow); setProjects([workflow]); setVersions(createVersionSnapshot(workflow, "Initial model", "Created from support triage template", []));
@@ -116,15 +118,20 @@ export default function StudioApp() {
   }, [workflow, traces, versions, mounted, repository, artifacts]);
 
   const replaceWorkflow = (next: WorkflowDocument, status = "Workflow updated") => {
-    setWorkflow({ ...next, updatedAt: new Date().toISOString() }); setSelectedNodeId(next.nodes[0]?.id ?? null);
-    setSelectedScenarioId(next.scenarios[0]?.id ?? null); setActiveRun(null); setMessage(status);
+    const result = applyWorkflowMutation(next, (draft) => draft);
+    if (!result.ok) { setSaveStatus("Edit rejected"); setMessage(`Workflow replacement rejected: ${result.error}`); return false; }
+    workflowRef.current = result.document; setWorkflow(result.document); setSelectedNodeId(result.document.nodes[0]?.id ?? null);
+    setSelectedScenarioId(result.document.scenarios[0]?.id ?? null); setActiveRun(null); setMessage(status); return true;
   };
   const mutate = (fn: (current: WorkflowDocument) => WorkflowDocument, event?: Parameters<NonNullable<typeof productAnalytics>["track"]>[0]) => {
-    setWorkflow((current) => ({ ...fn(structuredClone(current)), updatedAt: new Date().toISOString() }));
+    const result = applyWorkflowMutation(workflowRef.current, fn);
+    if (!result.ok) { setSaveStatus("Edit rejected"); setMessage(`Edit rejected: ${result.error}`); return false; }
+    workflowRef.current = result.document; setWorkflow(result.document);
     if (event) productAnalytics?.track(event);
+    return true;
   };
   const openProject = (project: WorkflowDocument) => {
-    setWorkflow(project); setVersions(artifacts?.loadVersions(project.id) ?? []); setTraces(artifacts?.loadTraces(project.id) ?? []);
+    workflowRef.current = project; setWorkflow(project); setVersions(artifacts?.loadVersions(project.id) ?? []); setTraces(artifacts?.loadTraces(project.id) ?? []);
     setSelectedNodeId(project.nodes[0]?.id ?? null); setSelectedScenarioId(project.scenarios[0]?.id ?? null); setActiveRun(null); setActiveView("canvas");
   };
   const createProject = (source: WorkflowDocument, sourceLabel: string) => {
@@ -157,7 +164,12 @@ export default function StudioApp() {
   const addNode = () => mutate((current) => { const index = current.nodes.length; current.nodes.push(makeNode(`node-${crypto.randomUUID()}`, "action" as NodeType, "New action", 220 + (index % 4) * 230, 120 + Math.floor(index / 4) * 150, { metadata: { errorPath: "define-exception" } })); return current; }, "node_created");
   const updateNode = (node: WorkflowNode) => mutate((current) => { current.nodes = current.nodes.map((item) => item.id === node.id ? node : item); return current; }, "node_updated");
   const duplicateNode = (id: string) => mutate((current) => { const source = current.nodes.find((node) => node.id === id); if (source) { const copy = structuredClone(source); copy.id = `${source.id}-copy-${crypto.randomUUID()}`; copy.title = `${source.title} copy`; copy.position = { x: source.position.x + 36, y: source.position.y + 100 }; current.nodes.push(copy); setSelectedNodeId(copy.id); } return current; }, "node_created");
-  const deleteNode = (id: string) => { if (!window.confirm("Delete this node and all connected edges?")) return; mutate((current) => { current.nodes = current.nodes.filter((node) => node.id !== id); current.edges = current.edges.filter((edge) => edge.source !== id && edge.target !== id); return current; }); setSelectedNodeId(null); };
+  const deleteNode = (id: string) => {
+    if (workflow.scenarios.some((scenario) => scenario.startingTrigger === id)) { setMessage("Edit rejected: this trigger starts one or more scenarios. Change or delete those scenarios first."); return; }
+    if (!window.confirm("Delete this node and all connected edges?")) return;
+    const accepted = mutate((current) => { current.nodes = current.nodes.filter((node) => node.id !== id); current.edges = current.edges.filter((edge) => edge.source !== id && edge.target !== id); return current; });
+    if (accepted) setSelectedNodeId(null);
+  };
   const connectNodes = (source: string, target: string) => mutate((current) => { current.edges.push({ id: `edge-${crypto.randomUUID()}`, source, target, condition: "", priority: (current.edges.filter((edge) => edge.source === source).length + 1), label: "next", fallback: false, metadata: {} }); return current; }, "edge_created");
   const updateEdge = (edge: WorkflowEdge) => mutate((current) => { current.edges = current.edges.map((item) => item.id === edge.id ? edge : item); return current; });
   const deleteEdge = (id: string) => mutate((current) => { current.edges = current.edges.filter((edge) => edge.id !== id); return current; });
