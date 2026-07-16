@@ -56,6 +56,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Run deterministic Studio and preflight tests
+        run: npm run test:studio
+
       - name: Run lint
         run: npm run lint
 
@@ -67,4 +70,5 @@ jobs:
           test -f out/index.html
           test -f out/run/index.html
           test -f out/pricing/index.html
+          test -f out/check/index.html
           test ! -d app/api
