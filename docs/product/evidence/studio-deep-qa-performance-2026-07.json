@@ -1,0 +1,58 @@
+[
+  {
+    "nodes": 50,
+    "edges": 49,
+    "projectLoadMs": 594.85,
+    "canvasRenderMs": 104.55,
+    "renderedNodes": 50,
+    "analysisMs": 2.83,
+    "simulationMs": 1.39,
+    "analyticsMs": 4.39,
+    "versionMs": 7.18,
+    "jsonExportMs": 1,
+    "storageSaveMs": 30.89,
+    "jsonBytes": 36956
+  },
+  {
+    "nodes": 200,
+    "edges": 199,
+    "projectLoadMs": 628.12,
+    "canvasRenderMs": 107.95,
+    "renderedNodes": 200,
+    "analysisMs": 0.61,
+    "simulationMs": 1.4,
+    "analyticsMs": 2.5,
+    "versionMs": 4.3,
+    "jsonExportMs": 0.34,
+    "storageSaveMs": 15.45,
+    "jsonBytes": 147646
+  },
+  {
+    "nodes": 500,
+    "edges": 499,
+    "projectLoadMs": 608,
+    "canvasRenderMs": 146.33,
+    "renderedNodes": 500,
+    "analysisMs": 3.2,
+    "simulationMs": 1.18,
+    "analyticsMs": 4.61,
+    "versionMs": 8.9,
+    "jsonExportMs": 0.98,
+    "storageSaveMs": 35.84,
+    "jsonBytes": 369928
+  },
+  {
+    "nodes": 1000,
+    "edges": 999,
+    "projectLoadMs": 617.24,
+    "canvasRenderMs": 191.09,
+    "renderedNodes": 1000,
+    "analysisMs": 2.31,
+    "simulationMs": 0.97,
+    "analyticsMs": 4.04,
+    "versionMs": 23.5,
+    "jsonExportMs": 2.08,
+    "storageSaveMs": 31.72,
+    "jsonBytes": 740490
+  }
+]

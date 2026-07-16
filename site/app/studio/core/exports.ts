@@ -5,6 +5,16 @@ export function serializeFindings(analysis: WorkflowAnalysis) { return JSON.stri
 export function serializeAnalytics(analytics: WorkflowAnalytics) { return JSON.stringify(analytics, null, 2); }
 export function serializeTraces(traces: unknown[]) { return JSON.stringify(traces, null, 2); }
 
+const escapeMarkdown = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replace(/([\\`*_{}\[\]()#+.!|])/g, "\\$1");
+const safeSolveComment = (value: string) => value.replace(/[\r\n\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim();
+const safeSolveString = (value: string) => JSON.stringify(value.replace(/[\u2028\u2029]/g, " "));
+const spreadsheetSafe = (value: string) => /^\s*[=+\-@]/.test(value) ? `'${value}` : value;
+
+export function sanitizeFilename(value: string, fallback = "solvelang-export") {
+  const normalized = value.normalize("NFKC").replace(/[\u0000-\u001f\u007f/\\:]+/g, "-").replace(/^\.+/, "").replace(/\.{2,}/g, ".").replace(/\s+/g, " ").trim();
+  return (normalized || fallback).slice(0, 180);
+}
+
 function flatten(prefix: string, value: unknown, rows: Array<[string, string]>) {
   if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") rows.push([prefix, String(value)]);
   else if (Array.isArray(value)) rows.push([prefix, value.join(" | ")]);
@@ -14,11 +24,11 @@ function flatten(prefix: string, value: unknown, rows: Array<[string, string]>) 
 export function exportAnalyticsCsv(analytics: WorkflowAnalytics) {
   const rows: Array<[string, string]> = [];
   flatten("", analytics, rows);
-  return ["metric,value", ...rows.map(([metric, value]) => `"${metric.replaceAll('"', '""')}","${value.replaceAll('"', '""')}"`)].join("\n");
+  return ["metric,value", ...rows.map(([metric, value]) => `"${spreadsheetSafe(metric).replaceAll('"', '""')}","${spreadsheetSafe(value).replaceAll('"', '""')}"`)].join("\n");
 }
 
 export function exportMarkdownReport(workflow: WorkflowDocument, analysis: WorkflowAnalysis, analytics: WorkflowAnalytics) {
-  return `# Workflow X-Ray: ${workflow.name}\n\nGenerated locally by SolveLang Workflow Intelligence Studio.\n\n## Summary\n\n- Automation readiness: ${analysis.score.value}/100\n- Nodes: ${workflow.nodes.length}\n- Edges: ${workflow.edges.length}\n- Open findings: ${analysis.findings.filter((item) => !item.suppressed).length}\n- Scenario pass rate: ${analytics.scenario.scenarioPassRate}%\n\n## Findings\n\n${analysis.findings.map((item) => `- **${item.ruleId} ${item.title}** — ${item.explanation} ${item.remediation}`).join("\n") || "No findings."}\n\n## Human review\n\n${workflow.nodes.filter((node) => node.humanRequired || node.type === "human_review" || node.type === "approval").map((node) => `- ${node.title} (${node.owner || "owner missing"})`).join("\n") || "No human-review nodes modeled."}\n`;
+  return `# Workflow X-Ray: ${escapeMarkdown(workflow.name)}\n\nGenerated locally by SolveLang Workflow Intelligence Studio.\n\n## Summary\n\n- Automation readiness: ${analysis.score.value}/100\n- Nodes: ${workflow.nodes.length}\n- Edges: ${workflow.edges.length}\n- Open findings: ${analysis.findings.filter((item) => !item.suppressed).length}\n- Scenario pass rate: ${analytics.scenario.scenarioPassRate}%\n\n## Findings\n\n${analysis.findings.map((item) => `- **${escapeMarkdown(item.ruleId)} ${escapeMarkdown(item.title)}** - ${escapeMarkdown(item.explanation)} ${escapeMarkdown(item.remediation)}`).join("\n") || "No findings."}\n\n## Human review\n\n${workflow.nodes.filter((node) => node.humanRequired || node.type === "human_review" || node.type === "approval").map((node) => `- ${escapeMarkdown(node.title)} (${escapeMarkdown(node.owner || "owner missing")})`).join("\n") || "No human-review nodes modeled."}\n`;
 }
 
 export function exportPrintableHtml(workflow: WorkflowDocument, analysis: WorkflowAnalysis, analytics: WorkflowAnalytics) {
@@ -27,16 +37,16 @@ export function exportPrintableHtml(workflow: WorkflowDocument, analysis: Workfl
 }
 
 export function generateSolveLangDraft(workflow: WorkflowDocument) {
-  const lines = ["// GENERATED DRAFT — REVIEW BEFORE RUNNING", "// Studio-only concepts are preserved as comments and may not be executable.", `// Workflow: ${workflow.name}`, ""];
-  for (const policy of workflow.policies) lines.push(`// policy ${policy.id}: ${policy.title}`);
+  const lines = ["// GENERATED DRAFT - REVIEW BEFORE RUNNING", "// Studio-only concepts are preserved as comments and may not be executable.", `// Workflow: ${safeSolveComment(workflow.name)}`, ""];
+  for (const policy of workflow.policies) lines.push(`// policy ${safeSolveComment(policy.id)}: ${safeSolveComment(policy.title)}`);
   if (workflow.policies.length) lines.push("");
   for (const node of workflow.nodes) {
-    lines.push(`// [${node.type}] ${node.title}`);
-    if (node.owner) lines.push(`// owner: ${node.owner}`);
-    if (node.policyRefs.length) lines.push(`// policy references: ${node.policyRefs.join(", ")}`);
+    lines.push(`// [${node.type}] ${safeSolveComment(node.title)}`);
+    if (node.owner) lines.push(`// owner: ${safeSolveComment(node.owner)}`);
+    if (node.policyRefs.length) lines.push(`// policy references: ${safeSolveComment(node.policyRefs.join(", "))}`);
     if (node.humanRequired || node.type === "human_review" || node.type === "approval") lines.push("// human review required before continuing");
-    if (node.type === "trigger") lines.push(`print("Workflow started: ${node.title.replaceAll('"', '\\"')}")`);
-    else if (node.type === "terminal") lines.push(`print("Terminal: ${node.title.replaceAll('"', '\\"')}")`);
+    if (node.type === "trigger") lines.push(`print(${safeSolveString(`Workflow started: ${node.title}`)})`);
+    else if (node.type === "terminal") lines.push(`print(${safeSolveString(`Terminal: ${node.title}`)})`);
     else lines.push(`// Studio-only step: ${node.type}`);
     lines.push("");
   }
@@ -45,7 +55,7 @@ export function generateSolveLangDraft(workflow: WorkflowDocument) {
 
 export function downloadText(filename: string, content: string, mime = "text/plain") {
   const url = URL.createObjectURL(new Blob([content], { type: mime }));
-  const link = document.createElement("a"); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url);
+  const link = document.createElement("a"); link.href = url; link.download = sanitizeFilename(filename); link.click(); URL.revokeObjectURL(url);
 }
 
 export async function copyText(content: string) { await navigator.clipboard.writeText(content); }

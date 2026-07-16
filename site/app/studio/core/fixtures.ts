@@ -31,7 +31,7 @@ export function fixtureForRule(ruleId: string): WorkflowDocument {
     case "SL013": addNode(document, makeNode("system-empty", "system", "System step", 500, 600, { system: "" })); break;
     case "SL014": addNode(document, makeNode("input-empty", "data_input", "Input", 500, 600, { metadata: {} })); break;
     case "SL015": addNode(document, makeNode("output-empty", "data_output", "Output", 500, 600, { metadata: {} })); break;
-    case "SL016": action.metadata = {}; break;
+    case "SL016": action.metadata = {}; document.edges = document.edges.filter((edge) => !(edge.source === action.id && document.nodes.find((node) => node.id === edge.target)?.type === "exception")); break;
     case "SL017": action.slaMinutes = null; break;
     case "SL018": action.riskLevel = "high"; action.humanRequired = false; break;
     case "SL019": action.metadata.sensitiveData = "true"; action.policyRefs = []; break;

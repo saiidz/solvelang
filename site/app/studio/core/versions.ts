@@ -12,7 +12,7 @@ export function createVersionSnapshot(document: WorkflowDocument, label: string,
   const nextFingerprint = fingerprint(document);
   if (existing[0]?.fingerprint === nextFingerprint) return existing;
   const snapshot: VersionSnapshot = {
-    id: `version-${Date.now()}-${existing.length}`, label, timestamp: new Date().toISOString(), summary,
+    id: `version-${crypto.randomUUID()}`, label, timestamp: new Date().toISOString(), summary,
     nodeCount: document.nodes.length, edgeCount: document.edges.length, scoreSnapshot: analyzeWorkflow(document).score.value,
     fingerprint: nextFingerprint, document: structuredClone(document),
   };

@@ -1,0 +1,136 @@
+# Workflow Intelligence Studio Deep QA - July 2026
+
+## Verdict
+
+**Release recommended with known limitations.** This is an independent adversarial audit of Workflow Intelligence Studio v1. It does not describe the Studio as fully tested or production-ready.
+
+- Tested baseline: `4691e7701918d9fbc070be7f79b6d8f9aa878151`
+- Audit branch: `codex/studio-deep-qa-hardening`
+- Baseline verdict: release blocked by reproducible S1 and S2 defects
+- Final verdict: no known S0, S1, or S2 defect remains from this audit
+- Corrective follow-up: the two new P2 durability findings below are covered by the corrective commit after `5a1d183`.
+
+## Environments
+
+- Local static export: `http://127.0.0.1:4173/studio/`
+- Live parity check: `https://www.solve-lang.com/studio/`
+- Browsers: Playwright Chromium, Firefox, and WebKit
+- Viewports: 390x844, 430x932, 768x1024, 900x1024, 1280x800, 1440x900, and 1920x1080
+- Modes: keyboard-only, reduced motion, light preference, 200%-zoom-equivalent CSS viewport, and 6x CPU throttling
+- Storage: fresh, valid, corrupt, quota-failing, and access-denied
+- Stress documents: 50, 200, 500, and 1,000 nodes; focused dense cyclic graph with 1,000 nodes and 5,000 edges
+- Tests made no external internet request. Live parity was a separate read-only check.
+
+## Defects corrected
+
+| ID | Severity | Reproduction and actual result | Root cause | Correction and regression proof |
+| --- | --- | --- | --- | --- |
+| SDQA-001 | S1 | Denied or quota-full storage could crash actions or report a save that did not happen. | `localStorage` reads and writes lacked complete exception boundaries. | Repository operations return explicit `ok`, `corrupt`, or `unavailable` status; focused denial and quota tests pass. |
+| SDQA-002 | S1 | Imports accepted duplicate IDs and references to absent nodes, policies, or scenarios. | Shape validation did not enforce graph identity and reference integrity. | Strict schema refinements reject duplicates, broken references, unknown fields, unsafe keys, and excessive collection sizes. |
+| SDQA-003 | S1 | A project name containing a newline could inject a new generated `.solve` line. | Draft comments and literals interpolated raw workflow text. | Draft generation uses line-safe comments and JSON-safe text; hostile export regression passes. |
+| SDQA-004 | S1 | Renaming and immediately navigating away could lose the pending debounced edit. | Autosave had no synchronous lifecycle flush. | Pending changes flush on `pagehide`; cross-browser rename/reload persistence passes. |
+| SDQA-005 | S1 | All five named templates loaded the support-triage graph. | Template factories changed labels but reused one domain model. | Each template now has domain-specific title, owners, systems, outputs, policy, and exception path; all parse successfully. |
+| SDQA-006 | S1 | Path-depth analysis could grow exponentially on dense cyclic graphs. | It enumerated edge-simple paths. | Bounded iterative traversal replaces path enumeration; the 1,000-node/5,000-edge regression completes deterministically. |
+| SDQA-007 | S2 | Markdown allowed raw HTML and CSV cells could begin with spreadsheet formulas. | Export encoding handled delimiters but not active-content semantics. | Markdown escapes HTML; CSV prefixes formula-leading cells; focused tests pass. |
+| SDQA-008 | S2 | Project/scenario names produced traversal-like or control-character download names. | Filenames were derived without normalization. | Shared filename sanitizer produces bounded local names; browser download and hostile-name tests pass. |
+| SDQA-009 | S2 | Corrupt version and trace arrays were trusted after only checking the array root. | Artifact members were not schema validated. | Version and trace schemas validate every member and quarantine malformed artifacts. |
+| SDQA-010 | S2 | Corrupt project data was quarantined but could not be downloaded or reset as documented. | No recovery action was exposed. | The Projects view now offers `Download recovery data` and confirmed `Export & reset corrupt data`; repository recovery/reset tests pass. |
+| SDQA-011 | S2 | Scenario input variables could not be edited and scenarios could not be deleted. | Scenario controls omitted those operations. | JSON input editing and explicit scenario deletion are available. |
+| SDQA-012 | S2 | Edge label, condition, priority, and deletion were unavailable in the inspector. | Edge editing exposed only a subset of canonical fields. | Inspector provides all four controls and preserves canonical schema behavior. |
+| SDQA-013 | S2 | Trace replay provided only previous/next controls. | Replay state had no timer or terminal controls. | Replay, pause, and end controls were added with bounded state cleanup. |
+| SDQA-014 | S2 | Describe Workflow did not trap focus, close on Escape, or restore opener focus. | Dialog lifecycle behavior was incomplete. | Modal focus is trapped, Escape closes it, and focus returns to the opener; manual browser checks pass. |
+| SDQA-015 | S2 | Clipboard rejection left the export action without useful status. | Promise rejection was unhandled. | Clipboard failure is caught and reports a download fallback. |
+| SDQA-016 | S2 | A terminal reached exactly on step 200 was incorrectly marked as a safety-limit failure. | Limit evaluation happened before terminal completion. | Terminal completion precedes the limit check; exact-200 and over-200 tests pass. |
+| SDQA-017 | S2 | Analytics counted scenarios without an expected terminal as matches and showed success before any run. | Missing expectations and empty result sets were folded into successful ratios. | Match denominators include only explicit expectations; no-run metrics remain neutral and bounded. |
+| SDQA-018 | S2 | Serious axe color-contrast violations appeared in navigation and template numerals. | Muted foreground colors were too low contrast. | Tokens were adjusted; desktop and mobile axe runs report zero violations. |
+| SDQA-019 | S2 | Activating the skip link changed the hash but did not place keyboard focus on the workspace. | The main target was not programmatically focusable. | The main landmark accepts focus; browser evidence records active element `studio-main`. |
+| SDQA-020 | S2 | A blank workflow could create and autosave a scenario with `startingTrigger: ""`; reload then quarantined the project. | Scenario creation did not require a trigger, while reload correctly enforced the semantic reference. | Scenario creation is disabled with the accessible explanation `Add a trigger node first.` and the state boundary rejects missing trigger references. Save/reload tests pass in all three browsers. |
+| SDQA-021 | S2 | Decimal edge priority and decimal/negative SLA values could enter state, autosave, and make the next reload quarantine an otherwise recoverable project. | Number inputs converted raw strings with `Number` without integer-domain validation. | All Studio numeric inputs were audited. Priority accepts finite integers; SLA accepts null or finite nonnegative integers; both use `step=1`, `aria-invalid`, and described validation messages. |
+| SDQA-022 | S1 | Locally constructed edits bypassed the semantic schema used by import and reload. | The shared React mutation function replaced current state before validation, and repository `save` trusted its typed input. | Every proposed edit now passes the canonical parser before state replacement, and repository saves independently fail closed. Rejected edits preserve the exact in-memory and persisted last-valid document. |
+
+### New P2 follow-up findings
+
+| Finding | Root cause | Correction | Regression evidence |
+| --- | --- | --- | --- |
+| P2-A: failed create/import saves still activated the new workflow | `StudioApp` ignored non-`ok` repository save results before replacing workflow state and emitting success analytics. | Shared `persistWorkflowForActivation` checks availability and save status. Activation, project-list updates, version/trace resets, navigation, success analytics, and success copy occur only after persistence succeeds. Initial seeding reports an accessible `Save blocked` state. | Focused byte-preservation and checked-activation tests; committed Chromium/Firefox/WebKit denial evidence for blank, template, wizard, version duplicate, import, and initial seed; every `repository.save` call in `StudioApp.tsx` checks its result. |
+| P2-B: node-output renames were not atomic with scenario expectations | Inspector updates replaced a node without migrating `expectedOutputs`, so semantic validation could reject either edit order. | `updateNodeAndReferences` performs one validated mutation, maps outputs by position, migrates all scenarios, deduplicates expectations, rejects referenced removals/empty/duplicate/colliding names, and preserves the last valid document. | Atomic rename, multi-scenario, rejection, save/reload tests; committed browser output-rename persistence in Chromium/Firefox/WebKit. |
+| P2-C: the retained storage-denial QA sweep timed out before its assertions | The harness queried `aria-current` under the desktop navigation, but only the mobile navigation exposed that semantic state. The prior storage-denial evidence was therefore invalid and was replaced. | Desktop and mobile active navigation buttons now both expose `aria-current="page"`; the harness uses the desktop semantic contract, rejects incomplete source/browser matrices, and fails on skipped flows, false success, page errors, or console errors. | A permanent source-contract test passes, and all 15 denial combinations (five sources in three browsers) completed before evidence was regenerated. |
+| P2-D: corrupt data could become impossible to reset when its quarantine copy failed | Recovery controls were rendered only when quarantine bytes existed, so quota failure hid reset even though removing the corrupt key was still possible. Initial autosave could also mask the recovery status. | Recovery stage is independent from optional downloadable bytes. Copy and confirmation text reflect whether bytes exist; verified reset remains available; autosave/pagehide pause during recovery; failed replacement persistence shows `Save blocked` and a retry action. | Core copy/state and repository tests plus red/green Chromium/Firefox/WebKit regressions cover successful quarantine, failed quarantine, verified key removal, successful replacement/reload, and replacement-save denial. |
+
+All 26 defects above were first reproduced by source inspection, a focused failing test, or a browser failure. Corrections are covered by permanent Node tests where the behavior is pure and by committed browser evidence where it is interaction-specific.
+
+## Functional and destructive coverage
+
+- Created projects from every template; imported valid JSON; rejected malformed, incompatible, duplicate-ID, broken-reference, unknown-field, unsafe-key, and oversized documents without changing the active project.
+- Edited project metadata, nodes, edges, policies, and scenarios; ran analysis and scenarios; inspected traces; replayed and compared results; created/restored versions; exported JSON, Markdown, CSV, evidence, and draft scripts.
+- Verified delete cancellation, export-before-delete, active-project recovery, deletion of the last project, and reload into a usable blank project.
+- Verified corrupt-data quarantine, recovery access, storage denial messaging, quota-safe writes, malformed artifact quarantine, and project artifact isolation.
+- Verified blank workflow scenario prevention, trigger-plus-scenario save/reload, referenced-trigger deletion/type conversion rejection, invalid numeric edit rejection, and preservation of the last valid saved project.
+- Forced project-storage writes to fail before blank, template, wizard, version-duplicate, and import activation. Each operation preserved the active workflow, project bytes, project collection, current view, versions/traces, selections, and aggregate analytics; the prior project remained reloadable.
+- Renamed referenced node outputs through the Inspector and verified that every scenario expectation migrated atomically by output position, deduplicated, persisted, and reloaded without recovery. Referenced removals and invalid/colliding names are rejected without changing storage.
+- Validated all five generated template drafts with the Rust CLI. Drafts remain review-required and are not executed by Studio.
+
+## Browser, accessibility, privacy, and performance evidence
+
+- Chromium, Firefox, and WebKit completed create, edit, analyze, simulate, replay, export, reload, and persistence flows with zero console or page errors.
+- All tested viewports had `scrollWidth == clientWidth`. Offscreen items in template, tab, and scenario rails remain intentionally reachable through their horizontal scroll containers.
+- Axe reported zero violations on desktop and mobile reduced-motion/light-preference runs. Keyboard skip-link, dialog focus, Escape, focus restoration, and ordinary tab order were manually checked.
+- Hostile HTML/script project names remained inert. Export hardening tests cover HTML, CSV formula, source-line, filename, prototype-key, and oversized-input cases.
+- Runtime capture found no unexpected request in any local browser. The only Chromium failures were aborted same-origin Next prefetch `HEAD` requests to `/` and `/run/`; Firefox and WebKit had none. No workflow data was transmitted.
+- Corrective cross-browser evidence confirms that blank workflows remain at zero scenarios after reload and decimal priority plus decimal/negative SLA edits leave persisted values unchanged in Chromium, Firefox, and WebKit.
+- Regenerated evidence at `2026-07-16T15:37:22.383Z` records all 15 storage-denial activation attempts, three empty-seed denials, three atomic output renames, and three corrupt-payload/quarantine-failure recovery flows. Every required entry has zero page and console errors.
+- Linear 1,000-node corrective results: 617.24 ms project load, 191.09 ms canvas render, all 1,000 nodes present, 2.31 ms analysis, 4.04 ms analytics, 23.50 ms version snapshot, and 31.72 ms storage save in the measured local run.
+- Final corrective rerun rendered all 1,000 nodes in 971.97 ms including project load and canvas activation; the independent 1,000-node/5,000-edge analysis completed in 53.38 ms with finite output.
+- At 6x CPU throttling: 1,186.71 ms load and 246.44 ms canvas switch. The 640 CSS-pixel zoom equivalent had zero horizontal document overflow.
+
+Durable evidence is committed under `docs/product/evidence/`:
+
+- `studio-deep-qa-browser-2026-07.json`: corrective scenario/numeric checks, complete storage-denial matrix, output rename/reload, corrupt/quarantine-failure recovery, Axe, and responsive results.
+- `studio-deep-qa-full-browser-2026-07.json`: complete cross-browser workflows, viewport matrix, accessibility, storage failure, privacy capture, and live parity.
+- `studio-deep-qa-performance-2026-07.json`: measured 50, 200, 500, and 1,000-node stress results.
+
+The dependency-neutral harness is retained at `site/qa/studio-deep-qa.mjs`. It requires an explicitly supplied, separate QA module directory and does not change product packages.
+
+## Validation
+
+Baseline before production edits:
+
+- `cd site && npm ci`: passed with the existing lockfile.
+- `npm run test:studio`: 43 passed.
+- `npm run lint`: passed.
+- `npm run build`: passed; 13 static routes generated.
+- `cd solvec && cargo fmt --check`: passed.
+- `cargo clippy -- -D warnings`: passed.
+- `cargo test`: 84 passed (15 unit, 69 CLI).
+- `cargo build --release`: passed.
+
+Corrective final validation commands:
+
+```bash
+cd site
+npm ci
+npm run test:studio
+npm run lint
+npm run build
+STUDIO_QA_NODE_MODULES=<qa-node-modules> node qa/studio-deep-qa.mjs
+
+cd ../solvec
+cargo fmt --check
+cargo clippy -- -D warnings
+cargo test
+cargo build --release
+
+cd ..
+git diff --check
+```
+
+Corrective totals: **84 Studio tests** and 84 Rust tests (15 unit and 69 CLI). The committed browser harness covers scenario integrity, numeric integrity, fail-closed activation from every entry point, initial seed failure, atomic output rename/reload, corrupt recovery with and without replacement persistence, Axe, and responsive overflow in Chromium, Firefox, and WebKit.
+Final corrective validation: `npm ci`, `npm run test:studio` (84/84), `npm run lint`, `npm run build`, `STUDIO_QA_NODE_MODULES=<separate-qa-node-modules> node qa/studio-deep-qa.mjs`, `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`, `cargo build --release`, and `git diff --check`.
+
+## Known limitations
+
+- Persistence is local to one browser profile and device, subject to browser storage capacity and clearing. Important workflows should be exported.
+- The canvas renders all nodes and is not virtualized. The measured 1,000-node workflow remained usable in automated checks, but this is not a production-scale guarantee.
+- Horizontal navigation/template/scenario rails intentionally scroll on narrow viewports; offscreen controls are not page overflow.
+- The zoom check used a 640 CSS-pixel viewport as a deterministic 200%-equivalent layout test rather than browser UI zoom automation.
+- Studio simulation remains deterministic modeling, not runtime execution or proof that an external integration will behave correctly.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { makeNode } from "../core/templates";
 import type { WorkflowDocument } from "../core/types";
 import styles from "../studio.module.css";
@@ -17,6 +17,27 @@ const questions = [
 
 export default function WorkflowWizard({ onComplete, onCancel }: { onComplete: (workflow: WorkflowDocument) => void; onCancel: () => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const dialogRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const cancelRef = useRef(onCancel);
+  useEffect(() => { cancelRef.current = onCancel; }, [onCancel]);
+
+  useEffect(() => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    dialog?.querySelector<HTMLElement>("input, button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); cancelRef.current(); return; }
+      if (event.key !== "Tab" || !dialog) return;
+      const controls = [...dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')];
+      if (!controls.length) return;
+      const first = controls[0]; const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("keydown", onKeyDown); openerRef.current?.focus(); };
+  }, []);
 
   const create = () => {
     const now = new Date().toISOString();
@@ -33,7 +54,7 @@ export default function WorkflowWizard({ onComplete, onCancel }: { onComplete: (
       makeNode("terminal-recovery", "terminal", "Manual recovery", 1080, 430, { owner, system }),
     ];
     onComplete({
-      schemaVersion: 1, id: `workflow-${Date.now()}`, name: values.output ? `${values.output} workflow` : "Described workflow",
+      schemaVersion: 1, id: `workflow-${crypto.randomUUID()}`, name: values.output ? `${values.output} workflow` : "Described workflow",
       description: `Structured from: ${values.trigger || "workflow trigger"}.`, version: "0.1.0", createdAt: now, updatedAt: now, nodes,
       edges: [
         { id: "edge-w1", source: "trigger-start", target: "decision-primary", condition: "", priority: 1, label: "evaluate", fallback: false, metadata: {} },
@@ -50,15 +71,15 @@ export default function WorkflowWizard({ onComplete, onCancel }: { onComplete: (
 
   return (
     <div className={styles.modalBackdrop} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="wizard-title">
+      <section ref={dialogRef} className={styles.modal} role="dialog" aria-modal="true" aria-labelledby="wizard-title" aria-describedby="wizard-description">
         <div className={styles.modalHeader}>
           <div><p className={styles.eyebrow}>Structured intake</p><h2 id="wizard-title">Describe workflow</h2></div>
           <button className={styles.iconButton} onClick={onCancel} aria-label="Close workflow wizard" title="Close">×</button>
         </div>
-        <p className={styles.muted}>Answer in plain language. The Studio creates a deterministic starter graph; no AI extraction is used.</p>
+        <p id="wizard-description" className={styles.muted}>Answer in plain language. The Studio creates a deterministic starter graph; no AI extraction is used.</p>
         <div className={styles.formGrid}>
           {questions.map(([key, label, placeholder]) => (
-            <label key={key} className={styles.field}><span>{label}</span><input value={values[key] ?? ""} placeholder={placeholder} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} /></label>
+            <label key={key} className={styles.field}><span>{label}</span><textarea rows={2} value={values[key] ?? ""} placeholder={placeholder} onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))} /></label>
           ))}
         </div>
         <div className={styles.modalActions}><button className={styles.secondaryButton} onClick={onCancel}>Cancel</button><button className={styles.primaryButton} onClick={create}>Create workflow graph</button></div>

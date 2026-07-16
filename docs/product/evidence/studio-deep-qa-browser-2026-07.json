@@ -1,0 +1,520 @@
+{
+  "testedAt": "2026-07-16T15:37:22.383Z",
+  "baseUrl": "http://127.0.0.1:4173",
+  "scenario": [
+    {
+      "browser": "chromium",
+      "disabled": true,
+      "helper": "Add a trigger node first.",
+      "scenarioCountBeforeReload": 0,
+      "scenarioCountAfterReload": 0,
+      "recoveryShown": false,
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "disabled": true,
+      "helper": "Add a trigger node first.",
+      "scenarioCountBeforeReload": 0,
+      "scenarioCountAfterReload": 0,
+      "recoveryShown": false,
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "disabled": true,
+      "helper": "Add a trigger node first.",
+      "scenarioCountBeforeReload": 0,
+      "scenarioCountAfterReload": 0,
+      "recoveryShown": false,
+      "errors": []
+    }
+  ],
+  "numeric": [
+    {
+      "browser": "chromium",
+      "originalPriority": "1",
+      "originalSla": "10",
+      "priorityRejected": "true",
+      "decimalSlaRejected": "true",
+      "negativeSlaRejected": "true",
+      "storedPriorityBeforeReload": 1,
+      "storedSlaBeforeReload": 10,
+      "storedPriorityAfterReload": 1,
+      "storedSlaAfterReload": 10,
+      "recoveryShown": false,
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "originalPriority": "1",
+      "originalSla": "10",
+      "priorityRejected": "true",
+      "decimalSlaRejected": "true",
+      "negativeSlaRejected": "true",
+      "storedPriorityBeforeReload": 1,
+      "storedSlaBeforeReload": 10,
+      "storedPriorityAfterReload": 1,
+      "storedSlaAfterReload": 10,
+      "recoveryShown": false,
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "originalPriority": "1",
+      "originalSla": "10",
+      "priorityRejected": "true",
+      "decimalSlaRejected": "true",
+      "negativeSlaRejected": "true",
+      "storedPriorityBeforeReload": 1,
+      "storedSlaBeforeReload": 10,
+      "storedPriorityAfterReload": 1,
+      "storedSlaAfterReload": 10,
+      "recoveryShown": false,
+      "errors": []
+    }
+  ],
+  "storageDenial": [
+    {
+      "browser": "chromium",
+      "attempts": [
+        {
+          "source": "blank",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "template",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "wizard",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": true,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "version",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "07\nVersions",
+          "viewAfter": "07\nVersions",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "import",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Import was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        }
+      ],
+      "emptySeed": {
+        "saveBlocked": true,
+        "falseSuccess": false,
+        "projectStored": false,
+        "errors": []
+      }
+    },
+    {
+      "browser": "firefox",
+      "attempts": [
+        {
+          "source": "blank",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "template",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "wizard",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": true,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "version",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "07\nVersions",
+          "viewAfter": "07\nVersions",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "import",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Import was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        }
+      ],
+      "emptySeed": {
+        "saveBlocked": true,
+        "falseSuccess": false,
+        "projectStored": false,
+        "errors": []
+      }
+    },
+    {
+      "browser": "webkit",
+      "attempts": [
+        {
+          "source": "blank",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "template",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "wizard",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": true,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "version",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "07\nVersions",
+          "viewAfter": "07\nVersions",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Project was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        },
+        {
+          "source": "import",
+          "activeNameBefore": "Support triage workspace",
+          "activeNameAfter": "Support triage workspace",
+          "activeNameAfterReload": "Support triage workspace",
+          "viewBefore": "01\nProjects",
+          "viewAfter": "01\nProjects",
+          "projectBytes": 6212,
+          "projectBytesUnchangedAfter": true,
+          "projectBytesUnchangedAfterReload": true,
+          "analyticsUnchanged": true,
+          "saveState": "0.1.0 · Save blocked",
+          "status": "Import was not opened: Browser storage is full or unavailable.\n9 nodes · 8 edges · 5 scenarios",
+          "wizardStillOpen": null,
+          "recoveryShownAfterReload": false,
+          "flowExecuted": true,
+          "falseSuccess": false,
+          "errors": []
+        }
+      ],
+      "emptySeed": {
+        "saveBlocked": true,
+        "falseSuccess": false,
+        "projectStored": false,
+        "errors": []
+      }
+    }
+  ],
+  "outputRename": [
+    {
+      "browser": "chromium",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "persistedBeforeReload": true,
+      "persistedAfterReload": true,
+      "migratedScenarios": 2,
+      "stale": false,
+      "errors": []
+    }
+  ],
+  "corruptRecoveryWithoutQuarantine": [
+    {
+      "browser": "chromium",
+      "recoveryNeededVisible": true,
+      "missingCopyWarningVisible": true,
+      "resetVisible": true,
+      "downloadVisible": false,
+      "recovered": true,
+      "corruptKeyRemoved": true,
+      "reloadRecovered": true,
+      "replacementSaveBlocked": {
+        "saveBlocked": true,
+        "truthfulMessage": true,
+        "retryVisible": true,
+        "corruptKeyRemoved": true,
+        "noRecoveryLoopAfterReload": true,
+        "errors": []
+      },
+      "errors": []
+    },
+    {
+      "browser": "firefox",
+      "recoveryNeededVisible": true,
+      "missingCopyWarningVisible": true,
+      "resetVisible": true,
+      "downloadVisible": false,
+      "recovered": true,
+      "corruptKeyRemoved": true,
+      "reloadRecovered": true,
+      "replacementSaveBlocked": {
+        "saveBlocked": true,
+        "truthfulMessage": true,
+        "retryVisible": true,
+        "corruptKeyRemoved": true,
+        "noRecoveryLoopAfterReload": true,
+        "errors": []
+      },
+      "errors": []
+    },
+    {
+      "browser": "webkit",
+      "recoveryNeededVisible": true,
+      "missingCopyWarningVisible": true,
+      "resetVisible": true,
+      "downloadVisible": false,
+      "recovered": true,
+      "corruptKeyRemoved": true,
+      "reloadRecovered": true,
+      "replacementSaveBlocked": {
+        "saveBlocked": true,
+        "truthfulMessage": true,
+        "retryVisible": true,
+        "corruptKeyRemoved": true,
+        "noRecoveryLoopAfterReload": true,
+        "errors": []
+      },
+      "errors": []
+    }
+  ],
+  "accessibilityAndResponsive": [
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "axeViolations": []
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "axeViolations": []
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "axeViolations": []
+    },
+    {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "axeViolations": []
+    }
+  ]
+}

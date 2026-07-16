@@ -73,19 +73,20 @@ export function findCycles(index: GraphIndex): string[][] {
 
 export function pathDepths(index: GraphIndex, starts: string[], limit = 200): number[] {
   const depths: number[] = [];
-  const walk = (id: string, depth: number, visitedEdges: Set<string>) => {
-    if (depth >= limit) { depths.push(depth); return; }
+  const queue = starts.filter((start) => index.nodesById.has(start)).map((id) => ({ id, depth: 1 }));
+  const maximumDepth = new Map(queue.map(({ id, depth }) => [id, depth]));
+  const stateBudget = Math.max(1, index.nodesById.size * limit);
+  for (let cursor = 0; cursor < queue.length && cursor < stateBudget; cursor += 1) {
+    const { id, depth } = queue[cursor];
     const outgoing = index.outgoing.get(id) ?? [];
-    if (!outgoing.length) { depths.push(depth); return; }
-    let advanced = false;
+    if (depth >= limit || !outgoing.length) { depths.push(depth); continue; }
     for (const edge of outgoing) {
-      if (visitedEdges.has(edge.id)) continue;
-      advanced = true;
-      const next = new Set(visitedEdges); next.add(edge.id);
-      walk(edge.target, depth + 1, next);
+      const nextDepth = depth + 1;
+      if (nextDepth <= (maximumDepth.get(edge.target) ?? 0)) continue;
+      maximumDepth.set(edge.target, nextDepth);
+      queue.push({ id: edge.target, depth: nextDepth });
     }
-    if (!advanced) depths.push(depth);
-  };
-  for (const start of starts) walk(start, 1, new Set());
+  }
+  if (queue.length > stateBudget) depths.push(limit);
   return depths.length ? depths : [0];
 }

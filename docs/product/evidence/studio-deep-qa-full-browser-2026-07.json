@@ -1,0 +1,525 @@
+{
+  "browsers": {
+    "chromium": {
+      "status": 200,
+      "persistedName": "chromium QA workflow",
+      "suggestedFilename": "chromium-qa-workflow.json",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failedRequests": [
+        "HEAD http://127.0.0.1:4173/ net::ERR_ABORTED",
+        "HEAD http://127.0.0.1:4173/run/ net::ERR_ABORTED",
+        "HEAD http://127.0.0.1:4173/ net::ERR_ABORTED",
+        "HEAD http://127.0.0.1:4173/run/ net::ERR_ABORTED"
+      ],
+      "assetRequestCount": 34,
+      "unexpectedRequests": []
+    },
+    "firefox": {
+      "status": 200,
+      "persistedName": "firefox QA workflow",
+      "suggestedFilename": "firefox-qa-workflow.json",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failedRequests": [],
+      "assetRequestCount": 36,
+      "unexpectedRequests": []
+    },
+    "webkit": {
+      "status": 200,
+      "persistedName": "webkit QA workflow",
+      "suggestedFilename": "webkit-qa-workflow.json",
+      "consoleErrors": [],
+      "pageErrors": [],
+      "failedRequests": [],
+      "assetRequestCount": 34,
+      "unexpectedRequests": []
+    }
+  },
+  "responsive": [
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Projects",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 7
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Canvas",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Rules",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Scenarios",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 6
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Trace",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Analytics",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Versions",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "view": "Export",
+      "clientWidth": 390,
+      "scrollWidth": 390,
+      "clipped": 3
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Projects",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 5
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Canvas",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Rules",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Scenarios",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 5
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Trace",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Analytics",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Versions",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 430,
+      "height": 932,
+      "view": "Export",
+      "clientWidth": 430,
+      "scrollWidth": 430,
+      "clipped": 2
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Projects",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 2
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Canvas",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Rules",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Scenarios",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 1
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Trace",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Analytics",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Versions",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 768,
+      "height": 1024,
+      "view": "Export",
+      "clientWidth": 768,
+      "scrollWidth": 768,
+      "clipped": 0
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Projects",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Canvas",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Rules",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Scenarios",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Trace",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Analytics",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Versions",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 900,
+      "height": 1024,
+      "view": "Export",
+      "clientWidth": 900,
+      "scrollWidth": 900,
+      "clipped": 2
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Projects",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Canvas",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Rules",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Scenarios",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Trace",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Analytics",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Versions",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "view": "Export",
+      "clientWidth": 1280,
+      "scrollWidth": 1280,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Projects",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Canvas",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Rules",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Scenarios",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Trace",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Analytics",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Versions",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "view": "Export",
+      "clientWidth": 1440,
+      "scrollWidth": 1440,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Projects",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Canvas",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Rules",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Scenarios",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Trace",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Analytics",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Versions",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "view": "Export",
+      "clientWidth": 1920,
+      "scrollWidth": 1920,
+      "clipped": 0
+    }
+  ],
+  "accessibility": [
+    {
+      "name": "desktop",
+      "violations": []
+    },
+    {
+      "name": "mobile-reduced-light",
+      "violations": []
+    }
+  ],
+  "storage": {
+    "corrupt": {
+      "status": "Stored project data could not be read and was quarantined: Expected property name or '}' in JSON at position 1 (line 1 column 2)Download recovery dataExport & reset corrupt data",
+      "original": "{broken",
+      "quarantine": true,
+      "errors": []
+    },
+    "denied": {
+      "status": "Browser storage is unavailable. Changes cannot be persisted in this session.9 nodes · 8 edges · 5 scenarios",
+      "errors": []
+    }
+  },
+  "live": {
+    "status": 200,
+    "title": "Workflow Intelligence Studio — SolveLang | SolveLang",
+    "heading": "Model the operation. Test the decisions. Export the evidence.",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "failedRequests": [
+      "HEAD https://www.solve-lang.com/ net::ERR_ABORTED",
+      "HEAD https://www.solve-lang.com/run/ net::ERR_ABORTED"
+    ],
+    "unexpectedRequests": [],
+    "studioAssets": 15
+  },
+  "generatedAt": "2026-07-16T06:02:32.115Z"
+}

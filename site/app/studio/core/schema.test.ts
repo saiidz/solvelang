@@ -11,6 +11,7 @@ test("all included templates satisfy the canonical workflow schema", () => {
   for (const template of workflowTemplates) {
     assert.equal(WorkflowDocumentSchema.safeParse(template.document).success, true, template.key);
   }
+  assert.equal(new Set(workflowTemplates.map((template) => template.document.nodes.map((node) => node.title).join("|"))).size, workflowTemplates.length, "templates must model distinct domain workflows");
 });
 
 test("workflow parsing rejects unsupported node types", () => {
