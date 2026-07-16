@@ -52,6 +52,33 @@ test("finds missing trigger, connections, risky code, and AI without review", ()
   assert.ok(report.severityCounts.critical >= 2);
 });
 
+test("Respond to Webhook is not treated as a workflow trigger", () => {
+  const workflow = parseN8nWorkflow({
+    name: "Response only",
+    nodes: [{ name: "Respond", type: "n8n-nodes-base.respondToWebhook" }],
+    connections: {},
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(ids.has("N8N001"));
+});
+
+test("Respond to Webhook does not satisfy external-call error handling", () => {
+  const workflow = parseN8nWorkflow({
+    name: "API without failure path",
+    nodes: [
+      { name: "Webhook", type: "n8n-nodes-base.webhook" },
+      { name: "Call API", type: "n8n-nodes-base.httpRequest" },
+      { name: "Respond", type: "n8n-nodes-base.respondToWebhook" },
+    ],
+    connections: {
+      Webhook: { main: [[{ node: "Call API" }]] },
+      "Call API": { main: [[{ node: "Respond" }]] },
+    },
+  });
+  const ids = new Set(analyzeN8nWorkflow(workflow).findings.map((finding) => finding.id));
+  assert.ok(ids.has("N8N007"));
+});
+
 test("generated HTML escapes workflow and finding text", () => {
   const workflow = parseN8nWorkflow({
     name: '<img src=x onerror="alert(1)">',
