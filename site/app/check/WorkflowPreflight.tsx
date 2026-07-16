@@ -4,7 +4,6 @@ import { ChangeEvent, DragEvent, useMemo, useState } from "react";
 import { analyzeN8nWorkflow, createHtmlReport, parseN8nWorkflow, type PreflightReport } from "./core/n8nPreflight";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
-const paymentLink = process.env.NEXT_PUBLIC_STRIPE_PREFLIGHT_PAYMENT_LINK?.trim() ?? "";
 
 function download(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
@@ -164,17 +163,12 @@ export function WorkflowPreflight() {
           <div className="mt-8 rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8">
             <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Full evidence</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Free beta evidence</p>
                 <h2 className="mt-2 text-2xl font-semibold">Download the complete automated report</h2>
-                <p className="mt-3 max-w-3xl leading-7 text-slate-700">This beta currently generates the complete deterministic report in-browser. Stripe checkout can be activated by setting <code>NEXT_PUBLIC_STRIPE_PREFLIGHT_PAYMENT_LINK</code> to the live $49 Payment Link.</p>
+                <p className="mt-3 max-w-3xl leading-7 text-slate-700">During the public beta, the complete deterministic HTML report and JSON evidence are free. Paid checkout will not be advertised until server-side payment verification and signed report entitlements are deployed.</p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
-                {paymentLink ? (
-                  <a href={paymentLink} className="rounded-xl bg-blue-700 px-5 py-3 text-center text-sm font-semibold text-white shadow-sm hover:bg-blue-800">Unlock for $49</a>
-                ) : (
-                  <span className="rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-center text-sm font-semibold text-amber-900">Checkout configuration required</span>
-                )}
-                <button type="button" onClick={() => exportReport("html")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900">Download HTML beta report</button>
+                <button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-800">Download HTML beta report</button>
                 <button type="button" onClick={() => exportReport("json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900">Download JSON evidence</button>
               </div>
             </div>
