@@ -61,6 +61,19 @@ function includesAny(value: string, terms: string[]): boolean {
   return terms.some((term) => value.includes(term));
 }
 
+function isWebhookResponseType(type: string): boolean {
+  return includesAny(type, ["respondtowebhook", "webhookresponse"]);
+}
+
+function isTriggerType(type: string): boolean {
+  if (isWebhookResponseType(type)) return false;
+  return includesAny(type, ["trigger", "webhook", "schedule", "manualtrigger"]);
+}
+
+function isErrorHandlerType(type: string): boolean {
+  return includesAny(type, ["errortrigger", "stopanderror"]);
+}
+
 function countConnections(workflow: N8nWorkflow): number {
   let count = 0;
   for (const source of Object.values(workflow.connections ?? {})) {
@@ -126,7 +139,7 @@ export function analyzeN8nWorkflow(workflow: N8nWorkflow, now = new Date()): Pre
 
   const triggerIndexes = types
     .map((type, index) => ({ type, index }))
-    .filter(({ type }) => includesAny(type, ["trigger", "webhook", "schedule", "manualtrigger"]));
+    .filter(({ type }) => isTriggerType(type));
 
   if (triggerIndexes.length === 0) {
     findings.push({
@@ -208,9 +221,9 @@ export function analyzeN8nWorkflow(workflow: N8nWorkflow, now = new Date()): Pre
 
   const httpNodes = types
     .map((type, index) => ({ type, index }))
-    .filter(({ type }) => includesAny(type, ["httprequest", "webhookresponse", "graphql"]))
+    .filter(({ type }) => includesAny(type, ["httprequest", "graphql"]))
     .map(({ index }) => names[index]);
-  const errorNodes = types.filter((type) => includesAny(type, ["errortrigger", "stopanderror", "respondtoWebhook".toLowerCase()]));
+  const errorNodes = types.filter((type) => isErrorHandlerType(type));
   if (httpNodes.length > 0 && errorNodes.length === 0) {
     findings.push({
       id: "N8N007",
