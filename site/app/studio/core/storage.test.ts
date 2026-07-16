@@ -16,6 +16,16 @@ class MemoryStorage implements Storage {
   setItem(key: string, value: string) { this.values.set(key, value); }
 }
 
+class QuarantineDeniedStorage extends MemoryStorage {
+  denyQuarantine = false;
+  override setItem(key: string, value: string) {
+    if (this.denyQuarantine && key === "solvelang.studio.quarantine.v1") {
+      throw new DOMException("quota", "QuotaExceededError");
+    }
+    super.setItem(key, value);
+  }
+}
+
 test("repository saves, loads, lists, and deletes schema-versioned projects", () => {
   const storage = new MemoryStorage();
   const repository = createProjectRepository(storage);
@@ -38,6 +48,22 @@ test("repository quarantines corrupt data without overwriting it", () => {
   assert.equal(repository.recovery()?.raw, "{broken");
   assert.equal(repository.resetCorrupt(), true);
   assert.equal(repository.loadAll().status, "ok");
+});
+
+test("failed quarantine still permits verified reset and valid replacement persistence", () => {
+  const storage = new QuarantineDeniedStorage();
+  storage.setItem("solvelang.studio.projects.v1", "{broken");
+  storage.denyQuarantine = true;
+  const repository = createProjectRepository(storage);
+  assert.equal(repository.loadAll().status, "corrupt");
+  assert.equal(repository.recovery(), null);
+  assert.equal(repository.resetCorrupt(), true);
+  assert.equal(storage.getItem("solvelang.studio.projects.v1"), null);
+  assert.equal(storage.getItem("solvelang.studio.quarantine.v1"), null);
+
+  const replacement = validSupportTriageFixture();
+  assert.equal(repository.save(replacement).status, "ok");
+  assert.deepEqual(repository.load(replacement.id).document, replacement);
 });
 
 test("version snapshots deduplicate and compare graph changes", () => {

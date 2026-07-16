@@ -90,10 +90,11 @@ async function storageDenial(browserType, name) {
     const page = await context.newPage();
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => { if (message.type() === "error") errors.push(`console: ${message.text()}`); });
     await page.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
     await page.waitForTimeout(700);
     const importDocument = await page.evaluate(() => JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]")[0]);
-    if (source === "version") await page.getByRole("button", { name: "Versions", exact: true }).first().click();
+    if (source === "version") await page.getByRole("button", { name: /Versions/ }).first().click();
     const before = {
       name: await page.getByRole("textbox", { name: "Project name" }).inputValue(),
       projects: await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1")),
@@ -139,7 +140,25 @@ async function storageDenial(browserType, name) {
       projects: await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1")),
       recoveryShown: (await page.locator('[role="status"]').innerText()).includes("Recovery needed"),
     };
-    attempts.push({ source, before, after, reloaded, errors });
+    attempts.push({
+      source,
+      activeNameBefore: before.name,
+      activeNameAfter: after.name,
+      activeNameAfterReload: reloaded.name,
+      viewBefore: before.view,
+      viewAfter: after.view,
+      projectBytes: before.projects?.length ?? 0,
+      projectBytesUnchangedAfter: before.projects === after.projects,
+      projectBytesUnchangedAfterReload: before.projects === reloaded.projects,
+      analyticsUnchanged: before.analytics === after.analytics,
+      saveState: after.saveState,
+      status: after.status,
+      wizardStillOpen: after.wizardStillOpen,
+      recoveryShownAfterReload: reloaded.recoveryShown,
+      flowExecuted: after.status.includes(source === "import" ? "Import was not opened" : "Project was not opened"),
+      falseSuccess: /created locally|saved locally|imported and saved/i.test(after.status),
+      errors,
+    });
     await context.close();
   }
 
@@ -154,7 +173,9 @@ async function storageDenial(browserType, name) {
   const seedPage = await seedContext.newPage();
   const seedErrors = [];
   seedPage.on("pageerror", (error) => seedErrors.push(error.message));
+  seedPage.on("console", (message) => { if (message.type() === "error") seedErrors.push(`console: ${message.text()}`); });
   await seedPage.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+  await seedPage.waitForTimeout(700);
   const emptySeed = {
     saveBlocked: (await seedPage.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText()).includes("Save blocked"),
     falseSuccess: (await seedPage.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText()).includes("Saved locally"),
@@ -190,6 +211,92 @@ async function outputRenameIntegrity(browserType, name) {
   return { browser: name, persistedBeforeReload: beforeReload.nodes.some((node) => node.outputs.includes("resolution_recorded")), persistedAfterReload: afterReload.nodes.some((node) => node.outputs.includes("resolution_recorded")), migratedScenarios: expected, stale, errors };
 }
 
+async function corruptRecoveryWithoutQuarantine(browserType, name) {
+  const browser = await browserType.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => {
+    if (!location.pathname.endsWith("/studio/")) return;
+    if (!sessionStorage.getItem("corrupt-seeded")) {
+      localStorage.setItem("solvelang.studio.projects.v1", "{corrupt-project-json");
+      sessionStorage.setItem("corrupt-seeded", "true");
+    }
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("solvelang.studio.quarantine.v1")) throw new DOMException("quota", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => { if (message.type() === "error") errors.push(`console: ${message.text()}`); });
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+  await page.getByText(/Recovery needed/).waitFor();
+  const initialStatus = await page.locator('[role="status"]').innerText();
+  const initialSaveState = await page.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText();
+  const reset = page.getByRole("button", { name: "Reset corrupt data" });
+  const resetVisible = await reset.isVisible().catch(() => false);
+  const downloadVisible = await page.getByRole("button", { name: "Download recovery data" }).isVisible().catch(() => false);
+  if (resetVisible) await reset.click();
+  await page.waitForTimeout(700);
+  const stored = await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1"));
+  const status = await page.locator('[role="status"]').innerText();
+  await page.reload({ waitUntil: "networkidle" });
+  const reloadStatus = await page.locator('[role="status"]').innerText();
+  const reloadedProject = await page.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1"));
+  await context.close();
+
+  const blockedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await blockedContext.addInitScript(() => {
+    if (!location.pathname.endsWith("/studio/")) return;
+    if (!sessionStorage.getItem("corrupt-seeded")) {
+      localStorage.setItem("solvelang.studio.projects.v1", "{corrupt-project-json");
+      sessionStorage.setItem("corrupt-seeded", "true");
+    }
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "solvelang.studio.projects.v1" || key.startsWith("solvelang.studio.quarantine.v1")) throw new DOMException("quota", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  const blockedPage = await blockedContext.newPage();
+  const blockedErrors = [];
+  blockedPage.on("pageerror", (error) => blockedErrors.push(error.message));
+  blockedPage.on("console", (message) => { if (message.type() === "error") blockedErrors.push(`console: ${message.text()}`); });
+  blockedPage.on("dialog", (dialog) => dialog.accept());
+  await blockedPage.goto(`${baseUrl}/studio/`, { waitUntil: "networkidle" });
+  await blockedPage.getByRole("button", { name: "Reset corrupt data" }).click();
+  await blockedPage.waitForTimeout(700);
+  const blockedStatus = await blockedPage.locator('[role="status"]').innerText();
+  const blockedSaveState = await blockedPage.getByRole("textbox", { name: "Project name" }).locator("..").locator("span").innerText();
+  const retryVisible = await blockedPage.getByRole("button", { name: "Retry workspace setup" }).isVisible();
+  const corruptKeyRemoved = await blockedPage.evaluate(() => localStorage.getItem("solvelang.studio.projects.v1") === null);
+  await blockedPage.reload({ waitUntil: "networkidle" });
+  const blockedReloadStatus = await blockedPage.locator('[role="status"]').innerText();
+  await blockedContext.close();
+  await browser.close();
+  return {
+    browser: name,
+    recoveryNeededVisible: initialSaveState.includes("Recovery needed"),
+    missingCopyWarningVisible: initialStatus.includes("could not be copied") && initialStatus.includes("full or unavailable"),
+    resetVisible,
+    downloadVisible,
+    recovered: Boolean(stored && stored.startsWith("[")) && !status.includes("Recovery needed"),
+    corruptKeyRemoved: Boolean(stored && stored.startsWith("[")),
+    reloadRecovered: Boolean(reloadedProject?.startsWith("[")) && !reloadStatus.includes("Recovery needed"),
+    replacementSaveBlocked: {
+      saveBlocked: blockedSaveState.includes("Save blocked"),
+      truthfulMessage: blockedStatus.includes("corrupt data was removed") && !/saved locally/i.test(blockedStatus),
+      retryVisible,
+      corruptKeyRemoved,
+      noRecoveryLoopAfterReload: !blockedReloadStatus.includes("Recovery needed"),
+      errors: blockedErrors,
+    },
+    errors,
+  };
+}
+
 async function accessibilityAndResponsive() {
   const browser = await chromium.launch({ headless: true });
   const results = [];
@@ -211,13 +318,15 @@ const scenario = [];
 const numeric = [];
 const storageDenialResults = [];
 const outputRenameResults = [];
+const corruptRecoveryResults = [];
 for (const [browserType, name] of browsers) {
   scenario.push(await scenarioIntegrity(browserType, name));
   numeric.push(await numericIntegrity(browserType, name));
   storageDenialResults.push(await storageDenial(browserType, name));
   outputRenameResults.push(await outputRenameIntegrity(browserType, name));
+  corruptRecoveryResults.push(await corruptRecoveryWithoutQuarantine(browserType, name));
 }
-const evidence = { testedAt: new Date().toISOString(), baseUrl, scenario, numeric, storageDenial: storageDenialResults, outputRename: outputRenameResults, accessibilityAndResponsive: await accessibilityAndResponsive() };
+const evidence = { testedAt: new Date().toISOString(), baseUrl, scenario, numeric, storageDenial: storageDenialResults, outputRename: outputRenameResults, corruptRecoveryWithoutQuarantine: corruptRecoveryResults, accessibilityAndResponsive: await accessibilityAndResponsive() };
 
 for (const result of scenario) {
   if (!result.disabled || result.helper !== "Add a trigger node first." || result.scenarioCountBeforeReload !== 0 || result.scenarioCountAfterReload !== 0 || result.recoveryShown || result.errors.length) throw new Error(`Scenario integrity failed in ${result.browser}`);
@@ -226,24 +335,32 @@ for (const result of numeric) {
   if (result.priorityRejected !== "true" || result.decimalSlaRejected !== "true" || result.negativeSlaRejected !== "true" || result.storedPriorityBeforeReload !== Number(result.originalPriority) || result.storedSlaBeforeReload !== Number(result.originalSla) || result.storedPriorityAfterReload !== Number(result.originalPriority) || result.storedSlaAfterReload !== Number(result.originalSla) || result.recoveryShown || result.errors.length) throw new Error(`Numeric integrity failed in ${result.browser}`);
 }
 for (const result of storageDenialResults) {
+  const requiredSources = ["blank", "template", "wizard", "version", "import"];
+  if (result.attempts.length !== requiredSources.length || requiredSources.some((source) => !result.attempts.some((attempt) => attempt.source === source))) throw new Error(`Storage-denial evidence incomplete in ${result.browser}`);
   for (const attempt of result.attempts) {
-    if (attempt.before.name !== attempt.after.name
-      || attempt.before.projects !== attempt.after.projects
-      || attempt.before.analytics !== attempt.after.analytics
-      || attempt.before.view !== attempt.after.view
-      || attempt.before.name !== attempt.reloaded.name
-      || attempt.before.projects !== attempt.reloaded.projects
-      || !attempt.after.saveState.includes("Save blocked")
-      || !attempt.after.status.includes("Browser storage is full or unavailable")
-      || (attempt.source === "wizard" && !attempt.after.wizardStillOpen)
-      || attempt.reloaded.recoveryShown
+    if (attempt.activeNameBefore !== attempt.activeNameAfter
+      || attempt.activeNameBefore !== attempt.activeNameAfterReload
+      || !attempt.projectBytesUnchangedAfter
+      || !attempt.projectBytesUnchangedAfterReload
+      || !attempt.analyticsUnchanged
+      || attempt.viewBefore !== attempt.viewAfter
+      || !attempt.saveState.includes("Save blocked")
+      || !attempt.status.includes("Browser storage is full or unavailable")
+      || (attempt.source === "wizard" && !attempt.wizardStillOpen)
+      || attempt.recoveryShownAfterReload
+      || !attempt.flowExecuted
+      || attempt.falseSuccess
       || attempt.errors.length) throw new Error(`Storage-denial ${attempt.source} activation failed in ${result.browser}`);
   }
-  if (!result.emptySeed.saveBlocked || result.emptySeed.falseSuccess || result.emptySeed.projectStored || result.emptySeed.errors.length) throw new Error(`Storage-denial initial seed failed in ${result.browser}`);
+  if (!result.emptySeed.saveBlocked || result.emptySeed.falseSuccess || result.emptySeed.projectStored || result.emptySeed.errors.length) throw new Error(`Storage-denial initial seed failed in ${result.browser}: ${JSON.stringify(result.emptySeed)}`);
 }
 for (const result of outputRenameResults) {
   if (!result.persistedBeforeReload || !result.persistedAfterReload || result.migratedScenarios < 1 || result.stale || result.errors.length) throw new Error(`Output rename integrity failed in ${result.browser}`);
 }
+for (const result of corruptRecoveryResults) {
+  if (!result.recoveryNeededVisible || !result.missingCopyWarningVisible || !result.resetVisible || result.downloadVisible || !result.recovered || !result.corruptKeyRemoved || !result.reloadRecovered || !result.replacementSaveBlocked.saveBlocked || !result.replacementSaveBlocked.truthfulMessage || !result.replacementSaveBlocked.retryVisible || !result.replacementSaveBlocked.corruptKeyRemoved || !result.replacementSaveBlocked.noRecoveryLoopAfterReload || result.replacementSaveBlocked.errors.length || result.errors.length) throw new Error(`Corrupt recovery without quarantine failed in ${result.browser}: ${JSON.stringify(result)}`);
+}
+if (storageDenialResults.length !== browsers.length || outputRenameResults.length !== browsers.length || corruptRecoveryResults.length !== browsers.length) throw new Error("Browser evidence is missing a required browser result.");
 for (const result of evidence.accessibilityAndResponsive) {
   if (result.clientWidth !== result.scrollWidth || result.axeViolations.length) throw new Error(`Accessibility/responsive check failed at ${result.viewport.width}px`);
 }

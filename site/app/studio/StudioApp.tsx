@@ -19,6 +19,7 @@ import { calculateWorkflowAnalytics } from "./core/analytics";
 import { downloadText, serializeWorkflow } from "./core/exports";
 import { applyWorkflowMutation, updateNodeAndReferences } from "./core/mutations";
 import { createLocalAnalytics } from "./core/productAnalytics";
+import { getRecoveryPresentation, type RecoveryStage } from "./core/recovery";
 import { parseWorkflowDocument } from "./core/schema";
 import { simulateScenario } from "./core/simulation";
 import { createArtifactRepository, createProjectRepository, persistWorkflowForActivation } from "./core/storage";
@@ -55,6 +56,7 @@ export default function StudioApp() {
   const [saveStatus, setSaveStatus] = useState("Preparing local workspace…");
   const [message, setMessage] = useState("Studio data stays in this browser.");
   const [recoveryRaw, setRecoveryRaw] = useState<string | null>(null);
+  const [recoveryStage, setRecoveryStage] = useState<RecoveryStage>("none");
   const [showWizard, setShowWizard] = useState(false);
   const [mounted, setMounted] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -65,16 +67,30 @@ export default function StudioApp() {
   const analysis = useMemo(() => analyzeWorkflow(workflow), [workflow]);
   const scenarioRuns = useMemo(() => workflow.scenarios.map((scenario) => simulateScenario(workflow, scenario)), [workflow]);
   const analytics = useMemo(() => calculateWorkflowAnalytics(workflow, scenarioRuns), [workflow, scenarioRuns]);
+  const recoveryPresentation = getRecoveryPresentation(recoveryStage, recoveryRaw !== null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (recoveryStage === "corrupt") setSaveStatus("Recovery needed");
+    if (recoveryStage === "replacement-save-blocked") setSaveStatus("Save blocked");
+  }, [recoveryStage]);
   useEffect(() => {
     if (!repository || !artifacts || !productAnalytics) return;
     productAnalytics.track("studio_opened");
     const loaded = repository.loadAll();
     if (loaded.status !== "ok") {
-      setMessage(loaded.status === "corrupt" ? `Stored project data could not be read and was quarantined: ${loaded.error}` : "Browser storage is unavailable. Changes cannot be persisted in this session.");
-      setSaveStatus(loaded.status === "corrupt" ? "Recovery needed" : "Storage unavailable");
-      if (loaded.status === "corrupt") setRecoveryRaw(repository.recovery()?.raw ?? null);
+      if (loaded.status === "corrupt") {
+        const recovery = repository.recovery();
+        setRecoveryStage("corrupt");
+        setRecoveryRaw(recovery?.raw ?? null);
+        setMessage(recovery
+          ? `Stored project data could not be read and was quarantined: ${loaded.error}`
+          : `Stored project data could not be read. ${getRecoveryPresentation("corrupt", false).warning}`);
+        setSaveStatus("Recovery needed");
+      } else {
+        setMessage("Browser storage is unavailable. Changes cannot be persisted in this session.");
+        setSaveStatus("Storage unavailable");
+      }
       return;
     }
     if (loaded.documents.length) {
@@ -92,7 +108,7 @@ export default function StudioApp() {
   }, [repository, artifacts, productAnalytics]);
 
   useEffect(() => {
-    if (!mounted || !repository || !artifacts) return;
+    if (!mounted || !repository || !artifacts || recoveryStage !== "none") return;
     setSaveStatus("Saving locally…");
     const timer = window.setTimeout(() => {
       const result = repository.save(workflow);
@@ -105,10 +121,10 @@ export default function StudioApp() {
     return () => window.clearTimeout(timer);
   // Version updates are outputs of this autosave and must not retrigger it.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workflow, traces, mounted, repository, artifacts]);
+  }, [workflow, traces, mounted, repository, artifacts, recoveryStage]);
 
   useEffect(() => {
-    if (!mounted || !repository || !artifacts) return;
+    if (!mounted || !repository || !artifacts || recoveryStage !== "none") return;
     const flushPendingChanges = () => {
       const result = repository.save(workflow);
       if (result.status !== "ok") return;
@@ -117,7 +133,7 @@ export default function StudioApp() {
     };
     window.addEventListener("pagehide", flushPendingChanges);
     return () => window.removeEventListener("pagehide", flushPendingChanges);
-  }, [workflow, traces, versions, mounted, repository, artifacts]);
+  }, [workflow, traces, versions, mounted, repository, artifacts, recoveryStage]);
 
   const replaceWorkflow = (next: WorkflowDocument, status = "Workflow updated") => {
     const result = applyWorkflowMutation(next, (draft) => draft);
@@ -164,13 +180,17 @@ export default function StudioApp() {
     setProjects(remaining); if (project.id === workflow.id) { const next = remaining[0] ?? freshCopy(createBlankWorkflow()); replaceWorkflow(next, "Project exported and deleted locally."); }
   };
   const resetCorruptStorage = () => {
-    if (!repository || !window.confirm("Delete the corrupt stored collection after downloading it?")) return;
+    if (!repository || !window.confirm(recoveryPresentation.confirmation)) return;
     if (recoveryRaw) downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain");
-    if (!repository.resetCorrupt()) { setMessage("Browser storage could not be reset."); return; }
+    if (!repository.resetCorrupt()) { setSaveStatus("Save blocked"); setMessage("Browser storage could not be reset. The recovery action remains available."); return; }
     const next = freshCopy(createSupportTriageDocument(), " workspace");
     const result = persistWorkflowForActivation(repository, next);
-    if (result.status !== "ok") { setMessage(result.error); return; }
-    setRecoveryRaw(null); setProjects([next]); setVersions([]); setTraces([]); replaceWorkflow(next, "Corrupt storage was exported and reset locally."); setSaveStatus("Saved locally");
+    if (result.status !== "ok") {
+      setRecoveryStage("replacement-save-blocked"); setRecoveryRaw(null); setSaveStatus("Save blocked");
+      setMessage(`${getRecoveryPresentation("replacement-save-blocked", false).warning} ${result.error}`); return;
+    }
+    const resetMessage = recoveryRaw ? "Corrupt storage was exported and reset locally." : "Corrupt storage was reset and a valid workspace was saved locally.";
+    setRecoveryStage("none"); setRecoveryRaw(null); setProjects([next]); setVersions([]); setTraces([]); replaceWorkflow(next, resetMessage); setSaveStatus("Saved locally");
   };
 
   const addNode = () => mutate((current) => { const index = current.nodes.length; current.nodes.push(makeNode(`node-${crypto.randomUUID()}`, "action" as NodeType, "New action", 220 + (index % 4) * 230, 120 + Math.floor(index / 4) * 150, { metadata: { errorPath: "define-exception" } })); return current; }, "node_created");
@@ -213,8 +233,8 @@ export default function StudioApp() {
       <header className={styles.topbar}><Link href="/" aria-label="SolveLang home"><Image src="/solvelang-mark-mono.svg" alt="" width={32} height={32} priority /><span className={styles.brandText}>Solve<em>Lang</em></span></Link><div className={styles.projectIdentity}><input aria-label="Project name" value={workflow.name} onChange={(event) => mutate((current) => { current.name = event.target.value; return current; })} /><span>{workflow.version} · {saveStatus}</span></div><div className={styles.topActions}><span className={styles.localBadge}>Local only</span><Link href="/run/">Script preview</Link><Link href="/">Exit Studio</Link></div></header>
       <nav className={styles.mobileTabs} aria-label="Studio views">{views.map((view) => <button key={view.id} aria-current={activeView === view.id ? "page" : undefined} onClick={() => { setActiveView(view.id); if (view.id === "analysis") productAnalytics?.track("analysis_run"); }}>{view.short}</button>)}</nav>
       <div className={styles.appBody}>
-        <aside className={styles.sidebar}><div className={styles.sideTitle}><span>Workflow Intelligence</span><strong>Studio v1</strong></div><nav aria-label="Studio navigation">{views.map((view, index) => <button key={view.id} className={activeView === view.id ? styles.navActive : ""} onClick={() => { setActiveView(view.id); if (view.id === "analysis") productAnalytics?.track("analysis_run"); }}><span>{String(index + 1).padStart(2, "0")}</span>{view.label}{view.id === "analysis" ? <em>{analysis.findings.filter((item) => !item.suppressed).length}</em> : null}</button>)}</nav><div className={styles.privacyRail}><strong>Private by architecture</strong><p>Projects, traces, versions, and usage counters stay in browser storage.</p></div></aside>
-        <main id="studio-main" className={styles.main} tabIndex={-1}><div className={styles.statusBar} role="status" aria-live="polite"><span>{message}</span>{recoveryRaw ? <span className={styles.recoveryActions}><button onClick={() => downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain")}>Download recovery data</button><button onClick={resetCorruptStorage}>Export & reset corrupt data</button></span> : <strong>{workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.scenarios.length} scenarios</strong>}</div>{activeContent}</main>
+        <aside className={styles.sidebar}><div className={styles.sideTitle}><span>Workflow Intelligence</span><strong>Studio v1</strong></div><nav aria-label="Studio navigation">{views.map((view, index) => <button key={view.id} className={activeView === view.id ? styles.navActive : ""} aria-current={activeView === view.id ? "page" : undefined} onClick={() => { setActiveView(view.id); if (view.id === "analysis") productAnalytics?.track("analysis_run"); }}><span>{String(index + 1).padStart(2, "0")}</span>{view.label}{view.id === "analysis" ? <em>{analysis.findings.filter((item) => !item.suppressed).length}</em> : null}</button>)}</nav><div className={styles.privacyRail}><strong>Private by architecture</strong><p>Projects, traces, versions, and usage counters stay in browser storage.</p></div></aside>
+        <main id="studio-main" className={styles.main} tabIndex={-1}><div className={styles.statusBar} role="status" aria-live="polite"><span>{message}</span>{recoveryStage !== "none" ? <span className={styles.recoveryActions}>{recoveryPresentation.showDownload ? <button onClick={() => recoveryRaw && downloadText("solvelang-studio-recovery.txt", recoveryRaw, "text/plain")}>Download recovery data</button> : null}<button onClick={resetCorruptStorage}>{recoveryPresentation.resetLabel}</button></span> : <strong>{workflow.nodes.length} nodes · {workflow.edges.length} edges · {workflow.scenarios.length} scenarios</strong>}</div>{activeContent}</main>
       </div>
       <input ref={fileInput} className={styles.hiddenInput} type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importFile(file); event.currentTarget.value = ""; }} />
       {showWizard ? <WorkflowWizard onCancel={() => setShowWizard(false)} onComplete={(next) => { if (createProject(next, "Structured workflow")) setShowWizard(false); }} /> : null}

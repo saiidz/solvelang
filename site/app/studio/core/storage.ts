@@ -46,7 +46,13 @@ export function createProjectRepository(storage: Storage) {
         return typeof parsed.raw === "string" ? { capturedAt: typeof parsed.capturedAt === "string" ? parsed.capturedAt : "", raw: parsed.raw } : null;
       } catch { return null; }
     },
-    resetCorrupt() { try { storage.removeItem(PROJECT_KEY); storage.removeItem(QUARANTINE_KEY); return true; } catch { return false; } },
+    resetCorrupt() {
+      try {
+        storage.removeItem(PROJECT_KEY);
+        storage.removeItem(QUARANTINE_KEY);
+        return storage.getItem(PROJECT_KEY) === null && storage.getItem(QUARANTINE_KEY) === null;
+      } catch { return false; }
+    },
     list() { const result = loadAll(); return result.status === "ok" ? result.documents : []; },
     load(id: string) { const result = loadAll(); return { status: result.status, document: result.status === "ok" ? result.documents.find((item) => item.id === id) ?? null : null, ...("error" in result ? { error: result.error } : {}) }; },
     save(document: WorkflowDocument) {
