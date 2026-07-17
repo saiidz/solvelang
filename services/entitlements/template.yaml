@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang Stripe checkout and signed entitlement service
+
+Parameters:
+  SiteOrigin:
+    Type: String
+    Default: https://www.solve-lang.com
+  StripeSecretKey:
+    Type: String
+    NoEcho: true
+  StripeWebhookSecret:
+    Type: String
+    NoEcho: true
+  StripePriceId:
+    Type: String
+  EntitlementSigningSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+
+Resources:
+  EntitlementsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: scanId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: scanId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  EntitlementApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref SiteOrigin
+        AllowMethods:
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - content-type
+          - authorization
+          - stripe-signature
+
+  EntitlementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: dist/src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          SITE_ORIGIN: !Ref SiteOrigin
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
+          STRIPE_PRICE_ID: !Ref StripePriceId
+          ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret
+          ENTITLEMENTS_TABLE: !Ref EntitlementsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref EntitlementsTable
+      Events:
+        Checkout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /checkout
+            Method: POST
+        Webhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /webhook
+            Method: POST
+        Entitlement:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /entitlement
+            Method: POST
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  ApiBaseUrl:
+    Value: !Sub https://${EntitlementApi}.execute-api.${AWS::Region}.amazonaws.com
+  WebhookUrl:
+    Value: !Sub https://${EntitlementApi}.execute-api.${AWS::Region}.amazonaws.com/webhook
