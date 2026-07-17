@@ -1,0 +1,69 @@
+name: Deploy Entitlements
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub environment containing protected secrets
+        required: true
+        default: entitlement-test
+        type: choice
+        options:
+          - entitlement-test
+          - entitlement-production
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/entitlements
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - run: sam validate --lint --template template.yaml
+      - run: sam build --template template.yaml
+      - name: Deploy stack
+        env:
+          SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_ID: ${{ vars.STRIPE_PRICE_ID }}
+          ENTITLEMENT_SIGNING_SECRET: ${{ secrets.ENTITLEMENT_SIGNING_SECRET }}
+          STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
+        run: |
+          test -n "$SITE_ORIGIN"
+          test -n "$STRIPE_SECRET_KEY"
+          test -n "$STRIPE_WEBHOOK_SECRET"
+          test -n "$STRIPE_PRICE_ID"
+          test -n "$ENTITLEMENT_SIGNING_SECRET"
+          test -n "$STACK_NAME"
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              SiteOrigin="$SITE_ORIGIN" \
+              StripeSecretKey="$STRIPE_SECRET_KEY" \
+              StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
+              StripePriceId="$STRIPE_PRICE_ID" \
+              EntitlementSigningSecret="$ENTITLEMENT_SIGNING_SECRET"
+      - name: Print non-secret outputs
+        env:
+          STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
+        run: aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs' --output table
