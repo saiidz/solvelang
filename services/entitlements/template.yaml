@@ -47,11 +47,12 @@ Resources:
           - OPTIONS
         AllowHeaders:
           - content-type
-          - authorization
           - stripe-signature
 
   EntitlementFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       Runtime: nodejs22.x
       Handler: dist/src/handler.handler
@@ -90,8 +91,12 @@ Resources:
             ApiId: !Ref EntitlementApi
             Path: /entitlement
             Method: POST
-    Metadata:
-      BuildMethod: makefile
+        Events:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /events
+            Method: POST
 
 Outputs:
   ApiBaseUrl:
