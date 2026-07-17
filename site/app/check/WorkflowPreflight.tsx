@@ -42,39 +42,44 @@ export function WorkflowPreflight() {
 
   useEffect(() => {
     recordEvent("check_page_view");
-    const params = new URLSearchParams(window.location.search);
-    const returnedScanId = params.get("scan_id");
-    const sessionId = params.get("session_id");
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (!returnedScanId || !sessionId || !stored || !apiBase) return;
+    let cancelled = false;
 
-    try {
-      const pending = JSON.parse(stored) as PendingScan;
-      if (pending.scanId !== returnedScanId) throw new Error("The returned checkout does not match this scan.");
-      setReport(pending.report);
-      setScanId(pending.scanId);
-      setFileName(pending.fileName);
-      setBusy(true);
-      void fetch(`${apiBase}/entitlement`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scanId: returnedScanId, sessionId }),
-      })
-        .then(async (response) => {
-          if (!response.ok) throw new Error("Payment could not be verified.");
-          return response.json() as Promise<{ token: string }>;
-        })
-        .then(({ token }) => {
-          setEntitlement(token);
-          sessionStorage.removeItem(STORAGE_KEY);
-          window.history.replaceState({}, "", "/check/");
-          recordEvent("payment_completed");
-        })
-        .catch((caught) => setError(caught instanceof Error ? caught.message : "Payment verification failed."))
-        .finally(() => setBusy(false));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Checkout recovery failed.");
+    async function restorePaidScan() {
+      const params = new URLSearchParams(window.location.search);
+      const returnedScanId = params.get("scan_id");
+      const sessionId = params.get("session_id");
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (!returnedScanId || !sessionId || !stored || !apiBase) return;
+
+      try {
+        const pending = JSON.parse(stored) as PendingScan;
+        if (pending.scanId !== returnedScanId) throw new Error("The returned checkout does not match this scan.");
+
+        const response = await fetch(`${apiBase}/entitlement`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ scanId: returnedScanId, sessionId }),
+        });
+        if (!response.ok) throw new Error("Payment could not be verified.");
+        const { token } = (await response.json()) as { token: string };
+        if (cancelled) return;
+
+        setReport(pending.report);
+        setScanId(pending.scanId);
+        setFileName(pending.fileName);
+        setEntitlement(token);
+        sessionStorage.removeItem(STORAGE_KEY);
+        window.history.replaceState({}, "", "/check/");
+        recordEvent("payment_completed");
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "Payment verification failed.");
+      }
     }
+
+    void restorePaidScan();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function scanFile(file: File) {
