@@ -52,10 +52,17 @@ Resources:
   EntitlementFunction:
     Type: AWS::Serverless::Function
     Metadata:
-      BuildMethod: makefile
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/handler.ts
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        Format: esm
     Properties:
       Runtime: nodejs22.x
-      Handler: dist/src/handler.handler
+      Handler: src/handler.handler
       CodeUri: .
       MemorySize: 256
       Timeout: 15
