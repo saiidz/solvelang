@@ -28,6 +28,8 @@ jobs:
           cache: npm
           cache-dependency-path: services/entitlements/package.json
       - run: npm install
+      - name: Add local build tools to PATH
+        run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm test
       - uses: aws-actions/setup-sam@v2
       - run: sam validate --lint --template template.yaml
