@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { analyzeN8nText } from "../src/n8n.js";
+import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "../src/n8n.js";
 import { readWorkspaceText, resolveWorkspacePath } from "../src/workspace.js";
 
 test("finds missing trigger and missing error path", () => {
@@ -15,6 +15,9 @@ test("finds missing trigger and missing error path", () => {
   const ids = new Set(report.findings.map((finding) => finding.id));
   assert.ok(ids.has("N8N001"));
   assert.ok(ids.has("N8N007"));
+  assert.equal(report.pass, false);
+  assert.equal(report.schema, "solvelang.mcp.n8n-preflight.v2");
+  assert.equal(report.severityCounts.critical, 1);
 });
 
 test("disabled safeguards do not satisfy required gates", () => {
@@ -30,6 +33,42 @@ test("disabled safeguards do not satisfy required gates", () => {
   assert.ok(ids.has("N8N001"));
   assert.ok(ids.has("N8N006"));
   assert.ok(ids.has("N8N004"));
+});
+
+test("raw JSON analysis is deterministic and contains evidence", () => {
+  const raw = JSON.stringify({
+    name: "Deterministic",
+    nodes: [
+      { name: "Webhook", type: "n8n-nodes-base.webhook" },
+      { name: "Code", type: "n8n-nodes-base.code" },
+    ],
+    connections: {},
+  });
+  const first = analyzeN8nText(raw);
+  const second = analyzeN8nText(raw);
+  assert.deepEqual(first, second);
+  assert.ok(first.findings.every((finding) => finding.evidence.length > 0));
+  assert.deepEqual(first.findings.map((finding) => finding.id), [...first.findings.map((finding) => finding.id)].sort());
+});
+
+test("malformed raw JSON is rejected without echoing input", () => {
+  const secret = "super-secret-value";
+  assert.throws(() => analyzeN8nText(`{\"nodes\":[${secret}]`), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal(error.message, "The workflow is not valid JSON.");
+    assert.doesNotMatch(error.message, /super-secret-value/);
+    return true;
+  });
+});
+
+test("oversized raw JSON is rejected before parsing", () => {
+  const oversized = "x".repeat(MAX_N8N_BYTES + 1);
+  assert.throws(() => analyzeN8nText(oversized), /2 MB safety limit/);
+});
+
+test("node count is bounded", () => {
+  const nodes = Array.from({ length: MAX_N8N_NODES + 1 }, () => ({}));
+  assert.throws(() => analyzeN8nText(JSON.stringify({ nodes })), /5,000-node safety limit/);
 });
 
 test("workspace paths cannot escape the configured root", async () => {

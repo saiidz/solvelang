@@ -4,11 +4,39 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { analyzeN8nText } from "./n8n.js";
+import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { readWorkspaceText, resolveWorkspacePath, workspaceRoot } from "./workspace.js";
 
 function textResult(value: unknown) {
   return { content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] };
+}
+
+const n8nInputFields = {
+  path: z.string().min(1).optional().describe("Workspace-relative path to an n8n JSON export"),
+  rawJson: z.string().min(1).optional().describe("Raw n8n workflow JSON processed only in memory"),
+};
+
+function requireExactlyOneInput<T extends { path?: string; rawJson?: string }>(value: T, context: z.RefinementCtx) {
+  if (Boolean(value.path) === Boolean(value.rawJson)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Provide exactly one of path or rawJson." });
+  }
+}
+
+const n8nInputSchema = z.object(n8nInputFields).superRefine(requireExactlyOneInput);
+const n8nReportInputSchema = z.object({
+  ...n8nInputFields,
+  format: z.enum(["markdown", "json"]).default("markdown"),
+}).superRefine(requireExactlyOneInput);
+
+type N8nInput = z.infer<typeof n8nInputSchema>;
+
+async function readN8nInput(input: N8nInput): Promise<string> {
+  if (input.rawJson !== undefined) {
+    if (Buffer.byteLength(input.rawJson, "utf8") > MAX_N8N_BYTES) throw new Error("The workflow exceeds the 2 MB safety limit.");
+    return input.rawJson;
+  }
+  const { text } = await readWorkspaceText(input.path!);
+  return text;
 }
 
 async function runSolvec(filePath: string): Promise<{ ok: boolean; output: string }> {
@@ -41,7 +69,7 @@ async function runSolvec(filePath: string): Promise<{ ok: boolean; output: strin
 const server = new McpServer(
   { name: "solvelang", version: "0.1.0" },
   {
-    instructions: "Use SolveLang tools for deterministic workflow validation. All v1 tools are read-only, workspace-confined, bounded to 2 MB files, and never execute uploaded workflows.",
+    instructions: "Use SolveLang tools for deterministic workflow validation. Tools are read-only, bounded to 2 MB and 5,000 n8n nodes, never execute workflows, and process raw JSON only in memory.",
   },
 );
 
@@ -49,14 +77,11 @@ server.registerTool(
   "solvelang_analyze_n8n",
   {
     title: "Analyze n8n workflow",
-    description: "Read an n8n JSON export inside the configured workspace and return deterministic structural findings. The workflow is never executed.",
-    inputSchema: z.object({ path: z.string().min(1).describe("Workspace-relative path to an n8n JSON export") }),
+    description: "Analyze either a workspace-relative n8n JSON export or raw JSON supplied directly. Raw JSON is processed only in memory and is never written or sent over the network.",
+    inputSchema: n8nInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ path: inputPath }) => {
-    const { text } = await readWorkspaceText(inputPath);
-    return textResult(analyzeN8nText(text));
-  },
+  async (input) => textResult(analyzeN8nText(await readN8nInput(input))),
 );
 
 server.registerTool(
@@ -79,19 +104,15 @@ server.registerTool(
   "solvelang_generate_n8n_report",
   {
     title: "Generate n8n report",
-    description: "Generate a deterministic Markdown or JSON preflight report for an n8n workflow without writing files.",
-    inputSchema: z.object({
-      path: z.string().min(1),
-      format: z.enum(["markdown", "json"]).default("markdown"),
-    }),
+    description: "Generate a deterministic Markdown or CI-friendly JSON preflight report from a workspace file or raw in-memory JSON without writing files.",
+    inputSchema: n8nReportInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ path: inputPath, format }) => {
-    const { text } = await readWorkspaceText(inputPath);
-    const report = analyzeN8nText(text);
-    if (format === "json") return textResult(report);
-    const findings = report.findings.map((finding) => `## ${finding.severity.toUpperCase()} — ${finding.title}\n\n${finding.detail}\n\n**Recommendation:** ${finding.recommendation}${finding.nodes?.length ? `\n\n**Nodes:** ${finding.nodes.join(", ")}` : ""}`).join("\n\n");
-    return textResult(`# SolveLang Workflow Preflight\n\n**Workflow:** ${report.workflowName}\n\n**Score:** ${report.score}/100\n\n**Nodes:** ${report.nodeCount}\n\n**Connections:** ${report.connectionCount}\n\n${findings}\n\n---\nDeterministic structural analysis only. The workflow was not executed.`);
+  async (input) => {
+    const report = analyzeN8nText(await readN8nInput(input));
+    if (input.format === "json") return textResult(report);
+    const findings = report.findings.map((finding) => `## ${finding.severity.toUpperCase()} — ${finding.title}\n\n${finding.detail}\n\n**Evidence:** ${finding.evidence}\n\n**Recommendation:** ${finding.recommendation}${finding.nodes?.length ? `\n\n**Nodes:** ${finding.nodes.join(", ")}` : ""}`).join("\n\n");
+    return textResult(`# SolveLang Workflow Preflight\n\n**Workflow:** ${report.workflowName}\n\n**Result:** ${report.pass ? "PASS" : "FAIL"}\n\n**Score:** ${report.score}/100\n\n**Nodes:** ${report.nodeCount}\n\n**Connections:** ${report.connectionCount}\n\n${findings}\n\n---\nDeterministic structural analysis only. The workflow was not executed.`);
   },
 );
 
@@ -99,15 +120,16 @@ server.registerTool(
   "solvelang_capabilities",
   {
     title: "List SolveLang capabilities",
-    description: "Describe available checks, privacy boundaries, file limits, and required local dependencies.",
+    description: "Describe available checks, privacy boundaries, input modes, limits, and required local dependencies.",
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async () => textResult({
     workspaceRoot: workspaceRoot(),
-    limits: { maxFileBytes: 2 * 1024 * 1024, maxN8nNodes: 5000 },
+    limits: { maxFileBytes: MAX_N8N_BYTES, maxN8nNodes: MAX_N8N_NODES },
+    n8nInputModes: ["workspace-relative path", "raw JSON processed only in memory"],
     tools: ["solvelang_analyze_n8n", "solvelang_validate_solve", "solvelang_generate_n8n_report", "solvelang_capabilities"],
-    privacy: ["No workflow execution", "No network calls", "No credential-value inspection", "No file writes", "Paths cannot escape the configured workspace"],
+    privacy: ["No workflow execution", "No network calls", "No credential-value inspection", "No file writes", "Raw JSON is not logged or persisted", "Paths cannot escape the configured workspace"],
   }),
 );
 
