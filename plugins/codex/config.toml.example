@@ -1,6 +1,6 @@
 [mcp_servers.solvelang]
 command = "node"
-args = ["/absolute/path/to/solvelang/packages/mcp-server/dist/index.js"]
+args = ["/absolute/path/to/solvelang/packages/mcp-server/dist/src/index.js"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
