@@ -33,7 +33,9 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - uses: aws-actions/setup-sam@v2
-      - run: npm install --ignore-scripts
+      - run: npm install
+      - name: Add local build tools to PATH
+        run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm test
       - run: sam validate --lint --template template.yaml
       - run: sam build --template template.yaml
