@@ -11,14 +11,22 @@ function textResult(value: unknown) {
   return { content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] };
 }
 
-const n8nInputSchema = z.object({
+const n8nInputFields = {
   path: z.string().min(1).optional().describe("Workspace-relative path to an n8n JSON export"),
   rawJson: z.string().min(1).optional().describe("Raw n8n workflow JSON processed only in memory"),
-}).superRefine((value, context) => {
+};
+
+function requireExactlyOneInput<T extends { path?: string; rawJson?: string }>(value: T, context: z.RefinementCtx) {
   if (Boolean(value.path) === Boolean(value.rawJson)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Provide exactly one of path or rawJson." });
   }
-});
+}
+
+const n8nInputSchema = z.object(n8nInputFields).superRefine(requireExactlyOneInput);
+const n8nReportInputSchema = z.object({
+  ...n8nInputFields,
+  format: z.enum(["markdown", "json"]).default("markdown"),
+}).superRefine(requireExactlyOneInput);
 
 type N8nInput = z.infer<typeof n8nInputSchema>;
 
@@ -97,7 +105,7 @@ server.registerTool(
   {
     title: "Generate n8n report",
     description: "Generate a deterministic Markdown or CI-friendly JSON preflight report from a workspace file or raw in-memory JSON without writing files.",
-    inputSchema: n8nInputSchema.extend({ format: z.enum(["markdown", "json"]).default("markdown") }),
+    inputSchema: n8nReportInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async (input) => {
