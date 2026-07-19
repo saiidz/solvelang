@@ -1,6 +1,6 @@
 {
   "name": "@solvelang/mcp-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first, read-only MCP server for deterministic SolveLang and n8n workflow validation",
   "private": false,
   "type": "module",

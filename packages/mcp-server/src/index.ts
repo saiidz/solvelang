@@ -67,7 +67,7 @@ async function runSolvec(filePath: string): Promise<{ ok: boolean; output: strin
 }
 
 const server = new McpServer(
-  { name: "solvelang", version: "0.1.0" },
+  { name: "solvelang", version: "0.2.0" },
   {
     instructions: "Use SolveLang tools for deterministic workflow validation. Tools are read-only, bounded to 2 MB and 5,000 n8n nodes, never execute workflows, and process raw JSON only in memory.",
   },
