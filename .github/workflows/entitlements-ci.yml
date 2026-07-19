@@ -27,7 +27,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: services/entitlements/package.json
-      - run: npm install --ignore-scripts
+      - run: npm install
       - run: npm test
       - uses: aws-actions/setup-sam@v2
       - run: sam validate --lint --template template.yaml
