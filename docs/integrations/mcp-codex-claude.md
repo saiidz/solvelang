@@ -67,6 +67,6 @@ npm run test:packed
 
 `test:packed` builds an npm tarball, checks its exact allowlist, installs it into a clean temporary consumer, and starts the installed `solvelang-mcp` executable with `npx --no-install`. It does not publish the tarball or execute a workflow.
 
-## Release prerequisite
+## Releases
 
-As of July 19, 2026, the public registry returned `E404` for `@solvelang/mcp-server` and this development machine had no authenticated npm session, so ownership of `@solvelang` was not verified. Publishing remains disabled through the `NPM_SCOPE_OWNERSHIP_VERIFIED` repository-variable gate. Before any GitHub Release is created, follow the ownership, protected-environment, trusted-publishing, and optional bootstrap-token checklist in `packages/mcp-server/README.md`.
+`@solvelang/mcp-server@0.1.0` is live on the public npm registry. Trusted Publishing through `.github/workflows/npm-release.yml` is the required release path; releases retain the protected `npm-production` environment, repository-variable gate, version checks, tests, and packed-install verification without an npm access token.

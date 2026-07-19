@@ -51,13 +51,8 @@ SOLVELANG_SOLVEC=/absolute/path/to/solvec node dist/src/index.js
 
 Use the templates under `plugins/codex` and `plugins/claude` to connect supported clients.
 
-## Publishing readiness
+## Releases
 
-The package is configured for public access, but publishing remains disabled until all release prerequisites are completed:
+`@solvelang/mcp-server@0.1.0` is publicly available on npm.
 
-1. Authenticate to npm and verify control of the `@solvelang` scope. An anonymous registry lookup returning `E404` proves only that no public package is visible; it does not prove scope ownership.
-2. Create the protected GitHub environment `npm-production`, require a reviewer, prevent self-review, and disable administrator bypass where the repository plan supports it.
-3. Configure npm trusted publishing for the `saiidz/solvelang` repository and `.github/workflows/npm-release.yml`. For an initial package bootstrap that cannot use trusted publishing, add a short-lived granular `NPM_TOKEN` only to the protected environment, then remove it after trusted publishing is configured.
-4. Set the repository variable `NPM_SCOPE_OWNERSHIP_VERIFIED` to `true` only after the authenticated ownership check succeeds.
-
-The workflow runs only for a published GitHub Release, checks that its `v<version>` tag matches this manifest, reruns the unit and packed-install tests, and enters the protected environment before `npm publish`. Do not create a release until the prerequisites above are complete.
+Trusted Publishing is the required release path. The release workflow runs only for a published GitHub Release, requires the protected `npm-production` environment and `NPM_SCOPE_OWNERSHIP_VERIFIED=true`, checks that the `v<version>` tag matches this manifest, reruns the unit and packed-install tests, and publishes with npm's GitHub Actions identity. Do not add an npm access token or create a tag or release outside the approved release process.
