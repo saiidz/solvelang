@@ -34,4 +34,4 @@ jobs:
       - run: npm install
       - run: npm test
       - name: Verify stdio entrypoint
-        run: test -f dist/index.js && head -n 1 dist/index.js
+        run: test -f dist/src/index.js && head -n 1 dist/src/index.js
