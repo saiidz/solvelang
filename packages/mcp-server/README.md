@@ -28,13 +28,13 @@ npm test
 ## Run
 
 ```bash
-SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project node dist/index.js
+SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project node dist/src/index.js
 ```
 
 For `.solve` validation, build `solvec` or provide its path:
 
 ```bash
-SOLVELANG_SOLVEC=/absolute/path/to/solvec node dist/index.js
+SOLVELANG_SOLVEC=/absolute/path/to/solvec node dist/src/index.js
 ```
 
 Use the templates under `plugins/codex` and `plugins/claude` to connect supported clients.
