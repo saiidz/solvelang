@@ -1,14 +1,45 @@
 {
   "name": "@solvelang/mcp-server",
   "version": "0.1.0",
-  "private": true,
+  "description": "Local-first, read-only MCP server for deterministic SolveLang and n8n workflow validation",
+  "private": false,
   "type": "module",
+  "license": "MIT",
+  "author": "SolveLang",
+  "homepage": "https://solve-lang.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/saiidz/solvelang.git",
+    "directory": "packages/mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/saiidz/solvelang/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "solvelang",
+    "n8n",
+    "workflow",
+    "validation"
+  ],
   "bin": {
     "solvelang-mcp": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src/*.js",
+    "dist/src/*.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/test/*.test.js",
+    "test:packed": "node scripts/smoke-packed.mjs",
+    "prepack": "npm run build && node scripts/prepare-pack.mjs",
     "start": "node dist/src/index.js"
   },
   "dependencies": {
