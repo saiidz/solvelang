@@ -1,0 +1,37 @@
+name: MCP CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'packages/mcp-server/**'
+      - 'plugins/codex/**'
+      - 'plugins/claude/**'
+      - '.github/workflows/mcp-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/mcp-server/**'
+      - 'plugins/codex/**'
+      - 'plugins/claude/**'
+      - '.github/workflows/mcp-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/mcp-server/package.json
+      - run: npm install
+      - run: npm test
+      - name: Verify stdio entrypoint
+        run: test -f dist/src/index.js && head -n 1 dist/src/index.js

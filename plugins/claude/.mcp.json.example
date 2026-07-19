@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "solvelang": {
+      "command": "node",
+      "args": ["/absolute/path/to/solvelang/packages/mcp-server/dist/src/index.js"],
+      "env": {
+        "SOLVELANG_WORKSPACE_ROOT": "/absolute/path/to/workspace",
+        "SOLVELANG_SOLVEC": "/absolute/path/to/solvec"
+      }
+    }
+  }
+}
