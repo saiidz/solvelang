@@ -49,6 +49,4 @@ jobs:
         run: npm run test:packed
 
       - name: Publish public package
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
