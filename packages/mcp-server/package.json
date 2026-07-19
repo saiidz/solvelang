@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "bin": {
-    "solvelang-mcp": "dist/index.js"
+    "solvelang-mcp": "dist/src/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/test/*.test.js",
-    "start": "node dist/index.js"
+    "start": "node dist/src/index.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
