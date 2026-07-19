@@ -40,6 +40,8 @@ export function WorkflowPreflight() {
   const unlocked = !paidMode || Boolean(entitlement);
   const previewFindings = useMemo(() => report?.findings.slice(0, 3) ?? [], [report]);
 
+  // This effect restores state only after an asynchronous, server-verified Stripe entitlement check.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     recordEvent("check_page_view");
     let cancelled = false;
@@ -81,6 +83,7 @@ export function WorkflowPreflight() {
       cancelled = true;
     };
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function scanFile(file: File) {
     setBusy(true);
