@@ -1,7 +1,8 @@
 [mcp_servers.solvelang]
-command = "node"
-args = ["/absolute/path/to/solvelang/packages/mcp-server/dist/src/index.js"]
+command = "npx"
+args = ["--yes", "@solvelang/mcp-server"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
-SOLVELANG_SOLVEC = "/absolute/path/to/solvec"
+# Optional, needed only for solvelang_validate_solve:
+# SOLVELANG_SOLVEC = "/absolute/path/to/solvec"

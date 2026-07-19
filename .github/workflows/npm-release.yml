@@ -1,0 +1,54 @@
+name: Publish MCP package
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-mcp-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ vars.NPM_SCOPE_OWNERSHIP_VERIFIED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: npm-production
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - name: Checkout the released commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node for npm trusted publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+
+      - name: Run MCP tests
+        run: npm test
+
+      - name: Verify packed consumer install and npx entrypoint
+        run: npm run test:packed
+
+      - name: Publish public package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public

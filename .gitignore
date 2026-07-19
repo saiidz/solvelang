@@ -8,6 +8,10 @@ site/.studio-test-dist/
 site/.env.local
 site/.env*.local
 
+# MCP package build output
+packages/mcp-server/node_modules/
+packages/mcp-server/dist/
+
 # Rust build output
 /target/
 /solvec/target/

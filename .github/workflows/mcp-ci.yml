@@ -30,8 +30,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: packages/mcp-server/package.json
-      - run: npm install
+          cache-dependency-path: packages/mcp-server/package-lock.json
+      - run: npm ci
       - run: npm test
-      - name: Verify stdio entrypoint
-        run: test -f dist/src/index.js && head -n 1 dist/src/index.js
+      - name: Verify packed consumer install and npx entrypoint
+        run: npm run test:packed
