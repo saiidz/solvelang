@@ -18,6 +18,11 @@ const repository = {
     publicPublish: true,
     tokenSecret: false,
   },
+  entitlement: {
+    healthRoute: true,
+    privacySafe: true,
+    testModeE2eHarness: true,
+  },
 };
 
 const validEnvironment = {
@@ -104,6 +109,29 @@ test("release workflow must use OIDC and retain every guarded publish step", () 
 
   const workflow = report.controls.find((control) => control.id === "npm-trusted-publishing");
   assert.equal(workflow?.status, "fail");
+});
+
+test("missing health, privacy, and Stripe E2E safeguards are hard failures", () => {
+  const report = evaluateLaunch({
+    environment: validEnvironment,
+    repository: {
+      ...repository,
+      entitlement: { healthRoute: false, privacySafe: false, testModeE2eHarness: false },
+    },
+    probes: {
+      entitlementHealth: { ok: true, mode: "test" },
+      site: { ok: true },
+      webhook: { ok: true },
+      aws: { ok: true },
+      stripe: { ok: true, mode: "test" },
+    },
+    now: "2026-07-19T18:00:00.000Z",
+  });
+
+  assert.equal(report.ready, false);
+  for (const id of ["entitlement-health-contract", "workflow-data-privacy", "stripe-test-e2e-harness"]) {
+    assert.equal(report.controls.find((item) => item.id === id)?.status, "fail");
+  }
 });
 
 test("JSON and Markdown evidence contain provenance but never environment values", () => {

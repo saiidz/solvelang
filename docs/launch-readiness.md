@@ -47,6 +47,9 @@ The control center verifies:
 - MCP manifest, lockfile, release tag, and public npm version consistency;
 - npm Trusted Publishing guards, including OIDC and the protected `npm-production` environment;
 - clean Git provenance;
+- a safe entitlement health route in both the handler and infrastructure template;
+- static privacy contracts that keep workflow/report payloads out of network requests and server error logs;
+- deterministic Stripe test-mode lifecycle coverage, including replay, expiry, signature rejection, and browser recovery;
 - the AWS stack, active Stripe test Price, registered test webhook, entitlement health endpoint, and public site when `--online` is used.
 
 No account-level prerequisite is guessed or bypassed. A missing release tag, unpublished package version, undeployed stack, unavailable health endpoint, or unverified webhook remains a visible blocker.
