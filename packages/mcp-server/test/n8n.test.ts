@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "../src/n8n.js";
 import { readWorkspaceText, resolveWorkspacePath } from "../src/workspace.js";
+
+type ParityCase = { name: string; workflow: unknown; expectedIds: string[]; score: number };
+type InvalidParityCase = { name: string; workflow: unknown };
 
 test("finds missing trigger and missing error path", () => {
   const report = analyzeN8nText(JSON.stringify({
@@ -78,4 +81,18 @@ test("workspace paths cannot escape the configured root", async () => {
   await writeFile(path.join(root, "workflow.json"), JSON.stringify({ nodes: [{}] }));
   const result = await readWorkspaceText("workflow.json");
   assert.match(result.text, /nodes/);
+});
+
+test("MCP preflight matches the shared parity fixtures", async () => {
+  const cases = JSON.parse(await readFile("../../fixtures/n8n-preflight-parity/cases.json", "utf8")) as ParityCase[];
+  for (const fixture of cases) {
+    const report = analyzeN8nText(JSON.stringify(fixture.workflow));
+    assert.deepEqual(report.findings.map(({ id }) => id), fixture.expectedIds, fixture.name);
+    assert.equal(report.score, fixture.score, fixture.name);
+  }
+});
+
+test("MCP preflight rejects every shared invalid parity fixture", async () => {
+  const cases = JSON.parse(await readFile("../../fixtures/n8n-preflight-parity/invalid-cases.json", "utf8")) as InvalidParityCase[];
+  for (const fixture of cases) assert.throws(() => analyzeN8nText(JSON.stringify(fixture.workflow)), { name: "Error" }, fixture.name);
 });

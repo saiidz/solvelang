@@ -42,6 +42,8 @@ The v1 n8n adapter checks for:
 
 The score is bounded from 0 through 100 and uses fixed severity penalties.
 
+The browser and MCP analyzers run the shared fixtures in `fixtures/n8n-preflight-parity/`. The parity suite locks finding IDs and scores for enabled safeguards, disconnected risky workflows, disabled execution nodes, terminal-free loops, and invalid workflow shapes without coupling the browser bundle to the MCP package.
+
 ## Public beta access
 
 The repository remains a static Next.js export. Browser-only code cannot prove that a Stripe payment succeeded or safely protect a paid download.

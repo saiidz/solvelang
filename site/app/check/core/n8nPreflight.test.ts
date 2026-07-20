@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { analyzeN8nWorkflow, createHtmlReport, parseN8nWorkflow } from "./n8nPreflight";
+
+type ParityCase = { name: string; workflow: unknown; expectedIds: string[]; score: number };
+type InvalidParityCase = { name: string; workflow: unknown };
 
 const validWorkflow = {
   name: "Lead routing",
@@ -166,4 +170,18 @@ test("credential references are reported without serializing credential values i
   const credentialFinding = report.findings.find((finding) => finding.id === "N8N008");
   assert.ok(credentialFinding);
   assert.ok(!JSON.stringify(credentialFinding).includes("credential-id"));
+});
+
+test("browser preflight matches the shared parity fixtures", async () => {
+  const cases = JSON.parse(await readFile("../fixtures/n8n-preflight-parity/cases.json", "utf8")) as ParityCase[];
+  for (const fixture of cases) {
+    const report = analyzeN8nWorkflow(parseN8nWorkflow(fixture.workflow), new Date("2026-07-19T00:00:00.000Z"));
+    assert.deepEqual(report.findings.map(({ id }) => id), fixture.expectedIds, fixture.name);
+    assert.equal(report.score, fixture.score, fixture.name);
+  }
+});
+
+test("browser preflight rejects every shared invalid parity fixture", async () => {
+  const cases = JSON.parse(await readFile("../fixtures/n8n-preflight-parity/invalid-cases.json", "utf8")) as InvalidParityCase[];
+  for (const fixture of cases) assert.throws(() => parseN8nWorkflow(fixture.workflow), { name: "Error" }, fixture.name);
 });

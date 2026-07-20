@@ -47,6 +47,46 @@ function countConnections(connections: Record<string, unknown>): number {
   return count;
 }
 
+function connectedNames(connections: Record<string, unknown>): Set<string> {
+  const names = new Set<string>();
+  for (const [sourceName, source] of Object.entries(connections)) {
+    names.add(sourceName);
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+    for (const groups of Object.values(source)) {
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        if (!Array.isArray(group)) continue;
+        for (const target of group) {
+          if (target && typeof target === "object" && !Array.isArray(target) && typeof (target as { node?: unknown }).node === "string") {
+            names.add((target as { node: string }).node);
+          }
+        }
+      }
+    }
+  }
+  return names;
+}
+
+function terminalNames(connections: Record<string, unknown>): Set<string> {
+  const targets = new Set<string>();
+  const sources = new Set(Object.keys(connections));
+  for (const source of Object.values(connections)) {
+    if (!source || typeof source !== "object" || Array.isArray(source)) continue;
+    for (const groups of Object.values(source)) {
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        if (!Array.isArray(group)) continue;
+        for (const target of group) {
+          if (target && typeof target === "object" && !Array.isArray(target) && typeof (target as { node?: unknown }).node === "string") {
+            targets.add((target as { node: string }).node);
+          }
+        }
+      }
+    }
+  }
+  return new Set([...targets].filter((name) => !sources.has(name)));
+}
+
 function parseWorkflow(text: string): N8nWorkflow {
   const bytes = Buffer.byteLength(text, "utf8");
   if (bytes > MAX_N8N_BYTES) throw new Error("The workflow exceeds the 2 MB safety limit.");
@@ -58,6 +98,10 @@ function parseWorkflow(text: string): N8nWorkflow {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray((parsed as N8nWorkflow).nodes)) {
     throw new Error("This does not look like an n8n workflow: nodes[] is missing.");
+  }
+  const connections = (parsed as N8nWorkflow).connections;
+  if (connections !== undefined && (!connections || typeof connections !== "object" || Array.isArray(connections))) {
+    throw new Error("The workflow connections field must be an object.");
   }
   return parsed as N8nWorkflow;
 }
@@ -85,6 +129,20 @@ export function analyzeN8nText(text: string) {
     findings.push({ id: "N8N002", severity: "critical", title: "Workflow nodes are not connected", detail: `${nodes.length} nodes exist but no executable connections were found.`, recommendation: "Connect the intended execution paths.", evidence: `Node count: ${nodes.length}; connection count: 0` });
   }
 
+  const connected = connectedNames(connections);
+  const disconnected = names.filter((name) => !connected.has(name));
+  if (nodes.length > 1 && disconnected.length > 0) {
+    findings.push({
+      id: "N8N003",
+      severity: disconnected.length === nodes.length ? "high" : "medium",
+      title: "Disconnected nodes detected",
+      detail: `${disconnected.length} node${disconnected.length === 1 ? " is" : "s are"} not part of any connection.`,
+      recommendation: "Connect intentional nodes or remove abandoned nodes.",
+      evidence: `Disconnected node count: ${disconnected.length}`,
+      nodes: disconnected.slice(0, 12),
+    });
+  }
+
   const disabledNames = nodes.map((node, index) => ({ node, index })).filter(({ node }) => !isEnabled(node)).map(({ index }) => names[index]);
   if (disabledNames.length) findings.push({ id: "N8N004", severity: "low", title: "Disabled nodes remain", detail: `${disabledNames.length} disabled node${disabledNames.length === 1 ? " remains" : "s remain"}.`, recommendation: "Confirm they are intentional or remove them.", evidence: `Disabled node count: ${disabledNames.length}`, nodes: disabledNames.slice(0, 12) });
 
@@ -101,6 +159,17 @@ export function analyzeN8nText(text: string) {
 
   const credentials = nodes.map((node, index) => ({ node, index })).filter(({ node }) => node.credentials && Object.keys(node.credentials).length).map(({ index }) => names[index]);
   if (credentials.length) findings.push({ id: "N8N008", severity: "low", title: "Credential references are present", detail: "The workflow references credentials. SolveLang does not inspect credential values.", recommendation: "Confirm least privilege and rotate any plaintext secret found in the export.", evidence: `Nodes with credential references: ${credentials.length}`, nodes: credentials.slice(0, 12) });
+
+  if (connectionCount > 0 && terminalNames(connections).size === 0) {
+    findings.push({
+      id: "N8N009",
+      severity: "medium",
+      title: "No clear terminal node detected",
+      detail: "Every connected target also appears to continue execution, so the workflow may loop or lack a deliberate end state.",
+      recommendation: "Confirm loops are bounded and ensure each branch reaches a deliberate terminal outcome.",
+      evidence: "Connected terminal node count: 0",
+    });
+  }
 
   if (!findings.length) findings.push({ id: "N8N000", severity: "low", title: "No known structural finding", detail: "The deterministic scan did not identify a known structural issue.", recommendation: "Run scenario and production-environment tests separately.", evidence: "Known structural finding count: 0" });
 
