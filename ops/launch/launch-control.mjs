@@ -1,0 +1,250 @@
+#!/usr/bin/env node
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REQUIRED = {
+  aws: ["AWS_REGION", "AWS_ROLE_ARN", "ENTITLEMENT_STACK_NAME"],
+  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID"],
+  entitlement: ["ENTITLEMENT_SIGNING_SECRET"],
+  site: ["SITE_ORIGIN", "NEXT_PUBLIC_ENTITLEMENT_API_BASE"],
+  webhook: ["STRIPE_WEBHOOK_ENDPOINT"],
+  npm: ["NPM_SCOPE_OWNERSHIP_VERIFIED", "NPM_PRODUCTION_ENVIRONMENT_PROTECTED"],
+};
+
+function control(id, name, status, detail, ownerAction = undefined) {
+  return { id, name, status, detail, ...(ownerAction ? { ownerAction } : {}) };
+}
+
+function missing(environment, names) {
+  return names.filter((name) => typeof environment[name] !== "string" || environment[name].trim() === "");
+}
+
+function configControl(id, name, environment, names) {
+  const absent = missing(environment, names);
+  return absent.length
+    ? control(id, name, "blocked", `Missing required variables: ${absent.join(", ")}.`, `Configure ${absent.join(", ")} in the protected test environment.`)
+    : control(id, name, "pass", "All required variable names are configured; values were not emitted.");
+}
+
+function probeControl(id, name, probe, ownerAction) {
+  if (probe?.ok) return control(id, name, "pass", "Verified by a safe external probe.");
+  return control(id, name, "blocked", probe?.reason ?? "External verification was not run.", ownerAction);
+}
+
+export function evaluateLaunch({ environment, repository, probes = {}, now = new Date().toISOString() }) {
+  const controls = [];
+  controls.push(configControl("aws-configuration", "AWS deployment configuration", environment, REQUIRED.aws));
+  controls.push(configControl("stripe-configuration", "Stripe test configuration", environment, REQUIRED.stripe));
+  controls.push(configControl("entitlement-configuration", "Entitlement signing configuration", environment, REQUIRED.entitlement));
+  controls.push(configControl("site-configuration", "Static site entitlement configuration", environment, REQUIRED.site));
+  controls.push(configControl("webhook-configuration", "Stripe webhook configuration", environment, REQUIRED.webhook));
+  controls.push(configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm));
+
+  if (environment.STRIPE_SECRET_KEY && !environment.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
+    controls.push(control("stripe-mode", "Stripe mode", "fail", "The configured key is not a Stripe test-mode key.", "Use a protected sk_test_ credential for launch verification."));
+  } else if (environment.STRIPE_SECRET_KEY) {
+    controls.push(control("stripe-mode", "Stripe mode", "pass", "Stripe test mode is configured."));
+  } else {
+    controls.push(control("stripe-mode", "Stripe mode", "blocked", "STRIPE_SECRET_KEY is missing.", "Configure a protected Stripe test-mode key."));
+  }
+
+  const expectedWebhook = environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE
+    ? `${environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE.replace(/\/$/, "")}/webhook`
+    : undefined;
+  if (environment.STRIPE_WEBHOOK_ENDPOINT && expectedWebhook && environment.STRIPE_WEBHOOK_ENDPOINT !== expectedWebhook) {
+    controls.push(control("webhook-url-consistency", "Webhook URL consistency", "fail", "The configured webhook endpoint does not match the entitlement API base.", "Set STRIPE_WEBHOOK_ENDPOINT to the deployed entitlement API /webhook URL."));
+  } else if (environment.STRIPE_WEBHOOK_ENDPOINT && expectedWebhook) {
+    controls.push(control("webhook-url-consistency", "Webhook URL consistency", "pass", "Webhook and entitlement API paths are consistent."));
+  } else {
+    controls.push(control("webhook-url-consistency", "Webhook URL consistency", "blocked", "Webhook URL consistency cannot be checked until both variable names are configured."));
+  }
+
+  const releaseValues = [repository.mcpPackageVersion, repository.mcpLockVersion, repository.releaseTag?.replace(/^v/, ""), repository.npmVersion];
+  const releaseComplete = releaseValues.every(Boolean);
+  const releaseConsistent = releaseComplete && new Set(releaseValues).size === 1;
+  controls.push(
+    releaseConsistent
+      ? control("mcp-release-consistency", "MCP release consistency", "pass", `Manifest, lockfile, release tag, and npm agree on ${repository.mcpPackageVersion}.`)
+      : control(
+          "mcp-release-consistency",
+          "MCP release consistency",
+          releaseComplete ? "fail" : "blocked",
+          releaseComplete ? "Manifest, lockfile, release tag, and npm version mismatch." : "Manifest, lockfile, release tag, or npm version evidence is missing.",
+          "Publish only through the protected Trusted Publishing release workflow after versions and tag agree.",
+        ),
+  );
+
+  const workflow = repository.workflow;
+  const workflowPass = workflow.oidc && workflow.protectedEnvironment && workflow.tagValidation && workflow.tests && workflow.packedInstall && workflow.publicPublish && !workflow.tokenSecret;
+  controls.push(
+    workflowPass
+      ? control("npm-trusted-publishing", "npm Trusted Publishing workflow", "pass", "OIDC, protected environment, version gate, tests, packed install, and public publish are present without an npm token.")
+      : control("npm-trusted-publishing", "npm Trusted Publishing workflow", "fail", "The guarded Trusted Publishing workflow contract is incomplete.", "Restore every guarded publishing step before creating a release."),
+  );
+
+  controls.push(
+    repository.clean
+      ? control("repository-state", "Repository state", "pass", "The evidence commit has no uncommitted changes.")
+      : control("repository-state", "Repository state", "fail", "The evidence was collected from a dirty worktree.", "Commit or remove unrelated changes and rerun launch control."),
+  );
+
+  controls.push(probeControl("aws-stack", "AWS entitlement stack", probes.aws, "Run online launch control with authenticated test-account AWS access."));
+  controls.push(probeControl("stripe-price", "Stripe test Price", probes.stripe, "Run online launch control with the protected Stripe test key."));
+  controls.push(probeControl("entitlement-health", "Entitlement API health", probes.entitlementHealth, "Deploy the test stack, then rerun the public health probe."));
+  controls.push(probeControl("stripe-webhook", "Stripe webhook endpoint", probes.webhook, "Register and verify checkout.session.completed in Stripe test mode."));
+  controls.push(probeControl("site-deployment", "Static site deployment", probes.site, "Configure the public API base, rebuild the static site, and rerun the probe."));
+
+  const summary = {
+    pass: controls.filter(({ status }) => status === "pass").length,
+    fail: controls.filter(({ status }) => status === "fail").length,
+    blocked: controls.filter(({ status }) => status === "blocked").length,
+  };
+  return {
+    schema: "solvelang.launch-readiness.v1",
+    generatedAt: now,
+    commitSha: repository.commitSha,
+    ready: summary.fail === 0 && summary.blocked === 0,
+    summary,
+    testedComponents: controls.map(({ id }) => id),
+    controls,
+    unresolvedBlockers: controls
+      .filter(({ status }) => status !== "pass")
+      .map(({ id, status, detail, ownerAction }) => ({ id, status, detail, ...(ownerAction ? { ownerAction } : {}) })),
+  };
+}
+
+export function renderMarkdown(report) {
+  const rows = report.controls.map((item) => `| ${item.name} | ${item.status.toUpperCase()} | ${item.detail} |`).join("\n");
+  const blockers = report.unresolvedBlockers.length
+    ? report.unresolvedBlockers.map((item) => `- **${item.id} (${item.status})**: ${item.detail}${item.ownerAction ? ` Owner action: ${item.ownerAction}` : ""}`).join("\n")
+    : "- None.";
+  return `# SolveLang Launch Readiness Evidence\n\n- Generated: ${report.generatedAt}\n- Commit: \`${report.commitSha}\`\n- Ready: **${report.ready ? "YES" : "NO"}**\n- Results: ${report.summary.pass} pass, ${report.summary.fail} fail, ${report.summary.blocked} blocked\n\n## Controls\n\n| Component | Status | Evidence |\n| --- | --- | --- |\n${rows}\n\n## Unresolved blockers\n\n${blockers}\n`;
+}
+
+function readJson(text) {
+  return JSON.parse(text);
+}
+
+function git(root, args) {
+  try {
+    return execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function collectRepositoryState(root, { npmVersion } = {}) {
+  const manifest = readJson(await readFile(path.join(root, "packages/mcp-server/package.json"), "utf8"));
+  const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
+  const workflowText = await readFile(path.join(root, ".github/workflows/npm-release.yml"), "utf8");
+  return {
+    commitSha: git(root, ["rev-parse", "HEAD"]),
+    clean: git(root, ["status", "--porcelain"]) === "",
+    mcpPackageVersion: manifest.version,
+    mcpLockVersion: lock.version,
+    releaseTag: process.env.RELEASE_TAG || git(root, ["describe", "--tags", "--exact-match"]),
+    npmVersion,
+    workflow: {
+      oidc: /id-token:\s*write/.test(workflowText),
+      protectedEnvironment: /environment:\s*npm-production/.test(workflowText),
+      tagValidation: /Verify release tag matches package version/.test(workflowText),
+      tests: /npm test/.test(workflowText),
+      packedInstall: /npm run test:packed/.test(workflowText),
+      publicPublish: /npm publish --access public/.test(workflowText),
+      tokenSecret: /NODE_AUTH_TOKEN|NPM_TOKEN/.test(workflowText),
+    },
+  };
+}
+
+async function safeFetch(url, options = {}) {
+  try {
+    const response = await fetch(url, { ...options, signal: AbortSignal.timeout(10_000) });
+    return { response };
+  } catch {
+    return { response: null };
+  }
+}
+
+async function onlineProbes(environment) {
+  const probes = {};
+  const apiBase = environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "");
+  if (apiBase) {
+    const { response } = await safeFetch(`${apiBase}/health`, { headers: { accept: "application/json" } });
+    let health;
+    try { health = response ? await response.json() : null; } catch { health = null; }
+    probes.entitlementHealth = response?.ok && health?.status === "ok" && health?.mode === "test"
+      ? { ok: true, mode: "test" }
+      : { ok: false, reason: "The public health endpoint did not confirm test-mode readiness." };
+  }
+  if (environment.SITE_ORIGIN) {
+    const { response } = await safeFetch(environment.SITE_ORIGIN, { method: "HEAD", redirect: "follow" });
+    probes.site = response?.ok ? { ok: true } : { ok: false, reason: "The configured site origin was not reachable over HTTP." };
+  }
+  if (environment.STRIPE_SECRET_KEY?.startsWith("sk_test_") && environment.STRIPE_PRICE_ID) {
+    const headers = { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` };
+    const { response } = await safeFetch(`https://api.stripe.com/v1/prices/${encodeURIComponent(environment.STRIPE_PRICE_ID)}`, { headers });
+    let price;
+    try { price = response ? await response.json() : null; } catch { price = null; }
+    probes.stripe = response?.ok && price?.active === true && price?.livemode === false
+      ? { ok: true, mode: "test" }
+      : { ok: false, reason: "Stripe did not confirm an active test-mode Price." };
+
+    const webhookResult = await safeFetch("https://api.stripe.com/v1/webhook_endpoints?limit=100", { headers });
+    let endpoints;
+    try { endpoints = webhookResult.response ? await webhookResult.response.json() : null; } catch { endpoints = null; }
+    const endpoint = Array.isArray(endpoints?.data)
+      ? endpoints.data.find((item) => item?.url === environment.STRIPE_WEBHOOK_ENDPOINT && item?.status === "enabled")
+      : undefined;
+    probes.webhook = endpoint?.enabled_events?.includes("checkout.session.completed")
+      ? { ok: true }
+      : { ok: false, reason: "Stripe did not confirm an enabled checkout.session.completed webhook." };
+  }
+
+  if (environment.AWS_REGION && environment.ENTITLEMENT_STACK_NAME) {
+    const result = spawnSync("aws", [
+      "cloudformation", "describe-stacks",
+      "--region", environment.AWS_REGION,
+      "--stack-name", environment.ENTITLEMENT_STACK_NAME,
+      "--query", "Stacks[0].StackStatus",
+      "--output", "text",
+    ], { encoding: "utf8", timeout: 10_000 });
+    probes.aws = result.status === 0 && /_COMPLETE\s*$/.test(result.stdout)
+      ? { ok: true }
+      : { ok: false, reason: "AWS did not confirm a completed entitlement stack." };
+  }
+  return probes;
+}
+
+async function publicNpmVersion() {
+  const { response } = await safeFetch("https://registry.npmjs.org/@solvelang%2Fmcp-server/latest", { headers: { accept: "application/json" } });
+  if (!response?.ok) return undefined;
+  try { return (await response.json()).version; } catch { return undefined; }
+}
+
+async function writeEvidence(target, content) {
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, content, "utf8");
+}
+
+async function main() {
+  const args = new Set(process.argv.slice(2));
+  const online = args.has("--online");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const npmVersion = online ? await publicNpmVersion() : process.env.NPM_PUBLIC_VERSION;
+  const repository = await collectRepositoryState(root, { npmVersion });
+  const probes = online ? await onlineProbes(process.env) : {};
+  const report = evaluateLaunch({ environment: process.env, repository, probes });
+  const evidenceRoot = path.join(root, "artifacts/launch-readiness");
+  await writeEvidence(path.join(evidenceRoot, "launch-readiness.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await writeEvidence(path.join(evidenceRoot, "launch-readiness.md"), renderMarkdown(report));
+  console.log(`Launch readiness: ${report.ready ? "PASS" : "BLOCKED"} (${report.summary.pass} pass, ${report.summary.fail} fail, ${report.summary.blocked} blocked)`);
+  console.log(`Evidence: ${path.relative(root, evidenceRoot)}`);
+  process.exitCode = report.ready ? 0 : 1;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

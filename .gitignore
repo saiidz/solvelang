@@ -12,6 +12,9 @@ site/.env*.local
 packages/mcp-server/node_modules/
 packages/mcp-server/dist/
 
+# Generated launch evidence
+artifacts/launch-readiness/
+
 # Rust build output
 /target/
 /solvec/target/

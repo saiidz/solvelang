@@ -169,6 +169,8 @@ Live resources:
 - [llms.txt](https://www.solve-lang.com/llms.txt)
 - [sitemap.xml](https://www.solve-lang.com/sitemap.xml)
 
+Launch operators can run the fail-closed [Production Launch Control](docs/launch-readiness.md) to generate JSON and Markdown readiness evidence without exposing secrets or changing AWS, Stripe, npm, or deployment state.
+
 ### What Works Now
 
 - Variables with `let`
