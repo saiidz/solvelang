@@ -19,6 +19,12 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Install RustSec audit tool
+        run: cargo install cargo-audit --locked
+
+      - name: Audit dependencies
+        run: cargo audit
+
       - name: Check formatting
         run: cargo fmt --check
 
