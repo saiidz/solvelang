@@ -56,6 +56,8 @@ The control center verifies:
 - deterministic Stripe test-mode lifecycle coverage, including replay, expiry, signature rejection, and browser recovery;
 - the AWS stack, active Stripe test Price, registered test webhook, entitlement health endpoint, and public site when `--online` is used.
 
+Entitlement CI executes the deterministic lifecycle, privacy, browser recovery, and launch-control tests before `node ops/launch/assert-entitlement-gates.mjs` can pass. The code gates therefore require both the implementation contracts and their regression suites; a placeholder test filename is insufficient.
+
 No account-level prerequisite is guessed or bypassed. A missing release tag, unpublished package version, undeployed stack, unavailable health endpoint, or unverified webhook remains a visible blocker.
 
 After repository gates pass, follow the exact owner-only test-mode sequence in [the launch owner runbook](launch-owner-runbook.md).

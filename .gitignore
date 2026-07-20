@@ -12,6 +12,10 @@ site/.env*.local
 packages/mcp-server/node_modules/
 packages/mcp-server/dist/
 
+# Entitlement service build output
+services/entitlements/node_modules/
+services/entitlements/dist/
+
 # Generated launch evidence
 artifacts/launch-readiness/
 

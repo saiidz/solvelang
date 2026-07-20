@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
-import { evaluateLaunch, renderMarkdown, selectReleaseTag } from "./launch-control.mjs";
+import { fileURLToPath } from "node:url";
+import { collectRepositoryState, evaluateLaunch, renderMarkdown, selectReleaseTag } from "./launch-control.mjs";
+
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const repository = {
   commitSha: "0123456789abcdef0123456789abcdef01234567",
@@ -141,6 +145,15 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
   for (const id of ["entitlement-health-contract", "workflow-data-privacy", "stripe-test-e2e-harness"]) {
     assert.equal(report.controls.find((item) => item.id === id)?.status, "fail");
   }
+});
+
+test("current repository proves all entitlement code gates with implementation and regression contracts", async () => {
+  const state = await collectRepositoryState(repositoryRoot, { npmVersion: "0.2.0" });
+  assert.deepEqual(state.entitlement, {
+    healthRoute: true,
+    privacySafe: true,
+    testModeE2eHarness: true,
+  });
 });
 
 test("GitHub metadata satisfies npm gates and reports a missing entitlement test environment", () => {

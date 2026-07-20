@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,8 +108,8 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
 
   controls.push(
     repository.entitlement.healthRoute
-      ? control("entitlement-health-contract", "Entitlement health contract", "pass", "Handler, infrastructure template, and safe health response contract are present.")
-      : control("entitlement-health-contract", "Entitlement health contract", "fail", "The entitlement handler and infrastructure template do not expose the required safe GET /health contract.", "Add a credential-free health response and route before deployment verification."),
+      ? control("entitlement-health-contract", "Entitlement health contract", "pass", "Service, infrastructure template, and safe health response contract are present.")
+      : control("entitlement-health-contract", "Entitlement health contract", "fail", "The entitlement service and infrastructure template do not expose the required safe GET /health contract.", "Add a credential-free health response and route before deployment verification."),
   );
   controls.push(
     repository.entitlement.privacySafe
@@ -178,14 +177,34 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
   const workflowText = await readFile(path.join(root, ".github/workflows/npm-release.yml"), "utf8");
   const entitlementHandler = await readFile(path.join(root, "services/entitlements/src/handler.ts"), "utf8");
+  const entitlementService = await readFile(path.join(root, "services/entitlements/src/service.ts"), "utf8");
   const entitlementTemplate = await readFile(path.join(root, "services/entitlements/template.yaml"), "utf8");
+  const entitlementE2eTest = await readFile(path.join(root, "services/entitlements/test/e2e.test.ts"), "utf8");
+  const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
+  const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
   const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
-  const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementHandler)
-    && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate);
+  const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)
+    && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)
+    && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate)
+    && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
   const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId\s*\}\)/.test(preflightClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
-    && /metadata:\s*\{\s*scanId,\s*product:\s*["']workflow-preflight-v1["']\s*\}/.test(entitlementHandler)
+    && /metadata:\s*\{\s*scanId,\s*product:\s*PRODUCT\s*\}/.test(entitlementService)
+    && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
+    && /conversion logging accepts only allowlisted event names/.test(entitlementPrivacyTest)
+    && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
     && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
+  const requiredLifecycleEvidence = [
+    /checkout creation uses minimal metadata and a deterministic idempotency key/,
+    /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
+    /Stripe gateway verifies a deterministic local test signature without network access/,
+    /invalid webhook signatures are rejected without processing/,
+    /paid checkout recovery issues a verifiable short-lived entitlement/,
+    /expired, invalid, and tampered entitlement tokens are rejected/,
+  ];
+  const testModeE2eHarness = requiredLifecycleEvidence.every((pattern) => pattern.test(entitlementE2eTest))
+    && /browser return verifies entitlement server-side and removes checkout parameters/.test(browserRecoveryTest)
+    && /browser recovery fails closed for mismatched scans and unverifiable payment/.test(browserRecoveryTest);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",
@@ -205,7 +224,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     entitlement: {
       healthRoute,
       privacySafe,
-      testModeE2eHarness: existsSync(path.join(root, "services/entitlements/test/e2e.test.ts")),
+      testModeE2eHarness,
     },
   };
 }
