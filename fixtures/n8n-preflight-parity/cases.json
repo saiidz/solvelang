@@ -1,0 +1,67 @@
+[
+  {
+    "name": "enabled safeguards",
+    "workflow": {
+      "name": "Enabled safeguards",
+      "nodes": [
+        { "name": "Webhook", "type": "n8n-nodes-base.webhook" },
+        { "name": "AI Agent", "type": "@n8n/n8n-nodes-langchain.agent" },
+        { "name": "Approval", "type": "n8n-nodes-base.approval" },
+        { "name": "Call API", "type": "n8n-nodes-base.httpRequest" },
+        { "name": "Stop on error", "type": "n8n-nodes-base.stopAndError" }
+      ],
+      "connections": {
+        "Webhook": { "main": [[{ "node": "AI Agent" }]] },
+        "AI Agent": { "main": [[{ "node": "Approval" }]] },
+        "Approval": { "main": [[{ "node": "Call API" }]] },
+        "Call API": { "main": [[{ "node": "Stop on error" }]] }
+      }
+    },
+    "expectedIds": ["N8N000"],
+    "score": 97
+  },
+  {
+    "name": "disconnected risky workflow",
+    "workflow": {
+      "name": "Disconnected risky workflow",
+      "nodes": [
+        { "name": "Custom code", "type": "n8n-nodes-base.code" },
+        { "name": "AI Agent", "type": "@n8n/n8n-nodes-langchain.agent" }
+      ],
+      "connections": {}
+    },
+    "expectedIds": ["N8N001", "N8N002", "N8N003", "N8N005", "N8N006"],
+    "score": 5
+  },
+  {
+    "name": "disabled code does not create execution risk",
+    "workflow": {
+      "name": "Disabled code",
+      "nodes": [
+        { "name": "Webhook", "type": "n8n-nodes-base.webhook" },
+        { "name": "Disabled code", "type": "n8n-nodes-base.code", "disabled": true }
+      ],
+      "connections": {
+        "Webhook": { "main": [[{ "node": "Disabled code" }]] }
+      }
+    },
+    "expectedIds": ["N8N004"],
+    "score": 97
+  },
+  {
+    "name": "bounded loop lacks a terminal",
+    "workflow": {
+      "name": "Loop",
+      "nodes": [
+        { "name": "Manual Trigger", "type": "n8n-nodes-base.manualTrigger" },
+        { "name": "Loop", "type": "n8n-nodes-base.if" }
+      ],
+      "connections": {
+        "Manual Trigger": { "main": [[{ "node": "Loop" }]] },
+        "Loop": { "main": [[{ "node": "Manual Trigger" }]] }
+      }
+    },
+    "expectedIds": ["N8N009"],
+    "score": 92
+  }
+]

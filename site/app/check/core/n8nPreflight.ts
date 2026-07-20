@@ -194,7 +194,7 @@ export function analyzeN8nWorkflow(workflow: N8nWorkflow, now = new Date()): Pre
 
   const riskyCodeNodes = types
     .map((type, index) => ({ type, index }))
-    .filter(({ type }) => includesAny(type, ["function", "code", "executecommand", "ssh"]))
+    .filter(({ type, index }) => isEnabled(workflow.nodes[index]) && includesAny(type, ["function", "code", "executecommand", "ssh"]))
     .map(({ index }) => names[index]);
   if (riskyCodeNodes.length > 0) {
     findings.push({

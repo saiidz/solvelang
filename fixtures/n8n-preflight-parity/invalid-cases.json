@@ -1,0 +1,10 @@
+[
+  {
+    "name": "connections must be an object",
+    "workflow": { "nodes": [{}], "connections": [] }
+  },
+  {
+    "name": "every node must be an object",
+    "workflow": { "nodes": ["not-a-node"], "connections": {} }
+  }
+]
