@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateLaunch, renderMarkdown } from "./launch-control.mjs";
+import { evaluateLaunch, renderMarkdown, selectReleaseTag } from "./launch-control.mjs";
 
 const repository = {
   commitSha: "0123456789abcdef0123456789abcdef01234567",
@@ -91,6 +91,11 @@ test("package, lock, release tag, and npm drift is a hard failure", () => {
   const release = report.controls.find((control) => control.id === "mcp-release-consistency");
   assert.equal(release?.status, "fail");
   assert.match(release?.detail ?? "", /version mismatch/i);
+});
+
+test("release consistency selects the manifest version tag even after later commits", () => {
+  assert.equal(selectReleaseTag("0.2.0", "v0.1.0\nv0.2.0\nv0.3.0-beta.1"), "v0.2.0");
+  assert.equal(selectReleaseTag("0.2.1", "v0.1.0\nv0.2.0"), "");
 });
 
 test("release workflow must use OIDC and retain every guarded publish step", () => {

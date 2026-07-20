@@ -153,6 +153,11 @@ function git(root, args) {
   }
 }
 
+export function selectReleaseTag(version, tags) {
+  const expected = `v${version}`;
+  return tags.split(/\r?\n/).map((tag) => tag.trim()).find((tag) => tag === expected) ?? "";
+}
+
 export async function collectRepositoryState(root, { npmVersion } = {}) {
   const manifest = readJson(await readFile(path.join(root, "packages/mcp-server/package.json"), "utf8"));
   const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
@@ -171,7 +176,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     clean: git(root, ["status", "--porcelain"]) === "",
     mcpPackageVersion: manifest.version,
     mcpLockVersion: lock.version,
-    releaseTag: process.env.RELEASE_TAG || git(root, ["describe", "--tags", "--exact-match"]),
+    releaseTag: process.env.RELEASE_TAG || selectReleaseTag(manifest.version, git(root, ["tag", "--list"])),
     npmVersion,
     workflow: {
       oidc: /id-token:\s*write/.test(workflowText),

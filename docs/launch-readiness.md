@@ -12,6 +12,8 @@ node ops/launch/launch-control.mjs --online
 
 The command writes timestamped, commit-bound JSON and Markdown reports to `artifacts/launch-readiness/`. It exits zero only when every repository, configuration, and external test-mode control passes. Missing account prerequisites are reported as blockers by variable name and owner action.
 
+Launch Readiness CI runs the same fail-closed command with public inputs only and retains both evidence formats as a 30-day `launch-readiness-<commit>` artifact. Protected account credentials are intentionally not exposed to pull-request jobs, so account-level controls remain blockers there.
+
 Run the deterministic control tests without network or account credentials:
 
 ```bash
