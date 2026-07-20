@@ -2,12 +2,11 @@
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import { analyzeN8nWorkflow, createHtmlReport, parseN8nWorkflow, type PreflightReport } from "./core/n8nPreflight";
+import { recoverPaidScan, type PendingPaidScan } from "./core/paidRecovery";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const STORAGE_KEY = "solvelang.preflight.pending.v1";
-
-type PendingScan = { scanId: string; report: PreflightReport; fileName: string };
 
 function download(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
@@ -41,37 +40,28 @@ export function WorkflowPreflight() {
   const previewFindings = useMemo(() => report?.findings.slice(0, 3) ?? [], [report]);
 
   // This effect restores state only after an asynchronous, server-verified Stripe entitlement check.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     recordEvent("check_page_view");
     let cancelled = false;
 
     async function restorePaidScan() {
-      const params = new URLSearchParams(window.location.search);
-      const returnedScanId = params.get("scan_id");
-      const sessionId = params.get("session_id");
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (!returnedScanId || !sessionId || !stored || !apiBase) return;
 
       try {
-        const pending = JSON.parse(stored) as PendingScan;
-        if (pending.scanId !== returnedScanId) throw new Error("The returned checkout does not match this scan.");
-
-        const response = await fetch(`${apiBase}/entitlement`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scanId: returnedScanId, sessionId }),
+        const recovery = await recoverPaidScan({
+          apiBase,
+          search: window.location.search,
+          stored,
+          verify: fetch,
+          clearPending: () => sessionStorage.removeItem(STORAGE_KEY),
+          replaceUrl: (url) => window.history.replaceState({}, "", url),
         });
-        if (!response.ok) throw new Error("Payment could not be verified.");
-        const { token } = (await response.json()) as { token: string };
-        if (cancelled) return;
+        if (!recovery || cancelled) return;
 
-        setReport(pending.report);
-        setScanId(pending.scanId);
-        setFileName(pending.fileName);
-        setEntitlement(token);
-        sessionStorage.removeItem(STORAGE_KEY);
-        window.history.replaceState({}, "", "/check/");
+        setReport(recovery.pending.report);
+        setScanId(recovery.pending.scanId);
+        setFileName(recovery.pending.fileName);
+        setEntitlement(recovery.token);
         recordEvent("payment_completed");
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : "Payment verification failed.");
@@ -83,7 +73,6 @@ export function WorkflowPreflight() {
       cancelled = true;
     };
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   async function scanFile(file: File) {
     setBusy(true);
@@ -115,7 +104,7 @@ export function WorkflowPreflight() {
     setBusy(true);
     setError("");
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingScan));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
       const response = await fetch(`${apiBase}/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json" },

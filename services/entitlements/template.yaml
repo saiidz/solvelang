@@ -43,6 +43,7 @@ Resources:
         AllowOrigins:
           - !Ref SiteOrigin
         AllowMethods:
+          - GET
           - POST
           - OPTIONS
         AllowHeaders:
@@ -80,6 +81,12 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntitlementsTable
       Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /health
+            Method: GET
         Checkout:
           Type: HttpApi
           Properties:

@@ -6,12 +6,20 @@ on:
       - main
     paths:
       - 'services/entitlements/**'
+      - 'site/app/check/WorkflowPreflight.tsx'
+      - 'site/app/check/core/paidRecovery.ts'
+      - 'site/app/check/core/paidRecovery.test.ts'
+      - 'ops/launch/**'
       - '.github/workflows/entitlements-ci.yml'
   push:
     branches:
       - main
     paths:
       - 'services/entitlements/**'
+      - 'site/app/check/WorkflowPreflight.tsx'
+      - 'site/app/check/core/paidRecovery.ts'
+      - 'site/app/check/core/paidRecovery.test.ts'
+      - 'ops/launch/**'
       - '.github/workflows/entitlements-ci.yml'
 
 jobs:
@@ -26,11 +34,21 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: services/entitlements/package.json
-      - run: npm install
+          cache-dependency-path: services/entitlements/package-lock.json
+      - run: npm ci
       - name: Add local build tools to PATH
         run: echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
       - run: npm test
+      - name: Run browser recovery and launch-control tests
+        working-directory: ${{ github.workspace }}/site
+        run: |
+          npm ci
+          npm run test:studio
+      - name: Assert entitlement launch code gates
+        working-directory: ${{ github.workspace }}
+        run: |
+          node --test ops/launch/launch-control.test.mjs
+          node ops/launch/assert-entitlement-gates.mjs
       - uses: aws-actions/setup-sam@v2
       - run: sam validate --lint --template template.yaml
       - run: sam build --template template.yaml
