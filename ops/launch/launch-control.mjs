@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -91,6 +92,22 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
       : control("repository-state", "Repository state", "fail", "The evidence was collected from a dirty worktree.", "Commit or remove unrelated changes and rerun launch control."),
   );
 
+  controls.push(
+    repository.entitlement.healthRoute
+      ? control("entitlement-health-contract", "Entitlement health contract", "pass", "Handler, infrastructure template, and safe health response contract are present.")
+      : control("entitlement-health-contract", "Entitlement health contract", "fail", "The entitlement handler and infrastructure template do not expose the required safe GET /health contract.", "Add a credential-free health response and route before deployment verification."),
+  );
+  controls.push(
+    repository.entitlement.privacySafe
+      ? control("workflow-data-privacy", "Workflow-data privacy boundary", "pass", "Static contracts keep workflow and report data out of network payloads and server error logs.")
+      : control("workflow-data-privacy", "Workflow-data privacy boundary", "fail", "The static privacy contract cannot prove workflow data stays out of network payloads and server logs.", "Remove request-derived error details and add regression coverage for allowlisted payloads."),
+  );
+  controls.push(
+    repository.entitlement.testModeE2eHarness
+      ? control("stripe-test-e2e-harness", "Stripe test-mode E2E harness", "pass", "Deterministic checkout, webhook, entitlement, replay, expiry, signature, and recovery coverage is present.")
+      : control("stripe-test-e2e-harness", "Stripe test-mode E2E harness", "fail", "No deterministic end-to-end entitlement harness covers the required Stripe test-mode lifecycle.", "Add local fakes and browser recovery coverage without external internet dependencies."),
+  );
+
   controls.push(probeControl("aws-stack", "AWS entitlement stack", probes.aws, "Run online launch control with authenticated test-account AWS access."));
   controls.push(probeControl("stripe-price", "Stripe test Price", probes.stripe, "Run online launch control with the protected Stripe test key."));
   controls.push(probeControl("entitlement-health", "Entitlement API health", probes.entitlementHealth, "Deploy the test stack, then rerun the public health probe."));
@@ -140,6 +157,15 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const manifest = readJson(await readFile(path.join(root, "packages/mcp-server/package.json"), "utf8"));
   const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
   const workflowText = await readFile(path.join(root, ".github/workflows/npm-release.yml"), "utf8");
+  const entitlementHandler = await readFile(path.join(root, "services/entitlements/src/handler.ts"), "utf8");
+  const entitlementTemplate = await readFile(path.join(root, "services/entitlements/template.yaml"), "utf8");
+  const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
+  const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementHandler)
+    && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate);
+  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId\s*\}\)/.test(preflightClient)
+    && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
+    && /metadata:\s*\{\s*scanId,\s*product:\s*["']workflow-preflight-v1["']\s*\}/.test(entitlementHandler)
+    && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",
@@ -155,6 +181,11 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
       packedInstall: /npm run test:packed/.test(workflowText),
       publicPublish: /npm publish --access public/.test(workflowText),
       tokenSecret: /NODE_AUTH_TOKEN|NPM_TOKEN/.test(workflowText),
+    },
+    entitlement: {
+      healthRoute,
+      privacySafe,
+      testModeE2eHarness: existsSync(path.join(root, "services/entitlements/test/e2e.test.ts")),
     },
   };
 }
