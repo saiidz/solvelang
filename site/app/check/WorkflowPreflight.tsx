@@ -39,7 +39,6 @@ export function WorkflowPreflight() {
   const unlocked = !paidMode || Boolean(entitlement);
   const previewFindings = useMemo(() => report?.findings.slice(0, 3) ?? [], [report]);
 
-  // This effect restores state only after an asynchronous, server-verified Stripe entitlement check.
   useEffect(() => {
     recordEvent("check_page_view");
     let cancelled = false;
@@ -99,25 +98,13 @@ export function WorkflowPreflight() {
     }
   }
 
-  async function startCheckout() {
+  function startCheckout() {
     if (!report || !scanId || !apiBase) return;
     setBusy(true);
     setError("");
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
-      const response = await fetch(`${apiBase}/checkout`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scanId }),
-      });
-      if (!response.ok) throw new Error("Checkout could not be started.");
-      const { checkoutUrl } = (await response.json()) as { checkoutUrl: string };
-      recordEvent("checkout_started");
-      window.location.assign(checkoutUrl);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
-      setBusy(false);
-    }
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
+    recordEvent("checkout_started");
+    window.location.assign(`/checkout/?scan_id=${encodeURIComponent(scanId)}`);
   }
 
   function exportReport(format: "html" | "json") {
@@ -154,7 +141,7 @@ export function WorkflowPreflight() {
       {report ? <section className="mt-10" aria-live="polite">
         <div className="grid gap-5 md:grid-cols-4"><div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:col-span-2"><p className="text-sm text-slate-500">Preflight score</p><div className="mt-2 text-6xl font-semibold">{report.score}<span className="text-2xl text-slate-400">/100</span></div><p className="mt-4 text-slate-600">{report.summary}</p></div><div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-sm text-slate-500">Workflow</p><p className="mt-2 text-xl font-semibold">{report.workflowName}</p><p className="mt-3 text-sm text-slate-600">{report.nodeCount} nodes · {report.connectionCount} connections</p></div><div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><p className="text-sm text-slate-500">Severity</p><p className="mt-2 text-sm">{report.severityCounts.critical} critical · {report.severityCounts.high} high</p><p className="mt-2 text-sm">{report.severityCounts.medium} medium · {report.severityCounts.low} low</p></div></div>
         <div className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8"><p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Free preview</p><h2 className="mt-2 text-2xl font-semibold">First three findings</h2><div className="mt-6 grid gap-4">{previewFindings.map((finding) => <article key={finding.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5"><span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase text-white">{finding.severity}</span><h3 className="mt-3 text-lg font-semibold">{finding.title}</h3><p className="mt-2 leading-7 text-slate-600">{finding.detail}</p></article>)}</div></div>
-        <div className="mt-8 rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8"><div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center"><div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Complete evidence</p><h2 className="mt-2 text-2xl font-semibold">{paidMode ? (unlocked ? "Payment verified" : "Unlock the complete report for $49") : "Free beta report"}</h2><p className="mt-3 max-w-3xl leading-7 text-slate-700">{paidMode ? (unlocked ? "Your signed entitlement is active for this scan." : "Stripe handles payment. SolveLang verifies the checkout server-side before enabling downloads.") : "Checkout is disabled until the production entitlement API is configured."}</p></div><div className="flex flex-col gap-3">{paidMode && !unlocked ? <button type="button" onClick={() => void startCheckout()} disabled={busy} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">Continue to secure checkout</button> : <><button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white">Download HTML report</button><button type="button" onClick={() => exportReport("json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900">Download JSON evidence</button></>}</div></div></div>
+        <div className="mt-8 rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8"><div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center"><div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Complete evidence</p><h2 className="mt-2 text-2xl font-semibold">{paidMode ? (unlocked ? "Payment verified" : "Unlock the complete report for $49") : "Free beta report"}</h2><p className="mt-3 max-w-3xl leading-7 text-slate-700">{paidMode ? (unlocked ? "Your signed entitlement is active for this scan." : "Pay securely without leaving SolveLang. Access is enabled only after server-side verification.") : "Checkout is disabled until the production entitlement API is configured."}</p></div><div className="flex flex-col gap-3">{paidMode && !unlocked ? <button type="button" onClick={startCheckout} disabled={busy} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60">Pay securely on SolveLang</button> : <><button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white">Download HTML report</button><button type="button" onClick={() => exportReport("json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900">Download JSON evidence</button></>}</div></div></div>
       </section> : null}
     </div>
   );
