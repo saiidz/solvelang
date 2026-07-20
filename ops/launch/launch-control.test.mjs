@@ -64,6 +64,7 @@ test("a complete test-mode launch passes every control", () => {
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -83,6 +84,7 @@ test("package, lock, release tag, and npm drift is a hard failure", () => {
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -108,6 +110,7 @@ test("release workflow must use OIDC and retain every guarded publish step", () 
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -129,6 +132,7 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -137,6 +141,24 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
   for (const id of ["entitlement-health-contract", "workflow-data-privacy", "stripe-test-e2e-harness"]) {
     assert.equal(report.controls.find((item) => item.id === id)?.status, "fail");
   }
+});
+
+test("GitHub metadata satisfies npm gates and reports a missing entitlement test environment", () => {
+  const environment = { ...validEnvironment };
+  delete environment.NPM_SCOPE_OWNERSHIP_VERIFIED;
+  delete environment.NPM_PRODUCTION_ENVIRONMENT_PROTECTED;
+  const report = evaluateLaunch({
+    environment,
+    repository,
+    probes: {
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: false },
+    },
+    now: "2026-07-19T18:00:00.000Z",
+  });
+  assert.equal(report.controls.find((item) => item.id === "npm-configuration")?.status, "pass");
+  const entitlementEnvironment = report.controls.find((item) => item.id === "github-entitlement-test-environment");
+  assert.equal(entitlementEnvironment?.status, "blocked");
+  assert.match(entitlementEnvironment?.ownerAction ?? "", /entitlement-test/);
 });
 
 test("JSON and Markdown evidence contain provenance but never environment values", () => {

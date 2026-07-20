@@ -14,6 +14,8 @@ The command writes timestamped, commit-bound JSON and Markdown reports to `artif
 
 Launch Readiness CI runs the same fail-closed command with public inputs only and retains both evidence formats as a 30-day `launch-readiness-<commit>` artifact. Protected account credentials are intentionally not exposed to pull-request jobs, so account-level controls remain blockers there.
 
+When GitHub CLI authentication is available, the online run reads environment and repository-variable metadata automatically. It verifies protection rules and variable names only; secret and variable values are never requested or emitted. The two npm variables below remain a local fallback when GitHub metadata cannot be read.
+
 Run the deterministic control tests without network or account credentials:
 
 ```bash

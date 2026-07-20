@@ -42,7 +42,22 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
   controls.push(configControl("entitlement-configuration", "Entitlement signing configuration", environment, REQUIRED.entitlement));
   controls.push(configControl("site-configuration", "Static site entitlement configuration", environment, REQUIRED.site));
   controls.push(configControl("webhook-configuration", "Stripe webhook configuration", environment, REQUIRED.webhook));
-  controls.push(configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm));
+  controls.push(
+    probes.github?.npmProductionProtected && probes.github?.npmScopeOwnershipVerified
+      ? control("npm-configuration", "npm protected release configuration", "pass", "GitHub confirms the protected npm environment and ownership variable without exposing values.")
+      : configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm),
+  );
+  controls.push(
+    probes.github?.entitlementTestEnvironment
+      ? control("github-entitlement-test-environment", "GitHub entitlement test environment", "pass", "The protected entitlement-test environment exists.")
+      : control(
+          "github-entitlement-test-environment",
+          "GitHub entitlement test environment",
+          "blocked",
+          probes.github?.ok ? "GitHub confirms that entitlement-test is not configured." : "GitHub environment metadata was not available.",
+          "Create the protected entitlement-test environment and configure its required variables and secrets by name.",
+        ),
+  );
 
   if (environment.STRIPE_SECRET_KEY && !environment.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
     controls.push(control("stripe-mode", "Stripe mode", "fail", "The configured key is not a Stripe test-mode key.", "Use a protected sk_test_ credential for launch verification."));
@@ -206,6 +221,23 @@ async function safeFetch(url, options = {}) {
 
 async function onlineProbes(environment) {
   const probes = {};
+  const repositoryName = environment.GITHUB_REPOSITORY || "saiidz/solvelang";
+  const environmentsResult = spawnSync("gh", ["api", `repos/${repositoryName}/environments`], { encoding: "utf8", timeout: 10_000 });
+  const variablesResult = spawnSync("gh", ["api", `repos/${repositoryName}/actions/variables`], { encoding: "utf8", timeout: 10_000 });
+  try {
+    const environments = environmentsResult.status === 0 ? JSON.parse(environmentsResult.stdout).environments : [];
+    const variables = variablesResult.status === 0 ? JSON.parse(variablesResult.stdout).variables : [];
+    const npmEnvironment = environments.find((item) => item?.name === "npm-production");
+    const rules = Array.isArray(npmEnvironment?.protection_rules) ? npmEnvironment.protection_rules : [];
+    probes.github = {
+      ok: environmentsResult.status === 0 && variablesResult.status === 0,
+      npmProductionProtected: Boolean(npmEnvironment && rules.some((rule) => rule?.type === "required_reviewers") && rules.some((rule) => rule?.type === "branch_policy")),
+      npmScopeOwnershipVerified: variables.some((variable) => variable?.name === "NPM_SCOPE_OWNERSHIP_VERIFIED"),
+      entitlementTestEnvironment: environments.some((item) => item?.name === "entitlement-test"),
+    };
+  } catch {
+    probes.github = { ok: false, npmProductionProtected: false, npmScopeOwnershipVerified: false, entitlementTestEnvironment: false };
+  }
   const apiBase = environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "");
   if (apiBase) {
     const { response } = await safeFetch(`${apiBase}/health`, { headers: { accept: "application/json" } });
