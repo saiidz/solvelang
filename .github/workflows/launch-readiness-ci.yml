@@ -1,0 +1,37 @@
+name: Launch Readiness CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'ops/launch/**'
+      - '.github/workflows/launch-readiness-ci.yml'
+      - '.github/workflows/npm-release.yml'
+      - 'packages/mcp-server/package.json'
+      - 'packages/mcp-server/package-lock.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'ops/launch/**'
+      - '.github/workflows/launch-readiness-ci.yml'
+      - '.github/workflows/npm-release.yml'
+      - 'packages/mcp-server/package.json'
+      - 'packages/mcp-server/package-lock.json'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test fail-closed launch controls
+        run: node --test ops/launch/launch-control.test.mjs
+      - name: Parse launch and release workflow YAML
+        run: ruby -e 'require "yaml"; Psych.parse_file(".github/workflows/launch-readiness-ci.yml"); Psych.parse_file(".github/workflows/npm-release.yml")'
