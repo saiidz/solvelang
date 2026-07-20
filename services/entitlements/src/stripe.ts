@@ -7,14 +7,14 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
       async create(params, idempotencyKey) {
         const session = await client.checkout.sessions.create({
           mode: params.mode,
+          ui_mode: "embedded",
           line_items: params.lineItems.map(({ price, quantity }) => ({ price, quantity })),
-          success_url: params.successUrl,
-          cancel_url: params.cancelUrl,
+          return_url: params.returnUrl,
           metadata: params.metadata,
           allow_promotion_codes: true,
           billing_address_collection: "auto",
         }, { idempotencyKey });
-        return { id: session.id, url: session.url };
+        return { id: session.id, clientSecret: session.client_secret };
       },
       async retrieve(sessionId) {
         const session = await client.checkout.sessions.retrieve(sessionId);
