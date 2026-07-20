@@ -6,12 +6,17 @@ import { useEffect, useRef, useState } from "react";
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
+type MountedCheckout = {
+  mount(target: string | HTMLElement): void;
+  destroy(): void;
+};
+
 export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let checkout: Awaited<ReturnType<NonNullable<Awaited<ReturnType<typeof loadStripe>>>["initEmbeddedCheckout"]>> | undefined;
+    let checkout: MountedCheckout | undefined;
     let cancelled = false;
 
     async function mountCheckout() {
@@ -36,7 +41,10 @@ export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
           },
         });
 
-        if (cancelled || !containerRef.current) return;
+        if (cancelled || !containerRef.current) {
+          checkout.destroy();
+          return;
+        }
         checkout.mount(containerRef.current);
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : "Checkout could not be loaded.");
