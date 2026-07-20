@@ -1,0 +1,12 @@
+python3 -m json.tool docs/audits/audit.schema.json >/dev/null &&
+echo "audit.schema.json: valid JSON"
+
+python3 -m json.tool docs/audits/audit-ledger.schema.json >/dev/null &&
+echo "audit-ledger.schema.json: valid JSON"
+
+grep -nE '^## (5|6|7|8)\.' \
+  docs/audits/audit-delivery-report.md
+
+sed -n '/^## 5\./,/^## 8\./p' \
+  docs/audits/audit-delivery-report.md
+
