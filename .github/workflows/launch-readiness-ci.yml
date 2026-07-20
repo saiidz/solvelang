@@ -35,3 +35,15 @@ jobs:
         run: node --test ops/launch/launch-control.test.mjs
       - name: Parse launch and release workflow YAML
         run: ruby -e 'require "yaml"; Psych.parse_file(".github/workflows/launch-readiness-ci.yml"); Psych.parse_file(".github/workflows/npm-release.yml")'
+      - name: Generate current fail-closed launch evidence
+        env:
+          SITE_ORIGIN: https://www.solve-lang.com
+        run: node ops/launch/launch-control.mjs --online || test "$?" -eq 1
+      - name: Retain launch evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-readiness-${{ github.sha }}
+          path: artifacts/launch-readiness/
+          if-no-files-found: error
+          retention-days: 30
