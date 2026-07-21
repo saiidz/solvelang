@@ -1,12 +1,21 @@
 import Stripe from "stripe";
 import type { StripeGateway } from "./service.js";
 
+type EmbeddedCheckoutSessionParams = Stripe.Checkout.SessionCreateParams & {
+  ui_mode: "embedded";
+  return_url: string;
+  wallet_options: { link: { display: "never" } };
+};
+
 export function createStripeGateway(client: Stripe, options?: { receivedAt?: () => number }): StripeGateway {
   return {
     checkout: {
       async create(params, idempotencyKey) {
-        const session = await client.checkout.sessions.create({
+        const sessionParams = {
           mode: params.mode,
+          ui_mode: "embedded",
+          payment_method_types: ["card"],
+          wallet_options: { link: { display: "never" } },
           line_items: params.lineItems.map(({ quantity }) => ({
             price_data: {
               currency: "usd",
@@ -18,11 +27,12 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
             },
             quantity,
           })),
-          success_url: params.returnUrl,
-          cancel_url: params.cancelUrl,
+          return_url: params.returnUrl,
           metadata: params.metadata,
-        }, { idempotencyKey });
-        return { id: session.id, url: session.url };
+        } as unknown as EmbeddedCheckoutSessionParams;
+
+        const session = await client.checkout.sessions.create(sessionParams, { idempotencyKey });
+        return { id: session.id, clientSecret: session.client_secret };
       },
       async retrieve(sessionId) {
         const session = await client.checkout.sessions.retrieve(sessionId);
