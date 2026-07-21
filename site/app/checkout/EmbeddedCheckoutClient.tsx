@@ -2,25 +2,12 @@
 
 import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useRef, useState } from "react";
+import { initializeCheckout, type PaymentElementLike } from "./checkoutSdk";
 
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
 type ConfirmAction = () => Promise<void>;
-type PaymentElementLike = { mount(target: HTMLElement): void; destroy(): void };
-type CheckoutActionsResult =
-  | { type: "success"; actions: { confirm(): Promise<{ type: "success" } | { type: "error"; error: { message?: string } }> } }
-  | { type: "error" };
-type CustomCheckoutLike = {
-  createPaymentElement(): PaymentElementLike;
-  loadActions(): Promise<CheckoutActionsResult>;
-};
-type StripeWithCheckoutElementsSdk = {
-  initCheckoutElementsSdk(options: {
-    clientSecret: Promise<string>;
-    elementsOptions?: { appearance?: { theme?: "stripe"; variables?: Record<string, string> } };
-  }): CustomCheckoutLike;
-};
 
 export function EmbeddedCheckoutClient() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,7 +41,7 @@ export function EmbeddedCheckoutClient() {
           return body.clientSecret;
         });
 
-        const checkout = (stripe as unknown as StripeWithCheckoutElementsSdk).initCheckoutElementsSdk({
+        const checkout = await initializeCheckout(stripe, {
           clientSecret,
           elementsOptions: {
             appearance: {
@@ -69,7 +56,9 @@ export function EmbeddedCheckoutClient() {
         paymentElement.mount(containerRef.current);
 
         const result = await checkout.loadActions();
-        if (result.type !== "success") throw new Error("Stripe checkout could not be initialized.");
+        if (result.type !== "success") {
+          throw new Error(result.error?.message || "Stripe checkout could not be initialized. Verify that the publishable key and server secret key belong to the same Stripe account and mode.");
+        }
         if (cancelled) return;
 
         setConfirmAction(() => async () => {
