@@ -7,7 +7,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
       async create(params, idempotencyKey) {
         const session = await client.checkout.sessions.create({
           mode: params.mode,
-          ui_mode: "embedded",
+          ui_mode: "custom",
           line_items: params.lineItems.map(({ price, quantity }) => ({ price, quantity })),
           return_url: params.returnUrl,
           metadata: params.metadata,
