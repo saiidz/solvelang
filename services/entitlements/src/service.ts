@@ -27,7 +27,7 @@ export type EntitlementConfig = {
 
 export type CheckoutSession = {
   id: string;
-  clientSecret?: string | null;
+  url?: string | null;
   paymentStatus?: string | null;
   metadata?: Record<string, string> | null;
 };
@@ -44,6 +44,7 @@ export type StripeGateway = {
       mode: "payment";
       lineItems: Array<{ price: string; quantity: number }>;
       returnUrl: string;
+      cancelUrl: string;
       metadata: { scanId: string; product: typeof PRODUCT };
     }, idempotencyKey: string): Promise<CheckoutSession>;
     retrieve(sessionId: string): Promise<CheckoutSession>;
@@ -159,13 +160,14 @@ export function createEntitlementService({
         mode: "payment",
         lineItems: [{ price: config.stripePriceId, quantity: 1 }],
         returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&checkout=cancelled`,
         metadata: { scanId, product: PRODUCT },
       }, `preflight-${scanId}`);
     } catch (error) {
       throw stripeFailure(error);
     }
-    if (!session.clientSecret) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
-    return response(200, { clientSecret: session.clientSecret });
+    if (!session.url) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
+    return response(200, { checkoutUrl: session.url });
   }
 
   async function handleWebhook(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
