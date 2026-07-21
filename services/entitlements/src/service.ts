@@ -92,6 +92,20 @@ class RequestError extends Error {
   }
 }
 
+function stripeFailure(error: unknown): RequestError {
+  const candidate = error as { type?: string; code?: string };
+  if (candidate?.type === "StripeAuthenticationError") {
+    return new RequestError(502, "Stripe authentication failed. Verify the test secret key.", "stripe_authentication");
+  }
+  if (candidate?.code === "resource_missing") {
+    return new RequestError(502, "Stripe Price was not found for this test account. Verify the Price ID and Stripe keys use the same account.", "stripe_resource_missing");
+  }
+  if (candidate?.type === "StripeInvalidRequestError") {
+    return new RequestError(502, "Stripe rejected the Checkout Session configuration.", "stripe_invalid_request");
+  }
+  return new RequestError(502, "Stripe checkout is temporarily unavailable.", "stripe_checkout_failed");
+}
+
 function parseJson(event: APIGatewayProxyEventV2): unknown {
   if (!event.body) return {};
   return JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body);
@@ -126,12 +140,17 @@ export function createEntitlementService({
 
   async function createCheckout(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
     const { scanId } = checkoutSchema.parse(parseJson(event));
-    const session = await stripe.checkout.create({
-      mode: "payment",
-      lineItems: [{ price: config.stripePriceId, quantity: 1 }],
-      returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
-      metadata: { scanId, product: PRODUCT },
-    }, `preflight-${scanId}`);
+    let session: CheckoutSession;
+    try {
+      session = await stripe.checkout.create({
+        mode: "payment",
+        lineItems: [{ price: config.stripePriceId, quantity: 1 }],
+        returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
+        metadata: { scanId, product: PRODUCT },
+      }, `preflight-${scanId}`);
+    } catch (error) {
+      throw stripeFailure(error);
+    }
     if (!session.clientSecret) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
     return response(200, { clientSecret: session.clientSecret });
   }
