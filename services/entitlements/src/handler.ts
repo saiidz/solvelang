@@ -9,7 +9,9 @@ import { createEntitlementStore } from "./store.js";
 
 const environment = parseEntitlementEnvironment(process.env);
 
-const stripeClient = new Stripe(environment.STRIPE_SECRET_KEY);
+const stripeClient = new Stripe(environment.STRIPE_SECRET_KEY, {
+  apiVersion: "2026-04-22.dahlia",
+});
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const stripe = createStripeGateway(stripeClient);
 const store = createEntitlementStore(documentClient, environment.ENTITLEMENTS_TABLE);
