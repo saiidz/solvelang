@@ -13,7 +13,17 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
         const sessionParams = {
           mode: params.mode,
           ui_mode: "custom",
-          line_items: params.lineItems.map(({ price, quantity }) => ({ price, quantity })),
+          line_items: params.lineItems.map(({ quantity }) => ({
+            price_data: {
+              currency: "usd",
+              unit_amount: 4900,
+              product_data: {
+                name: "SolveLang Workflow Preflight Report",
+                description: "Complete deterministic findings, evidence, and downloadable HTML and JSON reports.",
+              },
+            },
+            quantity,
+          })),
           return_url: params.returnUrl,
           metadata: params.metadata,
         } as unknown as CustomCheckoutSessionParams;
