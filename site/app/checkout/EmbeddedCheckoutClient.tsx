@@ -15,8 +15,8 @@ type CustomCheckoutLike = {
   createPaymentElement(): PaymentElementLike;
   loadActions(): Promise<CheckoutActionsResult>;
 };
-type StripeWithCustomCheckout = {
-  initCheckout(options: {
+type StripeWithCheckoutElementsSdk = {
+  initCheckoutElementsSdk(options: {
     clientSecret: Promise<string>;
     elementsOptions?: { appearance?: { theme?: "stripe"; variables?: Record<string, string> } };
   }): CustomCheckoutLike;
@@ -54,7 +54,7 @@ export function EmbeddedCheckoutClient() {
           return body.clientSecret;
         });
 
-        const checkout = (stripe as unknown as StripeWithCustomCheckout).initCheckout({
+        const checkout = (stripe as unknown as StripeWithCheckoutElementsSdk).initCheckoutElementsSdk({
           clientSecret,
           elementsOptions: {
             appearance: {
