@@ -22,7 +22,7 @@ type StripeWithCustomCheckout = {
   }): CustomCheckoutLike;
 };
 
-export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
+export function EmbeddedCheckoutClient() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
@@ -34,9 +34,12 @@ export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
 
     async function mountCheckout() {
       try {
+        const scanId = new URLSearchParams(window.location.search).get("scan_id") ?? "";
         if (!apiBase) throw new Error("Checkout service is not configured.");
         if (!publishableKey) throw new Error("Stripe publishable key is not configured.");
-        if (!scanId) throw new Error("This checkout link is missing a valid scan ID.");
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scanId)) {
+          throw new Error("This checkout link is missing a valid scan ID.");
+        }
 
         const stripe = await loadStripe(publishableKey);
         if (!stripe) throw new Error("Stripe could not be loaded.");
@@ -88,7 +91,7 @@ export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
       cancelled = true;
       paymentElement?.destroy();
     };
-  }, [scanId]);
+  }, []);
 
   return (
     <div>
