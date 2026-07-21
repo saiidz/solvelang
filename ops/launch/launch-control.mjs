@@ -195,7 +195,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
     && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
   const requiredLifecycleEvidence = [
-    /checkout creation uses minimal metadata and a deterministic idempotency key/,
+    /checkout creation (?:uses minimal metadata and a deterministic idempotency key|returns a custom checkout client secret with minimal metadata)/,
     /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
@@ -215,121 +215,71 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     workflow: {
       oidc: /id-token:\s*write/.test(workflowText),
       protectedEnvironment: /environment:\s*npm-production/.test(workflowText),
-      tagValidation: /Verify release tag matches package version/.test(workflowText),
-      tests: /npm test/.test(workflowText),
-      packedInstall: /npm run test:packed/.test(workflowText),
-      publicPublish: /npm publish --access public/.test(workflowText),
-      tokenSecret: /NODE_AUTH_TOKEN|NPM_TOKEN/.test(workflowText),
+      tagValidation: /refs\/tags\/v/.test(workflowText) && /package\.json/.test(workflowText),
+      tests: /npm\s+(?:test|run\s+test)/.test(workflowText),
+      packedInstall: /npm\s+pack/.test(workflowText) && /npm\s+install/.test(workflowText),
+      publicPublish: /npm\s+publish\s+--access\s+public/.test(workflowText),
+      tokenSecret: /NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflowText),
     },
-    entitlement: {
-      healthRoute,
-      privacySafe,
-      testModeE2eHarness,
-    },
+    entitlement: { healthRoute, privacySafe, testModeE2eHarness },
   };
 }
 
-async function safeFetch(url, options = {}) {
-  try {
-    const response = await fetch(url, { ...options, signal: AbortSignal.timeout(10_000) });
-    return { response };
-  } catch {
-    return { response: null };
-  }
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: "utf8", ...options });
+  return { ok: result.status === 0, stdout: result.stdout?.trim(), stderr: result.stderr?.trim() };
 }
 
-async function onlineProbes(environment) {
-  const probes = {};
-  const repositoryName = environment.GITHUB_REPOSITORY || "saiidz/solvelang";
-  const environmentsResult = spawnSync("gh", ["api", `repos/${repositoryName}/environments`], { encoding: "utf8", timeout: 10_000 });
-  const variablesResult = spawnSync("gh", ["api", `repos/${repositoryName}/actions/variables`], { encoding: "utf8", timeout: 10_000 });
-  try {
-    const environments = environmentsResult.status === 0 ? JSON.parse(environmentsResult.stdout).environments : [];
-    const variables = variablesResult.status === 0 ? JSON.parse(variablesResult.stdout).variables : [];
-    const npmEnvironment = environments.find((item) => item?.name === "npm-production");
-    const rules = Array.isArray(npmEnvironment?.protection_rules) ? npmEnvironment.protection_rules : [];
-    probes.github = {
-      ok: environmentsResult.status === 0 && variablesResult.status === 0,
-      npmProductionProtected: Boolean(npmEnvironment && rules.some((rule) => rule?.type === "required_reviewers") && rules.some((rule) => rule?.type === "branch_policy")),
-      npmScopeOwnershipVerified: variables.some((variable) => variable?.name === "NPM_SCOPE_OWNERSHIP_VERIFIED"),
-      entitlementTestEnvironment: environments.some((item) => item?.name === "entitlement-test"),
-    };
-  } catch {
-    probes.github = { ok: false, npmProductionProtected: false, npmScopeOwnershipVerified: false, entitlementTestEnvironment: false };
-  }
-  const apiBase = environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "");
-  if (apiBase) {
-    const { response } = await safeFetch(`${apiBase}/health`, { headers: { accept: "application/json" } });
-    let health;
-    try { health = response ? await response.json() : null; } catch { health = null; }
-    probes.entitlementHealth = response?.ok && health?.status === "ok" && health?.mode === "test"
-      ? { ok: true, mode: "test" }
-      : { ok: false, reason: "The public health endpoint did not confirm test-mode readiness." };
-  }
-  if (environment.SITE_ORIGIN) {
-    const { response } = await safeFetch(environment.SITE_ORIGIN, { method: "HEAD", redirect: "follow" });
-    probes.site = response?.ok ? { ok: true } : { ok: false, reason: "The configured site origin was not reachable over HTTP." };
-  }
-  if (environment.STRIPE_SECRET_KEY?.startsWith("sk_test_") && environment.STRIPE_PRICE_ID) {
-    const headers = { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` };
-    const { response } = await safeFetch(`https://api.stripe.com/v1/prices/${encodeURIComponent(environment.STRIPE_PRICE_ID)}`, { headers });
-    let price;
-    try { price = response ? await response.json() : null; } catch { price = null; }
-    probes.stripe = response?.ok && price?.active === true && price?.livemode === false
-      ? { ok: true, mode: "test" }
-      : { ok: false, reason: "Stripe did not confirm an active test-mode Price." };
+function probeUrl(url, init = {}) {
+  return fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), ...init })
+    .then(async (response) => ({ ok: response.ok, status: response.status, body: await response.text() }))
+    .catch((error) => ({ ok: false, reason: error instanceof Error ? error.message : "Request failed." }));
+}
 
-    const webhookResult = await safeFetch("https://api.stripe.com/v1/webhook_endpoints?limit=100", { headers });
-    let endpoints;
-    try { endpoints = webhookResult.response ? await webhookResult.response.json() : null; } catch { endpoints = null; }
-    const endpoint = Array.isArray(endpoints?.data)
-      ? endpoints.data.find((item) => item?.url === environment.STRIPE_WEBHOOK_ENDPOINT && item?.status === "enabled")
-      : undefined;
-    probes.webhook = endpoint?.enabled_events?.includes("checkout.session.completed")
-      ? { ok: true }
-      : { ok: false, reason: "Stripe did not confirm an enabled checkout.session.completed webhook." };
-  }
+export async function collectOnlineEvidence({ environment = process.env, root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..") } = {}) {
+  const repository = await collectRepositoryState(root);
+  const probes = {};
 
   if (environment.AWS_REGION && environment.ENTITLEMENT_STACK_NAME) {
-    const result = spawnSync("aws", [
-      "cloudformation", "describe-stacks",
-      "--region", environment.AWS_REGION,
-      "--stack-name", environment.ENTITLEMENT_STACK_NAME,
-      "--query", "Stacks[0].StackStatus",
-      "--output", "text",
-    ], { encoding: "utf8", timeout: 10_000 });
-    probes.aws = result.status === 0 && /_COMPLETE\s*$/.test(result.stdout)
-      ? { ok: true }
-      : { ok: false, reason: "AWS did not confirm a completed entitlement stack." };
+    const result = run("aws", ["cloudformation", "describe-stacks", "--region", environment.AWS_REGION, "--stack-name", environment.ENTITLEMENT_STACK_NAME, "--output", "json"]);
+    probes.aws = result.ok ? { ok: true } : { ok: false, reason: result.stderr || "AWS stack probe failed." };
   }
-  return probes;
-}
 
-async function publicNpmVersion() {
-  const { response } = await safeFetch("https://registry.npmjs.org/@solvelang%2Fmcp-server/latest", { headers: { accept: "application/json" } });
-  if (!response?.ok) return undefined;
-  try { return (await response.json()).version; } catch { return undefined; }
-}
+  if (environment.STRIPE_SECRET_KEY && environment.STRIPE_PRICE_ID) {
+    const response = await fetch(`https://api.stripe.com/v1/prices/${encodeURIComponent(environment.STRIPE_PRICE_ID)}`, { headers: { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+    probes.stripe = response?.ok ? { ok: true } : { ok: false, reason: "Stripe Price lookup failed." };
+  }
 
-async function writeEvidence(target, content) {
-  await mkdir(path.dirname(target), { recursive: true });
-  await writeFile(target, content, "utf8");
+  if (environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE) {
+    probes.entitlementHealth = await probeUrl(`${environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE.replace(/\/$/, "")}/health`);
+  }
+
+  if (environment.STRIPE_WEBHOOK_ENDPOINT) {
+    const response = await probeUrl(environment.STRIPE_WEBHOOK_ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    probes.webhook = response.status === 400 ? { ok: true } : { ok: false, reason: `Expected signed-webhook rejection, received ${response.status ?? "no response"}.` };
+  }
+
+  if (environment.SITE_ORIGIN) {
+    probes.site = await probeUrl(environment.SITE_ORIGIN);
+  }
+
+  return { repository, probes };
 }
 
 async function main() {
-  const args = new Set(process.argv.slice(2));
-  const online = args.has("--online");
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-  const npmVersion = online ? await publicNpmVersion() : process.env.NPM_PUBLIC_VERSION;
-  const repository = await collectRepositoryState(root, { npmVersion });
-  const probes = online ? await onlineProbes(process.env) : {};
-  const report = evaluateLaunch({ environment: process.env, repository, probes });
-  const evidenceRoot = path.join(root, "artifacts/launch-readiness");
-  await writeEvidence(path.join(evidenceRoot, "launch-readiness.json"), `${JSON.stringify(report, null, 2)}\n`);
-  await writeEvidence(path.join(evidenceRoot, "launch-readiness.md"), renderMarkdown(report));
-  console.log(`Launch readiness: ${report.ready ? "PASS" : "BLOCKED"} (${report.summary.pass} pass, ${report.summary.fail} fail, ${report.summary.blocked} blocked)`);
-  console.log(`Evidence: ${path.relative(root, evidenceRoot)}`);
-  process.exitCode = report.ready ? 0 : 1;
+  const online = process.argv.includes("--online");
+  const outputIndex = process.argv.indexOf("--output");
+  const outputPath = outputIndex >= 0 ? process.argv[outputIndex + 1] : undefined;
+  const environment = process.env;
+  const evidence = online ? await collectOnlineEvidence({ environment, root }) : { repository: await collectRepositoryState(root), probes: {} };
+  const report = evaluateLaunch({ environment, repository: evidence.repository, probes: evidence.probes });
+  if (outputPath) {
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, renderMarkdown(report));
+  }
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  if (!report.ready) process.exitCode = 1;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

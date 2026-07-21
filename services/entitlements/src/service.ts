@@ -27,7 +27,7 @@ export type EntitlementConfig = {
 
 export type CheckoutSession = {
   id: string;
-  url?: string | null;
+  clientSecret?: string | null;
   paymentStatus?: string | null;
   metadata?: Record<string, string> | null;
 };
@@ -43,8 +43,7 @@ export type StripeGateway = {
     create(params: {
       mode: "payment";
       lineItems: Array<{ price: string; quantity: number }>;
-      successUrl: string;
-      cancelUrl: string;
+      returnUrl: string;
       metadata: { scanId: string; product: typeof PRODUCT };
     }, idempotencyKey: string): Promise<CheckoutSession>;
     retrieve(sessionId: string): Promise<CheckoutSession>;
@@ -130,12 +129,11 @@ export function createEntitlementService({
     const session = await stripe.checkout.create({
       mode: "payment",
       lineItems: [{ price: config.stripePriceId, quantity: 1 }],
-      successUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&checkout=cancelled`,
+      returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
       metadata: { scanId, product: PRODUCT },
     }, `preflight-${scanId}`);
-    if (!session.url) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
-    return response(200, { checkoutUrl: session.url });
+    if (!session.clientSecret) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
+    return response(200, { clientSecret: session.clientSecret });
   }
 
   async function handleWebhook(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
