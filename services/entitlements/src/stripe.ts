@@ -16,8 +16,6 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
           line_items: params.lineItems.map(({ price, quantity }) => ({ price, quantity })),
           return_url: params.returnUrl,
           metadata: params.metadata,
-          allow_promotion_codes: true,
-          billing_address_collection: "auto",
         } as unknown as CustomCheckoutSessionParams;
 
         const session = await client.checkout.sessions.create(sessionParams, { idempotencyKey });
