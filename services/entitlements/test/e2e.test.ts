@@ -67,7 +67,7 @@ function createFixture() {
     checkout: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: sessionId, url: "https://checkout.stripe.com/c/pay/cs_test_paid_session" };
+        return { id: sessionId, clientSecret: "cs_test_paid_session_secret_test" };
       },
       async retrieve(id) {
         assert.equal(id, sessionId);
@@ -110,11 +110,11 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
   assert.equal(result.headers?.["cache-control"], "no-store");
 });
 
-test("checkout creation returns a hosted Stripe checkout URL with minimal metadata", async () => {
+test("checkout creation returns an embedded checkout client secret with minimal metadata", async () => {
   const { service, checkoutRequests } = createFixture();
   const result = await service(apiEvent("POST", "/checkout", { scanId }));
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(responseBody(result), { checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test_paid_session" });
+  assert.deepEqual(responseBody(result), { clientSecret: "cs_test_paid_session_secret_test" });
   assert.equal(checkoutRequests.length, 1);
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
@@ -122,7 +122,6 @@ test("checkout creation returns a hosted Stripe checkout URL with minimal metada
       mode: "payment",
       lineItems: [{ price: "price_test_workflow_preflight", quantity: 1 }],
       returnUrl: `https://www.solve-lang.com/check/?scan_id=${scanId}&session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `https://www.solve-lang.com/check/?scan_id=${scanId}&checkout=cancelled`,
       metadata: { scanId, product: "workflow-preflight-v1" },
     },
   });
