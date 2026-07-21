@@ -67,7 +67,7 @@ function createFixture() {
     checkout: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: sessionId, clientSecret: "cs_test_paid_session_secret_example" };
+        return { id: sessionId, clientSecret: "cs_test_paid_session_secret_test" };
       },
       async retrieve(id) {
         assert.equal(id, sessionId);
@@ -110,11 +110,11 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
   assert.equal(result.headers?.["cache-control"], "no-store");
 });
 
-test("checkout creation returns an embedded client secret with minimal metadata", async () => {
+test("checkout creation returns a custom checkout client secret with minimal metadata", async () => {
   const { service, checkoutRequests } = createFixture();
   const result = await service(apiEvent("POST", "/checkout", { scanId }));
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(responseBody(result), { clientSecret: "cs_test_paid_session_secret_example" });
+  assert.deepEqual(responseBody(result), { clientSecret: "cs_test_paid_session_secret_test" });
   assert.equal(checkoutRequests.length, 1);
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
