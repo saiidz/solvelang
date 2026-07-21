@@ -104,6 +104,7 @@ export function WorkflowPreflight() {
     setError("");
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
     recordEvent("checkout_started");
+    // The checkout page preserves the privacy boundary and posts only body: JSON.stringify({ scanId }).
     window.location.assign(`/checkout/?scan_id=${encodeURIComponent(scanId)}`);
   }
 
