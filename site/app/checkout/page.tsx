@@ -8,13 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CheckoutPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ scan_id?: string }>;
-}) {
-  const { scan_id: scanId = "" } = await searchParams;
-
+export default function CheckoutPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-950 lg:px-8">
       <div className="mx-auto max-w-5xl">
@@ -52,7 +46,7 @@ export default async function CheckoutPage({
               <h2 className="mt-2 text-2xl font-semibold">Complete your purchase</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">The payment form stays on SolveLang.</p>
             </div>
-            <EmbeddedCheckoutClient scanId={scanId} />
+            <EmbeddedCheckoutClient />
           </section>
         </div>
       </div>
