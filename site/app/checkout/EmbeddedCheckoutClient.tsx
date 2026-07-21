@@ -7,6 +7,20 @@ const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "")
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
 type ConfirmAction = () => Promise<void>;
+type PaymentElementLike = { mount(target: HTMLElement): void; destroy(): void };
+type CheckoutActionsResult =
+  | { type: "success"; actions: { confirm(): Promise<{ type: "success" } | { type: "error"; error: { message?: string } }> } }
+  | { type: "error" };
+type CustomCheckoutLike = {
+  createPaymentElement(): PaymentElementLike;
+  loadActions(): Promise<CheckoutActionsResult>;
+};
+type StripeWithCustomCheckout = {
+  initCheckout(options: {
+    clientSecret: Promise<string>;
+    elementsOptions?: { appearance?: { theme?: "stripe"; variables?: Record<string, string> } };
+  }): CustomCheckoutLike;
+};
 
 export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -15,7 +29,7 @@ export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    let paymentElement: { destroy(): void } | undefined;
+    let paymentElement: PaymentElementLike | undefined;
     let cancelled = false;
 
     async function mountCheckout() {
@@ -37,7 +51,7 @@ export function EmbeddedCheckoutClient({ scanId }: { scanId: string }) {
           return body.clientSecret;
         });
 
-        const checkout = stripe.initCheckout({
+        const checkout = (stripe as unknown as StripeWithCustomCheckout).initCheckout({
           clientSecret,
           elementsOptions: {
             appearance: {
