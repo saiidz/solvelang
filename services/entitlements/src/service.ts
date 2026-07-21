@@ -92,18 +92,31 @@ class RequestError extends Error {
   }
 }
 
+function safeStripeToken(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const sanitized = value.replace(/[^a-zA-Z0-9_.\[\]-]/g, "").slice(0, 80);
+  return sanitized || undefined;
+}
+
 function stripeFailure(error: unknown): RequestError {
-  const candidate = error as { type?: string; code?: string };
+  const candidate = error as { type?: string; code?: string; param?: string };
+  const stripeCode = safeStripeToken(candidate?.code);
+  const stripeParam = safeStripeToken(candidate?.param);
+  const diagnostic = [stripeCode ? `code=${stripeCode}` : "", stripeParam ? `param=${stripeParam}` : ""]
+    .filter(Boolean)
+    .join(", ");
+  const suffix = diagnostic ? ` (${diagnostic})` : "";
+
   if (candidate?.type === "StripeAuthenticationError") {
-    return new RequestError(502, "Stripe authentication failed. Verify the test secret key.", "stripe_authentication");
+    return new RequestError(502, `Stripe authentication failed. Verify the test secret key.${suffix}`, "stripe_authentication");
   }
   if (candidate?.code === "resource_missing") {
-    return new RequestError(502, "Stripe Price was not found for this test account. Verify the Price ID and Stripe keys use the same account.", "stripe_resource_missing");
+    return new RequestError(502, `Stripe resource was not found for this test account.${suffix}`, "stripe_resource_missing");
   }
   if (candidate?.type === "StripeInvalidRequestError") {
-    return new RequestError(502, "Stripe rejected the Checkout Session configuration.", "stripe_invalid_request");
+    return new RequestError(502, `Stripe rejected the Checkout Session configuration.${suffix}`, "stripe_invalid_request");
   }
-  return new RequestError(502, "Stripe checkout is temporarily unavailable.", "stripe_checkout_failed");
+  return new RequestError(502, `Stripe checkout is temporarily unavailable.${suffix}`, "stripe_checkout_failed");
 }
 
 function parseJson(event: APIGatewayProxyEventV2): unknown {
