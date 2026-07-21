@@ -4,7 +4,7 @@ import { EmbeddedCheckoutClient } from "./EmbeddedCheckoutClient";
 
 export const metadata: Metadata = {
   title: "Secure Checkout | SolveLang",
-  description: "Complete your SolveLang Workflow Preflight purchase securely without leaving SolveLang.",
+  description: "Complete your SolveLang Workflow Preflight purchase securely with Stripe.",
   robots: { index: false, follow: false },
 };
 
@@ -44,7 +44,7 @@ export default function CheckoutPage() {
             <div className="mb-6">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">Secure payment</p>
               <h2 className="mt-2 text-2xl font-semibold">Complete your purchase</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">The payment form stays on SolveLang.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Secure checkout powered by Stripe.</p>
             </div>
             <EmbeddedCheckoutClient />
           </section>
