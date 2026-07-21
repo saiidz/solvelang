@@ -2,21 +2,25 @@
 
 import { loadStripe } from "@stripe/stripe-js";
 import { useEffect, useRef, useState } from "react";
-import { initializeCheckout, type PaymentElementLike } from "./checkoutSdk";
 
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
-type ConfirmAction = () => Promise<void>;
+type EmbeddedCheckoutLike = {
+  mount(target: HTMLElement): void;
+  destroy(): void;
+};
+
+type StripeWithEmbeddedCheckout = {
+  initEmbeddedCheckout(options: { fetchClientSecret: () => Promise<string> }): Promise<EmbeddedCheckoutLike>;
+};
 
 export function EmbeddedCheckoutClient() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    let paymentElement: PaymentElementLike | undefined;
+    let embeddedCheckout: EmbeddedCheckoutLike | undefined;
     let cancelled = false;
 
     async function mountCheckout() {
@@ -31,45 +35,23 @@ export function EmbeddedCheckoutClient() {
         const stripe = await loadStripe(publishableKey);
         if (!stripe) throw new Error("Stripe could not be loaded.");
 
-        const clientSecret = fetch(`${apiBase}/checkout`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scanId }),
-        }).then(async (response) => {
+        const fetchClientSecret = async () => {
+          const response = await fetch(`${apiBase}/checkout`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ scanId }),
+          });
           const body = (await response.json()) as { clientSecret?: string; error?: string };
           if (!response.ok || !body.clientSecret) throw new Error(body.error || "Checkout could not be started.");
           return body.clientSecret;
-        });
+        };
 
-        const checkout = await initializeCheckout(stripe, {
-          clientSecret,
-          elementsOptions: {
-            appearance: {
-              theme: "stripe",
-              variables: { borderRadius: "12px" },
-            },
-          },
-        });
-
-        paymentElement = checkout.createPaymentElement();
-        if (cancelled || !containerRef.current) return;
-        paymentElement.mount(containerRef.current);
-
-        const result = await checkout.loadActions();
-        if (result.type !== "success") {
-          throw new Error(result.error?.message || "Stripe checkout could not be initialized. Verify that the publishable key and server secret key belong to the same Stripe account and mode.");
+        embeddedCheckout = await (stripe as unknown as StripeWithEmbeddedCheckout).initEmbeddedCheckout({ fetchClientSecret });
+        if (cancelled || !containerRef.current) {
+          embeddedCheckout.destroy();
+          return;
         }
-        if (cancelled) return;
-
-        setConfirmAction(() => async () => {
-          setSubmitting(true);
-          setError("");
-          const confirmation = await result.actions.confirm();
-          if (confirmation.type === "error") {
-            setError(confirmation.error.message || "Payment could not be completed.");
-            setSubmitting(false);
-          }
-        });
+        embeddedCheckout.mount(containerRef.current);
       } catch (caught) {
         if (!cancelled) setError(caught instanceof Error ? caught.message : "Checkout could not be loaded.");
       }
@@ -78,7 +60,7 @@ export function EmbeddedCheckoutClient() {
     void mountCheckout();
     return () => {
       cancelled = true;
-      paymentElement?.destroy();
+      embeddedCheckout?.destroy();
     };
   }, []);
 
@@ -89,15 +71,7 @@ export function EmbeddedCheckoutClient() {
           {error}
         </div>
       ) : null}
-      <div ref={containerRef} className="min-h-[320px]" aria-label="Secure Stripe payment form" />
-      <button
-        type="button"
-        onClick={() => void confirmAction?.()}
-        disabled={!confirmAction || submitting}
-        className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {submitting ? "Processing…" : "Pay securely"}
-      </button>
+      <div ref={containerRef} className="min-h-[520px]" aria-label="Secure Stripe payment form" />
     </div>
   );
 }
