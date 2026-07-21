@@ -11,8 +11,8 @@ type EmbeddedCheckoutLike = {
   destroy(): void;
 };
 
-type StripeWithEmbeddedCheckout = {
-  initEmbeddedCheckout(options: { fetchClientSecret: () => Promise<string> }): Promise<EmbeddedCheckoutLike>;
+type StripeWithEmbeddedCheckoutPage = {
+  createEmbeddedCheckoutPage(options: { fetchClientSecret: () => Promise<string> }): Promise<EmbeddedCheckoutLike>;
 };
 
 export function EmbeddedCheckoutClient() {
@@ -46,7 +46,7 @@ export function EmbeddedCheckoutClient() {
           return body.clientSecret;
         };
 
-        embeddedCheckout = await (stripe as unknown as StripeWithEmbeddedCheckout).initEmbeddedCheckout({ fetchClientSecret });
+        embeddedCheckout = await (stripe as unknown as StripeWithEmbeddedCheckoutPage).createEmbeddedCheckoutPage({ fetchClientSecret });
         if (cancelled || !containerRef.current) {
           embeddedCheckout.destroy();
           return;
