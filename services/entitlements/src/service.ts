@@ -4,7 +4,7 @@ import { issueEntitlement } from "./token.js";
 
 const PRODUCT = "workflow-preflight-v1";
 const checkoutSchema = z.object({ scanId: z.string().uuid() }).strict();
-const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("cs_") }).strict();
+const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
 const conversionEventSchema = z.object({
   name: z.enum([
     "check_page_view",
@@ -114,9 +114,9 @@ function stripeFailure(error: unknown): RequestError {
     return new RequestError(502, `Stripe resource was not found for this test account.${suffix}`, "stripe_resource_missing");
   }
   if (candidate?.type === "StripeInvalidRequestError") {
-    return new RequestError(502, `Stripe rejected the Checkout Session configuration.${suffix}`, "stripe_invalid_request");
+    return new RequestError(502, `Stripe rejected the payment configuration.${suffix}`, "stripe_invalid_request");
   }
-  return new RequestError(502, `Stripe checkout is temporarily unavailable.${suffix}`, "stripe_checkout_failed");
+  return new RequestError(502, `Stripe payment is temporarily unavailable.${suffix}`, "stripe_checkout_failed");
 }
 
 function parseJson(event: APIGatewayProxyEventV2): unknown {
@@ -158,14 +158,14 @@ export function createEntitlementService({
       session = await stripe.checkout.create({
         mode: "payment",
         lineItems: [{ price: config.stripePriceId, quantity: 1 }],
-        returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}&session_id={CHECKOUT_SESSION_ID}`,
+        returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}`,
         metadata: { scanId, product: PRODUCT },
       }, `preflight-${scanId}`);
     } catch (error) {
       throw stripeFailure(error);
     }
-    if (!session.clientSecret) throw new RequestError(502, "Checkout is temporarily unavailable.", "checkout_unavailable");
-    return response(200, { clientSecret: session.clientSecret });
+    if (!session.clientSecret) throw new RequestError(502, "Payment is temporarily unavailable.", "checkout_unavailable");
+    return response(200, { clientSecret: session.clientSecret, paymentId: session.id });
   }
 
   async function handleWebhook(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
@@ -179,7 +179,7 @@ export function createEntitlementService({
       throw new RequestError(400, "Invalid webhook.", "invalid_webhook_signature");
     }
 
-    if (stripeEvent.type === "checkout.session.completed" && stripeEvent.session) {
+    if (stripeEvent.type === "payment_intent.succeeded" && stripeEvent.session) {
       const session = stripeEvent.session;
       const scanId = session.metadata?.scanId;
       if (scanId && session.metadata?.product === PRODUCT && session.paymentStatus === "paid") {
@@ -209,7 +209,7 @@ export function createEntitlementService({
       || session.metadata?.scanId !== scanId
       || session.metadata?.product !== PRODUCT
     ) {
-      return response(403, { error: "No matching paid checkout was found." });
+      return response(403, { error: "No matching paid payment was found." });
     }
     const exp = Math.floor(now() / 1000) + 15 * 60;
     return response(200, {
