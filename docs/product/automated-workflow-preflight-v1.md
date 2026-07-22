@@ -64,7 +64,7 @@ A truly gated paid report requires a server-side Stripe webhook and signed entit
 The service must:
 
 - validate Stripe webhook signatures;
-- associate checkout sessions with opaque scan identifiers;
+- associate PaymentIntents with opaque scan identifiers;
 - issue short-lived signed unlock tokens;
 - avoid receiving workflow contents unless the customer explicitly opts into hosted analysis;
 - support refunds, replay protection, and idempotency;

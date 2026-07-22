@@ -25,7 +25,7 @@ export type EntitlementConfig = {
   mode: "test";
 };
 
-export type CheckoutSession = {
+export type PaymentIntentSnapshot = {
   id: string;
   clientSecret?: string | null;
   paymentStatus?: string | null;
@@ -35,18 +35,18 @@ export type CheckoutSession = {
 export type StripeEvent = {
   id: string;
   type: string;
-  session?: CheckoutSession;
+  paymentIntent?: PaymentIntentSnapshot;
 };
 
 export type StripeGateway = {
-  checkout: {
+  payments: {
     create(params: {
       mode: "payment";
       lineItems: Array<{ price: string; quantity: number }>;
       returnUrl: string;
       metadata: { scanId: string; product: typeof PRODUCT };
-    }, idempotencyKey: string): Promise<CheckoutSession>;
-    retrieve(sessionId: string): Promise<CheckoutSession>;
+    }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
+    retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot>;
   };
   webhooks: {
     constructEvent(rawBody: Buffer, signature: string, secret: string): StripeEvent;
@@ -55,6 +55,7 @@ export type StripeGateway = {
 
 export type EntitlementRecord = {
   scanId: string;
+  // Compatibility field retained for existing browser recovery and stored records.
   sessionId: string;
   paymentStatus: string;
   stripeEventId: string;
@@ -153,9 +154,9 @@ export function createEntitlementService({
 
   async function createCheckout(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
     const { scanId } = checkoutSchema.parse(parseJson(event));
-    let session: CheckoutSession;
+    let paymentIntent: PaymentIntentSnapshot;
     try {
-      session = await stripe.checkout.create({
+      paymentIntent = await stripe.payments.create({
         mode: "payment",
         lineItems: [{ price: config.stripePriceId, quantity: 1 }],
         returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}`,
@@ -164,8 +165,8 @@ export function createEntitlementService({
     } catch (error) {
       throw stripeFailure(error);
     }
-    if (!session.clientSecret) throw new RequestError(502, "Payment is temporarily unavailable.", "checkout_unavailable");
-    return response(200, { clientSecret: session.clientSecret, paymentId: session.id });
+    if (!paymentIntent.clientSecret) throw new RequestError(502, "Payment is temporarily unavailable.", "payment_unavailable");
+    return response(200, { clientSecret: paymentIntent.clientSecret, paymentId: paymentIntent.id });
   }
 
   async function handleWebhook(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
@@ -179,14 +180,14 @@ export function createEntitlementService({
       throw new RequestError(400, "Invalid webhook.", "invalid_webhook_signature");
     }
 
-    if (stripeEvent.type === "payment_intent.succeeded" && stripeEvent.session) {
-      const session = stripeEvent.session;
-      const scanId = session.metadata?.scanId;
-      if (scanId && session.metadata?.product === PRODUCT && session.paymentStatus === "paid") {
+    if (stripeEvent.type === "payment_intent.succeeded" && stripeEvent.paymentIntent) {
+      const paymentIntent = stripeEvent.paymentIntent;
+      const scanId = paymentIntent.metadata?.scanId;
+      if (scanId && paymentIntent.metadata?.product === PRODUCT && paymentIntent.paymentStatus === "paid") {
         const timestamp = now();
         await store.putIfAbsent({
           scanId,
-          sessionId: session.id,
+          sessionId: paymentIntent.id,
           paymentStatus: "paid",
           stripeEventId: stripeEvent.id,
           createdAt: new Date(timestamp).toISOString(),
@@ -199,15 +200,15 @@ export function createEntitlementService({
 
   async function createEntitlement(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
     const { scanId, sessionId } = entitlementSchema.parse(parseJson(event));
-    const [stored, session] = await Promise.all([store.get(scanId), stripe.checkout.retrieve(sessionId)]);
+    const [stored, paymentIntent] = await Promise.all([store.get(scanId), stripe.payments.retrieve(sessionId)]);
     if (
       !stored
       || stored.paymentStatus !== "paid"
       || stored.sessionId !== sessionId
       || stored.expiresAt <= Math.floor(now() / 1000)
-      || session.paymentStatus !== "paid"
-      || session.metadata?.scanId !== scanId
-      || session.metadata?.product !== PRODUCT
+      || paymentIntent.paymentStatus !== "paid"
+      || paymentIntent.metadata?.scanId !== scanId
+      || paymentIntent.metadata?.product !== PRODUCT
     ) {
       return response(403, { error: "No matching paid payment was found." });
     }

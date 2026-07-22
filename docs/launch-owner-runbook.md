@@ -67,7 +67,7 @@ Record `ApiBaseUrl` and `WebhookUrl`. These URLs are public configuration, not c
 
 ## 5. Register and verify the Stripe test webhook
 
-In **Stripe test mode → Workbench → Webhooks**, create an endpoint using the stack `WebhookUrl` and subscribe only to `checkout.session.completed`.
+In **Stripe test mode → Workbench → Webhooks**, create an endpoint using the stack `WebhookUrl` and subscribe only to `payment_intent.succeeded`.
 
 Copy the generated `whsec_...` signing secret into the protected `entitlement-test` `STRIPE_WEBHOOK_SECRET`, replacing the bootstrap value. Rerun the test deployment workflow so Lambda receives the real test signing secret.
 
@@ -98,7 +98,7 @@ It must return only safe readiness fields and confirm `mode` is `test`. Stop if 
 5. Confirm the browser returns to the same opaque scan ID, verifies the entitlement server-side, removes checkout parameters from the address bar, and unlocks HTML/JSON downloads.
 6. Refresh once and exercise the documented recovery behavior. Do not treat a query parameter or local-storage edit as payment proof.
 
-In Stripe Workbench, confirm one successful `checkout.session.completed` delivery and no unexpected retries. In AWS logs and DynamoDB, verify only opaque scan/session/event identifiers and allowlisted conversion names are present. Workflow JSON, workflow names, filenames, report findings, credential values, and customer data must be absent.
+In Stripe Workbench, confirm one successful `payment_intent.succeeded` delivery and no unexpected retries. In AWS logs and DynamoDB, verify only opaque scan/PaymentIntent/event identifiers and allowlisted conversion names are present. Workflow JSON, workflow names, filenames, report findings, credential values, and customer data must be absent.
 
 ## 8. Generate final evidence
 

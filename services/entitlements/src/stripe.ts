@@ -3,7 +3,7 @@ import type { StripeGateway } from "./service.js";
 
 export function createStripeGateway(client: Stripe, options?: { receivedAt?: () => number }): StripeGateway {
   return {
-    checkout: {
+    payments: {
       async create(params, idempotencyKey) {
         const paymentIntent = await client.paymentIntents.create({
           amount: 4900,
@@ -36,7 +36,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
         return {
           id: event.id,
           type: event.type,
-          session: {
+          paymentIntent: {
             id: paymentIntent.id,
             paymentStatus: "paid",
             metadata: paymentIntent.metadata,

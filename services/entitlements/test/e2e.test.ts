@@ -12,7 +12,7 @@ import { issueEntitlement, verifyEntitlement } from "../src/token.js";
 import { createStripeGateway } from "../src/stripe.js";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
-const sessionId = "pi_test_paid_payment";
+const paymentIntentId = "pi_test_paid_payment";
 const signingSecret = "entitlement-test-secret-at-least-32-bytes";
 const nowMs = Date.parse("2026-07-20T00:00:00.000Z");
 
@@ -64,13 +64,13 @@ function createFixture() {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
-    checkout: {
+    payments: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: sessionId, clientSecret: "pi_test_paid_payment_secret_test" };
+        return { id: paymentIntentId, clientSecret: "pi_test_paid_payment_secret_test" };
       },
       async retrieve(id) {
-        assert.equal(id, sessionId);
+        assert.equal(id, paymentIntentId);
         return { id, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } };
       },
     },
@@ -80,7 +80,7 @@ function createFixture() {
         return {
           id: signature === "valid-duplicate-signature" ? "evt_test_duplicate" : "evt_test_paid",
           type: "payment_intent.succeeded",
-          session: { id: sessionId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
+          paymentIntent: { id: paymentIntentId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
         };
       },
     },
@@ -116,7 +116,7 @@ test("payment creation returns a PaymentIntent client secret with minimal metada
   assert.equal(result.statusCode, 200);
   assert.deepEqual(responseBody(result), {
     clientSecret: "pi_test_paid_payment_secret_test",
-    paymentId: sessionId,
+    paymentId: paymentIntentId,
   });
   assert.equal(checkoutRequests.length, 1);
   assert.deepEqual(checkoutRequests[0], {
@@ -147,7 +147,7 @@ test("valid signed webhook records one entitlement and replay or duplicate deliv
   assert.equal(store.writes, 1);
   assert.deepEqual(store.records.get(scanId), {
     scanId,
-    sessionId,
+    sessionId: paymentIntentId,
     paymentStatus: "paid",
     stripeEventId: "evt_test_paid",
     createdAt: "2026-07-20T00:00:00.000Z",
@@ -163,7 +163,7 @@ test("Stripe gateway verifies a deterministic local test signature without netwo
     type: "payment_intent.succeeded",
     data: {
       object: {
-        id: sessionId,
+        id: paymentIntentId,
         object: "payment_intent",
         status: "succeeded",
         metadata: { scanId, product: "workflow-preflight-v1" },
@@ -177,7 +177,7 @@ test("Stripe gateway verifies a deterministic local test signature without netwo
   assert.deepEqual(event, {
     id: "evt_local_signed",
     type: "payment_intent.succeeded",
-    session: { id: sessionId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
+    paymentIntent: { id: paymentIntentId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
   });
 });
 
@@ -192,14 +192,14 @@ test("invalid webhook signatures are rejected without processing", async () => {
 test("paid payment recovery issues a verifiable short-lived entitlement", async () => {
   const { service } = createFixture();
   await service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
-  const result = await service(apiEvent("POST", "/entitlement", { scanId, sessionId }));
+  const result = await service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
   assert.equal(result.statusCode, 200);
   const body = responseBody(result);
   assert.equal(body.expiresAt, "2026-07-20T00:15:00.000Z");
   assert.deepEqual(verifyEntitlement(String(body.token), signingSecret, Math.floor(nowMs / 1000)), {
     version: 1,
     scanId,
-    sessionId,
+    sessionId: paymentIntentId,
     exp: Math.floor(nowMs / 1000) + 15 * 60,
   });
 });
@@ -208,19 +208,19 @@ test("unpaid or mismatched payment cannot receive an entitlement", async () => {
   const fixture = createFixture();
   fixture.store.records.set(scanId, {
     scanId,
-    sessionId,
+    sessionId: paymentIntentId,
     paymentStatus: "unpaid",
     stripeEventId: "evt_unpaid",
     createdAt: "2026-07-20T00:00:00.000Z",
     expiresAt: Math.floor(nowMs / 1000) + 60,
   });
-  const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId }));
+  const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
   assert.equal(result.statusCode, 403);
   assert.deepEqual(responseBody(result), { error: "No matching paid payment was found." });
 });
 
 test("expired, invalid, and tampered entitlement tokens are rejected", () => {
-  const claims = { version: 1 as const, scanId, sessionId, exp: 1000 };
+  const claims = { version: 1 as const, scanId, sessionId: paymentIntentId, exp: 1000 };
   const token = issueEntitlement(claims, signingSecret);
   assert.throws(() => verifyEntitlement(token, signingSecret, 1000), /expired/);
   assert.throws(() => verifyEntitlement(token, "different-secret-at-least-32-bytes"), /signature/);

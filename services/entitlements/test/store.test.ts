@@ -6,7 +6,7 @@ import type { EntitlementRecord } from "../src/service.js";
 
 const record: EntitlementRecord = {
   scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875",
-  sessionId: "cs_test_paid_session",
+  sessionId: "pi_test_paid_payment",
   paymentStatus: "paid",
   stripeEventId: "evt_test_paid",
   createdAt: "2026-07-20T00:00:00.000Z",

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
 
-export function EmbeddedCheckoutClient() {
+export function PaymentElementClient() {
   const containerRef = useRef<HTMLDivElement>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const paymentElementRef = useRef<StripePaymentElement | null>(null);

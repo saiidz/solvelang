@@ -6,7 +6,7 @@ Serverless Stripe Checkout, webhook verification, signed report entitlements, an
 
 - Stripe secret keys and webhook secrets exist only in Lambda environment variables.
 - Checkout metadata contains only an opaque UUID scan ID and product identifier.
-- Entitlements are signed with HMAC-SHA256, expire after 15 minutes, and are bound to both scan ID and Checkout Session ID.
+- Entitlements are signed with HMAC-SHA256, expire after 15 minutes, and are bound to both scan ID and PaymentIntent ID. The serialized `sessionId` field is retained for browser and stored-record compatibility, but its value must begin with `pi_`.
 - Stripe payment status is re-read server-side before an entitlement is issued.
 - Entitlement recovery also requires the matching signed-webhook record in DynamoDB.
 - Webhook signatures are verified against the unmodified request body.
@@ -52,7 +52,7 @@ sam deploy --guided \
     EntitlementSigningSecret=REDACTED_AT_LEAST_32_CHARACTERS
 ```
 
-Register the stack output `WebhookUrl` in Stripe for `checkout.session.completed`. Set the static-site build variable to the `ApiBaseUrl` output:
+Register the stack output `WebhookUrl` in Stripe for `payment_intent.succeeded`. Set the static-site build variable to the `ApiBaseUrl` output:
 
 ```text
 NEXT_PUBLIC_ENTITLEMENT_API_BASE=https://example.execute-api.us-east-1.amazonaws.com

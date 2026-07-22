@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 export type EntitlementClaims = {
   version: 1;
   scanId: string;
+  // Compatibility field: this stores a Stripe PaymentIntent ID (`pi_...`).
   sessionId: string;
   exp: number;
 };

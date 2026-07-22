@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { EmbeddedCheckoutClient } from "./EmbeddedCheckoutClient";
+import { PaymentElementClient } from "./PaymentElementClient";
 
 export const metadata: Metadata = {
   title: "Secure Checkout | SolveLang",
@@ -46,7 +46,7 @@ export default function CheckoutPage() {
               <h2 className="mt-2 text-2xl font-semibold">Complete your purchase</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">Secure checkout powered by Stripe.</p>
             </div>
-            <EmbeddedCheckoutClient />
+            <PaymentElementClient />
           </section>
         </div>
       </div>

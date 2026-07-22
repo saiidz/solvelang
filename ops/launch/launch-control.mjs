@@ -125,7 +125,7 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
   controls.push(probeControl("aws-stack", "AWS entitlement stack", probes.aws, "Run online launch control with authenticated test-account AWS access."));
   controls.push(probeControl("stripe-price", "Stripe test Price", probes.stripe, "Run online launch control with the protected Stripe test key."));
   controls.push(probeControl("entitlement-health", "Entitlement API health", probes.entitlementHealth, "Deploy the test stack, then rerun the public health probe."));
-  controls.push(probeControl("stripe-webhook", "Stripe webhook endpoint", probes.webhook, "Register and verify checkout.session.completed in Stripe test mode."));
+  controls.push(probeControl("stripe-webhook", "Stripe webhook endpoint", probes.webhook, "Register and verify payment_intent.succeeded in Stripe test mode."));
   controls.push(probeControl("site-deployment", "Static site deployment", probes.site, "Configure the public API base, rebuild the static site, and rerun the probe."));
 
   const summary = {
