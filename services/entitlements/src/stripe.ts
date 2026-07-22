@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import type { StripeGateway } from "./service.js";
 
 type EmbeddedCheckoutSessionParams = Stripe.Checkout.SessionCreateParams & {
-  ui_mode: "embedded";
+  ui_mode: "embedded_page";
   return_url: string;
   wallet_options: { link: { display: "never" } };
 };
@@ -13,7 +13,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
       async create(params, idempotencyKey) {
         const sessionParams = {
           mode: params.mode,
-          ui_mode: "embedded",
+          ui_mode: "embedded_page",
           payment_method_types: ["card"],
           wallet_options: { link: { display: "never" } },
           line_items: params.lineItems.map(({ quantity }) => ({
