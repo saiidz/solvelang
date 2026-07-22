@@ -81,21 +81,34 @@ export function EmbeddedCheckoutClient() {
   async function submitPayment() {
     const stripe = stripeRef.current;
     const elements = elementsRef.current;
-    if (!stripe || !elements || !scanIdRef.current) return;
+    const scanId = scanIdRef.current;
+    if (!stripe || !elements || !scanId) return;
 
     setSubmitting(true);
     setError("");
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/check/?scan_id=${encodeURIComponent(scanIdRef.current)}`,
+        return_url: `${window.location.origin}/check/?scan_id=${encodeURIComponent(scanId)}`,
       },
+      redirect: "if_required",
     });
 
     if (result.error) {
       setError(result.error.message || "Payment could not be completed.");
       setSubmitting(false);
+      return;
     }
+
+    if (result.paymentIntent?.status === "succeeded") {
+      window.location.assign(
+        `/check/?scan_id=${encodeURIComponent(scanId)}&payment_intent=${encodeURIComponent(result.paymentIntent.id)}&redirect_status=succeeded`,
+      );
+      return;
+    }
+
+    setError("Payment is still processing. Please try again in a moment.");
+    setSubmitting(false);
   }
 
   return (
