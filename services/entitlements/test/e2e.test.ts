@@ -12,7 +12,7 @@ import { issueEntitlement, verifyEntitlement } from "../src/token.js";
 import { createStripeGateway } from "../src/stripe.js";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
-const sessionId = "cs_test_paid_session";
+const sessionId = "pi_test_paid_payment";
 const signingSecret = "entitlement-test-secret-at-least-32-bytes";
 const nowMs = Date.parse("2026-07-20T00:00:00.000Z");
 
@@ -67,7 +67,7 @@ function createFixture() {
     checkout: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: sessionId, clientSecret: "cs_test_paid_session_secret_test" };
+        return { id: sessionId, clientSecret: "pi_test_paid_payment_secret_test" };
       },
       async retrieve(id) {
         assert.equal(id, sessionId);
@@ -79,7 +79,7 @@ function createFixture() {
         if (!signature.startsWith("valid-")) throw new Error(`bad signature ${rawBody.toString("utf8")}`);
         return {
           id: signature === "valid-duplicate-signature" ? "evt_test_duplicate" : "evt_test_paid",
-          type: "checkout.session.completed",
+          type: "payment_intent.succeeded",
           session: { id: sessionId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
         };
       },
@@ -110,18 +110,21 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
   assert.equal(result.headers?.["cache-control"], "no-store");
 });
 
-test("checkout creation returns an embedded checkout client secret with minimal metadata", async () => {
+test("payment creation returns a PaymentIntent client secret with minimal metadata", async () => {
   const { service, checkoutRequests } = createFixture();
   const result = await service(apiEvent("POST", "/checkout", { scanId }));
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(responseBody(result), { clientSecret: "cs_test_paid_session_secret_test" });
+  assert.deepEqual(responseBody(result), {
+    clientSecret: "pi_test_paid_payment_secret_test",
+    paymentId: sessionId,
+  });
   assert.equal(checkoutRequests.length, 1);
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
       mode: "payment",
       lineItems: [{ price: "price_test_workflow_preflight", quantity: 1 }],
-      returnUrl: `https://www.solve-lang.com/check/?scan_id=${scanId}&session_id={CHECKOUT_SESSION_ID}`,
+      returnUrl: `https://www.solve-lang.com/check/?scan_id=${scanId}`,
       metadata: { scanId, product: "workflow-preflight-v1" },
     },
   });
@@ -157,12 +160,12 @@ test("Stripe gateway verifies a deterministic local test signature without netwo
   const payload = JSON.stringify({
     id: "evt_local_signed",
     object: "event",
-    type: "checkout.session.completed",
+    type: "payment_intent.succeeded",
     data: {
       object: {
         id: sessionId,
-        object: "checkout.session",
-        payment_status: "paid",
+        object: "payment_intent",
+        status: "succeeded",
         metadata: { scanId, product: "workflow-preflight-v1" },
       },
     },
@@ -173,7 +176,7 @@ test("Stripe gateway verifies a deterministic local test signature without netwo
   const event = gateway.webhooks.constructEvent(Buffer.from(payload), signature, webhookSecret);
   assert.deepEqual(event, {
     id: "evt_local_signed",
-    type: "checkout.session.completed",
+    type: "payment_intent.succeeded",
     session: { id: sessionId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
   });
 });
@@ -186,7 +189,7 @@ test("invalid webhook signatures are rejected without processing", async () => {
   assert.equal(store.writes, 0);
 });
 
-test("paid checkout recovery issues a verifiable short-lived entitlement", async () => {
+test("paid payment recovery issues a verifiable short-lived entitlement", async () => {
   const { service } = createFixture();
   await service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const result = await service(apiEvent("POST", "/entitlement", { scanId, sessionId }));
@@ -201,7 +204,7 @@ test("paid checkout recovery issues a verifiable short-lived entitlement", async
   });
 });
 
-test("unpaid or mismatched checkout cannot receive an entitlement", async () => {
+test("unpaid or mismatched payment cannot receive an entitlement", async () => {
   const fixture = createFixture();
   fixture.store.records.set(scanId, {
     scanId,
@@ -213,7 +216,7 @@ test("unpaid or mismatched checkout cannot receive an entitlement", async () => 
   });
   const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId }));
   assert.equal(result.statusCode, 403);
-  assert.deepEqual(responseBody(result), { error: "No matching paid checkout was found." });
+  assert.deepEqual(responseBody(result), { error: "No matching paid payment was found." });
 });
 
 test("expired, invalid, and tampered entitlement tokens are rejected", () => {
