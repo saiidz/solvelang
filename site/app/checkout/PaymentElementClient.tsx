@@ -15,6 +15,7 @@ export function PaymentElementClient() {
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +87,7 @@ export function PaymentElementClient() {
 
     setSubmitting(true);
     setError("");
+    setStatus("Processing your payment securely…");
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
@@ -96,6 +98,7 @@ export function PaymentElementClient() {
 
     if (result.error) {
       setError(result.error.message || "Payment could not be completed.");
+      setStatus("");
       setSubmitting(false);
       return;
     }
@@ -107,7 +110,7 @@ export function PaymentElementClient() {
       return;
     }
 
-    setError("Payment is still processing. Please try again in a moment.");
+    setStatus("Payment is processing. Keep this page open and try again in a moment.");
     setSubmitting(false);
   }
 
@@ -118,6 +121,7 @@ export function PaymentElementClient() {
           {error}
         </div>
       ) : null}
+      {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">{status}</div> : null}
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
       <button
         type="button"

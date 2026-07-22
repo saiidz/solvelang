@@ -35,6 +35,9 @@ export function WorkflowPreflight() {
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [recoveryState, setRecoveryState] = useState<"idle" | "verifying" | "waiting" | "retry" | "refunded" | "failed">("idle");
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
+  const [recoveryNonce, setRecoveryNonce] = useState(0);
   const paidMode = Boolean(apiBase);
   const unlocked = !paidMode || Boolean(entitlement);
   const previewFindings = useMemo(() => report?.findings.slice(0, 3) ?? [], [report]);
@@ -45,6 +48,11 @@ export function WorkflowPreflight() {
 
     async function restorePaidScan() {
       const stored = sessionStorage.getItem(STORAGE_KEY);
+      const hasPaymentReturn = new URLSearchParams(window.location.search).has("payment_intent");
+      if (hasPaymentReturn) {
+        setRecoveryState("verifying");
+        setError("");
+      }
 
       try {
         const recovery = await recoverPaidScan({
@@ -54,6 +62,12 @@ export function WorkflowPreflight() {
           verify: (url, init) => window.fetch(url, init),
           clearPending: () => sessionStorage.removeItem(STORAGE_KEY),
           replaceUrl: (url) => window.history.replaceState({}, "", url),
+          onRetry: (attempt) => {
+            if (!cancelled) {
+              setRecoveryAttempt(attempt);
+              setRecoveryState("waiting");
+            }
+          },
         });
         if (!recovery || cancelled) return;
 
@@ -61,9 +75,14 @@ export function WorkflowPreflight() {
         setScanId(recovery.pending.scanId);
         setFileName(recovery.pending.fileName);
         setEntitlement(recovery.token);
+        setRecoveryState("idle");
         recordEvent("payment_completed");
       } catch (caught) {
-        if (!cancelled) setError(caught instanceof Error ? caught.message : "Payment verification failed.");
+        if (!cancelled) {
+          const message = caught instanceof Error ? caught.message : "Payment verification failed.";
+          setError(message);
+          setRecoveryState(message.includes("fully refunded") ? "refunded" : message.includes("still pending") ? "retry" : "failed");
+        }
       }
     }
 
@@ -71,7 +90,7 @@ export function WorkflowPreflight() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [recoveryNonce]);
 
   async function scanFile(file: File) {
     setBusy(true);
@@ -129,7 +148,8 @@ export function WorkflowPreflight() {
             <span className="mt-5 rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">{busy ? "Working…" : "Choose n8n JSON"}</span>
           </label>
           {fileName ? <p className="mt-4 break-all text-sm text-slate-500">Selected: {fileName}</p> : null}
-          {error ? <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{error}</div> : null}
+          {recoveryState === "verifying" || recoveryState === "waiting" ? <div role="status" className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">{recoveryState === "waiting" ? `Payment succeeded. Waiting for secure webhook verification (retry ${recoveryAttempt} of 3)…` : "Payment succeeded. Verifying your access…"}</div> : null}
+          {error ? <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"><p>{error}</p>{recoveryState === "retry" ? <button type="button" onClick={() => setRecoveryNonce((value) => value + 1)} className="mt-3 rounded-lg bg-red-800 px-4 py-2 text-white">Retry verification</button> : null}</div> : null}
         </div>
         <aside className="rounded-[2rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl sm:p-8">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">What it checks</p>

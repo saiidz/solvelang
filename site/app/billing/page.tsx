@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Billing FAQ — SolveLang", description: "Billing and payment answers for SolveLang Workflow Preflight." };
 const items=[
-  ["How is payment handled?","Stripe Checkout processes payment. SolveLang does not receive or store full card details."],
-  ["What does one purchase unlock?","One successful checkout unlocks the complete report for the matching scan ID. Entitlements are short-lived and bound to the Stripe Checkout session."],
+  ["How is payment handled?","Stripe Payment Element processes the $49 card payment on SolveLang. SolveLang does not receive or store full card details."],
+  ["What does one purchase unlock?","One successful PaymentIntent unlocks the complete report for the matching scan ID. Entitlements are short-lived and bound to that PaymentIntent."],
   ["Why did checkout not unlock another scan?","Entitlements are intentionally bound to one opaque scan ID to prevent replay across unrelated reports."],
   ["Are subscriptions active?","No. Workflow Preflight v1 uses a one-time payment. Subscription plans require a separate launch decision."],
   ["Will I receive a receipt?","Stripe sends the receipt when receipt email is enabled in the Stripe account and the customer supplies an email during checkout."],

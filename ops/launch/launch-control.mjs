@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 
 const REQUIRED = {
   aws: ["AWS_REGION", "AWS_ROLE_ARN", "ENTITLEMENT_STACK_NAME"],
-  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_ID"],
-  entitlement: ["ENTITLEMENT_SIGNING_SECRET"],
+  stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+  entitlement: ["ENTITLEMENT_MODE", "ENTITLEMENT_SIGNING_SECRET"],
   site: ["SITE_ORIGIN", "NEXT_PUBLIC_ENTITLEMENT_API_BASE"],
   webhook: ["STRIPE_WEBHOOK_ENDPOINT"],
   npm: ["NPM_SCOPE_OWNERSHIP_VERIFIED", "NPM_PRODUCTION_ENVIRONMENT_PROTECTED"],
@@ -37,7 +37,7 @@ function probeControl(id, name, probe, ownerAction) {
 export function evaluateLaunch({ environment, repository, probes = {}, now = new Date().toISOString() }) {
   const controls = [];
   controls.push(configControl("aws-configuration", "AWS deployment configuration", environment, REQUIRED.aws));
-  controls.push(configControl("stripe-configuration", "Stripe test configuration", environment, REQUIRED.stripe));
+  controls.push(configControl("stripe-configuration", "Stripe configuration", environment, REQUIRED.stripe));
   controls.push(configControl("entitlement-configuration", "Entitlement signing configuration", environment, REQUIRED.entitlement));
   controls.push(configControl("site-configuration", "Static site entitlement configuration", environment, REQUIRED.site));
   controls.push(configControl("webhook-configuration", "Stripe webhook configuration", environment, REQUIRED.webhook));
@@ -46,24 +46,29 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
       ? control("npm-configuration", "npm protected release configuration", "pass", "GitHub confirms the protected npm environment and ownership variable without exposing values.")
       : configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm),
   );
+  const entitlementEnvironmentName = environment.ENTITLEMENT_MODE === "production" ? "entitlement-production" : "entitlement-test";
+  const entitlementEnvironmentPresent = environment.ENTITLEMENT_MODE === "production"
+    ? probes.github?.entitlementProductionEnvironment
+    : probes.github?.entitlementTestEnvironment;
   controls.push(
-    probes.github?.entitlementTestEnvironment
-      ? control("github-entitlement-test-environment", "GitHub entitlement test environment", "pass", "The protected entitlement-test environment exists.")
+    entitlementEnvironmentPresent
+      ? control("github-entitlement-environment", "GitHub entitlement environment", "pass", `The protected ${entitlementEnvironmentName} environment exists.`)
       : control(
-          "github-entitlement-test-environment",
-          "GitHub entitlement test environment",
+          "github-entitlement-environment",
+          "GitHub entitlement environment",
           "blocked",
-          probes.github?.ok ? "GitHub confirms that entitlement-test is not configured." : "GitHub environment metadata was not available.",
-          "Create the protected entitlement-test environment and configure its required variables and secrets by name.",
+          probes.github?.ok ? `GitHub confirms that ${entitlementEnvironmentName} is not configured.` : "GitHub environment metadata was not available.",
+          `Create the protected ${entitlementEnvironmentName} environment and configure its required variables and secrets by name.`,
         ),
   );
 
-  if (environment.STRIPE_SECRET_KEY && !environment.STRIPE_SECRET_KEY.startsWith("sk_test_")) {
-    controls.push(control("stripe-mode", "Stripe mode", "fail", "The configured key is not a Stripe test-mode key.", "Use a protected sk_test_ credential for launch verification."));
-  } else if (environment.STRIPE_SECRET_KEY) {
-    controls.push(control("stripe-mode", "Stripe mode", "pass", "Stripe test mode is configured."));
+  const expectedStripePrefix = environment.ENTITLEMENT_MODE === "production" ? "sk_live_" : "sk_test_";
+  if (environment.STRIPE_SECRET_KEY && !environment.STRIPE_SECRET_KEY.startsWith(expectedStripePrefix)) {
+    controls.push(control("stripe-mode", "Stripe mode", "fail", "The configured Stripe key does not match the selected entitlement mode.", "Use the protected Stripe credential for the selected environment."));
+  } else if (environment.STRIPE_SECRET_KEY && environment.ENTITLEMENT_MODE) {
+    controls.push(control("stripe-mode", "Stripe mode", "pass", `Stripe ${environment.ENTITLEMENT_MODE} mode is configured.`));
   } else {
-    controls.push(control("stripe-mode", "Stripe mode", "blocked", "STRIPE_SECRET_KEY is missing.", "Configure a protected Stripe test-mode key."));
+    controls.push(control("stripe-mode", "Stripe mode", "blocked", "ENTITLEMENT_MODE or STRIPE_SECRET_KEY is missing.", "Configure the selected mode and its protected Stripe key."));
   }
 
   const expectedWebhook = environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE
@@ -121,11 +126,16 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
       ? control("stripe-test-e2e-harness", "Stripe test-mode E2E harness", "pass", "Deterministic checkout, webhook, entitlement, replay, expiry, signature, and recovery coverage is present.")
       : control("stripe-test-e2e-harness", "Stripe test-mode E2E harness", "fail", "No deterministic end-to-end entitlement harness covers the required Stripe test-mode lifecycle.", "Add local fakes and browser recovery coverage without external internet dependencies."),
   );
+  controls.push(
+    repository.entitlement.refundAware
+      ? control("refund-revocation", "Refund revocation contract", "pass", "Full refunds deny entitlement renewal, partial refunds are explicit, and signed refund webhooks are covered.")
+      : control("refund-revocation", "Refund revocation contract", "fail", "Refund-aware verification and webhook regression coverage are incomplete.", "Restore server-side refund checks and deterministic refund tests before launch."),
+  );
 
   controls.push(probeControl("aws-stack", "AWS entitlement stack", probes.aws, "Run online launch control with authenticated test-account AWS access."));
-  controls.push(probeControl("stripe-price", "Stripe test Price", probes.stripe, "Run online launch control with the protected Stripe test key."));
+  controls.push(probeControl("stripe-account", "Stripe account access", probes.stripe, "Run online launch control with the protected Stripe key for the selected mode."));
   controls.push(probeControl("entitlement-health", "Entitlement API health", probes.entitlementHealth, "Deploy the test stack, then rerun the public health probe."));
-  controls.push(probeControl("stripe-webhook", "Stripe webhook endpoint", probes.webhook, "Register and verify payment_intent.succeeded in Stripe test mode."));
+  controls.push(probeControl("stripe-webhook", "Stripe webhook endpoint", probes.webhook, "Register and verify payment_intent.succeeded and charge.refunded in the selected Stripe mode."));
   controls.push(probeControl("site-deployment", "Static site deployment", probes.site, "Configure the public API base, rebuild the static site, and rerun the probe."));
 
   const summary = {
@@ -153,6 +163,22 @@ export function renderMarkdown(report) {
     ? report.unresolvedBlockers.map((item) => `- **${item.id} (${item.status})**: ${item.detail}${item.ownerAction ? ` Owner action: ${item.ownerAction}` : ""}`).join("\n")
     : "- None.";
   return `# SolveLang Launch Readiness Evidence\n\n- Generated: ${report.generatedAt}\n- Commit: \`${report.commitSha}\`\n- Ready: **${report.ready ? "YES" : "NO"}**\n- Results: ${report.summary.pass} pass, ${report.summary.fail} fail, ${report.summary.blocked} blocked\n\n## Controls\n\n| Component | Status | Evidence |\n| --- | --- | --- |\n${rows}\n\n## Unresolved blockers\n\n${blockers}\n`;
+}
+
+export async function writeLaunchEvidence(root, report, outputPath = undefined) {
+  const directory = path.join(root, "artifacts/launch-readiness");
+  const jsonPath = path.join(directory, "launch-readiness.json");
+  const markdownPath = path.join(directory, "launch-readiness.md");
+  await mkdir(directory, { recursive: true });
+  await Promise.all([
+    writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`),
+    writeFile(markdownPath, renderMarkdown(report)),
+  ]);
+  if (outputPath) {
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, renderMarkdown(report));
+  }
+  return [jsonPath, markdownPath];
 }
 
 function readJson(text) {
@@ -183,11 +209,12 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
   const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
   const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
+  const paymentClient = await readFile(path.join(root, "site/app/checkout/PaymentElementClient.tsx"), "utf8");
   const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)
     && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)
     && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate)
     && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
-  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId\s*\}\)/.test(preflightClient)
+  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId\s*\}\)/.test(paymentClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
     && /metadata:\s*\{\s*scanId,\s*product:\s*PRODUCT\s*\}/.test(entitlementService)
     && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
@@ -195,16 +222,20 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
     && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
   const requiredLifecycleEvidence = [
-    /checkout creation (?:uses minimal metadata and a deterministic idempotency key|returns a custom checkout client secret with minimal metadata)/,
+    /payment creation returns a PaymentIntent client secret with minimal metadata/,
     /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
-    /paid checkout recovery issues a verifiable short-lived entitlement/,
+    /paid payment recovery issues a verifiable short-lived entitlement/,
     /expired, invalid, and tampered entitlement tokens are rejected/,
   ];
   const testModeE2eHarness = requiredLifecycleEvidence.every((pattern) => pattern.test(entitlementE2eTest))
-    && /browser return verifies entitlement server-side and removes checkout parameters/.test(browserRecoveryTest)
+    && /browser return verifies entitlement server-side and removes payment parameters/.test(browserRecoveryTest)
     && /browser recovery fails closed for mismatched scans and unverifiable payment/.test(browserRecoveryTest);
+  const refundAware = /full refunds revoke entitlement renewal while partial refunds remain eligible/.test(entitlementE2eTest)
+    && /signed refund webhook records verified full refund state idempotently/.test(entitlementE2eTest)
+    && /charge\.refunded/.test(entitlementService)
+    && /refundStatus === ["']full["']/.test(entitlementService);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",
@@ -221,7 +252,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
       publicPublish: /npm\s+publish\s+--access\s+public/.test(workflowText),
       tokenSecret: /NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflowText),
     },
-    entitlement: { healthRoute, privacySafe, testModeE2eHarness },
+    entitlement: { healthRoute, privacySafe, testModeE2eHarness, refundAware },
   };
 }
 
@@ -245,9 +276,9 @@ export async function collectOnlineEvidence({ environment = process.env, root = 
     probes.aws = result.ok ? { ok: true } : { ok: false, reason: result.stderr || "AWS stack probe failed." };
   }
 
-  if (environment.STRIPE_SECRET_KEY && environment.STRIPE_PRICE_ID) {
-    const response = await fetch(`https://api.stripe.com/v1/prices/${encodeURIComponent(environment.STRIPE_PRICE_ID)}`, { headers: { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
-    probes.stripe = response?.ok ? { ok: true } : { ok: false, reason: "Stripe Price lookup failed." };
+  if (environment.STRIPE_SECRET_KEY) {
+    const response = await fetch("https://api.stripe.com/v1/account", { headers: { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+    probes.stripe = response?.ok ? { ok: true } : { ok: false, reason: "Stripe account probe failed." };
   }
 
   if (environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE) {
@@ -274,10 +305,7 @@ async function main() {
   const environment = process.env;
   const evidence = online ? await collectOnlineEvidence({ environment, root }) : { repository: await collectRepositoryState(root), probes: {} };
   const report = evaluateLaunch({ environment, repository: evidence.repository, probes: evidence.probes });
-  if (outputPath) {
-    await mkdir(path.dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, renderMarkdown(report));
-  }
+  await writeLaunchEvidence(root, report, outputPath);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   if (!report.ready) process.exitCode = 1;
 }

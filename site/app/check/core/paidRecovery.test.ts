@@ -53,3 +53,51 @@ test("browser recovery fails closed for mismatched scans and unverifiable paymen
     clearPending: () => assert.fail("must not clear recovery state"),
   }), /could not be verified/);
 });
+
+test("browser recovery retries bounded webhook propagation before restoring the report", async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const retryAttempts: number[] = [];
+  const result = await recoverPaidScan({
+    apiBase: "https://entitlements.example.test",
+    search: `?scan_id=${pending.scanId}&payment_intent=pi_test_paid&redirect_status=succeeded`,
+    stored: JSON.stringify(pending),
+    verify: async () => {
+      attempts += 1;
+      return attempts < 3
+        ? { ok: false, status: 409, json: async () => ({ code: "payment_pending" }) }
+        : { ok: true, status: 200, json: async () => ({ token: "signed-entitlement" }) };
+    },
+    wait: async (milliseconds) => { delays.push(milliseconds); },
+    onRetry: (attempt) => { retryAttempts.push(attempt); },
+    replaceUrl: () => undefined,
+    clearPending: () => undefined,
+  });
+
+  assert.equal(result?.token, "signed-entitlement");
+  assert.equal(attempts, 3);
+  assert.deepEqual(delays, [500, 1000]);
+  assert.deepEqual(retryAttempts, [1, 2]);
+});
+
+test("browser recovery reports full refunds and failed payments without retrying", async () => {
+  for (const fixture of [
+    { status: 403, code: "payment_refunded", message: /fully refunded/ },
+    { status: 402, code: "payment_not_succeeded", message: /has not succeeded/ },
+  ]) {
+    let attempts = 0;
+    await assert.rejects(() => recoverPaidScan({
+      apiBase: "https://entitlements.example.test",
+      search: `?scan_id=${pending.scanId}&payment_intent=pi_test_paid&redirect_status=succeeded`,
+      stored: JSON.stringify(pending),
+      verify: async () => {
+        attempts += 1;
+        return { ok: false, status: fixture.status, json: async () => ({ code: fixture.code }) };
+      },
+      wait: async () => assert.fail("must not retry"),
+      replaceUrl: () => undefined,
+      clearPending: () => undefined,
+    }), fixture.message);
+    assert.equal(attempts, 1);
+  }
+});

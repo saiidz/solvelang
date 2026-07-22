@@ -20,6 +20,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      ENTITLEMENT_MODE: ${{ inputs.environment == 'entitlement-production' && 'production' || 'test' }}
     defaults:
       run:
         working-directory: services/entitlements
@@ -78,19 +80,32 @@ jobs:
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_PRICE_ID: ${{ vars.STRIPE_PRICE_ID }}
           ENTITLEMENT_SIGNING_SECRET: ${{ secrets.ENTITLEMENT_SIGNING_SECRET }}
           STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         run: |
           set -euo pipefail
           test -n "$SITE_ORIGIN"
+          test -n "$ENTITLEMENT_MODE"
           test -n "$STRIPE_SECRET_KEY"
           test -n "$STRIPE_WEBHOOK_SECRET"
-          test -n "$STRIPE_PRICE_ID"
           test -n "$ENTITLEMENT_SIGNING_SECRET"
           test -n "$STACK_NAME"
           test -n "$SAM_ARTIFACT_BUCKET"
+          case "$ENTITLEMENT_MODE" in
+            test)
+              [[ "$STRIPE_SECRET_KEY" == sk_test_* ]] || { echo "Stripe key mode does not match entitlement-test." >&2; exit 1; }
+              [[ "$STACK_NAME" == *test* ]] || { echo "Test stack name must identify the test environment." >&2; exit 1; }
+              ;;
+            production)
+              [[ "$STRIPE_SECRET_KEY" == sk_live_* ]] || { echo "Stripe key mode does not match entitlement-production." >&2; exit 1; }
+              [[ "$STACK_NAME" == *production* ]] || { echo "Production stack name must identify the production environment." >&2; exit 1; }
+              ;;
+            *)
+              echo "Unsupported entitlement mode." >&2
+              exit 1
+              ;;
+          esac
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \
@@ -99,10 +114,10 @@ jobs:
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --parameter-overrides \
+              EntitlementMode="$ENTITLEMENT_MODE" \
               SiteOrigin="$SITE_ORIGIN" \
               StripeSecretKey="$STRIPE_SECRET_KEY" \
               StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
-              StripePriceId="$STRIPE_PRICE_ID" \
               EntitlementSigningSecret="$ENTITLEMENT_SIGNING_SECRET"
       - name: Print non-secret outputs
         env:

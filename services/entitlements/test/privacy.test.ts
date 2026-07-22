@@ -8,6 +8,7 @@ const forbidden = [
   "nodeParameters",
   "credential-reference",
   "sk_test_do_not_log",
+  "sk_live_do_not_log",
   "whsec_do_not_log",
   "entitlement-signing-do-not-log",
   "raw-webhook-payload-do-not-log",
@@ -44,12 +45,12 @@ function fixture() {
   };
   const store: EntitlementStore = {
     async putIfAbsent() { throw new Error(forbidden.join(" | ")); },
+    async updateRefundStatus() { throw new Error(forbidden.join(" | ")); },
     async get() { throw new Error(forbidden.join(" | ")); },
   };
   const service = createEntitlementService({
     config: {
       siteOrigin: "https://www.solve-lang.com",
-      stripePriceId: "price_test",
       stripeWebhookSecret: "whsec_do_not_log",
       entitlementSigningSecret: "entitlement-signing-do-not-log-32-bytes",
       mode: "test",

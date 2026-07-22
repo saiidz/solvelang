@@ -1,8 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: SolveLang Stripe checkout and signed entitlement service
+Description: SolveLang Stripe payment and signed entitlement service
 
 Parameters:
+  EntitlementMode:
+    Type: String
+    AllowedValues:
+      - test
+      - production
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -12,8 +17,6 @@ Parameters:
   StripeWebhookSecret:
     Type: String
     NoEcho: true
-  StripePriceId:
-    Type: String
   EntitlementSigningSecret:
     Type: String
     NoEcho: true
@@ -72,9 +75,9 @@ Resources:
       Environment:
         Variables:
           SITE_ORIGIN: !Ref SiteOrigin
+          ENTITLEMENT_MODE: !Ref EntitlementMode
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
-          STRIPE_PRICE_ID: !Ref StripePriceId
           ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret
           ENTITLEMENTS_TABLE: !Ref EntitlementsTable
       Policies:

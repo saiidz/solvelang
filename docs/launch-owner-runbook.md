@@ -1,128 +1,98 @@
-# SolveLang Test-Mode Launch Runbook
+# SolveLang Payment Launch Runbook
 
-This runbook covers the owner-only steps required after the repository launch gates pass. Use Stripe test mode and the `entitlement-test` GitHub environment only. Do not create a real charge, enable live payments, publish npm, or deploy the production entitlement environment during this verification.
+This is the owner-only sequence for moving Workflow Preflight from the verified Stripe sandbox to production. Repository checks do not deploy AWS, change GitHub or Amplify configuration, create Stripe resources, or make live charges.
 
-## 1. Create the protected GitHub environment
+## Required protected configuration
 
-Open **Repository settings → Environments → New environment**, create `entitlement-test`, and add a required reviewer and deployment-branch protection for `main`.
+Create separate protected GitHub environments named `entitlement-test` and `entitlement-production`. Give each a required reviewer and restrict deployments to `main`.
 
-Add environment variables:
+Environment variables:
 
 - `AWS_REGION`
-- `ENTITLEMENT_STACK_NAME`
-- `SITE_ORIGIN=https://www.solve-lang.com`
-- `STRIPE_PRICE_ID` for the active Stripe test-mode Price
+- `SITE_ORIGIN`
+- `ENTITLEMENT_STACK_NAME` (a different stack name in each environment)
 
-Add environment secrets:
+Environment secrets:
 
-- `AWS_ROLE_ARN` for a GitHub OIDC deployment role limited to the test stack
-- `STRIPE_SECRET_KEY` beginning with `sk_test_`
-- `STRIPE_WEBHOOK_SECRET` beginning with `whsec_`
-- `ENTITLEMENT_SIGNING_SECRET`, generated as at least 32 random bytes
+- `AWS_ROLE_ARN` (scoped to the matching stack/environment)
+- `STRIPE_SECRET_KEY` (`sk_test_...` in test; `sk_live_...` in production)
+- `STRIPE_WEBHOOK_SECRET` (from the matching Stripe mode and destination)
+- `ENTITLEMENT_SIGNING_SECRET` (at least 32 random bytes and different in each environment)
 
-Do not put secret values in repository variables, pull-request comments, command history, or launch evidence.
+The workflow derives `ENTITLEMENT_MODE` from the selected protected environment. The backend creates a fixed USD 49 PaymentIntent directly; no separate product-price identifier is required.
 
-## 2. Verify AWS identity without deploying
+Amplify public build variables:
 
-From a protected owner shell:
+- `NEXT_PUBLIC_ENTITLEMENT_API_BASE` (production API output for the live site)
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (`pk_live_...` for production)
 
-```bash
-aws sts get-caller-identity
-```
+Never put secret or webhook-signing keys in `NEXT_PUBLIC_*`, repository variables, logs, screenshots, issues, or command output.
 
-Confirm the returned account and role are the intended test account and deployment role. Stop if either is unexpected.
+## 1. Verify the test sandbox
 
-## 3. Prepare Stripe test mode
-
-In the Stripe Dashboard, enable **Test mode**, then:
-
-1. Create or select the Workflow Preflight product.
-2. Create one active one-time Price for USD 49.
-3. Put its `price_...` identifier in the `entitlement-test` `STRIPE_PRICE_ID` variable.
-4. Confirm no live-mode Price or webhook is being edited.
-
-The first test-stack deployment needs a non-live bootstrap value for `STRIPE_WEBHOOK_SECRET` because the final API URL does not exist yet. Use a random `whsec_bootstrap_...` test-only value, deploy once, then replace it immediately in step 5.
-
-## 4. Deploy only the test entitlement stack
-
-Run the protected manual workflow:
+Run the full repository validation and then deploy only `entitlement-test`:
 
 ```bash
 gh workflow run deploy-entitlements.yml -f environment=entitlement-test
-gh run list --workflow deploy-entitlements.yml --limit 1
-gh run watch <run-id>
 ```
 
-Do not select `entitlement-production`. After the workflow succeeds, read the non-secret stack outputs:
+Use a non-sensitive workflow fixture and Stripe test card. Confirm the on-site Payment Element charges exactly $49, returns to `/check/`, restores the pending report, and unlocks HTML/JSON only after server verification.
+
+## 2. Prepare live Stripe keys
+
+Activate and review the Stripe account, business profile, statement descriptor, support details, payout account, tax obligations, and fraud settings. Create or roll the live secret key only in the protected `entitlement-production` environment. Do not reuse test keys or test webhook secrets.
+
+## 3. Create the live webhook destination
+
+After the production backend URL exists, create one live Stripe webhook destination for its `/webhook` URL. Subscribe only to:
+
+- `payment_intent.succeeded`
+- `charge.refunded`
+
+Store its live `whsec_...` value in `entitlement-production`, then redeploy that environment so Lambda receives the final signing secret.
+
+## 4. Verify GitHub environments
+
+Confirm `entitlement-test` and `entitlement-production` use different stack names, signing secrets, Stripe credentials, and webhook secrets. Confirm both require reviewer approval. The deployment workflow rejects live keys in test and test keys in production without printing keys.
+
+## 5. Configure the live Amplify variables
+
+Set the live site’s `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to the matching `pk_live_...` key and `NEXT_PUBLIC_ENTITLEMENT_API_BASE` to the production stack `ApiBaseUrl`. No secret belongs in Amplify public variables.
+
+## 6. Deploy the production backend
+
+After owner review, run:
 
 ```bash
-aws cloudformation describe-stacks \
-  --region "$AWS_REGION" \
-  --stack-name "$ENTITLEMENT_STACK_NAME" \
-  --query 'Stacks[0].Outputs' \
-  --output table
+gh workflow run deploy-entitlements.yml -f environment=entitlement-production
 ```
 
-Record `ApiBaseUrl` and `WebhookUrl`. These URLs are public configuration, not credentials.
+Verify the workflow’s non-secret `ApiBaseUrl` and `WebhookUrl` outputs. `GET /health` must return only `status`, `service`, and `mode: "production"`.
 
-## 5. Register and verify the Stripe test webhook
+## 7. Deploy the frontend
 
-In **Stripe test mode → Workbench → Webhooks**, create an endpoint using the stack `WebhookUrl` and subscribe only to `payment_intent.succeeded`.
+Trigger the existing Amplify static-site deployment only after the live public variables point to the production backend and matching live Stripe account. Verify checkout still uses the on-site Payment Element and does not expose workflow contents or secrets.
 
-Copy the generated `whsec_...` signing secret into the protected `entitlement-test` `STRIPE_WEBHOOK_SECRET`, replacing the bootstrap value. Rerun the test deployment workflow so Lambda receives the real test signing secret.
+## 8. Make one low-risk live payment
 
-## 6. Configure and rebuild the static site
+Use a non-sensitive test workflow and a real card controlled by the owner. Make exactly one $49 payment. Do not use a customer workflow for launch verification.
 
-Set the static-site build variable:
+## 9. Verify downloads and recovery
 
-```text
-NEXT_PUBLIC_ENTITLEMENT_API_BASE=<ApiBaseUrl>
-```
+Confirm webhook verification returns 200, the pending scan restores, payment parameters are removed, and HTML/JSON downloads work. Refresh once to confirm recovery does not require repayment while webhook delivery is pending.
 
-Trigger the existing static-site build through the owner’s deployment system. Do not put Stripe or entitlement secrets in any `NEXT_PUBLIC_*` variable.
+## 10. Test a full refund
 
-Verify the public health endpoint before checkout:
+Refund the launch payment in full. Confirm Stripe delivers `charge.refunded`, new entitlement verification is denied, and the UI reports that the payment was fully refunded. An entitlement token issued before the refund may remain usable only until its existing 15-minute expiration.
 
-```bash
-curl -fsS "$NEXT_PUBLIC_ENTITLEMENT_API_BASE/health"
-```
+## 11. Review logs and privacy
 
-It must return only safe readiness fields and confirm `mode` is `test`. Stop if it returns credentials, identifiers, customer/workflow data, internal stack details, or live mode.
+Confirm logs and DynamoDB contain only opaque scan, PaymentIntent, event, status, and timestamp fields. Workflow JSON, workflow names, filenames, report contents, node parameters, credential references, card data, customer data, secrets, and raw webhook bodies must be absent.
 
-## 7. Complete one test purchase
+## 12. Confirm policy behavior
 
-1. Open `https://www.solve-lang.com/check/` in a clean browser session.
-2. Upload a non-sensitive test fixture, not a customer workflow.
-3. Confirm the preview appears and the complete report remains locked.
-4. Continue to Stripe Checkout and use Stripe’s documented `4242 4242 4242 4242` test card with any future expiry and CVC.
-5. Confirm the browser returns to the same opaque scan ID, verifies the entitlement server-side, removes checkout parameters from the address bar, and unlocks HTML/JSON downloads.
-6. Refresh once and exercise the documented recovery behavior. Do not treat a query parameter or local-storage edit as payment proof.
+Full refunds revoke new or renewed access. Partial refunds remain eligible because the product was not fully refunded; handle partial-refund customer communication manually. Review the public refund policy with qualified counsel for the operating jurisdiction before broader sales.
 
-In Stripe Workbench, confirm one successful `payment_intent.succeeded` delivery and no unexpected retries. In AWS logs and DynamoDB, verify only opaque scan/PaymentIntent/event identifiers and allowlisted conversion names are present. Workflow JSON, workflow names, filenames, report findings, credential values, and customer data must be absent.
+## 13. Roll back safely
 
-## 8. Generate final evidence
-
-Export the protected values into the owner shell without printing them, then run:
-
-```bash
-node ops/launch/launch-control.mjs --online
-```
-
-Review:
-
-```text
-artifacts/launch-readiness/launch-readiness.json
-artifacts/launch-readiness/launch-readiness.md
-```
-
-Launch readiness is proven only when the command exits zero and reports no failed or blocked controls. Preserve the evidence artifact with the tested commit SHA and the corresponding successful GitHub Actions runs.
-
-## Current mandatory stop conditions
-
-Do not run the owner sequence until repository CI proves all three code-level gates:
-
-- safe entitlement `GET /health` contract;
-- workflow-data privacy regression coverage, including sanitized server errors;
-- deterministic Stripe test-mode lifecycle coverage for checkout, webhook, entitlement issuance/verification, replay, expiry, invalid signatures, and browser recovery.
-
-Any missing gate remains a blocker. Do not bypass it with a manual token, query parameter, local storage, synthetic success page, or live-mode test.
+To stop new purchases, remove or disable the live frontend entitlement API/public Stripe variables and redeploy the static site. Disable the live webhook destination only after purchases are stopped. Roll back application code through a reviewed commit; do not delete the DynamoDB table or rotate signing/webhook secrets during an active incident unless compromise requires it. Preserve logs and Stripe records for investigation.

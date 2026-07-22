@@ -19,10 +19,9 @@ const store = createEntitlementStore(documentClient, environment.ENTITLEMENTS_TA
 const service = createEntitlementService({
   config: {
     siteOrigin: environment.SITE_ORIGIN,
-    stripePriceId: environment.STRIPE_PRICE_ID,
     stripeWebhookSecret: environment.STRIPE_WEBHOOK_SECRET,
     entitlementSigningSecret: environment.ENTITLEMENT_SIGNING_SECRET,
-    mode: "test",
+    mode: environment.ENTITLEMENT_MODE,
   },
   stripe,
   store,

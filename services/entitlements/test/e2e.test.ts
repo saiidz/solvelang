@@ -47,6 +47,7 @@ function responseBody(response: { body?: string }): Record<string, unknown> {
 class MemoryStore implements EntitlementStore {
   records = new Map<string, EntitlementRecord>();
   writes = 0;
+  refundWrites = 0;
 
   async putIfAbsent(record: EntitlementRecord): Promise<"created" | "duplicate"> {
     if (this.records.has(record.scanId)) return "duplicate";
@@ -55,32 +56,57 @@ class MemoryStore implements EntitlementStore {
     return "created";
   }
 
+  async updateRefundStatus(
+    scanIdToUpdate: string,
+    paymentIntentIdToUpdate: string,
+    refundStatus: "partial" | "full",
+    eventId: string,
+    updatedAt: string,
+  ): Promise<"updated" | "duplicate_or_missing"> {
+    const record = this.records.get(scanIdToUpdate);
+    if (!record || record.sessionId !== paymentIntentIdToUpdate || record.refundEventId === eventId) return "duplicate_or_missing";
+    this.records.set(scanIdToUpdate, { ...record, refundStatus, refundEventId: eventId, refundUpdatedAt: updatedAt });
+    this.refundWrites += 1;
+    return "updated";
+  }
+
   async get(scanIdToFind: string): Promise<EntitlementRecord | undefined> {
     return this.records.get(scanIdToFind);
   }
 }
 
-function createFixture() {
+function createFixture(payment: {
+  paymentStatus: "paid" | "unpaid";
+  refundStatus: "none" | "partial" | "full";
+  metadata: Record<string, string>;
+} = {
+  paymentStatus: "paid",
+  refundStatus: "none",
+  metadata: { scanId, product: "workflow-preflight-v1" },
+}) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
     payments: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: paymentIntentId, clientSecret: "pi_test_paid_payment_secret_test" };
+        return { id: paymentIntentId, clientSecret: "pi_test_paid_payment_secret_test", refundStatus: "none" };
       },
       async retrieve(id) {
         assert.equal(id, paymentIntentId);
-        return { id, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } };
+        return { id, ...payment };
       },
     },
     webhooks: {
       constructEvent(rawBody, signature) {
         if (!signature.startsWith("valid-")) throw new Error(`bad signature ${rawBody.toString("utf8")}`);
+        if (signature === "valid-refund-signature") {
+          return { id: "evt_test_refund", type: "charge.refunded", refund: { paymentIntentId } };
+        }
         return {
           id: signature === "valid-duplicate-signature" ? "evt_test_duplicate" : "evt_test_paid",
           type: "payment_intent.succeeded",
-          paymentIntent: { id: paymentIntentId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
+          paymentIntent: { id: paymentIntentId, paymentStatus: "paid", refundStatus: "none", metadata: { scanId, product: "workflow-preflight-v1" } },
         };
       },
     },
@@ -89,7 +115,6 @@ function createFixture() {
   const service = createEntitlementService({
     config: {
       siteOrigin: "https://www.solve-lang.com",
-      stripePriceId: "price_test_workflow_preflight",
       stripeWebhookSecret: "whsec_test_only",
       entitlementSigningSecret: signingSecret,
       mode: "test",
@@ -122,9 +147,6 @@ test("payment creation returns a PaymentIntent client secret with minimal metada
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
-      mode: "payment",
-      lineItems: [{ price: "price_test_workflow_preflight", quantity: 1 }],
-      returnUrl: `https://www.solve-lang.com/check/?scan_id=${scanId}`,
       metadata: { scanId, product: "workflow-preflight-v1" },
     },
   });
@@ -149,6 +171,7 @@ test("valid signed webhook records one entitlement and replay or duplicate deliv
     scanId,
     sessionId: paymentIntentId,
     paymentStatus: "paid",
+    refundStatus: "none",
     stripeEventId: "evt_test_paid",
     createdAt: "2026-07-20T00:00:00.000Z",
     expiresAt: Math.floor(nowMs / 1000) + 60 * 60 * 24 * 30,
@@ -177,8 +200,83 @@ test("Stripe gateway verifies a deterministic local test signature without netwo
   assert.deepEqual(event, {
     id: "evt_local_signed",
     type: "payment_intent.succeeded",
-    paymentIntent: { id: paymentIntentId, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } },
+    paymentIntent: { id: paymentIntentId, paymentStatus: "paid", refundStatus: "none", metadata: { scanId, product: "workflow-preflight-v1" } },
   });
+});
+
+test("Stripe gateway verifies a deterministic local refund signature without network access", () => {
+  const webhookSecret = "whsec_local_refund_signature";
+  const payload = JSON.stringify({
+    id: "evt_local_refund",
+    object: "event",
+    type: "charge.refunded",
+    data: {
+      object: {
+        id: "ch_test_refunded",
+        object: "charge",
+        payment_intent: paymentIntentId,
+        amount: 4900,
+        amount_refunded: 4900,
+        refunded: true,
+      },
+    },
+  });
+  const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret: webhookSecret, timestamp: 1_753_056_000 });
+  const gateway = createStripeGateway(new Stripe("sk_test_local_only"), { receivedAt: () => 1_753_056_000 });
+
+  assert.deepEqual(gateway.webhooks.constructEvent(Buffer.from(payload), signature, webhookSecret), {
+    id: "evt_local_refund",
+    type: "charge.refunded",
+    refund: { paymentIntentId },
+  });
+});
+
+test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expanded refund state", async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const client = {
+    paymentIntents: {
+      async create(...args: unknown[]) {
+        calls.push({ method: "create", args });
+        return {
+          id: paymentIntentId,
+          client_secret: "pi_test_paid_payment_secret_test",
+          status: "requires_payment_method",
+          amount: 4900,
+          latest_charge: null,
+          metadata: { scanId, product: "workflow-preflight-v1" },
+        };
+      },
+      async retrieve(...args: unknown[]) {
+        calls.push({ method: "retrieve", args });
+        return {
+          id: paymentIntentId,
+          client_secret: null,
+          status: "succeeded",
+          amount: 4900,
+          latest_charge: { amount_refunded: 1200, refunded: false },
+          metadata: { scanId, product: "workflow-preflight-v1" },
+        };
+      },
+    },
+    webhooks: { constructEvent() { throw new Error("not used"); } },
+  } as unknown as Stripe;
+  const gateway = createStripeGateway(client);
+
+  await gateway.payments.create({ metadata: { scanId, product: "workflow-preflight-v1" } }, "idempotent-scan");
+  const snapshot = await gateway.payments.retrieve(paymentIntentId);
+
+  assert.deepEqual(calls[0], {
+    method: "create",
+    args: [{
+      amount: 4900,
+      currency: "usd",
+      payment_method_types: ["card"],
+      description: "SolveLang Workflow Preflight Report",
+      metadata: { scanId, product: "workflow-preflight-v1" },
+    }, { idempotencyKey: "idempotent-scan" }],
+  });
+  assert.deepEqual(calls[1], { method: "retrieve", args: [paymentIntentId, { expand: ["latest_charge"] }] });
+  assert.equal(snapshot.refundStatus, "partial");
 });
 
 test("invalid webhook signatures are rejected without processing", async () => {
@@ -204,6 +302,58 @@ test("paid payment recovery issues a verifiable short-lived entitlement", async 
   });
 });
 
+test("full refunds revoke entitlement renewal while partial refunds remain eligible", async () => {
+  const partial = createFixture({
+    paymentStatus: "paid",
+    refundStatus: "partial",
+    metadata: { scanId, product: "workflow-preflight-v1" },
+  });
+  await partial.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
+  const partialResult = await partial.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(partialResult.statusCode, 200);
+
+  const full = createFixture({
+    paymentStatus: "paid",
+    refundStatus: "full",
+    metadata: { scanId, product: "workflow-preflight-v1" },
+  });
+  await full.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
+  const fullResult = await full.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(fullResult.statusCode, 403);
+  assert.deepEqual(responseBody(fullResult), { code: "payment_refunded", error: "This payment was fully refunded and is no longer eligible." });
+});
+
+test("signed refund webhook records verified full refund state idempotently", async () => {
+  const fixture = createFixture({
+    paymentStatus: "paid",
+    refundStatus: "full",
+    metadata: { scanId, product: "workflow-preflight-v1" },
+  });
+  await fixture.service(apiEvent("POST", "/webhook", { opaque: "paid fixture" }, { "stripe-signature": "valid-test-signature" }));
+  const refund = apiEvent("POST", "/webhook", { opaque: "refund fixture" }, { "stripe-signature": "valid-refund-signature" });
+  assert.equal((await fixture.service(refund)).statusCode, 200);
+  assert.equal((await fixture.service(refund)).statusCode, 200);
+  assert.equal(fixture.store.refundWrites, 1);
+  assert.equal(fixture.store.records.get(scanId)?.refundStatus, "full");
+  assert.equal(fixture.store.records.get(scanId)?.refundEventId, "evt_test_refund");
+});
+
+test("missing webhook record is retryable but unpaid and mismatched payments fail closed", async () => {
+  const missing = createFixture();
+  const pending = await missing.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(pending.statusCode, 409);
+  assert.deepEqual(responseBody(pending), { code: "payment_pending", error: "Payment succeeded and is awaiting webhook verification." });
+
+  const unpaid = createFixture({ paymentStatus: "unpaid", refundStatus: "none", metadata: { scanId, product: "workflow-preflight-v1" } });
+  const unpaidResult = await unpaid.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(unpaidResult.statusCode, 402);
+  assert.deepEqual(responseBody(unpaidResult), { code: "payment_not_succeeded", error: "Payment has not succeeded." });
+
+  const mismatch = createFixture({ paymentStatus: "paid", refundStatus: "none", metadata: { scanId: "different", product: "workflow-preflight-v1" } });
+  const mismatchResult = await mismatch.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(mismatchResult.statusCode, 403);
+});
+
 test("unpaid or mismatched payment cannot receive an entitlement", async () => {
   const fixture = createFixture();
   fixture.store.records.set(scanId, {
@@ -216,7 +366,7 @@ test("unpaid or mismatched payment cannot receive an entitlement", async () => {
   });
   const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
   assert.equal(result.statusCode, 403);
-  assert.deepEqual(responseBody(result), { error: "No matching paid payment was found." });
+  assert.deepEqual(responseBody(result), { code: "payment_ineligible", error: "No matching eligible payment was found." });
 });
 
 test("expired, invalid, and tampered entitlement tokens are rejected", () => {

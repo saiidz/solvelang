@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { createEntitlementStore } from "../src/store.js";
 import type { EntitlementRecord } from "../src/service.js";
 
@@ -14,7 +14,7 @@ const record: EntitlementRecord = {
 };
 
 test("Dynamo store conditionally persists only the allowlisted entitlement record", async () => {
-  const commands: Array<PutCommand | GetCommand> = [];
+  const commands: Array<PutCommand | GetCommand | UpdateCommand> = [];
   const store = createEntitlementStore({
     async send(command) {
       commands.push(command);
@@ -33,6 +33,20 @@ test("Dynamo store conditionally persists only the allowlisted entitlement recor
     TableName: "test-entitlements",
     Key: { scanId: record.scanId },
     ConsistentRead: true,
+  });
+
+  assert.equal(await store.updateRefundStatus(record.scanId, record.sessionId, "full", "evt_refund", "2026-07-22T00:00:00.000Z"), "updated");
+  assert.deepEqual((commands[2] as UpdateCommand).input, {
+    TableName: "test-entitlements",
+    Key: { scanId: record.scanId },
+    ConditionExpression: "sessionId = :paymentIntentId AND (attribute_not_exists(refundEventId) OR refundEventId <> :eventId)",
+    UpdateExpression: "SET refundStatus = :refundStatus, refundEventId = :eventId, refundUpdatedAt = :updatedAt",
+    ExpressionAttributeValues: {
+      ":paymentIntentId": record.sessionId,
+      ":refundStatus": "full",
+      ":eventId": "evt_refund",
+      ":updatedAt": "2026-07-22T00:00:00.000Z",
+    },
   });
 });
 

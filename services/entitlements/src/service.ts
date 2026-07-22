@@ -19,16 +19,16 @@ const conversionEventSchema = z.object({
 
 export type EntitlementConfig = {
   siteOrigin: string;
-  stripePriceId: string;
   stripeWebhookSecret: string;
   entitlementSigningSecret: string;
-  mode: "test";
+  mode: "test" | "production";
 };
 
 export type PaymentIntentSnapshot = {
   id: string;
   clientSecret?: string | null;
   paymentStatus?: string | null;
+  refundStatus: "none" | "partial" | "full";
   metadata?: Record<string, string> | null;
 };
 
@@ -36,14 +36,12 @@ export type StripeEvent = {
   id: string;
   type: string;
   paymentIntent?: PaymentIntentSnapshot;
+  refund?: { paymentIntentId: string };
 };
 
 export type StripeGateway = {
   payments: {
     create(params: {
-      mode: "payment";
-      lineItems: Array<{ price: string; quantity: number }>;
-      returnUrl: string;
       metadata: { scanId: string; product: typeof PRODUCT };
     }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
     retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot>;
@@ -58,6 +56,9 @@ export type EntitlementRecord = {
   // Compatibility field retained for existing browser recovery and stored records.
   sessionId: string;
   paymentStatus: string;
+  refundStatus?: "none" | "partial" | "full";
+  refundEventId?: string;
+  refundUpdatedAt?: string;
   stripeEventId: string;
   createdAt: string;
   expiresAt: number;
@@ -65,6 +66,13 @@ export type EntitlementRecord = {
 
 export type EntitlementStore = {
   putIfAbsent(record: EntitlementRecord): Promise<"created" | "duplicate">;
+  updateRefundStatus(
+    scanId: string,
+    paymentIntentId: string,
+    refundStatus: "partial" | "full",
+    eventId: string,
+    updatedAt: string,
+  ): Promise<"updated" | "duplicate_or_missing">;
   get(scanId: string): Promise<EntitlementRecord | undefined>;
 };
 
@@ -117,7 +125,7 @@ function stripeFailure(error: unknown): RequestError {
   if (candidate?.type === "StripeInvalidRequestError") {
     return new RequestError(502, `Stripe rejected the payment configuration.${suffix}`, "stripe_invalid_request");
   }
-  return new RequestError(502, `Stripe payment is temporarily unavailable.${suffix}`, "stripe_checkout_failed");
+  return new RequestError(502, `Stripe payment is temporarily unavailable.${suffix}`, "stripe_payment_failed");
 }
 
 function parseJson(event: APIGatewayProxyEventV2): unknown {
@@ -157,9 +165,6 @@ export function createEntitlementService({
     let paymentIntent: PaymentIntentSnapshot;
     try {
       paymentIntent = await stripe.payments.create({
-        mode: "payment",
-        lineItems: [{ price: config.stripePriceId, quantity: 1 }],
-        returnUrl: `${config.siteOrigin}/check/?scan_id=${encodeURIComponent(scanId)}`,
         metadata: { scanId, product: PRODUCT },
       }, `preflight-${scanId}`);
     } catch (error) {
@@ -189,10 +194,28 @@ export function createEntitlementService({
           scanId,
           sessionId: paymentIntent.id,
           paymentStatus: "paid",
+          refundStatus: paymentIntent.refundStatus,
           stripeEventId: stripeEvent.id,
           createdAt: new Date(timestamp).toISOString(),
           expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
         });
+      }
+    }
+    if (stripeEvent.type === "charge.refunded" && stripeEvent.refund) {
+      const paymentIntent = await stripe.payments.retrieve(stripeEvent.refund.paymentIntentId);
+      const scanId = paymentIntent.metadata?.scanId;
+      if (
+        scanId
+        && paymentIntent.metadata?.product === PRODUCT
+        && (paymentIntent.refundStatus === "partial" || paymentIntent.refundStatus === "full")
+      ) {
+        await store.updateRefundStatus(
+          scanId,
+          paymentIntent.id,
+          paymentIntent.refundStatus,
+          stripeEvent.id,
+          new Date(now()).toISOString(),
+        );
       }
     }
     return response(200, { received: true });
@@ -201,16 +224,24 @@ export function createEntitlementService({
   async function createEntitlement(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
     const { scanId, sessionId } = entitlementSchema.parse(parseJson(event));
     const [stored, paymentIntent] = await Promise.all([store.get(scanId), stripe.payments.retrieve(sessionId)]);
+    if (paymentIntent.paymentStatus !== "paid") {
+      return response(402, { code: "payment_not_succeeded", error: "Payment has not succeeded." });
+    }
+    if (paymentIntent.metadata?.scanId !== scanId || paymentIntent.metadata?.product !== PRODUCT) {
+      return response(403, { code: "payment_mismatch", error: "Payment does not match this scan." });
+    }
+    if (paymentIntent.refundStatus === "full") {
+      return response(403, { code: "payment_refunded", error: "This payment was fully refunded and is no longer eligible." });
+    }
+    if (!stored) {
+      return response(409, { code: "payment_pending", error: "Payment succeeded and is awaiting webhook verification." });
+    }
     if (
-      !stored
-      || stored.paymentStatus !== "paid"
+      stored.paymentStatus !== "paid"
       || stored.sessionId !== sessionId
       || stored.expiresAt <= Math.floor(now() / 1000)
-      || paymentIntent.paymentStatus !== "paid"
-      || paymentIntent.metadata?.scanId !== scanId
-      || paymentIntent.metadata?.product !== PRODUCT
     ) {
-      return response(403, { error: "No matching paid payment was found." });
+      return response(403, { code: "payment_ineligible", error: "No matching eligible payment was found." });
     }
     const exp = Math.floor(now() / 1000) + 15 * 60;
     return response(200, {

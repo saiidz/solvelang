@@ -67,7 +67,7 @@ The service must:
 - associate PaymentIntents with opaque scan identifiers;
 - issue short-lived signed unlock tokens;
 - avoid receiving workflow contents unless the customer explicitly opts into hosted analysis;
-- support refunds, replay protection, and idempotency;
+- deny new or renewed entitlement after a full refund, keep partial refunds eligible, and preserve replay protection and idempotency;
 - retain no workflow data by default.
 
 ## Validation

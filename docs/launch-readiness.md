@@ -1,6 +1,6 @@
 # Production Launch Control
 
-The read-only launch control checks whether SolveLang's paid Workflow Preflight path is ready for a Stripe test-mode customer. It does not deploy infrastructure, change Stripe, create charges, publish npm, or print secret values.
+The read-only launch control checks whether SolveLang's paid Workflow Preflight path is ready in the selected test or production mode. It does not deploy infrastructure, change Stripe, create charges, publish npm, or print secret values.
 
 ## Run
 
@@ -10,7 +10,7 @@ From the repository root:
 node ops/launch/launch-control.mjs --online
 ```
 
-The command writes timestamped, commit-bound JSON and Markdown reports to `artifacts/launch-readiness/`. It exits zero only when every repository, configuration, and external test-mode control passes. Missing account prerequisites are reported as blockers by variable name and owner action.
+The command writes timestamped, commit-bound JSON and Markdown reports to `artifacts/launch-readiness/`. It exits zero only when every repository, configuration, and external control passes. Missing account prerequisites are reported as blockers by variable name and owner action.
 
 Launch Readiness CI runs the same fail-closed command with public inputs only and retains both evidence formats as a 30-day `launch-readiness-<commit>` artifact. Protected account credentials are intentionally not exposed to pull-request jobs, so account-level controls remain blockers there.
 
@@ -29,10 +29,10 @@ Provide these through a protected local shell or CI environment. Do not commit t
 - `AWS_REGION`
 - `AWS_ROLE_ARN`
 - `ENTITLEMENT_STACK_NAME`
+- `ENTITLEMENT_MODE` (`test` or `production`)
 - `SITE_ORIGIN`
-- `STRIPE_SECRET_KEY` using an `sk_test_` key
+- `STRIPE_SECRET_KEY` matching the selected mode
 - `STRIPE_WEBHOOK_SECRET`
-- `STRIPE_PRICE_ID` for an active test-mode Price
 - `STRIPE_WEBHOOK_ENDPOINT`
 - `ENTITLEMENT_SIGNING_SECRET`
 - `NEXT_PUBLIC_ENTITLEMENT_API_BASE`
@@ -46,18 +46,18 @@ The online run uses secrets only for authenticated probes. Reports contain contr
 The control center verifies:
 
 - required AWS, Stripe, entitlement, site, webhook, and npm variable names;
-- Stripe test mode rather than live mode;
+- Stripe key mode matches `ENTITLEMENT_MODE`;
 - webhook URL consistency with the public entitlement API base;
 - MCP manifest, lockfile, release tag, and public npm version consistency;
 - npm Trusted Publishing guards, including OIDC and the protected `npm-production` environment;
 - clean Git provenance;
 - a safe entitlement health route in both the handler and infrastructure template;
 - static privacy contracts that keep workflow/report payloads out of network requests and server error logs;
-- deterministic Stripe test-mode lifecycle coverage, including replay, expiry, signature rejection, and browser recovery;
-- the AWS stack, active Stripe test Price, registered test webhook, entitlement health endpoint, and public site when `--online` is used.
+- deterministic Stripe lifecycle coverage, including refund revocation, replay, expiry, signature rejection, and browser recovery;
+- the AWS stack, matching Stripe account, registered webhook, entitlement health endpoint, and public site when `--online` is used.
 
 Entitlement CI executes the deterministic lifecycle, privacy, browser recovery, and launch-control tests before `node ops/launch/assert-entitlement-gates.mjs` can pass. The code gates therefore require both the implementation contracts and their regression suites; a placeholder test filename is insufficient.
 
 No account-level prerequisite is guessed or bypassed. A missing release tag, unpublished package version, undeployed stack, unavailable health endpoint, or unverified webhook remains a visible blocker.
 
-After repository gates pass, follow the exact owner-only test-mode sequence in [the launch owner runbook](launch-owner-runbook.md).
+After repository gates pass, follow the exact owner-only sequence in [the launch owner runbook](launch-owner-runbook.md).

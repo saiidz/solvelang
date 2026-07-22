@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { collectRepositoryState, evaluateLaunch, renderMarkdown, selectReleaseTag } from "./launch-control.mjs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { collectRepositoryState, evaluateLaunch, renderMarkdown, selectReleaseTag, writeLaunchEvidence } from "./launch-control.mjs";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -26,17 +28,18 @@ const repository = {
     healthRoute: true,
     privacySafe: true,
     testModeE2eHarness: true,
+    refundAware: true,
   },
 };
 
 const validEnvironment = {
+  ENTITLEMENT_MODE: "test",
   AWS_REGION: "us-east-1",
   AWS_ROLE_ARN: "arn:aws:iam::123456789012:role/launch",
   ENTITLEMENT_STACK_NAME: "solvelang-entitlements-test",
   SITE_ORIGIN: "https://www.solve-lang.com",
   STRIPE_SECRET_KEY: "sk_test_secret-never-print",
   STRIPE_WEBHOOK_SECRET: "whsec_secret-never-print",
-  STRIPE_PRICE_ID: "price_test_123",
   STRIPE_WEBHOOK_ENDPOINT: "https://api.example.test/webhook",
   ENTITLEMENT_SIGNING_SECRET: "signing-secret-never-print-1234567890",
   NEXT_PUBLIC_ENTITLEMENT_API_BASE: "https://api.example.test",
@@ -76,6 +79,42 @@ test("a complete test-mode launch passes every control", () => {
   assert.equal(report.ready, true);
   assert.deepEqual(report.summary, { pass: report.controls.length, fail: 0, blocked: 0 });
   assert.ok(report.controls.every((control) => control.status === "pass"));
+});
+
+test("a complete production launch requires live keys and the protected production environment", () => {
+  const report = evaluateLaunch({
+    environment: {
+      ...validEnvironment,
+      ENTITLEMENT_MODE: "production",
+      STRIPE_SECRET_KEY: "sk_live_secret-never-print",
+      ENTITLEMENT_STACK_NAME: "solvelang-entitlements-production",
+    },
+    repository,
+    probes: {
+      entitlementHealth: { ok: true, mode: "production" },
+      site: { ok: true },
+      webhook: { ok: true },
+      aws: { ok: true },
+      stripe: { ok: true, mode: "production" },
+      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementProductionEnvironment: true },
+    },
+    now: "2026-07-22T00:00:00.000Z",
+  });
+
+  assert.equal(report.ready, true);
+  assert.equal(report.controls.find((control) => control.id === "stripe-mode")?.status, "pass");
+});
+
+test("production launch rejects test keys without exposing their values", () => {
+  const report = evaluateLaunch({
+    environment: { ...validEnvironment, ENTITLEMENT_MODE: "production" },
+    repository,
+    probes: {},
+    now: "2026-07-22T00:00:00.000Z",
+  });
+  const stripeMode = report.controls.find((control) => control.id === "stripe-mode");
+  assert.equal(stripeMode?.status, "fail");
+  assert.doesNotMatch(JSON.stringify(report), /secret-never-print/);
 });
 
 test("package, lock, release tag, and npm drift is a hard failure", () => {
@@ -128,7 +167,7 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
     environment: validEnvironment,
     repository: {
       ...repository,
-      entitlement: { healthRoute: false, privacySafe: false, testModeE2eHarness: false },
+      entitlement: { healthRoute: false, privacySafe: false, testModeE2eHarness: false, refundAware: false },
     },
     probes: {
       entitlementHealth: { ok: true, mode: "test" },
@@ -142,7 +181,7 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
   });
 
   assert.equal(report.ready, false);
-  for (const id of ["entitlement-health-contract", "workflow-data-privacy", "stripe-test-e2e-harness"]) {
+  for (const id of ["entitlement-health-contract", "workflow-data-privacy", "stripe-test-e2e-harness", "refund-revocation"]) {
     assert.equal(report.controls.find((item) => item.id === id)?.status, "fail");
   }
 });
@@ -153,6 +192,7 @@ test("current repository proves all entitlement code gates with implementation a
     healthRoute: true,
     privacySafe: true,
     testModeE2eHarness: true,
+    refundAware: true,
   });
 });
 
@@ -169,7 +209,7 @@ test("GitHub metadata satisfies npm gates and reports a missing entitlement test
     now: "2026-07-19T18:00:00.000Z",
   });
   assert.equal(report.controls.find((item) => item.id === "npm-configuration")?.status, "pass");
-  const entitlementEnvironment = report.controls.find((item) => item.id === "github-entitlement-test-environment");
+  const entitlementEnvironment = report.controls.find((item) => item.id === "github-entitlement-environment");
   assert.equal(entitlementEnvironment?.status, "blocked");
   assert.match(entitlementEnvironment?.ownerAction ?? "", /entitlement-test/);
 });
@@ -195,5 +235,21 @@ test("JSON and Markdown evidence contain provenance but never environment values
   for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "ENTITLEMENT_SIGNING_SECRET", "AWS_ROLE_ARN"]) {
     const value = validEnvironment[name];
     assert.doesNotMatch(combined, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+});
+
+test("launch evidence writes deterministic JSON and Markdown artifacts", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "solvelang-launch-evidence-"));
+  try {
+    const report = evaluateLaunch({ environment: validEnvironment, repository, probes: {}, now: "2026-07-22T00:00:00.000Z" });
+    const paths = await writeLaunchEvidence(root, report);
+    assert.deepEqual(paths.map((value) => path.relative(root, value)), [
+      "artifacts/launch-readiness/launch-readiness.json",
+      "artifacts/launch-readiness/launch-readiness.md",
+    ]);
+    assert.deepEqual(JSON.parse(await readFile(paths[0], "utf8")), report);
+    assert.equal(await readFile(paths[1], "utf8"), renderMarkdown(report));
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
