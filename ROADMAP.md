@@ -291,8 +291,8 @@ The current agent syntax is only a local prototype. A real AI-native runtime nee
 
 The next concrete implementation order should be:
 
-1. Finish and stabilize the on-site Stripe payment and entitlement flow.
-2. Restore green CI for the checkout pull request before merge or deployment.
+1. Complete deployed browser verification of the on-site Stripe payment, webhook, entitlement recovery, downloads, and full-refund revocation.
+2. Preserve a passing online launch-control evidence bundle for the deployed test commit.
 3. Define the Repository Audit report schema, evidence model, redaction rules, and scan limits.
 4. Build Repository Audit v0 as a read-only deterministic inventory and recommendation engine.
 5. Add GitHub App or archive ingestion with least-privilege repository access.
@@ -315,4 +315,4 @@ SolveLang should become a simple, readable, safe, and AI-native language and ana
 - repository architecture and cleanup audits
 - server posture and operational audits
 
-The immediate engineering priority is stabilizing the payment flow, then delivering a read-only Repository Audit before attempting any live-server remediation capability.
+Payment code, CI, and the test-stack deployment are green. The immediate launch priority is deployed browser end-to-end proof and commit-bound launch evidence, followed by a read-only Repository Audit before any live-server remediation capability.

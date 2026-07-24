@@ -38,18 +38,29 @@ gh workflow run deploy-entitlements.yml -f environment=entitlement-test
 
 Use a non-sensitive workflow fixture and Stripe test card. Confirm the on-site Payment Element charges exactly $49, returns to `/check/`, restores the pending report, and unlocks HTML/JSON only after server verification.
 
-## 2. Prepare live Stripe keys
+## 2. Prepare the protected production environment
 
 Activate and review the Stripe account, business profile, statement descriptor, support details, payout account, tax obligations, and fraud settings. Create or roll the live secret key only in the protected `entitlement-production` environment. Do not reuse test keys or test webhook secrets.
 
-## 3. Create the live webhook destination
+Configure every required production variable and secret except the final Stripe webhook secret. Because the production `WebhookUrl` does not exist until the first stack deployment, set `STRIPE_WEBHOOK_SECRET` to a temporary, cryptographically strong bootstrap value beginning with `whsec_`. Generate it with a secure secret generator, store it only in the protected environment, and never use it to sign or accept an event. This value exists only to let the stack create the production URL and must be replaced before production payment traffic is enabled.
 
-After the production backend URL exists, create one live Stripe webhook destination for its `/webhook` URL. Subscribe only to:
+## 3. Bootstrap the production stack and webhook
+
+The first production setup requires two deployments:
+
+1. Confirm `entitlement-production` has a required reviewer, is restricted to `main`, and contains the temporary bootstrap `STRIPE_WEBHOOK_SECRET`.
+2. Run `gh workflow run deploy-entitlements.yml -f environment=entitlement-production`.
+3. Capture the non-secret `WebhookUrl` output from the successful deployment.
+4. Create one live Stripe webhook destination for that exact URL and subscribe only to:
 
 - `payment_intent.succeeded`
 - `charge.refunded`
 
-Store its live `whsec_...` value in `entitlement-production`, then redeploy that environment so Lambda receives the final signing secret.
+5. Replace the bootstrap value in `entitlement-production` with Stripe's actual live `whsec_...` signing secret.
+6. Run `gh workflow run deploy-entitlements.yml -f environment=entitlement-production` again.
+7. Send a real Stripe-signed test event from the live destination and confirm the webhook returns HTTP 200 before enabling production payment traffic.
+
+The bootstrap value must not remain configured after this sequence. Never weaken webhook verification, expose the secret, or accept an unsigned event to avoid the second deployment.
 
 ## 4. Verify GitHub environments
 
@@ -59,15 +70,9 @@ Confirm `entitlement-test` and `entitlement-production` use different stack name
 
 Set the live site’s `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to the matching `pk_live_...` key and `NEXT_PUBLIC_ENTITLEMENT_API_BASE` to the production stack `ApiBaseUrl`. No secret belongs in Amplify public variables.
 
-## 6. Deploy the production backend
+## 6. Verify the production backend
 
-After owner review, run:
-
-```bash
-gh workflow run deploy-entitlements.yml -f environment=entitlement-production
-```
-
-Verify the workflow’s non-secret `ApiBaseUrl` and `WebhookUrl` outputs. `GET /health` must return only `status`, `service`, and `mode: "production"`.
+After both bootstrap deployments and owner review, verify the workflow's non-secret `ApiBaseUrl` and `WebhookUrl` outputs. `GET /health` must return only `status`, `service`, and `mode: "production"`.
 
 ## 7. Deploy the frontend
 

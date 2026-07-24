@@ -196,6 +196,27 @@ test("current repository proves all entitlement code gates with implementation a
   });
 });
 
+test("production runbook preserves the two-deployment webhook bootstrap sequence", async () => {
+  const runbook = await readFile(path.join(repositoryRoot, "docs/launch-owner-runbook.md"), "utf8");
+  const requiredSteps = [
+    "temporary bootstrap `STRIPE_WEBHOOK_SECRET`",
+    "gh workflow run deploy-entitlements.yml -f environment=entitlement-production",
+    "Capture the non-secret `WebhookUrl`",
+    "`payment_intent.succeeded`",
+    "`charge.refunded`",
+    "Replace the bootstrap value",
+    "gh workflow run deploy-entitlements.yml -f environment=entitlement-production",
+    "real Stripe-signed test event",
+  ];
+
+  let previousIndex = -1;
+  for (const step of requiredSteps) {
+    const index = runbook.indexOf(step, previousIndex + 1);
+    assert.ok(index > previousIndex, `missing or out-of-order production bootstrap step: ${step}`);
+    previousIndex = index;
+  }
+});
+
 test("GitHub metadata satisfies npm gates and reports a missing entitlement test environment", () => {
   const environment = { ...validEnvironment };
   delete environment.NPM_SCOPE_OWNERSHIP_VERIFIED;
