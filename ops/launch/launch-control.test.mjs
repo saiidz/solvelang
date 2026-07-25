@@ -216,6 +216,7 @@ test("current repository proves all entitlement code gates with implementation a
     checkoutGate: true,
   });
   assert.equal(state.workflow.packedInstall, true);
+  assert.equal(state.workflow.tagValidation, true);
 });
 
 test("launch control collects the public MCP npm version without credentials", async () => {

@@ -344,7 +344,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     workflow: {
       oidc: /id-token:\s*write/.test(workflowText),
       protectedEnvironment: /environment:\s*npm-production/.test(workflowText),
-      tagValidation: /refs\/tags\/v/.test(workflowText) && /package\.json/.test(workflowText),
+      tagValidation: /RELEASE_TAG/.test(workflowText) && /v\$\(node -p/.test(workflowText) && /package\.json/.test(workflowText),
       tests: /npm\s+(?:test|run\s+test)/.test(workflowText),
       packedInstall: /npm\s+run\s+test:packed/.test(workflowText)
         && /npm", \["pack"/.test(packedSmoke)
