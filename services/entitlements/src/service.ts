@@ -1,9 +1,13 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { z } from "zod";
 import { issueEntitlement } from "./token.js";
+import type { TurnstileGateway } from "./turnstile.js";
 
 const PRODUCT = "workflow-preflight-v1";
-const checkoutSchema = z.object({ scanId: z.string().uuid() }).strict();
+const checkoutSchema = z.object({
+  scanId: z.string().uuid(),
+  turnstileToken: z.string().min(1).max(2_048),
+}).strict();
 const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
 const conversionEventSchema = z.object({
   name: z.enum([
@@ -86,6 +90,7 @@ type ServiceDependencies = {
   config: EntitlementConfig;
   stripe: StripeGateway;
   store: EntitlementStore;
+  turnstile: TurnstileGateway;
   now?: () => number;
   logger?: SafeLogger;
 };
@@ -143,6 +148,7 @@ export function createEntitlementService({
   config,
   stripe,
   store,
+  turnstile,
   now = Date.now,
   logger = console,
 }: ServiceDependencies): (event: APIGatewayProxyEventV2) => Promise<JsonResponse> {
@@ -165,7 +171,17 @@ export function createEntitlementService({
     if (!config.checkoutEnabled) {
       throw new RequestError(503, "Checkout is temporarily unavailable.", "checkout_disabled");
     }
-    const { scanId } = checkoutSchema.parse(parseJson(event));
+    const { scanId, turnstileToken } = checkoutSchema.parse(parseJson(event));
+    let verified: boolean;
+    try {
+      verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp });
+    } catch {
+      throw new RequestError(503, "Verification is temporarily unavailable.", "turnstile_unavailable");
+    }
+    if (!verified) {
+      throw new RequestError(403, "Verification could not be completed.", "turnstile_rejected");
+    }
+
     let paymentIntent: PaymentIntentSnapshot;
     try {
       paymentIntent = await stripe.payments.create({

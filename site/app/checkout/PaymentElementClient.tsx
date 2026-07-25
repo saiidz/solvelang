@@ -1,23 +1,77 @@
 "use client";
 
 import { loadStripe, type StripeElements, type StripePaymentElement } from "@stripe/stripe-js";
+import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
+const turnstileSiteKey = "0x4AAAAAAD9obneMXYQ49uyU";
+
+type Turnstile = {
+  render(container: HTMLElement, options: {
+    sitekey: string;
+    action: string;
+    callback: (token: string) => void;
+    "expired-callback": () => void;
+    "error-callback": () => void;
+  }): string;
+  remove(widgetId: string): void;
+  reset(widgetId: string): void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: Turnstile;
+  }
+}
 
 export function PaymentElementClient() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetRef = useRef<string | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const paymentElementRef = useRef<StripePaymentElement | null>(null);
   const stripeRef = useRef<Awaited<ReturnType<typeof loadStripe>>>(null);
   const scanIdRef = useRef("");
   const [error, setError] = useState("");
+  const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
+    if (!turnstileReady || !turnstileContainerRef.current || !window.turnstile) return;
+
+    const widgetId = window.turnstile.render(turnstileContainerRef.current, {
+      sitekey: turnstileSiteKey,
+      action: "turnstile-spin-v2",
+      callback: (token) => {
+        setError("");
+        setTurnstileToken(token);
+      },
+      "expired-callback": () => {
+        setReady(false);
+        setTurnstileToken("");
+        setError("Verification expired. Complete it again to load the payment form.");
+      },
+      "error-callback": () => {
+        setReady(false);
+        setTurnstileToken("");
+        setError("Verification could not be loaded. Refresh the page and try again.");
+      },
+    });
+    turnstileWidgetRef.current = widgetId;
+
+    return () => {
+      window.turnstile?.remove(widgetId);
+      turnstileWidgetRef.current = null;
+    };
+  }, [turnstileReady]);
+
+  useEffect(() => {
+    if (!turnstileToken) return;
     let cancelled = false;
 
     async function mountPaymentElement() {
@@ -33,10 +87,15 @@ export function PaymentElementClient() {
         const response = await fetch(`${apiBase}/checkout`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scanId }),
+          body: JSON.stringify({ scanId, turnstileToken }),
         });
         const body = (await response.json()) as { clientSecret?: string; error?: string };
-        if (!response.ok || !body.clientSecret) throw new Error(body.error || "Payment could not be started.");
+        if (!response.ok || !body.clientSecret) {
+          const widgetId = turnstileWidgetRef.current;
+          if (widgetId) window.turnstile?.reset(widgetId);
+          setTurnstileToken("");
+          throw new Error(body.error || "Payment could not be started.");
+        }
 
         const stripe = await loadStripe(publishableKey);
         if (!stripe) throw new Error("Stripe could not be loaded.");
@@ -77,7 +136,7 @@ export function PaymentElementClient() {
       elementsRef.current = null;
       stripeRef.current = null;
     };
-  }, []);
+  }, [turnstileToken]);
 
   async function submitPayment() {
     const stripe = stripeRef.current;
@@ -116,12 +175,26 @@ export function PaymentElementClient() {
 
   return (
     <div>
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="afterInteractive"
+        onLoad={() => setTurnstileReady(true)}
+      />
       {error ? (
         <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
           {error}
         </div>
       ) : null}
       {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">{status}</div> : null}
+      <div className="mb-5">
+        <div
+          ref={turnstileContainerRef}
+          className="cf-turnstile"
+          data-sitekey={turnstileSiteKey}
+          data-action="turnstile-spin-v2"
+          aria-label="Human verification"
+        />
+      </div>
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
       <button
         type="button"

@@ -6,6 +6,7 @@ const valid = {
   ENTITLEMENT_MODE: "test",
   STRIPE_SECRET_KEY: "sk_test_local_only",
   STRIPE_WEBHOOK_SECRET: "whsec_local_only",
+  TURNSTILE_SECRET: "turnstile-test-secret",
   ENTITLEMENT_SIGNING_SECRET: "local-signing-secret-at-least-32-bytes",
   ENTITLEMENTS_TABLE: "entitlements-test",
   SITE_ORIGIN: "https://www.solve-lang.com",
@@ -42,4 +43,7 @@ test("test and production environments reject Stripe keys from the wrong mode", 
 test("environment fails closed for incomplete secrets", () => {
   assert.throws(() => parseEntitlementEnvironment({ ...valid, ENTITLEMENT_SIGNING_SECRET: "short" }), /ENTITLEMENT_SIGNING_SECRET/);
   assert.throws(() => parseEntitlementEnvironment({ ...valid, STRIPE_WEBHOOK_SECRET: "missing-prefix" }), /STRIPE_WEBHOOK_SECRET/);
+  const withoutTurnstileSecret = { ...valid } as Record<string, string>;
+  delete withoutTurnstileSecret.TURNSTILE_SECRET;
+  assert.throws(() => parseEntitlementEnvironment(withoutTurnstileSecret), /TURNSTILE_SECRET/);
 });

@@ -10,6 +10,8 @@ const forbidden = [
   "sk_test_do_not_log",
   "sk_live_do_not_log",
   "whsec_do_not_log",
+  "turnstile-secret-do-not-log",
+  "turnstile-response-do-not-log",
   "entitlement-signing-do-not-log",
   "raw-webhook-payload-do-not-log",
 ];
@@ -58,6 +60,9 @@ function fixture() {
     },
     stripe,
     store,
+    turnstile: {
+      async verify() { throw new Error(forbidden.join(" | ")); },
+    },
     now: () => 0,
     logger: {
       info: (...values) => output.push(values.map(serialize).join(" ")),
@@ -70,7 +75,8 @@ function fixture() {
 test("workflow and secret material never reaches client errors or structured logs", async () => {
   const cases = [
     { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", workflow: forbidden })), status: 400 },
-    { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875" })), status: 502 },
+    { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875" })), status: 400 },
+    { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", turnstileToken: "turnstile-response-do-not-log" })), status: 503 },
     { request: event("/webhook", `{"raw":"${forbidden.join("-")}"}`, "invalid"), status: 400 },
     { request: event("/entitlement", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", sessionId: "pi_test_private", workflow: forbidden })), status: 400 },
     { request: event("/entitlement", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", sessionId: "pi_test_private" })), status: 500 },

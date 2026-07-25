@@ -6,6 +6,7 @@ import { parseEntitlementEnvironment } from "./config.js";
 import { createEntitlementService } from "./service.js";
 import { createStripeGateway } from "./stripe.js";
 import { createEntitlementStore } from "./store.js";
+import { createTurnstileGateway } from "./turnstile.js";
 
 const environment = parseEntitlementEnvironment(process.env);
 
@@ -15,6 +16,7 @@ const stripeClient = new Stripe(environment.STRIPE_SECRET_KEY, {
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const stripe = createStripeGateway(stripeClient);
 const store = createEntitlementStore(documentClient, environment.ENTITLEMENTS_TABLE);
+const turnstile = createTurnstileGateway(environment.TURNSTILE_SECRET);
 
 const service = createEntitlementService({
   config: {
@@ -26,6 +28,7 @@ const service = createEntitlementService({
   },
   stripe,
   store,
+  turnstile,
 });
 
 export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {

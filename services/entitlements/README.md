@@ -17,6 +17,7 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - Conversion events accept only a fixed event-name allowlist.
 - Client errors and structured logs use fixed codes and never serialize request bodies or caught exception details.
 - `CHECKOUT_ENABLED` defaults to `false`; when disabled, `POST /checkout` returns a fixed HTTP 503 before parsing the request or calling Stripe.
+- Checkout accepts a Cloudflare Turnstile token only after the checkout page renders the configured widget. The Lambda verifies it server-side with `TURNSTILE_SECRET` and the API Gateway client IP before it creates a PaymentIntent. Verification rejection or unavailability never creates a PaymentIntent.
 
 ## Health endpoint
 
@@ -52,6 +53,7 @@ sam deploy --guided \
     CheckoutEnabled=true \
     StripeSecretKey=REDACTED \
     StripeWebhookSecret=REDACTED \
+    TurnstileSecret=REDACTED \
     EntitlementSigningSecret=REDACTED_AT_LEAST_32_CHARACTERS
 ```
 
