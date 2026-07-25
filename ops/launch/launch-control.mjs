@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 const REQUIRED = {
   aws: ["AWS_REGION", "AWS_ROLE_ARN", "ENTITLEMENT_STACK_NAME"],
   stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
-  entitlement: ["ENTITLEMENT_MODE", "ENTITLEMENT_SIGNING_SECRET", "CHECKOUT_ENABLED", "TURNSTILE_SECRET"],
-  site: ["SITE_ORIGIN", "NEXT_PUBLIC_ENTITLEMENT_API_BASE"],
+  entitlement: ["ENTITLEMENT_MODE", "ENTITLEMENT_SIGNING_SECRET", "CHECKOUT_ENABLED", "TURNSTILE_SECRET_KEY"],
+  site: ["SITE_ORIGIN", "NEXT_PUBLIC_ENTITLEMENT_API_BASE", "NEXT_PUBLIC_TURNSTILE_SITE_KEY"],
   webhook: ["STRIPE_WEBHOOK_ENDPOINT"],
   npm: ["NPM_SCOPE_OWNERSHIP_VERIFIED", "NPM_PRODUCTION_ENVIRONMENT_PROTECTED"],
 };
@@ -297,13 +297,15 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const entitlementE2eTest = await readFile(path.join(root, "services/entitlements/test/e2e.test.ts"), "utf8");
   const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
   const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
+  const checkoutGateTest = await readFile(path.join(root, "site/app/check/core/turnstileCheckout.test.ts"), "utf8");
   const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
   const paymentClient = await readFile(path.join(root, "site/app/checkout/PaymentElementClient.tsx"), "utf8");
+  const turnstileGateway = await readFile(path.join(root, "services/entitlements/src/turnstile.ts"), "utf8");
   const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)
     && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)
     && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate)
     && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
-  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId,\s*turnstileToken\s*\}\)/.test(paymentClient)
+  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId,\s*turnstileToken:\s*token\s*\}\)/.test(paymentClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
     && /metadata:\s*\{\s*scanId,\s*product:\s*PRODUCT\s*\}/.test(entitlementService)
     && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
@@ -326,20 +328,26 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /charge\.refunded/.test(entitlementService)
     && /refundStatus === ["']full["']/.test(entitlementService);
   const checkoutGate = /CHECKOUT_ENABLED:\s*z\.enum\(\["true", "false"\]\)\.default\("false"\)/.test(entitlementConfig)
-    && /TURNSTILE_SECRET:\s*z\.string\(\)\.min\(1\)/.test(entitlementConfig)
+    && /TURNSTILE_SECRET_KEY:\s*z\.string\(\)\.min\(1\)/.test(entitlementConfig)
     && /if \(!config\.checkoutEnabled\)[\s\S]*RequestError\(503, "Checkout is temporarily unavailable\."/.test(entitlementService)
     && /verified = await turnstile\.verify[\s\S]*paymentIntent = await stripe\.payments\.create/.test(entitlementService)
     && /checkoutEnabled: environment\.CHECKOUT_ENABLED === "true"/.test(entitlementHandler)
-    && /createTurnstileGateway\(environment\.TURNSTILE_SECRET\)/.test(entitlementHandler)
+    && /createTurnstileGateway\(\{[\s\S]*secret: environment\.TURNSTILE_SECRET_KEY,[\s\S]*expectedHostname: new URL\(environment\.SITE_ORIGIN\)\.hostname/.test(entitlementHandler)
     && /CheckoutEnabled:[\s\S]*Default: "false"/.test(entitlementTemplate)
-    && /TurnstileSecret:[\s\S]*NoEcho: true/.test(entitlementTemplate)
+    && /TurnstileSecretKey:[\s\S]*NoEcho: true/.test(entitlementTemplate)
     && /WebhookSignedDeliveryVerified:[\s\S]*Default: "false"/.test(entitlementTemplate)
     && /ProductionCheckoutRequiresVerifiedWebhook:[\s\S]*!Equals \[!Ref CheckoutEnabled, "false"\][\s\S]*!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/.test(entitlementTemplate)
     && /CHECKOUT_ENABLED:[\s\S]*WEBHOOK_SIGNED_DELIVERY_VERIFIED/.test(entitlementDeployWorkflow)
-    && /TURNSTILE_SECRET:[\s\S]*secrets\.TURNSTILE_SECRET/.test(entitlementDeployWorkflow)
+    && /TURNSTILE_SECRET_KEY:[\s\S]*secrets\.TURNSTILE_SECRET_KEY/.test(entitlementDeployWorkflow)
     && /checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent/.test(entitlementE2eTest)
-    && /production bootstrap denies checkout without creating a PaymentIntent/.test(entitlementE2eTest)
-    && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest);
+    && /production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile/.test(entitlementE2eTest)
+    && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest)
+    && /expectedHostname/.test(turnstileGateway)
+    && /idempotency_key/.test(turnstileGateway)
+    && /NEXT_PUBLIC_TURNSTILE_SITE_KEY/.test(paymentClient)
+    && /action: "checkout"/.test(paymentClient)
+    && /Turnstile expiry after a client secret mounts preserves the payment form state/.test(checkoutGateTest)
+    && /duplicate Turnstile callbacks cannot start concurrent checkout requests/.test(checkoutGateTest);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",

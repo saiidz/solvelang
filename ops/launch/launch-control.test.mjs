@@ -41,7 +41,8 @@ const validEnvironment = {
   SITE_ORIGIN: "https://www.solve-lang.com",
   STRIPE_SECRET_KEY: "sk_test_secret-never-print",
   STRIPE_WEBHOOK_SECRET: "whsec_secret-never-print",
-  TURNSTILE_SECRET: "turnstile-secret-never-print",
+  TURNSTILE_SECRET_KEY: "turnstile-secret-never-print",
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: "turnstile-public-site-key",
   STRIPE_WEBHOOK_ENDPOINT: "https://api.example.test/webhook",
   ENTITLEMENT_SIGNING_SECRET: "signing-secret-never-print-1234567890",
   NEXT_PUBLIC_ENTITLEMENT_API_BASE: "https://api.example.test",
@@ -67,12 +68,12 @@ test("missing launch prerequisites fail closed using names only", () => {
 
 test("missing Turnstile configuration blocks launch without exposing its value", () => {
   const environment = { ...validEnvironment };
-  delete environment.TURNSTILE_SECRET;
+  delete environment.TURNSTILE_SECRET_KEY;
   const report = evaluateLaunch({ environment, repository, probes: {}, now: "2026-07-25T00:00:00.000Z" });
 
   const entitlement = report.controls.find((control) => control.id === "entitlement-configuration");
   assert.equal(entitlement?.status, "blocked");
-  assert.match(entitlement?.detail ?? "", /TURNSTILE_SECRET/);
+  assert.match(entitlement?.detail ?? "", /TURNSTILE_SECRET_KEY/);
   assert.doesNotMatch(JSON.stringify(report), /turnstile-secret-never-print/);
 });
 

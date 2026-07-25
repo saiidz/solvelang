@@ -33,7 +33,8 @@ Provide these through a protected local shell or CI environment. Do not commit t
 - `SITE_ORIGIN`
 - `STRIPE_SECRET_KEY` matching the selected mode
 - `STRIPE_WEBHOOK_SECRET`
-- `TURNSTILE_SECRET`
+- `TURNSTILE_SECRET_KEY`
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `STRIPE_WEBHOOK_ENDPOINT`
 - `ENTITLEMENT_SIGNING_SECRET`
 - `NEXT_PUBLIC_ENTITLEMENT_API_BASE`

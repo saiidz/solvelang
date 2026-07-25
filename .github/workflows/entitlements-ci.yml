@@ -9,6 +9,8 @@ on:
       - 'site/app/check/WorkflowPreflight.tsx'
       - 'site/app/check/core/paidRecovery.ts'
       - 'site/app/check/core/paidRecovery.test.ts'
+      - 'site/app/check/core/turnstileCheckout.test.ts'
+      - 'site/app/checkout/**'
       - 'ops/launch/**'
       - '.github/workflows/entitlements-ci.yml'
   push:
@@ -19,6 +21,8 @@ on:
       - 'site/app/check/WorkflowPreflight.tsx'
       - 'site/app/check/core/paidRecovery.ts'
       - 'site/app/check/core/paidRecovery.test.ts'
+      - 'site/app/check/core/turnstileCheckout.test.ts'
+      - 'site/app/checkout/**'
       - 'ops/launch/**'
       - '.github/workflows/entitlements-ci.yml'
 

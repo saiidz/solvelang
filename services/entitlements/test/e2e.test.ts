@@ -188,13 +188,14 @@ test("checkout rejects an unsuccessful Turnstile verification before creating a 
   assert.equal(checkoutRequests.length, 0);
 });
 
-test("production bootstrap denies checkout without creating a PaymentIntent", async () => {
-  const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
+test("production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile", async () => {
+  const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
   const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
 
   assert.equal(result.statusCode, 503);
   assert.deepEqual(responseBody(result), { error: "Checkout is temporarily unavailable." });
   assert.equal(checkoutRequests.length, 0);
+  assert.equal(turnstileRequests.length, 0);
 });
 
 test("explicitly enabled production checkout creates a PaymentIntent", async () => {

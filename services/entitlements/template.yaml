@@ -29,7 +29,7 @@ Parameters:
   StripeWebhookSecret:
     Type: String
     NoEcho: true
-  TurnstileSecret:
+  TurnstileSecretKey:
     Type: String
     NoEcho: true
   EntitlementSigningSecret:
@@ -103,7 +103,7 @@ Resources:
           CHECKOUT_ENABLED: !Ref CheckoutEnabled
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
-          TURNSTILE_SECRET: !Ref TurnstileSecret
+          TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret
           ENTITLEMENTS_TABLE: !Ref EntitlementsTable
       Policies:

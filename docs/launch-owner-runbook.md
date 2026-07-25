@@ -19,7 +19,7 @@ Environment secrets:
 - `AWS_ROLE_ARN` (scoped to the matching stack/environment)
 - `STRIPE_SECRET_KEY` (`sk_test_...` in test; `sk_live_...` in production)
 - `STRIPE_WEBHOOK_SECRET` (from the matching Stripe mode and destination)
-- `TURNSTILE_SECRET` (the secret for the existing Cloudflare Turnstile widget; configure it in each protected entitlement environment)
+- `TURNSTILE_SECRET_KEY` (the secret for the existing Cloudflare Turnstile widget; configure it in each protected entitlement environment)
 - `ENTITLEMENT_SIGNING_SECRET` (at least 32 random bytes and different in each environment)
 
 The workflow derives `ENTITLEMENT_MODE` from the selected protected environment. The backend creates a fixed USD 49 PaymentIntent directly; no separate product-price identifier is required.
@@ -28,8 +28,9 @@ Amplify public build variables:
 
 - `NEXT_PUBLIC_ENTITLEMENT_API_BASE` (production API output for the live site)
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` (`pk_live_...` for production)
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (the public site key for the checkout widget)
 
-Never put secret, webhook-signing, or Turnstile secret values in `NEXT_PUBLIC_*`, repository variables, logs, screenshots, issues, or command output. The Turnstile site key is public and embedded only in the checkout client.
+Never put secret, webhook-signing, or Turnstile secret values in `NEXT_PUBLIC_*`, repository variables, logs, screenshots, issues, or command output. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is a public value read by the checkout client at build time.
 
 ## 1. Verify the test sandbox
 
@@ -75,7 +76,7 @@ The bootstrap value must not remain configured after this sequence. Never weaken
 
 ## 4. Verify GitHub environments
 
-Confirm `entitlement-test` and `entitlement-production` use different stack names, signing secrets, Stripe credentials, and webhook secrets, and that `TURNSTILE_SECRET` is configured in each protected environment. Confirm both require reviewer approval. The deployment workflow rejects live keys in test and test keys in production without printing keys.
+Confirm `entitlement-test` and `entitlement-production` use different stack names, signing secrets, Stripe credentials, and webhook secrets, and that `TURNSTILE_SECRET_KEY` is configured in each protected environment. Confirm both require reviewer approval. The deployment workflow rejects live keys in test and test keys in production without printing keys.
 
 ## 5. Configure the live Amplify variables
 
