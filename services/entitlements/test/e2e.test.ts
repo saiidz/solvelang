@@ -83,7 +83,7 @@ function createFixture(payment: {
   paymentStatus: "paid",
   refundStatus: "none",
   metadata: { scanId, product: "workflow-preflight-v1" },
-}) {
+}, configOverrides: Record<string, unknown> = {}) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
@@ -118,7 +118,9 @@ function createFixture(payment: {
       stripeWebhookSecret: "whsec_test_only",
       entitlementSigningSecret: signingSecret,
       mode: "test",
-    },
+      checkoutEnabled: true,
+      ...configOverrides,
+    } as unknown as Parameters<typeof createEntitlementService>[0]["config"],
     stripe,
     store,
     now: () => nowMs,
@@ -135,7 +137,7 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
   assert.equal(result.headers?.["cache-control"], "no-store");
 });
 
-test("payment creation returns a PaymentIntent client secret with minimal metadata", async () => {
+test("test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata", async () => {
   const { service, checkoutRequests } = createFixture();
   const result = await service(apiEvent("POST", "/checkout", { scanId }));
   assert.equal(result.statusCode, 200);
@@ -150,6 +152,23 @@ test("payment creation returns a PaymentIntent client secret with minimal metada
       metadata: { scanId, product: "workflow-preflight-v1" },
     },
   });
+});
+
+test("production bootstrap denies checkout without creating a PaymentIntent", async () => {
+  const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
+  const result = await service(apiEvent("POST", "/checkout", { scanId }));
+
+  assert.equal(result.statusCode, 503);
+  assert.deepEqual(responseBody(result), { error: "Checkout is temporarily unavailable." });
+  assert.equal(checkoutRequests.length, 0);
+});
+
+test("explicitly enabled production checkout creates a PaymentIntent", async () => {
+  const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: true });
+  const result = await service(apiEvent("POST", "/checkout", { scanId }));
+
+  assert.equal(result.statusCode, 200);
+  assert.equal(checkoutRequests.length, 1);
 });
 
 test("valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent", async () => {

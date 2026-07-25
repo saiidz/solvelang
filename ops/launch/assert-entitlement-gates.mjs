@@ -13,6 +13,7 @@ assert.deepEqual(repository.entitlement, {
   privacySafe: true,
   testModeE2eHarness: true,
   refundAware: true,
+  checkoutGate: true,
 });
 
 console.log("Entitlement launch code gates: PASS");

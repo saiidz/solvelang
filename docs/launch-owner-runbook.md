@@ -11,6 +11,8 @@ Environment variables:
 - `AWS_REGION`
 - `SITE_ORIGIN`
 - `ENTITLEMENT_STACK_NAME` (a different stack name in each environment)
+- `CHECKOUT_ENABLED` (`false` for every production bootstrap deployment; set to `true` only after the signed webhook verification step)
+- `WEBHOOK_SIGNED_DELIVERY_VERIFIED` (`false` until the real production webhook has accepted a Stripe-signed delivery with HTTP 200)
 
 Environment secrets:
 
@@ -42,14 +44,19 @@ Use a non-sensitive workflow fixture and Stripe test card. Confirm the on-site P
 
 Activate and review the Stripe account, business profile, statement descriptor, support details, payout account, tax obligations, and fraud settings. Create or roll the live secret key only in the protected `entitlement-production` environment. Do not reuse test keys or test webhook secrets.
 
-Configure every required production variable and secret except the final Stripe webhook secret. Because the production `WebhookUrl` does not exist until the first stack deployment, set `STRIPE_WEBHOOK_SECRET` to a temporary, cryptographically strong bootstrap value beginning with `whsec_`. Generate it with a secure secret generator, store it only in the protected environment, and never use it to sign or accept an event. This value exists only to let the stack create the production URL and must be replaced before production payment traffic is enabled.
+Configure every required production variable and secret except the final Stripe webhook secret. Set `CHECKOUT_ENABLED` to `false` and `WEBHOOK_SIGNED_DELIVERY_VERIFIED` to `false`. Because the production `WebhookUrl` does not exist until the first stack deployment, set `STRIPE_WEBHOOK_SECRET` to a temporary, cryptographically strong bootstrap value beginning with `whsec_`. Generate it with a secure secret generator, store it only in the protected environment, and never use it to sign or accept an event. This value exists only to let the stack create the production URL and must be replaced before production payment traffic is enabled.
 
 ## 3. Bootstrap the production stack and webhook
 
-The first production setup requires two deployments:
+The first production setup requires three deployments. `POST /checkout` returns a fixed HTTP 503 and makes no Stripe call whenever `CHECKOUT_ENABLED` is `false`.
 
-1. Confirm `entitlement-production` has a required reviewer, is restricted to `main`, and contains the temporary bootstrap `STRIPE_WEBHOOK_SECRET`.
-2. Run `gh workflow run deploy-entitlements.yml -f environment=entitlement-production`.
+1. Confirm `entitlement-production` has a required reviewer, is restricted to `main`, contains the temporary bootstrap `STRIPE_WEBHOOK_SECRET`, and has `CHECKOUT_ENABLED=false`.
+2. Run the first production deployment with checkout disabled:
+
+   ```bash
+   gh workflow run deploy-entitlements.yml -f environment=entitlement-production
+   ```
+
 3. Capture the non-secret `WebhookUrl` output from the successful deployment.
 4. Create one live Stripe webhook destination for that exact URL and subscribe only to:
 
@@ -57,10 +64,13 @@ The first production setup requires two deployments:
 - `charge.refunded`
 
 5. Replace the bootstrap value in `entitlement-production` with Stripe's actual live `whsec_...` signing secret.
-6. Run `gh workflow run deploy-entitlements.yml -f environment=entitlement-production` again.
-7. Send a real Stripe-signed test event from the live destination and confirm the webhook returns HTTP 200 before enabling production payment traffic.
+6. Run the second production deployment with checkout still disabled.
+7. Send a real Stripe-signed test event from the live destination and confirm the Stripe-signed event returns HTTP 200.
+8. Only after that confirmation, set `WEBHOOK_SIGNED_DELIVERY_VERIFIED=true` and `CHECKOUT_ENABLED=true` in the protected production environment.
+9. Run the third production deployment. The workflow rejects `CHECKOUT_ENABLED=true` unless `WEBHOOK_SIGNED_DELIVERY_VERIFIED=true` is already configured.
+10. Verify `GET /health`, then only then point or activate the live frontend with the matching production API base and publishable key.
 
-The bootstrap value must not remain configured after this sequence. Never weaken webhook verification, expose the secret, or accept an unsigned event to avoid the second deployment.
+The bootstrap value must not remain configured after this sequence. Never weaken webhook verification, expose the secret, accept an unsigned event, or enable checkout early to avoid the guarded deployments.
 
 ## 4. Verify GitHub environments
 
@@ -72,7 +82,7 @@ Set the live site’s `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` to the matching `pk_l
 
 ## 6. Verify the production backend
 
-After both bootstrap deployments and owner review, verify the workflow's non-secret `ApiBaseUrl` and `WebhookUrl` outputs. `GET /health` must return only `status`, `service`, and `mode: "production"`.
+After the third deployment and owner review, verify the workflow's non-secret `ApiBaseUrl` and `WebhookUrl` outputs. `GET /health` must return only `status`, `service`, and `mode: "production"`.
 
 ## 7. Deploy the frontend
 

@@ -22,6 +22,7 @@ const service = createEntitlementService({
     stripeWebhookSecret: environment.STRIPE_WEBHOOK_SECRET,
     entitlementSigningSecret: environment.ENTITLEMENT_SIGNING_SECRET,
     mode: environment.ENTITLEMENT_MODE,
+    checkoutEnabled: environment.CHECKOUT_ENABLED === "true",
   },
   stripe,
   store,

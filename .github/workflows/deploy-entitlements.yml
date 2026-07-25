@@ -81,6 +81,8 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           ENTITLEMENT_SIGNING_SECRET: ${{ secrets.ENTITLEMENT_SIGNING_SECRET }}
+          CHECKOUT_ENABLED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.CHECKOUT_ENABLED || 'false' }}
+          WEBHOOK_SIGNED_DELIVERY_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.WEBHOOK_SIGNED_DELIVERY_VERIFIED || 'false' }}
           STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         run: |
@@ -96,10 +98,17 @@ jobs:
             test)
               [[ "$STRIPE_SECRET_KEY" == sk_test_* ]] || { echo "Stripe key mode does not match entitlement-test." >&2; exit 1; }
               [[ "$STACK_NAME" == *test* ]] || { echo "Test stack name must identify the test environment." >&2; exit 1; }
+              [[ "$CHECKOUT_ENABLED" == "true" ]] || { echo "Test checkout must remain enabled." >&2; exit 1; }
               ;;
             production)
               [[ "$STRIPE_SECRET_KEY" == sk_live_* ]] || { echo "Stripe key mode does not match entitlement-production." >&2; exit 1; }
               [[ "$STACK_NAME" == *production* ]] || { echo "Production stack name must identify the production environment." >&2; exit 1; }
+              [[ "$CHECKOUT_ENABLED" == "true" || "$CHECKOUT_ENABLED" == "false" ]] || { echo "CHECKOUT_ENABLED must be true or false." >&2; exit 1; }
+              [[ "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "true" || "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "false" ]] || { echo "WEBHOOK_SIGNED_DELIVERY_VERIFIED must be true or false." >&2; exit 1; }
+              if [[ "$CHECKOUT_ENABLED" == "true" && "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" != "true" ]]; then
+                echo "Production checkout requires a verified Stripe-signed webhook delivery." >&2
+                exit 1
+              fi
               ;;
             *)
               echo "Unsupported entitlement mode." >&2
@@ -115,6 +124,8 @@ jobs:
             --no-fail-on-empty-changeset \
             --parameter-overrides \
               EntitlementMode="$ENTITLEMENT_MODE" \
+              CheckoutEnabled="$CHECKOUT_ENABLED" \
+              WebhookSignedDeliveryVerified="$WEBHOOK_SIGNED_DELIVERY_VERIFIED" \
               SiteOrigin="$SITE_ORIGIN" \
               StripeSecretKey="$STRIPE_SECRET_KEY" \
               StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \

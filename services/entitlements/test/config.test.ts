@@ -12,7 +12,18 @@ const valid = {
 };
 
 test("test-mode environment accepts complete protected configuration", () => {
-  assert.deepEqual(parseEntitlementEnvironment(valid), valid);
+  assert.deepEqual(parseEntitlementEnvironment(valid), { ...valid, CHECKOUT_ENABLED: "false" });
+});
+
+test("checkout defaults disabled until explicitly enabled", () => {
+  const production = parseEntitlementEnvironment({
+    ...valid,
+    ENTITLEMENT_MODE: "production",
+    STRIPE_SECRET_KEY: "sk_live_local_only",
+  }) as Record<string, string>;
+  assert.equal(production.CHECKOUT_ENABLED, "false");
+  assert.equal((parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "true" }) as Record<string, string>).CHECKOUT_ENABLED, "true");
+  assert.throws(() => parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "enabled" }), /CHECKOUT_ENABLED/);
 });
 
 test("test and production environments reject Stripe keys from the wrong mode", () => {

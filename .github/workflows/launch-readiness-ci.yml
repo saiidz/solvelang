@@ -7,6 +7,7 @@ on:
     paths:
       - 'ops/launch/**'
       - '.github/workflows/launch-readiness-ci.yml'
+      - '.github/workflows/deploy-entitlements.yml'
       - '.github/workflows/npm-release.yml'
       - 'packages/mcp-server/package.json'
       - 'packages/mcp-server/package-lock.json'
@@ -16,6 +17,7 @@ on:
     paths:
       - 'ops/launch/**'
       - '.github/workflows/launch-readiness-ci.yml'
+      - '.github/workflows/deploy-entitlements.yml'
       - '.github/workflows/npm-release.yml'
       - 'packages/mcp-server/package.json'
       - 'packages/mcp-server/package-lock.json'
@@ -33,8 +35,8 @@ jobs:
           node-version: 24
       - name: Test fail-closed launch controls
         run: node --test ops/launch/launch-control.test.mjs
-      - name: Parse launch and release workflow YAML
-        run: ruby -e 'require "yaml"; Psych.parse_file(".github/workflows/launch-readiness-ci.yml"); Psych.parse_file(".github/workflows/npm-release.yml")'
+      - name: Parse launch, entitlement deployment, and release workflow YAML
+        run: ruby -e 'require "yaml"; Psych.parse_file(".github/workflows/launch-readiness-ci.yml"); Psych.parse_file(".github/workflows/deploy-entitlements.yml"); Psych.parse_file(".github/workflows/npm-release.yml")'
       - name: Generate current fail-closed launch evidence
         env:
           SITE_ORIGIN: https://www.solve-lang.com

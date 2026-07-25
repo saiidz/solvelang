@@ -8,6 +8,18 @@ Parameters:
     AllowedValues:
       - test
       - production
+  CheckoutEnabled:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+  WebhookSignedDeliveryVerified:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -21,6 +33,15 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+
+Rules:
+  ProductionCheckoutRequiresVerifiedWebhook:
+    RuleCondition: !Equals [!Ref EntitlementMode, production]
+    Assertions:
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref WebhookSignedDeliveryVerified, "true"]
+        AssertDescription: Production checkout requires a verified Stripe-signed webhook delivery.
 
 Resources:
   EntitlementsTable:
@@ -76,6 +97,7 @@ Resources:
         Variables:
           SITE_ORIGIN: !Ref SiteOrigin
           ENTITLEMENT_MODE: !Ref EntitlementMode
+          CHECKOUT_ENABLED: !Ref CheckoutEnabled
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret

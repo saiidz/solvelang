@@ -22,6 +22,7 @@ export type EntitlementConfig = {
   stripeWebhookSecret: string;
   entitlementSigningSecret: string;
   mode: "test" | "production";
+  checkoutEnabled: boolean;
 };
 
 export type PaymentIntentSnapshot = {
@@ -161,6 +162,9 @@ export function createEntitlementService({
   }
 
   async function createCheckout(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
+    if (!config.checkoutEnabled) {
+      throw new RequestError(503, "Checkout is temporarily unavailable.", "checkout_disabled");
+    }
     const { scanId } = checkoutSchema.parse(parseJson(event));
     let paymentIntent: PaymentIntentSnapshot;
     try {

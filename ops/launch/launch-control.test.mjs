@@ -29,6 +29,7 @@ const repository = {
     privacySafe: true,
     testModeE2eHarness: true,
     refundAware: true,
+    checkoutGate: true,
   },
 };
 
@@ -45,6 +46,8 @@ const validEnvironment = {
   NEXT_PUBLIC_ENTITLEMENT_API_BASE: "https://api.example.test",
   NPM_SCOPE_OWNERSHIP_VERIFIED: "true",
   NPM_PRODUCTION_ENVIRONMENT_PROTECTED: "true",
+  CHECKOUT_ENABLED: "true",
+  WEBHOOK_SIGNED_DELIVERY_VERIFIED: "true",
 };
 
 test("missing launch prerequisites fail closed using names only", () => {
@@ -71,7 +74,7 @@ test("a complete test-mode launch passes every control", () => {
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -96,7 +99,7 @@ test("a complete production launch requires live keys and the protected producti
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "production" },
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementProductionEnvironment: true },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementProductionEnvironment: true },
     },
     now: "2026-07-22T00:00:00.000Z",
   });
@@ -117,6 +120,23 @@ test("production launch rejects test keys without exposing their values", () => 
   assert.doesNotMatch(JSON.stringify(report), /secret-never-print/);
 });
 
+test("production checkout cannot be enabled before signed webhook verification is confirmed", () => {
+  const report = evaluateLaunch({
+    environment: {
+      ...validEnvironment,
+      ENTITLEMENT_MODE: "production",
+      STRIPE_SECRET_KEY: "sk_live_secret-never-print",
+      ENTITLEMENT_STACK_NAME: "solvelang-entitlements-production",
+      WEBHOOK_SIGNED_DELIVERY_VERIFIED: "false",
+    },
+    repository,
+    probes: {},
+    now: "2026-07-22T00:00:00.000Z",
+  });
+
+  assert.equal(report.controls.find((control) => control.id === "production-checkout-enablement")?.status, "blocked");
+});
+
 test("package, lock, release tag, and npm drift is a hard failure", () => {
   const report = evaluateLaunch({
     environment: validEnvironment,
@@ -127,7 +147,7 @@ test("package, lock, release tag, and npm drift is a hard failure", () => {
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -153,7 +173,7 @@ test("release workflow must use OIDC and retain every guarded publish step", () 
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -175,7 +195,7 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
       webhook: { ok: true },
       aws: { ok: true },
       stripe: { ok: true, mode: "test" },
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: true },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -193,20 +213,65 @@ test("current repository proves all entitlement code gates with implementation a
     privacySafe: true,
     testModeE2eHarness: true,
     refundAware: true,
+    checkoutGate: true,
   });
+  assert.equal(state.workflow.packedInstall, true);
 });
 
-test("production runbook preserves the two-deployment webhook bootstrap sequence", async () => {
+test("launch control collects the public MCP npm version without credentials", async () => {
+  const module = await import("./launch-control.mjs");
+  const collectPublicNpmVersion = module.collectPublicNpmVersion ?? (async () => undefined);
+  const version = await collectPublicNpmVersion(async (url) => {
+    assert.equal(url, "https://registry.npmjs.org/%40solvelang%2Fmcp-server/latest");
+    return new Response(JSON.stringify({ version: "0.2.0" }), { status: 200 });
+  });
+
+  assert.equal(version, "0.2.0");
+});
+
+test("launch control collects safe GitHub environment metadata and fails closed without authentication", async () => {
+  const module = await import("./launch-control.mjs");
+  const collectGitHubMetadata = module.collectGitHubMetadata ?? (() => ({ ok: false, reason: "missing" }));
+  const calls = [];
+  const metadata = collectGitHubMetadata({
+    repository: "saiidz/solvelang",
+    runCommand(command, args) {
+      calls.push([command, args]);
+      if (args[0] === "auth") return { ok: true };
+      if (args.at(-1)?.endsWith("NPM_SCOPE_OWNERSHIP_VERIFIED")) return { ok: true, stdout: JSON.stringify({ value: "true" }) };
+      return { ok: true, stdout: JSON.stringify({ protection_rules: [{ type: "required_reviewers" }] }) };
+    },
+  });
+  assert.deepEqual(metadata, {
+    ok: true,
+    entitlementTestEnvironment: true,
+    entitlementProductionEnvironment: true,
+    npmProductionEnvironment: true,
+    npmProductionProtected: true,
+    npmScopeOwnershipVerified: true,
+  });
+  assert.equal(calls.length, 5);
+  assert.deepEqual(
+    collectGitHubMetadata({ repository: "saiidz/solvelang", runCommand: () => ({ ok: false }) }),
+    { ok: false, reason: "Authenticated GitHub CLI access is unavailable." },
+  );
+});
+
+test("production runbook preserves the disabled checkout bootstrap sequence", async () => {
   const runbook = await readFile(path.join(repositoryRoot, "docs/launch-owner-runbook.md"), "utf8");
   const requiredSteps = [
-    "temporary bootstrap `STRIPE_WEBHOOK_SECRET`",
-    "gh workflow run deploy-entitlements.yml -f environment=entitlement-production",
+    "`CHECKOUT_ENABLED` to `false`",
+    "first production deployment with checkout disabled",
     "Capture the non-secret `WebhookUrl`",
     "`payment_intent.succeeded`",
     "`charge.refunded`",
     "Replace the bootstrap value",
-    "gh workflow run deploy-entitlements.yml -f environment=entitlement-production",
-    "real Stripe-signed test event",
+    "checkout still disabled",
+    "Stripe-signed event returns HTTP 200",
+    "`WEBHOOK_SIGNED_DELIVERY_VERIFIED=true`",
+    "`CHECKOUT_ENABLED=true`",
+    "third production deployment",
+    "only then point or activate the live frontend",
   ];
 
   let previousIndex = -1;
@@ -217,6 +282,14 @@ test("production runbook preserves the two-deployment webhook bootstrap sequence
   }
 });
 
+test("SAM rejects production checkout enablement without signed-webhook verification", async () => {
+  const template = await readFile(path.join(repositoryRoot, "services/entitlements/template.yaml"), "utf8");
+  assert.match(template, /WebhookSignedDeliveryVerified:/);
+  assert.match(template, /ProductionCheckoutRequiresVerifiedWebhook:/);
+  assert.match(template, /!Equals \[!Ref CheckoutEnabled, "false"\]/);
+  assert.match(template, /!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/);
+});
+
 test("GitHub metadata satisfies npm gates and reports a missing entitlement test environment", () => {
   const environment = { ...validEnvironment };
   delete environment.NPM_SCOPE_OWNERSHIP_VERIFIED;
@@ -225,7 +298,7 @@ test("GitHub metadata satisfies npm gates and reports a missing entitlement test
     environment,
     repository,
     probes: {
-      github: { ok: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: false },
+      github: { ok: true, npmProductionEnvironment: true, npmProductionProtected: true, npmScopeOwnershipVerified: true, entitlementTestEnvironment: false },
     },
     now: "2026-07-19T18:00:00.000Z",
   });
@@ -233,6 +306,25 @@ test("GitHub metadata satisfies npm gates and reports a missing entitlement test
   const entitlementEnvironment = report.controls.find((item) => item.id === "github-entitlement-environment");
   assert.equal(entitlementEnvironment?.status, "blocked");
   assert.match(entitlementEnvironment?.ownerAction ?? "", /entitlement-test/);
+});
+
+test("authenticated GitHub metadata cannot be bypassed when npm-production is missing", () => {
+  const report = evaluateLaunch({
+    environment: validEnvironment,
+    repository,
+    probes: {
+      github: {
+        ok: true,
+        npmProductionEnvironment: false,
+        npmProductionProtected: false,
+        npmScopeOwnershipVerified: false,
+        entitlementTestEnvironment: true,
+      },
+    },
+    now: "2026-07-24T00:00:00.000Z",
+  });
+
+  assert.equal(report.controls.find((item) => item.id === "npm-configuration")?.status, "blocked");
 });
 
 test("JSON and Markdown evidence contain provenance but never environment values", () => {
