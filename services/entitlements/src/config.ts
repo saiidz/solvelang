@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const environmentSchema = z.object({
   ENTITLEMENT_MODE: z.enum(["test", "production"]),
+  CHECKOUT_ENABLED: z.enum(["true", "false"]).default("false"),
   STRIPE_SECRET_KEY: z.string().min(12),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").min(12),
   ENTITLEMENT_SIGNING_SECRET: z.string().min(32),

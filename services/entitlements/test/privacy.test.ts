@@ -54,6 +54,7 @@ function fixture() {
       stripeWebhookSecret: "whsec_do_not_log",
       entitlementSigningSecret: "entitlement-signing-do-not-log-32-bytes",
       mode: "test",
+      checkoutEnabled: true,
     },
     stripe,
     store,

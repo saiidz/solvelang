@@ -16,6 +16,7 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - No workflow JSON, workflow name, report finding, credential value, or filename is sent to this service.
 - Conversion events accept only a fixed event-name allowlist.
 - Client errors and structured logs use fixed codes and never serialize request bodies or caught exception details.
+- `CHECKOUT_ENABLED` defaults to `false`; when disabled, `POST /checkout` returns a fixed HTTP 503 before parsing the request or calling Stripe.
 
 ## Health endpoint
 
@@ -40,7 +41,7 @@ sam build --template template.yaml
 
 ## Deploy
 
-Deploy with an explicit mode. The backend creates a fixed $49 USD card-only PaymentIntent directly:
+Deploy with an explicit mode. Test checkout is enabled by the protected deployment workflow. For production, `CheckoutEnabled` defaults to `false` and must remain disabled until a real Stripe webhook secret is installed and a Stripe-signed delivery has returned HTTP 200. The backend creates a fixed $49 USD card-only PaymentIntent only when checkout is explicitly enabled:
 
 ```bash
 sam deploy --guided \
@@ -48,6 +49,7 @@ sam deploy --guided \
   --parameter-overrides \
     SiteOrigin=https://www.solve-lang.com \
     EntitlementMode=test \
+    CheckoutEnabled=true \
     StripeSecretKey=REDACTED \
     StripeWebhookSecret=REDACTED \
     EntitlementSigningSecret=REDACTED_AT_LEAST_32_CHARACTERS

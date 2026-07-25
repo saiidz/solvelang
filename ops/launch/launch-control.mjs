@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const REQUIRED = {
   aws: ["AWS_REGION", "AWS_ROLE_ARN", "ENTITLEMENT_STACK_NAME"],
   stripe: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
-  entitlement: ["ENTITLEMENT_MODE", "ENTITLEMENT_SIGNING_SECRET"],
+  entitlement: ["ENTITLEMENT_MODE", "ENTITLEMENT_SIGNING_SECRET", "CHECKOUT_ENABLED"],
   site: ["SITE_ORIGIN", "NEXT_PUBLIC_ENTITLEMENT_API_BASE"],
   webhook: ["STRIPE_WEBHOOK_ENDPOINT"],
   npm: ["NPM_SCOPE_OWNERSHIP_VERIFIED", "NPM_PRODUCTION_ENVIRONMENT_PROTECTED"],
@@ -41,11 +41,17 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
   controls.push(configControl("entitlement-configuration", "Entitlement signing configuration", environment, REQUIRED.entitlement));
   controls.push(configControl("site-configuration", "Static site entitlement configuration", environment, REQUIRED.site));
   controls.push(configControl("webhook-configuration", "Stripe webhook configuration", environment, REQUIRED.webhook));
-  controls.push(
-    probes.github?.npmProductionProtected && probes.github?.npmScopeOwnershipVerified
-      ? control("npm-configuration", "npm protected release configuration", "pass", "GitHub confirms the protected npm environment and ownership variable without exposing values.")
-      : configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm),
-  );
+  if (probes.github?.ok) {
+    controls.push(
+      !probes.github.npmProductionEnvironment
+        ? control("npm-configuration", "npm protected release configuration", "blocked", "GitHub confirms that npm-production is not configured.", "Create the protected npm-production environment with a required reviewer.")
+        : probes.github.npmProductionProtected && probes.github.npmScopeOwnershipVerified
+          ? control("npm-configuration", "npm protected release configuration", "pass", "GitHub confirms the protected npm environment and ownership variable without exposing values.")
+          : control("npm-configuration", "npm protected release configuration", "blocked", "GitHub metadata is missing a required npm release control.", "Require an npm-production reviewer and set NPM_SCOPE_OWNERSHIP_VERIFIED=true before a release."),
+    );
+  } else {
+    controls.push(configControl("npm-configuration", "npm protected release configuration", environment, REQUIRED.npm));
+  }
   const entitlementEnvironmentName = environment.ENTITLEMENT_MODE === "production" ? "entitlement-production" : "entitlement-test";
   const entitlementEnvironmentPresent = environment.ENTITLEMENT_MODE === "production"
     ? probes.github?.entitlementProductionEnvironment
@@ -131,6 +137,33 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
       ? control("refund-revocation", "Refund revocation contract", "pass", "Full refunds deny entitlement renewal, partial refunds are explicit, and signed refund webhooks are covered.")
       : control("refund-revocation", "Refund revocation contract", "fail", "Refund-aware verification and webhook regression coverage are incomplete.", "Restore server-side refund checks and deterministic refund tests before launch."),
   );
+  controls.push(
+    repository.entitlement.checkoutGate
+      ? control("production-checkout-gate", "Production checkout bootstrap gate", "pass", "Checkout defaults disabled in production and the service denies disabled checkout before Stripe access.")
+      : control("production-checkout-gate", "Production checkout bootstrap gate", "fail", "The production checkout bootstrap gate is incomplete.", "Require an explicit disabled-by-default checkout setting, zero-Stripe-call denial coverage, and guarded deployment configuration."),
+  );
+
+  if (environment.ENTITLEMENT_MODE === "production") {
+    const enabled = environment.CHECKOUT_ENABLED === "true";
+    const signedWebhookVerified = environment.WEBHOOK_SIGNED_DELIVERY_VERIFIED === "true";
+    controls.push(
+      enabled && signedWebhookVerified
+        ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after the protected signed-webhook verification confirmation.")
+        : control(
+            "production-checkout-enablement",
+            "Production checkout enablement",
+            "blocked",
+            enabled ? "Production checkout cannot be enabled until signed webhook verification is confirmed." : "Production checkout remains disabled.",
+            "After the real webhook secret is installed and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
+          ),
+    );
+  } else {
+    controls.push(
+      environment.CHECKOUT_ENABLED === "true"
+        ? control("test-checkout-enablement", "Test checkout enablement", "pass", "Test checkout is explicitly enabled for the test Stripe account.")
+        : control("test-checkout-enablement", "Test checkout enablement", "fail", "Test checkout is disabled.", "Set CHECKOUT_ENABLED=true for the entitlement-test deployment."),
+    );
+  }
 
   controls.push(probeControl("aws-stack", "AWS entitlement stack", probes.aws, "Run online launch control with authenticated test-account AWS access."));
   controls.push(probeControl("stripe-account", "Stripe account access", probes.stripe, "Run online launch control with the protected Stripe key for the selected mode."));
@@ -198,13 +231,69 @@ export function selectReleaseTag(version, tags) {
   return tags.split(/\r?\n/).map((tag) => tag.trim()).find((tag) => tag === expected) ?? "";
 }
 
+export async function collectPublicNpmVersion(fetchImpl = fetch) {
+  try {
+    const response = await fetchImpl("https://registry.npmjs.org/%40solvelang%2Fmcp-server/latest", { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return undefined;
+    const payload = await response.json();
+    return typeof payload?.version === "string" ? payload.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseCommandJson(result) {
+  if (!result?.ok || !result.stdout) return undefined;
+  try {
+    return readJson(result.stdout);
+  } catch {
+    return undefined;
+  }
+}
+
+export function collectGitHubMetadata({ repository, runCommand = run }) {
+  if (!repository || !runCommand("gh", ["auth", "status"]).ok) {
+    return { ok: false, reason: "Authenticated GitHub CLI access is unavailable." };
+  }
+
+  const environment = (name) => parseCommandJson(runCommand("gh", ["api", `repos/${repository}/environments/${name}`]));
+  const entitlementTest = environment("entitlement-test");
+  const entitlementProduction = environment("entitlement-production");
+  const npmProduction = environment("npm-production");
+  const ownership = parseCommandJson(runCommand("gh", ["api", `repos/${repository}/actions/variables/NPM_SCOPE_OWNERSHIP_VERIFIED`]));
+  const npmProductionProtected = Array.isArray(npmProduction?.protection_rules)
+    && npmProduction.protection_rules.some((rule) => rule?.type === "required_reviewers");
+
+  return {
+    ok: true,
+    entitlementTestEnvironment: Boolean(entitlementTest),
+    entitlementProductionEnvironment: Boolean(entitlementProduction),
+    npmProductionEnvironment: Boolean(npmProduction),
+    npmProductionProtected,
+    npmScopeOwnershipVerified: ownership?.value === "true",
+  };
+}
+
+function githubRepository(root) {
+  const remote = git(root, ["remote", "get-url", "origin"]);
+  const match = remote.match(/github\.com[/:]([^/]+\/[^/.]+)(?:\.git)?$/);
+  return match?.[1];
+}
+
 export async function collectRepositoryState(root, { npmVersion } = {}) {
   const manifest = readJson(await readFile(path.join(root, "packages/mcp-server/package.json"), "utf8"));
   const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
   const workflowText = await readFile(path.join(root, ".github/workflows/npm-release.yml"), "utf8");
+  const packedScript = manifest.scripts?.["test:packed"];
+  const packedScriptMatch = typeof packedScript === "string" ? packedScript.match(/^node\s+(.+)$/) : undefined;
+  const packedSmoke = packedScriptMatch
+    ? await readFile(path.join(root, "packages/mcp-server", packedScriptMatch[1]), "utf8")
+    : "";
   const entitlementHandler = await readFile(path.join(root, "services/entitlements/src/handler.ts"), "utf8");
   const entitlementService = await readFile(path.join(root, "services/entitlements/src/service.ts"), "utf8");
+  const entitlementConfig = await readFile(path.join(root, "services/entitlements/src/config.ts"), "utf8");
   const entitlementTemplate = await readFile(path.join(root, "services/entitlements/template.yaml"), "utf8");
+  const entitlementDeployWorkflow = await readFile(path.join(root, ".github/workflows/deploy-entitlements.yml"), "utf8");
   const entitlementE2eTest = await readFile(path.join(root, "services/entitlements/test/e2e.test.ts"), "utf8");
   const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
   const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
@@ -222,7 +311,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
     && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
   const requiredLifecycleEvidence = [
-    /payment creation returns a PaymentIntent client secret with minimal metadata/,
+    /test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata/,
     /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
@@ -236,6 +325,15 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /signed refund webhook records verified full refund state idempotently/.test(entitlementE2eTest)
     && /charge\.refunded/.test(entitlementService)
     && /refundStatus === ["']full["']/.test(entitlementService);
+  const checkoutGate = /CHECKOUT_ENABLED:\s*z\.enum\(\["true", "false"\]\)\.default\("false"\)/.test(entitlementConfig)
+    && /if \(!config\.checkoutEnabled\)[\s\S]*RequestError\(503, "Checkout is temporarily unavailable\."/.test(entitlementService)
+    && /checkoutEnabled: environment\.CHECKOUT_ENABLED === "true"/.test(entitlementHandler)
+    && /CheckoutEnabled:[\s\S]*Default: "false"/.test(entitlementTemplate)
+    && /WebhookSignedDeliveryVerified:[\s\S]*Default: "false"/.test(entitlementTemplate)
+    && /ProductionCheckoutRequiresVerifiedWebhook:[\s\S]*!Equals \[!Ref CheckoutEnabled, "false"\][\s\S]*!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/.test(entitlementTemplate)
+    && /CHECKOUT_ENABLED:[\s\S]*WEBHOOK_SIGNED_DELIVERY_VERIFIED/.test(entitlementDeployWorkflow)
+    && /production bootstrap denies checkout without creating a PaymentIntent/.test(entitlementE2eTest)
+    && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",
@@ -246,13 +344,16 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     workflow: {
       oidc: /id-token:\s*write/.test(workflowText),
       protectedEnvironment: /environment:\s*npm-production/.test(workflowText),
-      tagValidation: /refs\/tags\/v/.test(workflowText) && /package\.json/.test(workflowText),
+      tagValidation: /RELEASE_TAG/.test(workflowText) && /v\$\(node -p/.test(workflowText) && /package\.json/.test(workflowText),
       tests: /npm\s+(?:test|run\s+test)/.test(workflowText),
-      packedInstall: /npm\s+pack/.test(workflowText) && /npm\s+install/.test(workflowText),
+      packedInstall: /npm\s+run\s+test:packed/.test(workflowText)
+        && /npm", \["pack"/.test(packedSmoke)
+        && /npm", \["install"/.test(packedSmoke)
+        && /npx", \["--no-install", "solvelang-mcp"\]/.test(packedSmoke),
       publicPublish: /npm\s+publish\s+--access\s+public/.test(workflowText),
       tokenSecret: /NPM_TOKEN|NODE_AUTH_TOKEN/.test(workflowText),
     },
-    entitlement: { healthRoute, privacySafe, testModeE2eHarness, refundAware },
+    entitlement: { healthRoute, privacySafe, testModeE2eHarness, refundAware, checkoutGate },
   };
 }
 
@@ -261,37 +362,41 @@ function run(command, args, options = {}) {
   return { ok: result.status === 0, stdout: result.stdout?.trim(), stderr: result.stderr?.trim() };
 }
 
-function probeUrl(url, init = {}) {
-  return fetch(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), ...init })
+function probeUrl(url, init = {}, fetchImpl = fetch) {
+  return fetchImpl(url, { redirect: "manual", signal: AbortSignal.timeout(10_000), ...init })
     .then(async (response) => ({ ok: response.ok, status: response.status, body: await response.text() }))
     .catch((error) => ({ ok: false, reason: error instanceof Error ? error.message : "Request failed." }));
 }
 
-export async function collectOnlineEvidence({ environment = process.env, root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..") } = {}) {
-  const repository = await collectRepositoryState(root);
+export async function collectOnlineEvidence({ environment = process.env, root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.."), fetchImpl = fetch, runCommand = run } = {}) {
+  const repository = await collectRepositoryState(root, { npmVersion: await collectPublicNpmVersion(fetchImpl) });
   const probes = {};
+  const repositorySlug = githubRepository(root);
+  probes.github = repositorySlug
+    ? collectGitHubMetadata({ repository: repositorySlug, runCommand })
+    : { ok: false, reason: "GitHub repository metadata could not be resolved." };
 
   if (environment.AWS_REGION && environment.ENTITLEMENT_STACK_NAME) {
-    const result = run("aws", ["cloudformation", "describe-stacks", "--region", environment.AWS_REGION, "--stack-name", environment.ENTITLEMENT_STACK_NAME, "--output", "json"]);
+    const result = runCommand("aws", ["cloudformation", "describe-stacks", "--region", environment.AWS_REGION, "--stack-name", environment.ENTITLEMENT_STACK_NAME, "--output", "json"]);
     probes.aws = result.ok ? { ok: true } : { ok: false, reason: result.stderr || "AWS stack probe failed." };
   }
 
   if (environment.STRIPE_SECRET_KEY) {
-    const response = await fetch("https://api.stripe.com/v1/account", { headers: { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
+    const response = await fetchImpl("https://api.stripe.com/v1/account", { headers: { authorization: `Bearer ${environment.STRIPE_SECRET_KEY}` }, signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
     probes.stripe = response?.ok ? { ok: true } : { ok: false, reason: "Stripe account probe failed." };
   }
 
   if (environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE) {
-    probes.entitlementHealth = await probeUrl(`${environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE.replace(/\/$/, "")}/health`);
+    probes.entitlementHealth = await probeUrl(`${environment.NEXT_PUBLIC_ENTITLEMENT_API_BASE.replace(/\/$/, "")}/health`, {}, fetchImpl);
   }
 
   if (environment.STRIPE_WEBHOOK_ENDPOINT) {
-    const response = await probeUrl(environment.STRIPE_WEBHOOK_ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const response = await probeUrl(environment.STRIPE_WEBHOOK_ENDPOINT, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }, fetchImpl);
     probes.webhook = response.status === 400 ? { ok: true } : { ok: false, reason: `Expected signed-webhook rejection, received ${response.status ?? "no response"}.` };
   }
 
   if (environment.SITE_ORIGIN) {
-    probes.site = await probeUrl(environment.SITE_ORIGIN);
+    probes.site = await probeUrl(environment.SITE_ORIGIN, {}, fetchImpl);
   }
 
   return { repository, probes };
