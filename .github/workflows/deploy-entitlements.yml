@@ -80,6 +80,7 @@ jobs:
           SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
           ENTITLEMENT_SIGNING_SECRET: ${{ secrets.ENTITLEMENT_SIGNING_SECRET }}
           CHECKOUT_ENABLED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.CHECKOUT_ENABLED || 'false' }}
           WEBHOOK_SIGNED_DELIVERY_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.WEBHOOK_SIGNED_DELIVERY_VERIFIED || 'false' }}
@@ -91,6 +92,7 @@ jobs:
           test -n "$ENTITLEMENT_MODE"
           test -n "$STRIPE_SECRET_KEY"
           test -n "$STRIPE_WEBHOOK_SECRET"
+          test -n "$TURNSTILE_SECRET_KEY"
           test -n "$ENTITLEMENT_SIGNING_SECRET"
           test -n "$STACK_NAME"
           test -n "$SAM_ARTIFACT_BUCKET"
@@ -129,6 +131,7 @@ jobs:
               SiteOrigin="$SITE_ORIGIN" \
               StripeSecretKey="$STRIPE_SECRET_KEY" \
               StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
+              TurnstileSecretKey="$TURNSTILE_SECRET_KEY" \
               EntitlementSigningSecret="$ENTITLEMENT_SIGNING_SECRET"
       - name: Print non-secret outputs
         env:

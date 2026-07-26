@@ -83,8 +83,9 @@ function createFixture(payment: {
   paymentStatus: "paid",
   refundStatus: "none",
   metadata: { scanId, product: "workflow-preflight-v1" },
-}, configOverrides: Record<string, unknown> = {}) {
+}, configOverrides: Record<string, unknown> = {}, turnstileResult: boolean | Error = true) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
+  const turnstileRequests: Array<{ token: string; remoteIp: string }> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
     payments: {
@@ -112,6 +113,13 @@ function createFixture(payment: {
     },
   };
   const logs: unknown[][] = [];
+  const turnstile = {
+    async verify({ token, remoteIp }: { token: string; remoteIp: string }) {
+      turnstileRequests.push({ token, remoteIp });
+      if (turnstileResult instanceof Error) throw turnstileResult;
+      return turnstileResult;
+    },
+  };
   const service = createEntitlementService({
     config: {
       siteOrigin: "https://www.solve-lang.com",
@@ -123,10 +131,11 @@ function createFixture(payment: {
     } as unknown as Parameters<typeof createEntitlementService>[0]["config"],
     stripe,
     store,
+    turnstile,
     now: () => nowMs,
     logger: { info: (...values) => logs.push(values), error: (...values) => logs.push(values) },
   });
-  return { service, store, checkoutRequests, logs };
+  return { service, store, checkoutRequests, turnstileRequests, logs };
 }
 
 test("health exposes only a fixed non-sensitive test-mode readiness contract", async () => {
@@ -138,14 +147,15 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
 });
 
 test("test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata", async () => {
-  const { service, checkoutRequests } = createFixture();
-  const result = await service(apiEvent("POST", "/checkout", { scanId }));
+  const { service, checkoutRequests, turnstileRequests } = createFixture();
+  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
   assert.equal(result.statusCode, 200);
   assert.deepEqual(responseBody(result), {
     clientSecret: "pi_test_paid_payment_secret_test",
     paymentId: paymentIntentId,
   });
   assert.equal(checkoutRequests.length, 1);
+  assert.deepEqual(turnstileRequests, [{ token: "turnstile-valid-token", remoteIp: "127.0.0.1" }]);
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
@@ -154,18 +164,43 @@ test("test-mode checkout remains operational and returns a PaymentIntent client 
   });
 });
 
-test("production bootstrap denies checkout without creating a PaymentIntent", async () => {
-  const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
-  const result = await service(apiEvent("POST", "/checkout", { scanId }));
+test("checkout rejects missing and unavailable Turnstile verification before creating a PaymentIntent", async () => {
+  const missing = createFixture();
+  const missingToken = await missing.service(apiEvent("POST", "/checkout", { scanId }));
+  assert.equal(missingToken.statusCode, 400);
+  assert.equal(missing.checkoutRequests.length, 0);
+  assert.equal(missing.turnstileRequests.length, 0);
+
+  const unavailable = createFixture(undefined, {}, new Error("turnstile unavailable"));
+  const unavailableResult = await unavailable.service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  assert.equal(unavailableResult.statusCode, 503);
+  assert.deepEqual(responseBody(unavailableResult), { error: "Verification is temporarily unavailable." });
+  assert.equal(unavailable.checkoutRequests.length, 0);
+});
+
+test("checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent", async () => {
+  const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, {}, false);
+  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-invalid-token" }));
+
+  assert.equal(result.statusCode, 403);
+  assert.deepEqual(responseBody(result), { error: "Verification could not be completed." });
+  assert.deepEqual(turnstileRequests, [{ token: "turnstile-invalid-token", remoteIp: "127.0.0.1" }]);
+  assert.equal(checkoutRequests.length, 0);
+});
+
+test("production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile", async () => {
+  const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
+  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
 
   assert.equal(result.statusCode, 503);
   assert.deepEqual(responseBody(result), { error: "Checkout is temporarily unavailable." });
   assert.equal(checkoutRequests.length, 0);
+  assert.equal(turnstileRequests.length, 0);
 });
 
 test("explicitly enabled production checkout creates a PaymentIntent", async () => {
   const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: true });
-  const result = await service(apiEvent("POST", "/checkout", { scanId }));
+  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
 
   assert.equal(result.statusCode, 200);
   assert.equal(checkoutRequests.length, 1);

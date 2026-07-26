@@ -17,6 +17,7 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - Conversion events accept only a fixed event-name allowlist.
 - Client errors and structured logs use fixed codes and never serialize request bodies or caught exception details.
 - `CHECKOUT_ENABLED` defaults to `false`; when disabled, `POST /checkout` returns a fixed HTTP 503 before parsing the request or calling Stripe.
+- Checkout accepts a Cloudflare Turnstile token only after the checkout page renders the configured widget. The Lambda verifies it server-side with `TURNSTILE_SECRET_KEY`, the API Gateway client IP, the expected `SITE_ORIGIN` hostname, and the exact `checkout` action before it creates a PaymentIntent. Verification rejection, malformed responses, and provider unavailability never create a PaymentIntent.
 
 ## Health endpoint
 
@@ -52,6 +53,7 @@ sam deploy --guided \
     CheckoutEnabled=true \
     StripeSecretKey=REDACTED \
     StripeWebhookSecret=REDACTED \
+    TurnstileSecretKey=REDACTED \
     EntitlementSigningSecret=REDACTED_AT_LEAST_32_CHARACTERS
 ```
 
@@ -59,8 +61,9 @@ Register the stack output `WebhookUrl` in the matching Stripe mode for exactly `
 
 ```text
 NEXT_PUBLIC_ENTITLEMENT_API_BASE=https://example.execute-api.us-east-1.amazonaws.com
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=REDACTED_PUBLIC_SITE_KEY
 ```
 
-Rebuild and deploy the static site after setting the variable. Do not place Stripe secrets in `NEXT_PUBLIC_*` variables, repository files, build logs, or GitHub Actions variables.
+Rebuild and deploy the static site after setting the variables. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is a public Turnstile site key; do not place Stripe or Turnstile secret values in `NEXT_PUBLIC_*` variables, repository files, build logs, or GitHub Actions variables.
 
 Follow [the owner launch runbook](../../docs/launch-owner-runbook.md) for isolated test and production setup, live webhook registration, one low-risk payment/refund verification, privacy review, and rollback.

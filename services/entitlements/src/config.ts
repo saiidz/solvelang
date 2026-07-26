@@ -5,6 +5,7 @@ const environmentSchema = z.object({
   CHECKOUT_ENABLED: z.enum(["true", "false"]).default("false"),
   STRIPE_SECRET_KEY: z.string().min(12),
   STRIPE_WEBHOOK_SECRET: z.string().startsWith("whsec_").min(12),
+  TURNSTILE_SECRET_KEY: z.string().min(1),
   ENTITLEMENT_SIGNING_SECRET: z.string().min(32),
   ENTITLEMENTS_TABLE: z.string().min(1),
   SITE_ORIGIN: z.string().url(),
