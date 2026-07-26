@@ -10,11 +10,23 @@ import {
 } from "../src/service.js";
 import { issueEntitlement, verifyEntitlement } from "../src/token.js";
 import { createStripeGateway } from "../src/stripe.js";
+import { TERMS_VERSION } from "../src/terms.js";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
 const paymentIntentId = "pi_test_paid_payment";
 const signingSecret = "entitlement-test-secret-at-least-32-bytes";
 const nowMs = Date.parse("2026-07-20T00:00:00.000Z");
+const termsVersion = TERMS_VERSION;
+
+function checkoutRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    scanId,
+    turnstileToken: "turnstile-valid-token",
+    termsAccepted: true,
+    termsVersion,
+    ...overrides,
+  };
+}
 
 function apiEvent(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): APIGatewayProxyEventV2 {
   return {
@@ -85,13 +97,22 @@ function createFixture(payment: {
   metadata: { scanId, product: "workflow-preflight-v1" },
 }, configOverrides: Record<string, unknown> = {}, turnstileResult: boolean | Error = true) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
+  const metadataUpdates: Array<{ paymentIntentId: string; metadata: Record<string, unknown>; idempotencyKey: string }> = [];
   const turnstileRequests: Array<{ token: string; remoteIp: string }> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
     payments: {
       async create(params, idempotencyKey) {
         checkoutRequests.push({ params, idempotencyKey });
-        return { id: paymentIntentId, clientSecret: "pi_test_paid_payment_secret_test", refundStatus: "none" };
+        return {
+          id: paymentIntentId,
+          clientSecret: "pi_test_paid_payment_secret_test",
+          createdAt: Math.floor(nowMs / 1000),
+          refundStatus: "none",
+        };
+      },
+      async updateMetadata(id, metadata, idempotencyKey) {
+        metadataUpdates.push({ paymentIntentId: id, metadata, idempotencyKey });
       },
       async retrieve(id) {
         assert.equal(id, paymentIntentId);
@@ -135,7 +156,7 @@ function createFixture(payment: {
     now: () => nowMs,
     logger: { info: (...values) => logs.push(values), error: (...values) => logs.push(values) },
   });
-  return { service, store, checkoutRequests, turnstileRequests, logs };
+  return { service, store, checkoutRequests, metadataUpdates, turnstileRequests, logs };
 }
 
 test("health exposes only a fixed non-sensitive test-mode readiness contract", async () => {
@@ -146,9 +167,9 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
   assert.equal(result.headers?.["cache-control"], "no-store");
 });
 
-test("test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata", async () => {
-  const { service, checkoutRequests, turnstileRequests } = createFixture();
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+test("test-mode checkout remains operational and records server-derived consent metadata", async () => {
+  const { service, checkoutRequests, metadataUpdates, turnstileRequests } = createFixture();
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest()));
   assert.equal(result.statusCode, 200);
   assert.deepEqual(responseBody(result), {
     clientSecret: "pi_test_paid_payment_secret_test",
@@ -159,20 +180,169 @@ test("test-mode checkout remains operational and returns a PaymentIntent client 
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
-      metadata: { scanId, product: "workflow-preflight-v1" },
+      metadata: {
+        scanId,
+        product: "workflow-preflight-v1",
+        termsVersion,
+      },
     },
   });
+  assert.deepEqual(metadataUpdates, [{
+    paymentIntentId,
+    metadata: { termsAcceptedAt: "2026-07-20T00:00:00.000Z" },
+    idempotencyKey: `preflight-${scanId}-consent-${termsVersion}`,
+  }]);
+});
+
+test("a lost PaymentIntent create response retries with stable parameters and recovers the original client secret", async () => {
+  const createRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
+  const metadataUpdates: Array<{ paymentIntentId: string; metadata: Record<string, unknown>; idempotencyKey: string }> = [];
+  let paymentIntentCreations = 0;
+  let clock = nowMs;
+  const stablePaymentIntent = {
+    id: paymentIntentId,
+    clientSecret: "pi_test_paid_payment_secret_test",
+    createdAt: Math.floor(nowMs / 1000),
+    refundStatus: "none" as const,
+  };
+  const stripe: StripeGateway = {
+    payments: {
+      async create(params, idempotencyKey) {
+        createRequests.push({ params, idempotencyKey });
+        if (createRequests.length === 1) {
+          paymentIntentCreations += 1;
+          throw new Error("connection dropped after Stripe created the PaymentIntent");
+        }
+        assert.deepEqual(params, createRequests[0].params);
+        assert.equal(idempotencyKey, createRequests[0].idempotencyKey);
+        return stablePaymentIntent;
+      },
+      async updateMetadata(id, metadata, idempotencyKey) {
+        metadataUpdates.push({ paymentIntentId: id, metadata, idempotencyKey });
+      },
+      async retrieve() { return { ...stablePaymentIntent, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } }; },
+    },
+    webhooks: { constructEvent() { throw new Error("not used"); } },
+  };
+  const service = createEntitlementService({
+    config: {
+      siteOrigin: "https://www.solve-lang.com",
+      stripeWebhookSecret: "whsec_test_only",
+      entitlementSigningSecret: signingSecret,
+      mode: "test",
+      checkoutEnabled: true,
+    },
+    stripe,
+    store: new MemoryStore(),
+    turnstile: { async verify() { return true; } },
+    now: () => clock,
+  });
+
+  const first = await service(apiEvent("POST", "/checkout", checkoutRequest()));
+  assert.equal(first.statusCode, 502);
+  assert.equal(metadataUpdates.length, 0);
+
+  clock += 60_000;
+  const retry = await service(apiEvent("POST", "/checkout", checkoutRequest()));
+  assert.equal(retry.statusCode, 200);
+  assert.deepEqual(responseBody(retry), { clientSecret: stablePaymentIntent.clientSecret, paymentId: paymentIntentId });
+  assert.equal(paymentIntentCreations, 1);
+  assert.equal(createRequests.length, 2);
+  assert.deepEqual(createRequests[1], createRequests[0]);
+  assert.deepEqual(metadataUpdates, [{
+    paymentIntentId,
+    metadata: { termsAcceptedAt: "2026-07-20T00:00:00.000Z" },
+    idempotencyKey: `preflight-${scanId}-consent-${termsVersion}`,
+  }]);
+});
+
+test("a failed consent metadata update withholds the client secret until a stable retry succeeds", async () => {
+  const createRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
+  const metadataUpdates: Array<{ paymentIntentId: string; metadata: Record<string, unknown>; idempotencyKey: string }> = [];
+  let paymentIntentCreations = 0;
+  let clock = nowMs;
+  const stablePaymentIntent = {
+    id: paymentIntentId,
+    clientSecret: "pi_test_paid_payment_secret_test",
+    createdAt: Math.floor(nowMs / 1000),
+    refundStatus: "none" as const,
+  };
+  const stripe: StripeGateway = {
+    payments: {
+      async create(params, idempotencyKey) {
+        createRequests.push({ params, idempotencyKey });
+        if (createRequests.length === 1) paymentIntentCreations += 1;
+        return stablePaymentIntent;
+      },
+      async updateMetadata(id, metadata, idempotencyKey) {
+        metadataUpdates.push({ paymentIntentId: id, metadata, idempotencyKey });
+        if (metadataUpdates.length === 1) throw new Error("metadata update response lost");
+      },
+      async retrieve() { return { ...stablePaymentIntent, paymentStatus: "paid", metadata: { scanId, product: "workflow-preflight-v1" } }; },
+    },
+    webhooks: { constructEvent() { throw new Error("not used"); } },
+  };
+  const service = createEntitlementService({
+    config: {
+      siteOrigin: "https://www.solve-lang.com",
+      stripeWebhookSecret: "whsec_test_only",
+      entitlementSigningSecret: signingSecret,
+      mode: "test",
+      checkoutEnabled: true,
+    },
+    stripe,
+    store: new MemoryStore(),
+    turnstile: { async verify() { return true; } },
+    now: () => clock,
+  });
+
+  const first = await service(apiEvent("POST", "/checkout", checkoutRequest()));
+  assert.equal(first.statusCode, 502);
+  assert.deepEqual(responseBody(first), { error: "Stripe payment is temporarily unavailable." });
+
+  clock += 60_000;
+  const retry = await service(apiEvent("POST", "/checkout", checkoutRequest()));
+  assert.equal(retry.statusCode, 200);
+  assert.deepEqual(responseBody(retry), { clientSecret: stablePaymentIntent.clientSecret, paymentId: paymentIntentId });
+  assert.equal(paymentIntentCreations, 1);
+  assert.equal(createRequests.length, 2);
+  assert.deepEqual(createRequests[1], createRequests[0]);
+  assert.equal(metadataUpdates.length, 2);
+  assert.deepEqual(metadataUpdates[1], metadataUpdates[0]);
+  assert.deepEqual(metadataUpdates[0], {
+    paymentIntentId,
+    metadata: { termsAcceptedAt: "2026-07-20T00:00:00.000Z" },
+    idempotencyKey: `preflight-${scanId}-consent-${termsVersion}`,
+  });
+});
+
+test("missing, false, and unsupported terms consent fail before Turnstile or Stripe", async () => {
+  const requests = [
+    { scanId, turnstileToken: "turnstile-valid-token" },
+    checkoutRequest({ termsAccepted: false }),
+    checkoutRequest({ termsVersion: "unsupported-version" }),
+    checkoutRequest({ termsAcceptedAt: "client-supplied-value" }),
+  ];
+
+  for (const request of requests) {
+    const fixture = createFixture();
+    const result = await fixture.service(apiEvent("POST", "/checkout", request));
+    assert.equal(result.statusCode, 400);
+    assert.deepEqual(responseBody(result), { error: "Invalid request." });
+    assert.equal(fixture.turnstileRequests.length, 0);
+    assert.equal(fixture.checkoutRequests.length, 0);
+  }
 });
 
 test("checkout rejects missing and unavailable Turnstile verification before creating a PaymentIntent", async () => {
   const missing = createFixture();
-  const missingToken = await missing.service(apiEvent("POST", "/checkout", { scanId }));
+  const missingToken = await missing.service(apiEvent("POST", "/checkout", checkoutRequest({ turnstileToken: undefined })));
   assert.equal(missingToken.statusCode, 400);
   assert.equal(missing.checkoutRequests.length, 0);
   assert.equal(missing.turnstileRequests.length, 0);
 
   const unavailable = createFixture(undefined, {}, new Error("turnstile unavailable"));
-  const unavailableResult = await unavailable.service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const unavailableResult = await unavailable.service(apiEvent("POST", "/checkout", checkoutRequest()));
   assert.equal(unavailableResult.statusCode, 503);
   assert.deepEqual(responseBody(unavailableResult), { error: "Verification is temporarily unavailable." });
   assert.equal(unavailable.checkoutRequests.length, 0);
@@ -180,7 +350,7 @@ test("checkout rejects missing and unavailable Turnstile verification before cre
 
 test("checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent", async () => {
   const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, {}, false);
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-invalid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest({ turnstileToken: "turnstile-invalid-token" })));
 
   assert.equal(result.statusCode, 403);
   assert.deepEqual(responseBody(result), { error: "Verification could not be completed." });
@@ -190,7 +360,7 @@ test("checkout rejects an unsuccessful Turnstile verification before creating a 
 
 test("production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile", async () => {
   const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", { scanId, opaque: "must-not-be-parsed" }));
 
   assert.equal(result.statusCode, 503);
   assert.deepEqual(responseBody(result), { error: "Checkout is temporarily unavailable." });
@@ -200,7 +370,7 @@ test("production bootstrap denies checkout without creating a PaymentIntent or v
 
 test("explicitly enabled production checkout creates a PaymentIntent", async () => {
   const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: true });
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest()));
 
   assert.equal(result.statusCode, 200);
   assert.equal(checkoutRequests.length, 1);
@@ -285,7 +455,7 @@ test("Stripe gateway verifies a deterministic local refund signature without net
   });
 });
 
-test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expanded refund state", async () => {
+test("Stripe gateway creates exactly one $49 card PaymentIntent, records consent metadata, and reads expanded refund state", async () => {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const client = {
     paymentIntents: {
@@ -294,6 +464,7 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expand
         return {
           id: paymentIntentId,
           client_secret: "pi_test_paid_payment_secret_test",
+          created: Math.floor(nowMs / 1000),
           status: "requires_payment_method",
           amount: 4900,
           latest_charge: null,
@@ -305,18 +476,34 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expand
         return {
           id: paymentIntentId,
           client_secret: null,
+          created: Math.floor(nowMs / 1000),
           status: "succeeded",
           amount: 4900,
           latest_charge: { amount_refunded: 1200, refunded: false },
           metadata: { scanId, product: "workflow-preflight-v1" },
         };
       },
+      async update(...args: unknown[]) {
+        calls.push({ method: "update", args });
+        return {};
+      },
     },
     webhooks: { constructEvent() { throw new Error("not used"); } },
   } as unknown as Stripe;
   const gateway = createStripeGateway(client);
 
-  await gateway.payments.create({ metadata: { scanId, product: "workflow-preflight-v1" } }, "idempotent-scan");
+  await gateway.payments.create({
+    metadata: {
+      scanId,
+      product: "workflow-preflight-v1",
+      termsVersion,
+    },
+  }, "idempotent-scan");
+  await gateway.payments.updateMetadata(
+    paymentIntentId,
+    { termsAcceptedAt: "2026-07-20T00:00:00.000Z" },
+    `preflight-${scanId}-consent-${termsVersion}`,
+  );
   const snapshot = await gateway.payments.retrieve(paymentIntentId);
 
   assert.deepEqual(calls[0], {
@@ -326,10 +513,22 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expand
       currency: "usd",
       payment_method_types: ["card"],
       description: "SolveLang Workflow Preflight Report",
-      metadata: { scanId, product: "workflow-preflight-v1" },
+      metadata: {
+        scanId,
+        product: "workflow-preflight-v1",
+        termsVersion,
+      },
     }, { idempotencyKey: "idempotent-scan" }],
   });
-  assert.deepEqual(calls[1], { method: "retrieve", args: [paymentIntentId, { expand: ["latest_charge"] }] });
+  assert.deepEqual(calls[1], {
+    method: "update",
+    args: [
+      paymentIntentId,
+      { metadata: { termsAcceptedAt: "2026-07-20T00:00:00.000Z" } },
+      { idempotencyKey: `preflight-${scanId}-consent-${termsVersion}` },
+    ],
+  });
+  assert.deepEqual(calls[2], { method: "retrieve", args: [paymentIntentId, { expand: ["latest_charge"] }] });
   assert.equal(snapshot.refundStatus, "partial");
 });
 

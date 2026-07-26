@@ -39,6 +39,7 @@ function fixture() {
   const stripe: StripeGateway = {
     payments: {
       async create() { throw new Error(forbidden.join(" | ")); },
+      async updateMetadata() { throw new Error(forbidden.join(" | ")); },
       async retrieve() { throw new Error(forbidden.join(" | ")); },
     },
     webhooks: {
@@ -76,7 +77,15 @@ test("workflow and secret material never reaches client errors or structured log
   const cases = [
     { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", workflow: forbidden })), status: 400 },
     { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875" })), status: 400 },
-    { request: event("/checkout", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", turnstileToken: "turnstile-response-do-not-log" })), status: 503 },
+    {
+      request: event("/checkout", JSON.stringify({
+        scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875",
+        turnstileToken: "turnstile-response-do-not-log",
+        termsAccepted: true,
+        termsVersion: "2026-07-26",
+      })),
+      status: 503,
+    },
     { request: event("/webhook", `{"raw":"${forbidden.join("-")}"}`, "invalid"), status: 400 },
     { request: event("/entitlement", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", sessionId: "pi_test_private", workflow: forbidden })), status: 400 },
     { request: event("/entitlement", JSON.stringify({ scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875", sessionId: "pi_test_private" })), status: 500 },

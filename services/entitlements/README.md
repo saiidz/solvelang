@@ -5,7 +5,7 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 ## Security model
 
 - Stripe secret keys and webhook secrets exist only in Lambda environment variables.
-- PaymentIntent metadata contains only an opaque UUID scan ID and product identifier.
+- PaymentIntent metadata contains only an opaque UUID scan ID, product identifier, accepted Terms version, and server-generated acceptance timestamp.
 - Entitlements are signed with HMAC-SHA256, expire after 15 minutes, and are bound to both scan ID and PaymentIntent ID. The serialized `sessionId` field is retained for browser and stored-record compatibility, but its value must begin with `pi_`.
 - Stripe payment status is re-read server-side before an entitlement is issued.
 - The latest Charge refund state is expanded and re-read before every entitlement. A full refund denies renewal; a partial refund remains eligible.
@@ -18,6 +18,8 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - Client errors and structured logs use fixed codes and never serialize request bodies or caught exception details.
 - `CHECKOUT_ENABLED` defaults to `false`; when disabled, `POST /checkout` returns a fixed HTTP 503 before parsing the request or calling Stripe.
 - Checkout accepts a Cloudflare Turnstile token only after the checkout page renders the configured widget. The Lambda verifies it server-side with `TURNSTILE_SECRET_KEY`, the API Gateway client IP, the expected `SITE_ORIGIN` hostname, and the exact `checkout` action before it creates a PaymentIntent. Verification rejection, malformed responses, and provider unavailability never create a PaymentIntent.
+- Checkout requires `termsAccepted: true` and the supported terms version before Turnstile verification. It never stores the checkbox text, Turnstile token, IP address, user agent, workflow content, or secrets in PaymentIntent metadata.
+- Checkout creates the PaymentIntent with stable scan and terms metadata under `preflight-${scanId}`, then records the server-derived Stripe creation time as `termsAcceptedAt` with a separate stable consent-update idempotency key before returning the client secret. Retries therefore recover the same intent without changing Stripe parameters.
 
 ## Health endpoint
 
@@ -51,6 +53,7 @@ sam deploy --guided \
     SiteOrigin=https://www.solve-lang.com \
     EntitlementMode=test \
     CheckoutEnabled=true \
+    LegalCheckoutReviewVerified=true \
     StripeSecretKey=REDACTED \
     StripeWebhookSecret=REDACTED \
     TurnstileSecretKey=REDACTED \

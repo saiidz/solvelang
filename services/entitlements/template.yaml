@@ -20,6 +20,12 @@ Parameters:
       - "true"
       - "false"
     Default: "false"
+  LegalCheckoutReviewVerified:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -45,6 +51,10 @@ Rules:
           - !Equals [!Ref CheckoutEnabled, "false"]
           - !Equals [!Ref WebhookSignedDeliveryVerified, "true"]
         AssertDescription: Production checkout requires a verified Stripe-signed webhook delivery.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref LegalCheckoutReviewVerified, "true"]
+        AssertDescription: Production checkout requires verified legal review and clickwrap readiness.
 
 Resources:
   EntitlementsTable:

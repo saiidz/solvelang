@@ -1,12 +1,15 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { z } from "zod";
 import { issueEntitlement } from "./token.js";
+import { TERMS_VERSION } from "./terms.js";
 import type { TurnstileGateway } from "./turnstile.js";
 
 const PRODUCT = "workflow-preflight-v1";
 const checkoutSchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1).max(2_048),
+  termsAccepted: z.literal(true),
+  termsVersion: z.literal(TERMS_VERSION),
 }).strict();
 const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
 const conversionEventSchema = z.object({
@@ -32,6 +35,7 @@ export type EntitlementConfig = {
 export type PaymentIntentSnapshot = {
   id: string;
   clientSecret?: string | null;
+  createdAt?: number;
   paymentStatus?: string | null;
   refundStatus: "none" | "partial" | "full";
   metadata?: Record<string, string> | null;
@@ -47,8 +51,17 @@ export type StripeEvent = {
 export type StripeGateway = {
   payments: {
     create(params: {
-      metadata: { scanId: string; product: typeof PRODUCT };
+      metadata: {
+        scanId: string;
+        product: typeof PRODUCT;
+        termsVersion: typeof TERMS_VERSION;
+      };
     }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
+    updateMetadata(
+      paymentIntentId: string,
+      metadata: { termsAcceptedAt: string },
+      idempotencyKey: string,
+    ): Promise<void>;
     retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot>;
   };
   webhooks: {
@@ -144,6 +157,13 @@ function rawBody(event: APIGatewayProxyEventV2): Buffer {
   return event.isBase64Encoded ? Buffer.from(event.body, "base64") : Buffer.from(event.body, "utf8");
 }
 
+function consentTimestamp(createdAt: number | undefined): string {
+  if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
+    throw new RequestError(502, "Payment is temporarily unavailable.", "payment_created_at_unavailable");
+  }
+  return new Date(createdAt * 1_000).toISOString();
+}
+
 export function createEntitlementService({
   config,
   stripe,
@@ -171,7 +191,7 @@ export function createEntitlementService({
     if (!config.checkoutEnabled) {
       throw new RequestError(503, "Checkout is temporarily unavailable.", "checkout_disabled");
     }
-    const { scanId, turnstileToken } = checkoutSchema.parse(parseJson(event));
+    const { scanId, turnstileToken, termsVersion } = checkoutSchema.parse(parseJson(event));
     let verified: boolean;
     try {
       verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp });
@@ -185,8 +205,22 @@ export function createEntitlementService({
     let paymentIntent: PaymentIntentSnapshot;
     try {
       paymentIntent = await stripe.payments.create({
-        metadata: { scanId, product: PRODUCT },
+        metadata: {
+          scanId,
+          product: PRODUCT,
+          termsVersion,
+        },
       }, `preflight-${scanId}`);
+    } catch (error) {
+      throw stripeFailure(error);
+    }
+    const termsAcceptedAt = consentTimestamp(paymentIntent.createdAt);
+    try {
+      await stripe.payments.updateMetadata(
+        paymentIntent.id,
+        { termsAcceptedAt },
+        `preflight-${scanId}-consent-${termsVersion}`,
+      );
     } catch (error) {
       throw stripeFailure(error);
     }
