@@ -1,10 +1,14 @@
 import type { SQSHandler } from "aws-lambda";
 import { SendEmailCommand, SESv2Client } from "@aws-sdk/client-sesv2";
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { DeleteCommand, DynamoDBDocumentClient, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { CONTRACT_REFUND_POLICY_TEXT, CONTRACT_TERMS_TEXT, TERMS_VERSION } from "./terms.js";
 
 const sender = process.env.DURABLE_CONFIRMATION_SENDER;
 if (!sender) throw new Error("DURABLE_CONFIRMATION_SENDER is required for the confirmation worker.");
+const deliveryTable = process.env.DURABLE_CONFIRMATION_DELIVERY_TABLE;
+if (!deliveryTable) throw new Error("DURABLE_CONFIRMATION_DELIVERY_TABLE is required for the confirmation worker.");
 
 const confirmation = z.object({
   kind: z.enum(["contract", "withdrawal"]),
@@ -28,6 +32,21 @@ const confirmation = z.object({
 }).strict();
 
 const ses = new SESv2Client({});
+const deliveries = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+
+async function reserveDelivery(key: string): Promise<boolean> {
+  try {
+    await deliveries.send(new PutCommand({
+      TableName: deliveryTable,
+      Item: { deliveryKey: key, state: "in_progress" },
+      ConditionExpression: "attribute_not_exists(deliveryKey)",
+    }));
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === "ConditionalCheckFailedException") return false;
+    throw error;
+  }
+}
 
 function contractBody(payload: z.infer<typeof confirmation>["payload"]): string {
   if (!payload.paymentIntentId || !payload.product || !payload.total || !payload.termsVersion || !payload.termsAcceptedAt || !payload.deliveryDescription || !payload.termsText || !payload.refundPolicyText) {
@@ -65,14 +84,27 @@ function withdrawalBody(payload: z.infer<typeof confirmation>["payload"]): strin
 export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     const message = confirmation.parse(JSON.parse(record.body));
+    if (!await reserveDelivery(message.payload.idempotencyKey)) continue;
     const subject = message.kind === "contract" ? "SolveLang Workflow Preflight contract confirmation" : "SolveLang withdrawal request received";
     const body = message.kind === "contract"
       ? contractBody(message.payload)
       : withdrawalBody(message.payload);
-    await ses.send(new SendEmailCommand({
-      FromEmailAddress: sender,
-      Destination: { ToAddresses: [message.payload.email] },
-      Content: { Simple: { Subject: { Data: subject }, Body: { Text: { Data: body } } } },
-    }));
+    try {
+      await ses.send(new SendEmailCommand({
+        FromEmailAddress: sender,
+        Destination: { ToAddresses: [message.payload.email] },
+        Content: { Simple: { Subject: { Data: subject }, Body: { Text: { Data: body } } } },
+      }));
+      await deliveries.send(new UpdateCommand({
+        TableName: deliveryTable,
+        Key: { deliveryKey: message.payload.idempotencyKey },
+        UpdateExpression: "SET #state = :sent",
+        ExpressionAttributeNames: { "#state": "state" },
+        ExpressionAttributeValues: { ":sent": "sent" },
+      }));
+    } catch (error) {
+      await deliveries.send(new DeleteCommand({ TableName: deliveryTable, Key: { deliveryKey: message.payload.idempotencyKey } })).catch(() => undefined);
+      throw error;
+    }
   }
 };

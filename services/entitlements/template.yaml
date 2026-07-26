@@ -130,6 +130,19 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  ConfirmationDeliveryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deliveryKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deliveryKey
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
   EntitlementApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -192,6 +205,7 @@ Resources:
           DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
           DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue
           DURABLE_CONFIRMATION_SENDER: !Ref DurableConfirmationSender
+          DURABLE_CONFIRMATION_DELIVERY_TABLE: !Ref ConfirmationDeliveryTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
@@ -271,6 +285,8 @@ Resources:
       Policies:
         - SQSPollerPolicy:
             QueueName: !GetAtt ConfirmationQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfirmationDeliveryTable
         - Statement:
             Effect: Allow
             Action:
