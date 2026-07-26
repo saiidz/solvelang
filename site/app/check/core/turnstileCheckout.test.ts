@@ -27,11 +27,43 @@ test("a missing public Turnstile site key shows a safe configuration error befor
 
 test("checkout requires current explicit Terms and Refund Policy consent before verification", () => {
   assert.equal(
-    checkoutConsentError(false, TERMS_VERSION),
+    checkoutConsentError({
+      customerEmail: "buyer@example.test",
+      termsAccepted: false,
+      immediatePerformanceRequested: false,
+      withdrawalAcknowledged: false,
+      termsVersion: TERMS_VERSION,
+    }),
     "Accept the Terms of Use and Refund Policy before checkout can start.",
   );
-  assert.equal(checkoutConsentError(true, "2026-01-01"), "Checkout terms are out of date. Refresh the page and try again.");
-  assert.equal(checkoutConsentError(true, TERMS_VERSION), undefined);
+  assert.equal(checkoutConsentError({
+    customerEmail: "buyer@example.test",
+    termsAccepted: true,
+    immediatePerformanceRequested: false,
+    withdrawalAcknowledged: false,
+    termsVersion: TERMS_VERSION,
+  }), "Confirm the immediate-performance and withdrawal acknowledgement before checkout can start.");
+  assert.equal(checkoutConsentError({
+    customerEmail: "buyer@example.test",
+    termsAccepted: true,
+    immediatePerformanceRequested: true,
+    withdrawalAcknowledged: true,
+    termsVersion: "2026-01-01",
+  }), "Checkout terms are out of date. Refresh the page and try again.");
+  assert.equal(checkoutConsentError({
+    customerEmail: "buyer@example.test",
+    termsAccepted: true,
+    immediatePerformanceRequested: true,
+    withdrawalAcknowledged: true,
+    termsVersion: TERMS_VERSION,
+  }), undefined);
+  assert.equal(checkoutConsentError({
+    customerEmail: "not-an-email",
+    termsAccepted: true,
+    immediatePerformanceRequested: true,
+    withdrawalAcknowledged: true,
+    termsVersion: TERMS_VERSION,
+  }), "Enter a valid email address for your contract confirmation and Stripe receipt.");
 });
 
 test("Turnstile expiry before checkout creation requires a new verification", () => {

@@ -1,4 +1,12 @@
-export const TERMS_VERSION = "2026-07-26";
+export const TERMS_VERSION = "2026-07-26-v2";
+
+export type CheckoutConsent = {
+  customerEmail: string;
+  termsAccepted: boolean;
+  immediatePerformanceRequested: boolean;
+  withdrawalAcknowledged: boolean;
+  termsVersion: string;
+};
 
 export type CheckoutGateState =
   | { phase: "awaiting_verification" }
@@ -46,8 +54,14 @@ export function checkoutConfigurationError({
   return undefined;
 }
 
-export function checkoutConsentError(termsAccepted: boolean, termsVersion: string): string | undefined {
-  if (!termsAccepted) return "Accept the Terms of Use and Refund Policy before checkout can start.";
-  if (termsVersion !== TERMS_VERSION) return "Checkout terms are out of date. Refresh the page and try again.";
+export function checkoutConsentError(consent: CheckoutConsent): string | undefined {
+  if (!consent.customerEmail || !/^\S+@\S+\.\S+$/.test(consent.customerEmail)) {
+    return "Enter a valid email address for your contract confirmation and Stripe receipt.";
+  }
+  if (!consent.termsAccepted) return "Accept the Terms of Use and Refund Policy before checkout can start.";
+  if (!consent.immediatePerformanceRequested || !consent.withdrawalAcknowledged) {
+    return "Confirm the immediate-performance and withdrawal acknowledgement before checkout can start.";
+  }
+  if (consent.termsVersion !== TERMS_VERSION) return "Checkout terms are out of date. Refresh the page and try again.";
   return undefined;
 }

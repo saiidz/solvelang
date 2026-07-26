@@ -26,6 +26,18 @@ Parameters:
       - "true"
       - "false"
     Default: "false"
+  LegalIdentityVerified:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+  DurableConfirmationProvider:
+    Type: String
+    AllowedValues:
+      - disabled
+      - approved
+    Default: disabled
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -55,6 +67,14 @@ Rules:
           - !Equals [!Ref CheckoutEnabled, "false"]
           - !Equals [!Ref LegalCheckoutReviewVerified, "true"]
         AssertDescription: Production checkout requires verified legal review and clickwrap readiness.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref LegalIdentityVerified, "true"]
+        AssertDescription: Production checkout requires verified operator identity and final consumer price information.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref DurableConfirmationProvider, approved]
+        AssertDescription: Production checkout requires an approved durable contract-confirmation provider.
 
 Resources:
   EntitlementsTable:
@@ -111,6 +131,7 @@ Resources:
           SITE_ORIGIN: !Ref SiteOrigin
           ENTITLEMENT_MODE: !Ref EntitlementMode
           CHECKOUT_ENABLED: !Ref CheckoutEnabled
+          DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
@@ -143,6 +164,12 @@ Resources:
           Properties:
             ApiId: !Ref EntitlementApi
             Path: /entitlement
+            Method: POST
+        Withdraw:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /withdraw
             Method: POST
         Events:
           Type: HttpApi

@@ -59,11 +59,15 @@ export function PaymentElementClient() {
   const scanIdRef = useRef("");
   const checkoutGateRef = useRef<CheckoutGateState>(initialCheckoutGate());
   const termsAcceptedRef = useRef(false);
+  const immediatePerformanceRequestedRef = useRef(false);
+  const customerEmailRef = useRef("");
   const configuredRef = useRef(!checkoutConfiguration.error);
   const mountedRef = useRef(true);
   const [error, setError] = useState(checkoutConfiguration.error ?? "");
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediatePerformanceRequested, setImmediatePerformanceRequested] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState("");
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState("");
@@ -73,9 +77,17 @@ export function PaymentElementClient() {
     if (widgetId) window.turnstile?.reset(widgetId);
   }, []);
 
+  const currentConsent = useCallback(() => ({
+    customerEmail: customerEmailRef.current,
+    termsAccepted: termsAcceptedRef.current,
+    immediatePerformanceRequested: immediatePerformanceRequestedRef.current,
+    withdrawalAcknowledged: immediatePerformanceRequestedRef.current,
+    termsVersion: TERMS_VERSION,
+  }), []);
+
   const createCheckout = useCallback(async (token: string) => {
     try {
-      const consentError = checkoutConsentError(termsAcceptedRef.current, TERMS_VERSION);
+      const consentError = checkoutConsentError(currentConsent());
       if (consentError) throw new Error(consentError);
       const scanId = scanIdRef.current;
       const response = await fetch(`${apiBase}/checkout`, {
@@ -84,7 +96,10 @@ export function PaymentElementClient() {
         body: JSON.stringify({
           scanId,
           turnstileToken: token,
+          customerEmail: customerEmailRef.current,
           termsAccepted: true,
+          immediatePerformanceRequested: true,
+          withdrawalAcknowledged: true,
           termsVersion: TERMS_VERSION,
         }),
       });
@@ -130,10 +145,10 @@ export function PaymentElementClient() {
         setError(caught instanceof Error ? caught.message : "Payment could not be loaded.");
       }
     }
-  }, [resetTurnstile]);
+  }, [currentConsent, resetTurnstile]);
 
   const beginVerifiedCheckout = useCallback((token: string) => {
-    const consentError = checkoutConsentError(termsAcceptedRef.current, TERMS_VERSION);
+    const consentError = checkoutConsentError(currentConsent());
     if (consentError) {
       setError(consentError);
       return;
@@ -150,7 +165,7 @@ export function PaymentElementClient() {
     checkoutGateRef.current = next;
     setError("");
     void createCheckout(token);
-  }, [createCheckout]);
+  }, [createCheckout, currentConsent]);
 
   const requireFreshVerification = useCallback((message: string) => {
     if (checkoutGateRef.current.phase !== "awaiting_verification") return;
@@ -165,8 +180,28 @@ export function PaymentElementClient() {
     if (accepted) setError("");
   }, []);
 
+  const updateImmediatePerformanceRequested = useCallback((accepted: boolean) => {
+    immediatePerformanceRequestedRef.current = accepted;
+    setImmediatePerformanceRequested(accepted);
+    if (accepted) setError("");
+  }, []);
+
+  const updateCustomerEmail = useCallback((email: string) => {
+    customerEmailRef.current = email;
+    setCustomerEmail(email);
+    if (email) setError("");
+  }, []);
+
+  const checkoutRequirementsMet = !checkoutConsentError({
+    customerEmail,
+    termsAccepted,
+    immediatePerformanceRequested,
+    withdrawalAcknowledged: immediatePerformanceRequested,
+    termsVersion: TERMS_VERSION,
+  });
+
   useEffect(() => {
-    if (!termsAccepted || !turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
+    if (!checkoutRequirementsMet || !turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
 
     const widgetId = window.turnstile.render(turnstileContainerRef.current, {
       sitekey: turnstileSiteKey,
@@ -182,7 +217,7 @@ export function PaymentElementClient() {
       window.turnstile?.remove(widgetId);
       turnstileWidgetRef.current = null;
     };
-  }, [beginVerifiedCheckout, requireFreshVerification, termsAccepted, turnstileReady]);
+  }, [beginVerifiedCheckout, checkoutRequirementsMet, requireFreshVerification, turnstileReady]);
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -229,7 +264,19 @@ export function PaymentElementClient() {
 
   return (
     <div>
-      <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+      <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+        <label className="block" htmlFor="checkout-receipt-email">
+          <span className="mb-1 block font-semibold text-slate-900">Contract confirmation and Stripe receipt email</span>
+          <input
+            id="checkout-receipt-email"
+            type="email"
+            autoComplete="email"
+            value={customerEmail}
+            onChange={(event) => updateCustomerEmail(event.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            required
+          />
+        </label>
         <label className="flex items-start gap-3" htmlFor="checkout-terms-consent">
           <input
             id="checkout-terms-consent"
@@ -239,11 +286,26 @@ export function PaymentElementClient() {
             className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
           />
           <span>
-            I agree to the <a href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</a> and <a href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</a>. I request immediate performance and delivery of the digital service and acknowledge that, once processing or delivery begins, I may lose any statutory withdrawal right and the purchase is non-refundable except where required by law.
+            I have read and agree to the Terms of Use and Refund Policy, version 2026-07-26-v2.
           </span>
         </label>
+        <label className="flex items-start gap-3" htmlFor="checkout-immediate-performance-consent">
+          <input
+            id="checkout-immediate-performance-consent"
+            type="checkbox"
+            checked={immediatePerformanceRequested}
+            onChange={(event) => updateImmediatePerformanceRequested(event.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
+          />
+          <span>
+            I expressly request that SolveLang begin performing and delivering the digital service immediately, before the withdrawal period expires. I understand that for digital content not supplied on a tangible medium, I may lose my right of withdrawal when delivery begins. If the purchase is legally treated as a service, I understand that the right is lost after the service has been fully performed. Mandatory consumer rights remain unaffected.
+          </span>
+        </label>
+        <p className="text-xs leading-5 text-slate-600">
+          Read the <a href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</a> and <a href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</a> before confirming.
+        </p>
       </div>
-      {termsAccepted && turnstileSiteKey ? (
+      {checkoutRequirementsMet && turnstileSiteKey ? (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
@@ -256,19 +318,27 @@ export function PaymentElementClient() {
         </div>
       ) : null}
       {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">{status}</div> : null}
-      {termsAccepted && turnstileSiteKey ? (
+      {checkoutRequirementsMet && turnstileSiteKey ? (
         <div className="mb-5">
           <div ref={turnstileContainerRef} className="cf-turnstile" data-sitekey={turnstileSiteKey} data-action="checkout" aria-label="Human verification" />
         </div>
       ) : null}
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
+      <section aria-label="Pre-contract payment summary" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+        <h3 className="font-semibold text-slate-950">Workflow Preflight</h3>
+        <p>One-time payment: USD $49. No subscription.</p>
+        <p>Automated digital report with immediate delivery after successful payment. Your workflow input and compatibility limits can affect the report; review it before acting on it.</p>
+        <p>VAT and final tax treatment require operator confirmation before production checkout is enabled.</p>
+        <p>Withdrawal and refund rights are summarized in the Refund Policy; mandatory consumer rights remain unaffected.</p>
+        <p>Operator and legal identity details require verification before production checkout. Support: <a href="mailto:hello@solve-lang.com" className="font-semibold text-blue-700 underline">hello@solve-lang.com</a>.</p>
+      </section>
       <button
         type="button"
         onClick={() => void submitPayment()}
-        disabled={!termsAccepted || !ready || submitting}
+        disabled={!checkoutRequirementsMet || !ready || submitting}
         className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {submitting ? "Processing…" : "Pay $49 securely"}
+        {submitting ? "Processing…" : "Pay $49 and start Workflow Preflight"}
       </button>
     </div>
   );

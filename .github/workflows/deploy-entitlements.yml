@@ -85,6 +85,8 @@ jobs:
           CHECKOUT_ENABLED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.CHECKOUT_ENABLED || 'false' }}
           WEBHOOK_SIGNED_DELIVERY_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.WEBHOOK_SIGNED_DELIVERY_VERIFIED || 'false' }}
           LEGAL_CHECKOUT_REVIEW_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.LEGAL_CHECKOUT_REVIEW_VERIFIED || 'false' }}
+          LEGAL_IDENTITY_VERIFIED: ${{ vars.LEGAL_IDENTITY_VERIFIED || 'false' }}
+          DURABLE_CONFIRMATION_PROVIDER: ${{ vars.DURABLE_CONFIRMATION_PROVIDER || 'disabled' }}
           STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         run: |
@@ -109,8 +111,10 @@ jobs:
               [[ "$CHECKOUT_ENABLED" == "true" || "$CHECKOUT_ENABLED" == "false" ]] || { echo "CHECKOUT_ENABLED must be true or false." >&2; exit 1; }
               [[ "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "true" || "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "false" ]] || { echo "WEBHOOK_SIGNED_DELIVERY_VERIFIED must be true or false." >&2; exit 1; }
               [[ "$LEGAL_CHECKOUT_REVIEW_VERIFIED" == "true" || "$LEGAL_CHECKOUT_REVIEW_VERIFIED" == "false" ]] || { echo "LEGAL_CHECKOUT_REVIEW_VERIFIED must be true or false." >&2; exit 1; }
-              if [[ "$CHECKOUT_ENABLED" == "true" && ( "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" != "true" || "$LEGAL_CHECKOUT_REVIEW_VERIFIED" != "true" ) ]]; then
-                echo "Production checkout requires verified webhook and legal review controls." >&2
+              [[ "$LEGAL_IDENTITY_VERIFIED" == "true" || "$LEGAL_IDENTITY_VERIFIED" == "false" ]] || { echo "LEGAL_IDENTITY_VERIFIED must be true or false." >&2; exit 1; }
+              [[ "$DURABLE_CONFIRMATION_PROVIDER" == "disabled" || "$DURABLE_CONFIRMATION_PROVIDER" == "approved" ]] || { echo "DURABLE_CONFIRMATION_PROVIDER must be disabled or approved." >&2; exit 1; }
+              if [[ "$CHECKOUT_ENABLED" == "true" && ( "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" != "true" || "$LEGAL_CHECKOUT_REVIEW_VERIFIED" != "true" || "$LEGAL_IDENTITY_VERIFIED" != "true" || "$DURABLE_CONFIRMATION_PROVIDER" != "approved" ) ]]; then
+                echo "Production checkout requires verified webhook, legal review, legal identity, and durable confirmation controls." >&2
                 exit 1
               fi
               ;;
@@ -131,6 +135,8 @@ jobs:
               CheckoutEnabled="$CHECKOUT_ENABLED" \
               WebhookSignedDeliveryVerified="$WEBHOOK_SIGNED_DELIVERY_VERIFIED" \
               LegalCheckoutReviewVerified="$LEGAL_CHECKOUT_REVIEW_VERIFIED" \
+              LegalIdentityVerified="$LEGAL_IDENTITY_VERIFIED" \
+              DurableConfirmationProvider="$DURABLE_CONFIRMATION_PROVIDER" \
               SiteOrigin="$SITE_ORIGIN" \
               StripeSecretKey="$STRIPE_SECRET_KEY" \
               StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \

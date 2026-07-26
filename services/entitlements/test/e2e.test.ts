@@ -22,7 +22,10 @@ function checkoutRequest(overrides: Record<string, unknown> = {}) {
   return {
     scanId,
     turnstileToken: "turnstile-valid-token",
+    customerEmail: "buyer@example.test",
     termsAccepted: true,
+    immediatePerformanceRequested: true,
+    withdrawalAcknowledged: true,
     termsVersion,
     ...overrides,
   };
@@ -94,11 +97,19 @@ function createFixture(payment: {
 } = {
   paymentStatus: "paid",
   refundStatus: "none",
-  metadata: { scanId, product: "workflow-preflight-v1" },
+  metadata: {
+    scanId,
+    product: "workflow-preflight-v1",
+    termsVersion,
+    termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+    immediatePerformanceRequested: "true",
+    withdrawalAcknowledged: "true",
+  },
 }, configOverrides: Record<string, unknown> = {}, turnstileResult: boolean | Error = true) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
   const metadataUpdates: Array<{ paymentIntentId: string; metadata: Record<string, unknown>; idempotencyKey: string }> = [];
   const turnstileRequests: Array<{ token: string; remoteIp: string }> = [];
+  const confirmations: Array<Record<string, unknown>> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
     payments: {
@@ -107,6 +118,7 @@ function createFixture(payment: {
         return {
           id: paymentIntentId,
           clientSecret: "pi_test_paid_payment_secret_test",
+          receiptEmail: "buyer@example.test",
           createdAt: Math.floor(nowMs / 1000),
           refundStatus: "none",
         };
@@ -116,7 +128,7 @@ function createFixture(payment: {
       },
       async retrieve(id) {
         assert.equal(id, paymentIntentId);
-        return { id, ...payment };
+        return { id, receiptEmail: "buyer@example.test", ...payment };
       },
     },
     webhooks: {
@@ -148,15 +160,20 @@ function createFixture(payment: {
       entitlementSigningSecret: signingSecret,
       mode: "test",
       checkoutEnabled: true,
+      durableConfirmationEnabled: true,
       ...configOverrides,
     } as unknown as Parameters<typeof createEntitlementService>[0]["config"],
     stripe,
     store,
     turnstile,
+    durableConfirmation: {
+      async queueContractConfirmation(input) { confirmations.push(input); },
+      async queueWithdrawalConfirmation(input) { confirmations.push(input); },
+    },
     now: () => nowMs,
     logger: { info: (...values) => logs.push(values), error: (...values) => logs.push(values) },
   });
-  return { service, store, checkoutRequests, metadataUpdates, turnstileRequests, logs };
+  return { service, store, checkoutRequests, metadataUpdates, turnstileRequests, confirmations, logs };
 }
 
 test("health exposes only a fixed non-sensitive test-mode readiness contract", async () => {
@@ -184,7 +201,10 @@ test("test-mode checkout remains operational and records server-derived consent 
         scanId,
         product: "workflow-preflight-v1",
         termsVersion,
+        immediatePerformanceRequested: "true",
+        withdrawalAcknowledged: "true",
       },
+      receiptEmail: "buyer@example.test",
     },
   });
   assert.deepEqual(metadataUpdates, [{
@@ -231,10 +251,15 @@ test("a lost PaymentIntent create response retries with stable parameters and re
       entitlementSigningSecret: signingSecret,
       mode: "test",
       checkoutEnabled: true,
+      durableConfirmationEnabled: true,
     },
     stripe,
     store: new MemoryStore(),
     turnstile: { async verify() { return true; } },
+    durableConfirmation: {
+      async queueContractConfirmation() {},
+      async queueWithdrawalConfirmation() {},
+    },
     now: () => clock,
   });
 
@@ -289,10 +314,15 @@ test("a failed consent metadata update withholds the client secret until a stabl
       entitlementSigningSecret: signingSecret,
       mode: "test",
       checkoutEnabled: true,
+      durableConfirmationEnabled: true,
     },
     stripe,
     store: new MemoryStore(),
     turnstile: { async verify() { return true; } },
+    durableConfirmation: {
+      async queueContractConfirmation() {},
+      async queueWithdrawalConfirmation() {},
+    },
     now: () => clock,
   });
 
@@ -316,10 +346,13 @@ test("a failed consent metadata update withholds the client secret until a stabl
   });
 });
 
-test("missing, false, and unsupported terms consent fail before Turnstile or Stripe", async () => {
+test("missing, false, and unsupported consent fields fail before Turnstile or Stripe", async () => {
   const requests = [
     { scanId, turnstileToken: "turnstile-valid-token" },
+    checkoutRequest({ customerEmail: "not-an-email" }),
     checkoutRequest({ termsAccepted: false }),
+    checkoutRequest({ immediatePerformanceRequested: false }),
+    checkoutRequest({ withdrawalAcknowledged: false }),
     checkoutRequest({ termsVersion: "unsupported-version" }),
     checkoutRequest({ termsAcceptedAt: "client-supplied-value" }),
   ];
@@ -497,7 +530,10 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent, records consent
       scanId,
       product: "workflow-preflight-v1",
       termsVersion,
+      immediatePerformanceRequested: "true",
+      withdrawalAcknowledged: "true",
     },
+    receiptEmail: "buyer@example.test",
   }, "idempotent-scan");
   await gateway.payments.updateMetadata(
     paymentIntentId,
@@ -517,7 +553,10 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent, records consent
         scanId,
         product: "workflow-preflight-v1",
         termsVersion,
+        immediatePerformanceRequested: "true",
+        withdrawalAcknowledged: "true",
       },
+      receipt_email: "buyer@example.test",
     }, { idempotencyKey: "idempotent-scan" }],
   });
   assert.deepEqual(calls[1], {
@@ -541,10 +580,25 @@ test("invalid webhook signatures are rejected without processing", async () => {
 });
 
 test("paid payment recovery issues a verifiable short-lived entitlement", async () => {
-  const { service } = createFixture();
+  const { service, confirmations } = createFixture();
   await service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const result = await service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
   assert.equal(result.statusCode, 200);
+  assert.deepEqual(confirmations, [{
+    email: "buyer@example.test",
+    paymentIntentId,
+    product: "Workflow Preflight",
+    total: "USD $49",
+    termsVersion,
+    termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+    immediatePerformanceRequested: true,
+    withdrawalAcknowledged: true,
+    deliveryDescription: "An automated Workflow Preflight report is processed and delivered immediately after successful payment.",
+    supportEmail: "hello@solve-lang.com",
+    termsText: (await import("../src/terms.js")).CONTRACT_TERMS_TEXT,
+    refundPolicyText: (await import("../src/terms.js")).CONTRACT_REFUND_POLICY_TEXT,
+    idempotencyKey: `contract-confirmation-${paymentIntentId}-${termsVersion}`,
+  }]);
   const body = responseBody(result);
   assert.equal(body.expiresAt, "2026-07-20T00:15:00.000Z");
   assert.deepEqual(verifyEntitlement(String(body.token), signingSecret, Math.floor(nowMs / 1000)), {
@@ -555,11 +609,51 @@ test("paid payment recovery issues a verifiable short-lived entitlement", async 
   });
 });
 
+test("report recovery fails closed until durable contract confirmation is queued", async () => {
+  const fixture = createFixture(undefined, { durableConfirmationEnabled: false });
+  await fixture.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
+  const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
+  assert.equal(result.statusCode, 503);
+  assert.deepEqual(responseBody(result), { code: "confirmation_unavailable", error: "Contract confirmation is temporarily unavailable." });
+  assert.equal(fixture.confirmations.length, 0);
+});
+
+test("withdrawal requests require durable confirmation and record only a server timestamp", async () => {
+  const { service, confirmations } = createFixture();
+  const result = await service(apiEvent("POST", "/withdraw", {
+    name: "Buyer Name",
+    contractReference: paymentIntentId,
+    email: "buyer@example.test",
+    statement: "I hereby withdraw from the Workflow Preflight contract.",
+  }));
+  assert.equal(result.statusCode, 202);
+  assert.deepEqual(responseBody(result), {
+    receivedAt: "2026-07-20T00:00:00.000Z",
+    message: "Your withdrawal request was received. Eligibility will be reviewed under applicable law.",
+  });
+  assert.deepEqual(confirmations[0], {
+    name: "Buyer Name",
+    contractReference: paymentIntentId,
+    email: "buyer@example.test",
+    statement: "I hereby withdraw from the Workflow Preflight contract.",
+    receivedAt: "2026-07-20T00:00:00.000Z",
+    supportEmail: "hello@solve-lang.com",
+    idempotencyKey: `withdrawal-${paymentIntentId}`,
+  });
+});
+
 test("full refunds revoke entitlement renewal while partial refunds remain eligible", async () => {
   const partial = createFixture({
     paymentStatus: "paid",
     refundStatus: "partial",
-    metadata: { scanId, product: "workflow-preflight-v1" },
+    metadata: {
+      scanId,
+      product: "workflow-preflight-v1",
+      termsVersion,
+      termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+      immediatePerformanceRequested: "true",
+      withdrawalAcknowledged: "true",
+    },
   });
   await partial.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const partialResult = await partial.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
@@ -568,7 +662,14 @@ test("full refunds revoke entitlement renewal while partial refunds remain eligi
   const full = createFixture({
     paymentStatus: "paid",
     refundStatus: "full",
-    metadata: { scanId, product: "workflow-preflight-v1" },
+    metadata: {
+      scanId,
+      product: "workflow-preflight-v1",
+      termsVersion,
+      termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+      immediatePerformanceRequested: "true",
+      withdrawalAcknowledged: "true",
+    },
   });
   await full.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const fullResult = await full.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));

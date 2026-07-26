@@ -13,6 +13,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
     return {
       id: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
+      receiptEmail: paymentIntent.receipt_email,
       createdAt: paymentIntent.created,
       paymentStatus: paymentIntent.status === "succeeded" ? "paid" : "unpaid",
       refundStatus,
@@ -29,6 +30,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
           payment_method_types: ["card"],
           description: "SolveLang Workflow Preflight Report",
           metadata: params.metadata,
+          receipt_email: params.receiptEmail,
         }, { idempotencyKey });
         return snapshot(paymentIntent);
       },

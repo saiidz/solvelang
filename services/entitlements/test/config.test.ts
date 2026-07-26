@@ -13,7 +13,11 @@ const valid = {
 };
 
 test("test-mode environment accepts complete protected configuration", () => {
-  assert.deepEqual(parseEntitlementEnvironment(valid), { ...valid, CHECKOUT_ENABLED: "false" });
+  assert.deepEqual(parseEntitlementEnvironment(valid), {
+    ...valid,
+    CHECKOUT_ENABLED: "false",
+    DURABLE_CONFIRMATION_PROVIDER: "disabled",
+  });
 });
 
 test("checkout defaults disabled until explicitly enabled", () => {
@@ -25,6 +29,20 @@ test("checkout defaults disabled until explicitly enabled", () => {
   assert.equal(production.CHECKOUT_ENABLED, "false");
   assert.equal((parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "true" }) as Record<string, string>).CHECKOUT_ENABLED, "true");
   assert.throws(() => parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "enabled" }), /CHECKOUT_ENABLED/);
+});
+
+test("production checkout requires an approved durable confirmation provider", () => {
+  const production = {
+    ...valid,
+    ENTITLEMENT_MODE: "production",
+    STRIPE_SECRET_KEY: "sk_live_local_only",
+    CHECKOUT_ENABLED: "true",
+  };
+  assert.throws(() => parseEntitlementEnvironment(production), /DURABLE_CONFIRMATION_PROVIDER/);
+  assert.equal(parseEntitlementEnvironment({
+    ...production,
+    DURABLE_CONFIRMATION_PROVIDER: "approved",
+  }).DURABLE_CONFIRMATION_PROVIDER, "approved");
 });
 
 test("test and production environments reject Stripe keys from the wrong mode", () => {

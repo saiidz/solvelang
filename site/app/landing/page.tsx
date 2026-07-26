@@ -569,11 +569,15 @@ else {
                 <Link className="block hover:text-white" href="/audit/">Workflow X-Ray</Link>
                 <Link className="block hover:text-white" href="/terms/">Terms of Use</Link>
                 <Link className="block hover:text-white" href="/refund-policy/">Refund Policy</Link>
+                <Link className="block hover:text-white" href="/withdraw/">Withdrawal request</Link>
               </div>
             </div>
           </div>
-          <div className="flex flex-col gap-3 pt-7 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-5 pt-7 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p>© 2026 SolveLang. Before you automate it, understand it.</p>
+            <a href="https://reclamatiisal.anpc.ro" className="block w-[250px]" aria-label="ANPC solutionarea alternativa a litigiilor">
+              <Image src="/anpc-sal-pictogram.png" alt="ANPC solutionarea alternativa a litigiilor" width={250} height={50} className="h-[50px] w-[250px]" />
+            </a>
             <p>Open-source runtime. Guided workflow analysis.</p>
           </div>
         </div>

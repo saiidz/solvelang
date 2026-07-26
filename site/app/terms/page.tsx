@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 const sections = [
   ["Acceptance, eligibility, and operator", [
     "These Terms of Use (Terms) govern use of SolveLang. By using SolveLang or purchasing a Workflow Preflight report, you agree to these Terms. You must be able to enter into a binding agreement or use the service with permission from a parent, guardian, or authorized organization representative.",
-    "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). These Terms are effective as of version 2026-07-26. Contact the Operator at hello@solve-lang.com.",
+    "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). These Terms are effective as of version 2026-07-26-v2. Contact the Operator at hello@solve-lang.com. Production checkout remains blocked until the Operator has verified and published its registered office, telephone number, trade-register details, CUI, VAT treatment, and final consumer price information.",
   ]],
   ["Automated outputs and customer review", [
     "SolveLang provides automated workflow analysis, reports, digital entitlements, requests, credits, and related services. Available features may change, and some features may be previews or limited releases.",
@@ -32,7 +32,7 @@ const sections = [
     "SolveLang and its content are protected by applicable intellectual-property laws. Subject to these Terms and payment where required, the Operator grants you a limited, revocable, non-transferable license to use a purchased report for your personal or internal business purpose. No ownership is transferred.",
   ]],
   ["Payments and immediate digital performance", [
-    "Payments are processed by Stripe. A purchase may start automated processing and digital delivery immediately after you provide the required clickwrap consent. The applicable Refund Policy is incorporated into these Terms by reference.",
+    "Payments are processed by Stripe. A purchase may start automated processing and digital delivery immediately after you give the required express consent, immediate-performance request, and withdrawal acknowledgement. The applicable Refund Policy is incorporated into these Terms by reference. A durable contract confirmation must be safely queued before a purchased report can be recovered.",
   ]],
   ["Tokens, credits, entitlements, and requests", [
     "Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. SolveLang does not currently promise subscriptions or token packages unless a product page expressly says otherwise.",
@@ -43,8 +43,9 @@ const sections = [
   ["Warranty disclaimer", [
     "To the maximum extent permitted by applicable law, SolveLang is provided on an as-is and as-available basis without warranties of any kind. Mandatory consumer rights and liabilities that cannot legally be excluded remain unaffected.",
   ]],
-  ["Limitation of liability", [
-    "To the maximum extent permitted by applicable law, the Operator is not liable for indirect, incidental, special, consequential, lost-profit, lost-data, or business-interruption damages. The Operator's total aggregate liability for an affected purchase is limited to the greater of the amount actually paid for that purchase or USD $49. This section does not exclude liability that cannot legally be excluded.",
+  ["Consumer remedies and business liability", [
+    "Consumers retain all mandatory statutory remedies, including remedies for failure to supply, lack of conformity, unauthorised payments, duplicate charges, and any right that cannot lawfully be excluded or limited. Nothing in these Terms limits liability for fraud, wilful misconduct, gross negligence, death or personal injury, or any other liability that cannot legally be limited.",
+    "For business users only, and only to the maximum extent permitted by applicable law, the Operator is not liable for indirect, incidental, special, consequential, lost-profit, lost-data, or business-interruption damages. For an affected business purchase, the Operator's total aggregate liability is limited to the greater of the amount actually paid for that purchase or USD $49. This section does not limit mandatory consumer rights.",
   ]],
   ["Business-user indemnity", [
     "Where legally permitted, business users will indemnify the Operator for third-party claims arising from their unlawful submissions, misuse of the service, or breach of these Terms. This does not remove or limit mandatory consumer rights.",
@@ -70,7 +71,7 @@ export default function TermsPage() {
         <header className="mt-10 border-b border-slate-200 pb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">SolveLang legal</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Terms of Use</h1>
-          <p className="mt-4 text-base leading-7 text-slate-600">Effective version: 2026-07-26. Operator: UPCOMINGSOUNDS S.R.L., Romania.</p>
+          <p className="mt-4 text-base leading-7 text-slate-600">Effective version: 2026-07-26-v2. Operator: UPCOMINGSOUNDS S.R.L., Romania.</p>
         </header>
         <div className="mt-10 space-y-10">
           {sections.map(([heading, paragraphs]) => (
