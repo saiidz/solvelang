@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dictionaries, dictionaryFor, requiredDictionaryKeys, technicalTerms } from "../../i18n/dictionaries";
-import { defaultLocale, locales, reviewedLocales } from "../../i18n/locales";
+import { dictionaries, dictionaryFor, requiredDictionaryKeys, technicalTerms, validateReviewedDictionary } from "../../i18n/dictionaries";
+import { defaultLocale, locales, publishedLocales, reviewedLocales } from "../../i18n/locales";
 import { browserLocale, storedLocale, suggestedLocale, validateCountryHint } from "../../i18n/preference";
-import { normalisePublicRoute, pathForLocale, publicRouteSegments, safeLocalePath } from "../../i18n/routes";
+import { localizableRoutes, normalisePublicRoute, pathForLocale, productionLocalizedParams, publicRoutes, safeLocalePath } from "../../i18n/routes";
+import { alternatesForRoute, sitemapEntries } from "../../i18n/seo";
 
 test("locale registry has unique valid static route and hreflang definitions", () => {
   assert.equal(locales.length, 28);
@@ -30,21 +31,22 @@ test("only English is reviewed and every non-English locale remains a no-checkou
   }
 });
 
-test("dictionaries are complete and technical terms are explicitly allowlisted", () => {
+test("only reviewed dictionaries must be complete and non-placeholder", () => {
   assert.ok(technicalTerms.includes("PaymentIntent"));
-  for (const locale of locales) {
-    const dictionary = dictionaryFor(locale.code as never);
-    assert.deepEqual(Object.keys(dictionary).sort(), [...requiredDictionaryKeys].sort());
-    assert.deepEqual(dictionaries[locale.code as never], dictionary);
-  }
+  assert.deepEqual(Object.keys(dictionaryFor("en")).sort(), [...requiredDictionaryKeys].sort());
+  assert.equal(dictionaries.fr, undefined);
+  assert.doesNotThrow(() => validateReviewedDictionary("en", dictionaries.en));
+  assert.throws(() => validateReviewedDictionary("fr", { ...dictionaries.en }), /English placeholder/);
+  assert.throws(() => validateReviewedDictionary("fr", { home: "Accueil" }), /Missing translation key/);
 });
 
-test("static routes preserve English roots and generate all draft locale paths", () => {
+test("production generates no draft locale routes and preview remains explicit", () => {
   assert.equal(pathForLocale(defaultLocale, ""), "/");
-  assert.equal(pathForLocale(defaultLocale, "support"), "/support");
+  assert.equal(pathForLocale(defaultLocale, "support"), "/support/");
   const french = locales.find((locale) => locale.code === "fr")!;
   assert.equal(pathForLocale(french, "support"), "/fr/support/");
-  assert.equal(locales.filter((locale) => locale.code !== "en").length * publicRouteSegments.length, 216);
+  assert.deepEqual(productionLocalizedParams(false), []);
+  assert.equal(productionLocalizedParams(true).length, 27 * localizableRoutes.length);
   assert.equal(normalisePublicRoute(["terms"]), "terms");
   assert.equal(normalisePublicRoute(["invalid"]), undefined);
 });
@@ -57,16 +59,40 @@ test("route switching preserves context but rejects payment and private query va
 });
 
 test("language preference order and country hint validation are deterministic and privacy-minimal", () => {
-  assert.equal(storedLocale("fr"), "fr");
+  assert.equal(storedLocale("fr"), undefined);
   assert.equal(storedLocale("fr-FR"), undefined);
   assert.equal(browserLocale(["fr-CA", "en"]), "fr");
-  assert.equal(suggestedLocale({ explicit: "de", saved: "fr", browser: "ro", country: "BR" }), "de");
-  assert.equal(suggestedLocale({ saved: "fr", browser: "ro", country: "BR" }), "fr");
-  assert.equal(suggestedLocale({ browser: "ro", country: "BR" }), "ro");
-  assert.equal(suggestedLocale({ country: "BR" }), "pt-BR");
+  assert.equal(suggestedLocale({ explicit: "de", saved: "fr", browser: "ro", country: "BR" }), "en");
+  assert.equal(suggestedLocale({ saved: "fr", browser: "ro", country: "BR" }), "en");
+  assert.equal(suggestedLocale({ browser: "ro", country: "BR" }), "en");
+  assert.equal(suggestedLocale({ country: "BR" }), "en");
   assert.equal(suggestedLocale({ country: "CA" }), "en");
   assert.equal(validateCountryHint({ country: "FR" }), "FR");
   assert.equal(validateCountryHint({ country: "fr" }), undefined);
   assert.equal(validateCountryHint({ country: "FR", city: "Paris" }), undefined);
   assert.equal(validateCountryHint({ city: "Paris" }), undefined);
+});
+
+test("hreflang is route-specific, self-referencing, reciprocal, and excludes drafts", () => {
+  const english = alternatesForRoute("support");
+  assert.equal(english.canonical, "https://www.solve-lang.com/support/");
+  assert.deepEqual(english.languages, {
+    en: "https://www.solve-lang.com/support/",
+    "x-default": "https://www.solve-lang.com/support/",
+  });
+  const frenchReviewed = locales.map((locale) => locale.code === "fr" ? { ...locale, publicationState: "reviewed" as const } : locale);
+  const en = alternatesForRoute("support", frenchReviewed);
+  const fr = alternatesForRoute("support", frenchReviewed, "fr");
+  assert.equal(en.languages.fr, fr.canonical);
+  assert.equal(fr.languages.en, en.canonical);
+  assert.equal(fr.languages["x-default"], en.canonical);
+});
+
+test("sitemap is generated from the complete classified public route registry", () => {
+  const entries = sitemapEntries();
+  assert.equal(entries.length, publicRoutes.filter((route) => route.sitemap).length);
+  assert.equal(new Set(entries.map((entry) => entry.url)).size, entries.length);
+  assert.ok(entries.some((entry) => entry.url === "https://www.solve-lang.com/support/"));
+  assert.ok(!entries.some((entry) => entry.url.includes("/fr/")));
+  assert.deepEqual(publishedLocales.map((locale) => locale.code), ["en"]);
 });

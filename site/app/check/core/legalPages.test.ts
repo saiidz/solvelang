@@ -14,8 +14,8 @@ async function source(relativePath: string): Promise<string> {
 
 test("Terms and Refund Policy pages contain their required customer-facing headings", async () => {
   const [terms, refundPolicy, legalContent, canonicalLegalContent] = await Promise.all([
-    source("app/terms/page.tsx"),
-    source("app/refund-policy/page.tsx"),
+    source("app/(english)/terms/page.tsx"),
+    source("app/(english)/refund-policy/page.tsx"),
     source("app/legal-content.json"),
     readFile(path.join(siteRoot, "../services/entitlements/src/legal-content.json"), "utf8"),
   ]);
@@ -34,19 +34,20 @@ test("Terms and Refund Policy pages contain their required customer-facing headi
 });
 
 test("the public sitemap and legal navigation include the legal and withdrawal routes", async () => {
-  const [sitemap, landing, checkout, privacy, support] = await Promise.all([
-    source("public/sitemap.xml"),
-    source("app/landing/page.tsx"),
+  const [routeRegistry, sitemap, landing, checkout, privacy, support] = await Promise.all([
+    source("app/i18n/routes.ts"),
+    source("app/sitemap.ts"),
+    source("app/(english)/landing/page.tsx"),
     source("app/checkout/PaymentElementClient.tsx"),
-    source("app/preflight-privacy/page.tsx"),
-    source("app/support/page.tsx"),
+    source("app/(english)/preflight-privacy/page.tsx"),
+    source("app/(english)/support/page.tsx"),
   ]);
 
-  for (const sourceText of [sitemap, landing, checkout, privacy, support]) {
+  for (const sourceText of [routeRegistry, sitemap, landing, checkout, privacy, support]) {
     assert.match(sourceText, /\/terms\//);
     assert.match(sourceText, /\/refund-policy\//);
   }
-  assert.match(sitemap, /\/withdraw\//);
+  assert.match(`${routeRegistry}\n${sitemap}`, /withdraw/);
   assert.match(landing, /\/withdraw\//);
 });
 
@@ -82,8 +83,8 @@ test("Romanian legal routes, withdrawal flow, and current ANPC SAL asset are pre
     source("app/ro/refund-policy/page.tsx"),
     source("app/ro/preflight-privacy/page.tsx"),
     source("app/ro/withdraw/page.tsx"),
-    source("app/landing/page.tsx"),
-    source("public/sitemap.xml"),
+    source("app/(english)/landing/page.tsx"),
+    source("app/sitemap.ts"),
   ]);
   for (const sourceText of [roTerms, roRefund, roPrivacy, roWithdraw]) {
     assert.match(sourceText, /verificare juridica si a proprietarului/);

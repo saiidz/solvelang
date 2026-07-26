@@ -2,41 +2,57 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { dictionaryFor } from "../../i18n/dictionaries";
-import { localeForSegment, locales } from "../../i18n/locales";
-import { normalisePublicRoute, pathForLocale, publicRouteSegments, type PublicRouteSegment } from "../../i18n/routes";
+import { localeForSegment } from "../../i18n/locales";
+import { alternatesForRoute } from "../../i18n/seo";
+import { draftPreviewEnabled, normalisePublicRoute, pathForLocale, productionLocalizedParams, type PublicRouteSegment } from "../../i18n/routes";
 
 type Props = { params: Promise<{ locale: string; route?: string[] }> };
 
 function routeTitle(route: PublicRouteSegment, dictionary: ReturnType<typeof dictionaryFor>): string {
-  return route === "" ? "SolveLang" : dictionary[route === "refund-policy" ? "refundPolicy" : route === "preflight-privacy" ? "privacy" : route] ?? "SolveLang";
+  const translated = {
+    support: dictionary.support,
+    terms: dictionary.terms,
+    "refund-policy": dictionary.refundPolicy,
+    "preflight-privacy": dictionary.privacy,
+    withdraw: dictionary.withdraw,
+  } as Partial<Record<PublicRouteSegment, string>>;
+  return route === "" ? "SolveLang" : translated[route] ?? route.split("-").map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`).join(" ");
 }
 
 export function generateStaticParams() {
-  return locales.filter((locale) => locale.code !== "en").flatMap((locale) => publicRouteSegments.map((route) => ({ locale: locale.segment, route: route ? [route] : [] })));
+  const params = productionLocalizedParams();
+  return params.length > 0 ? params : [{ locale: "__i18n_disabled__", route: [] }];
 }
+
+export const dynamic = "force-static";
+export const dynamicParams = false;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale: segment, route: routeParts } = await params;
+  if (segment === "__i18n_disabled__") return { robots: { index: false, follow: false } };
   const locale = localeForSegment(segment);
   const route = normalisePublicRoute(routeParts);
   if (!locale || route === undefined) return {};
   const dictionary = dictionaryFor(locale.code as never);
-  const canonical = `https://www.solve-lang.com${pathForLocale(locale, route)}`;
+  const alternates = alternatesForRoute(route, undefined, locale.code);
   return {
     title: `${routeTitle(route, dictionary)} | SolveLang`,
     description: dictionary.draftNotice,
-    alternates: { canonical },
-    robots: { index: false, follow: true },
-    openGraph: { title: `${routeTitle(route, dictionary)} | SolveLang`, description: dictionary.draftNotice, url: canonical, locale: locale.code },
+    alternates,
+    robots: { index: locale.publicationState === "reviewed", follow: true },
+    openGraph: { title: `${routeTitle(route, dictionary)} | SolveLang`, description: dictionary.draftNotice, url: alternates.canonical, locale: locale.code },
     twitter: { card: "summary", title: `${routeTitle(route, dictionary)} | SolveLang`, description: dictionary.draftNotice },
   };
 }
 
 export default async function LocalizedPublicPage({ params }: Props) {
   const { locale: segment, route: routeParts } = await params;
+  if (segment === "__i18n_disabled__") {
+    return <main aria-hidden="true" className="hidden">Localized routes are not published.</main>;
+  }
   const locale = localeForSegment(segment);
   const route = normalisePublicRoute(routeParts);
-  if (!locale || route === undefined || locale.code === "en") notFound();
+  if (!locale || route === undefined || locale.code === "en" || (locale.publicationState !== "reviewed" && !draftPreviewEnabled())) notFound();
   const dictionary = dictionaryFor(locale.code as never);
   const checkoutBlocked = route === "checkout" || route === "check";
   return <main lang={locale.code} dir={locale.direction} className="min-h-screen bg-slate-50 px-6 py-14 text-slate-950 sm:py-20">

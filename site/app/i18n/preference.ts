@@ -1,4 +1,4 @@
-import { localeByCode, locales, type LocaleCode } from "./locales";
+import { locales, reviewedLocales, type LocaleCode } from "./locales";
 
 export const localeStorageKey = "solvelang_locale";
 export const suggestionDismissedStorageKey = "solvelang_locale_suggestion_dismissed";
@@ -14,7 +14,7 @@ const countryCandidates: Record<string, readonly LocaleCode[]> = {
 };
 
 export function storedLocale(value: string | null): LocaleCode | undefined {
-  return value && localeByCode.has(value) ? value as LocaleCode : undefined;
+  return value && reviewedLocales.some((locale) => locale.code === value) ? value as LocaleCode : undefined;
 }
 
 export function browserLocale(languages: readonly string[]): LocaleCode | undefined {
@@ -37,11 +37,12 @@ export function validateCountryHint(payload: unknown): string | undefined {
 }
 
 export function suggestedLocale({ explicit, saved, browser, country }: { explicit?: LocaleCode; saved?: LocaleCode; browser?: LocaleCode; country?: string }): LocaleCode {
-  if (explicit) return explicit;
-  if (saved) return saved;
-  if (browser) return browser;
+  const published = (candidate?: LocaleCode) => candidate && reviewedLocales.some((locale) => locale.code === candidate) ? candidate : undefined;
+  if (published(explicit)) return explicit!;
+  if (published(saved)) return saved!;
+  if (published(browser)) return browser!;
   const candidates = country ? countryCandidates[country] : undefined;
-  return candidates?.length === 1 ? candidates[0] : "en";
+  return candidates?.map(published).find(Boolean) ?? "en";
 }
 
 export async function fetchCountryHint(endpoint: string, fetchImpl: typeof fetch = fetch): Promise<string | undefined> {
