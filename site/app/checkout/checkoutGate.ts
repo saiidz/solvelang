@@ -10,20 +10,20 @@ export type CheckoutConsent = {
 
 export type CheckoutGateState =
   | { phase: "awaiting_verification" }
-  | { phase: "creating_checkout"; token: string }
-  | { phase: "payment_ready" };
+  | { phase: "creating_checkout"; token: string; consent: CheckoutConsent }
+  | { phase: "payment_ready"; consent: CheckoutConsent };
 
 export function initialCheckoutGate(): CheckoutGateState {
   return { phase: "awaiting_verification" };
 }
 
-export function beginCheckout(state: CheckoutGateState, token: string): CheckoutGateState {
+export function beginCheckout(state: CheckoutGateState, token: string, consent: CheckoutConsent): CheckoutGateState {
   if (!token || state.phase !== "awaiting_verification") return state;
-  return { phase: "creating_checkout", token };
+  return { phase: "creating_checkout", token, consent: { ...consent } };
 }
 
 export function checkoutCreated(state: CheckoutGateState): CheckoutGateState {
-  return state.phase === "creating_checkout" ? { phase: "payment_ready" } : state;
+  return state.phase === "creating_checkout" ? { phase: "payment_ready", consent: state.consent } : state;
 }
 
 export function checkoutFailed(): CheckoutGateState {

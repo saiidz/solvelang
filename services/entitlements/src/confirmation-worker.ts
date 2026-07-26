@@ -22,6 +22,8 @@ const confirmation = z.object({
     termsText: z.literal(CONTRACT_TERMS_TEXT).optional(),
     refundPolicyText: z.literal(CONTRACT_REFUND_POLICY_TEXT).optional(),
     idempotencyKey: z.string().min(1),
+    contractReference: z.string().startsWith("pi_").optional(),
+    receivedAt: z.string().datetime().optional(),
   }).passthrough(),
 }).strict();
 
@@ -49,13 +51,24 @@ function contractBody(payload: z.infer<typeof confirmation>["payload"]): string 
   ].join("\n");
 }
 
+function withdrawalBody(payload: z.infer<typeof confirmation>["payload"]): string {
+  if (!payload.contractReference || !payload.receivedAt) throw new Error("Invalid withdrawal confirmation message.");
+  return [
+    "SolveLang withdrawal request received",
+    `Received at: ${payload.receivedAt}`,
+    `Payment or contract reference: ${payload.contractReference}`,
+    `Support: ${payload.supportEmail}`,
+    "Eligibility remains subject to review and applicable law. This acknowledgement is not an automatic refund decision or promise.",
+  ].join("\n");
+}
+
 export const handler: SQSHandler = async (event) => {
   for (const record of event.Records) {
     const message = confirmation.parse(JSON.parse(record.body));
     const subject = message.kind === "contract" ? "SolveLang Workflow Preflight contract confirmation" : "SolveLang withdrawal request received";
     const body = message.kind === "contract"
       ? contractBody(message.payload)
-      : `We received your withdrawal request. Eligibility will be reviewed under applicable law. Support: ${message.payload.supportEmail}`;
+      : withdrawalBody(message.payload);
     await ses.send(new SendEmailCommand({
       FromEmailAddress: sender,
       Destination: { ToAddresses: [message.payload.email] },

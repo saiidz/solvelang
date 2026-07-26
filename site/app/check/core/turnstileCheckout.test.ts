@@ -12,6 +12,13 @@ import {
 } from "../../checkout/checkoutGate";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
+const consent = {
+  customerEmail: "buyer@example.test",
+  termsAccepted: true,
+  immediatePerformanceRequested: true,
+  withdrawalAcknowledged: true,
+  termsVersion: TERMS_VERSION,
+};
 
 test("a missing public Turnstile site key shows a safe configuration error before checkout can start", () => {
   assert.equal(
@@ -72,21 +79,29 @@ test("Turnstile expiry before checkout creation requires a new verification", ()
 });
 
 test("Turnstile expiry after a client secret mounts preserves the payment form state", () => {
-  const paymentReady = checkoutCreated(beginCheckout(initialCheckoutGate(), "turnstile-token"));
+  const paymentReady = checkoutCreated(beginCheckout(initialCheckoutGate(), "turnstile-token", consent));
   assert.equal(paymentReady.phase, "payment_ready");
   assert.deepEqual(expireTurnstile(paymentReady), paymentReady);
 });
 
 test("duplicate Turnstile callbacks cannot start concurrent checkout requests", () => {
-  const creatingCheckout = beginCheckout(initialCheckoutGate(), "first-token");
+  const creatingCheckout = beginCheckout(initialCheckoutGate(), "first-token", consent);
   assert.equal(creatingCheckout.phase, "creating_checkout");
-  assert.deepEqual(beginCheckout(creatingCheckout, "second-token"), creatingCheckout);
+  assert.deepEqual(beginCheckout(creatingCheckout, "second-token", consent), creatingCheckout);
 
   const paymentReady = checkoutCreated(creatingCheckout);
-  assert.deepEqual(beginCheckout(paymentReady, "third-token"), paymentReady);
+  assert.deepEqual(beginCheckout(paymentReady, "third-token", consent), paymentReady);
 });
 
 test("checkout creation failure returns to Turnstile verification for a fresh single-use token", () => {
   assert.deepEqual(checkoutFailed(), initialCheckoutGate());
-  assert.equal(beginCheckout(checkoutFailed(), "fresh-token").phase, "creating_checkout");
+  assert.equal(beginCheckout(checkoutFailed(), "fresh-token", consent).phase, "creating_checkout");
+});
+
+test("checkout snapshots the email and required consent once creation begins", () => {
+  const snapshot = beginCheckout(initialCheckoutGate(), "turnstile-token", consent);
+  assert.equal(snapshot.phase, "creating_checkout");
+  if (snapshot.phase !== "creating_checkout") return;
+  assert.deepEqual(snapshot.consent, consent);
+  assert.notEqual(snapshot.consent, consent);
 });

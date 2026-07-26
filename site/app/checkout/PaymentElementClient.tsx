@@ -71,6 +71,7 @@ export function PaymentElementClient() {
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState("");
+  const [checkoutPhase, setCheckoutPhase] = useState<CheckoutGateState["phase"]>("awaiting_verification");
 
   const resetTurnstile = useCallback(() => {
     const widgetId = turnstileWidgetRef.current;
@@ -85,9 +86,9 @@ export function PaymentElementClient() {
     termsVersion: TERMS_VERSION,
   }), []);
 
-  const createCheckout = useCallback(async (token: string) => {
+  const createCheckout = useCallback(async (token: string, consent: ReturnType<typeof currentConsent>) => {
     try {
-      const consentError = checkoutConsentError(currentConsent());
+      const consentError = checkoutConsentError(consent);
       if (consentError) throw new Error(consentError);
       const scanId = scanIdRef.current;
       const response = await fetch(`${apiBase}/checkout`, {
@@ -96,7 +97,7 @@ export function PaymentElementClient() {
         body: JSON.stringify({
           scanId,
           turnstileToken: token,
-          customerEmail: customerEmailRef.current,
+          customerEmail: consent.customerEmail,
           termsAccepted: true,
           immediatePerformanceRequested: true,
           withdrawalAcknowledged: true,
@@ -133,8 +134,10 @@ export function PaymentElementClient() {
       });
       paymentElement.mount(containerRef.current);
       checkoutGateRef.current = checkoutCreated(checkoutGateRef.current);
+      setCheckoutPhase(checkoutGateRef.current.phase);
     } catch (caught) {
       checkoutGateRef.current = checkoutFailed();
+      setCheckoutPhase("awaiting_verification");
       paymentElementRef.current?.destroy();
       paymentElementRef.current = null;
       elementsRef.current = null;
@@ -145,7 +148,7 @@ export function PaymentElementClient() {
         setError(caught instanceof Error ? caught.message : "Payment could not be loaded.");
       }
     }
-  }, [currentConsent, resetTurnstile]);
+  }, [resetTurnstile]);
 
   const beginVerifiedCheckout = useCallback((token: string) => {
     const consentError = checkoutConsentError(currentConsent());
@@ -160,11 +163,13 @@ export function PaymentElementClient() {
       return;
     }
     scanIdRef.current = scanId;
-    const next = beginCheckout(checkoutGateRef.current, token);
+    const consent = currentConsent();
+    const next = beginCheckout(checkoutGateRef.current, token, consent);
     if (next === checkoutGateRef.current) return;
     checkoutGateRef.current = next;
+    setCheckoutPhase(next.phase);
     setError("");
-    void createCheckout(token);
+    void createCheckout(token, consent);
   }, [createCheckout, currentConsent]);
 
   const requireFreshVerification = useCallback((message: string) => {
@@ -199,6 +204,28 @@ export function PaymentElementClient() {
     withdrawalAcknowledged: immediatePerformanceRequested,
     termsVersion: TERMS_VERSION,
   });
+  const checkoutLocked = checkoutPhase !== "awaiting_verification";
+
+  const startOver = useCallback(() => {
+    paymentElementRef.current?.destroy();
+    paymentElementRef.current = null;
+    elementsRef.current = null;
+    stripeRef.current = null;
+    checkoutGateRef.current = initialCheckoutGate();
+    setCheckoutPhase("awaiting_verification");
+    scanIdRef.current = crypto.randomUUID();
+    window.history.replaceState(null, "", `/checkout/?scan_id=${encodeURIComponent(scanIdRef.current)}`);
+    termsAcceptedRef.current = false;
+    immediatePerformanceRequestedRef.current = false;
+    customerEmailRef.current = "";
+    setTermsAccepted(false);
+    setImmediatePerformanceRequested(false);
+    setCustomerEmail("");
+    setReady(false);
+    setStatus("");
+    setError("");
+    resetTurnstile();
+  }, [resetTurnstile]);
 
   useEffect(() => {
     if (!checkoutRequirementsMet || !turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
@@ -273,6 +300,7 @@ export function PaymentElementClient() {
             autoComplete="email"
             value={customerEmail}
             onChange={(event) => updateCustomerEmail(event.target.value)}
+            disabled={checkoutLocked}
             className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
             required
           />
@@ -283,6 +311,7 @@ export function PaymentElementClient() {
             type="checkbox"
             checked={termsAccepted}
             onChange={(event) => updateTermsAccepted(event.target.checked)}
+            disabled={checkoutLocked}
             className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
           />
           <span>
@@ -295,6 +324,7 @@ export function PaymentElementClient() {
             type="checkbox"
             checked={immediatePerformanceRequested}
             onChange={(event) => updateImmediatePerformanceRequested(event.target.checked)}
+            disabled={checkoutLocked}
             className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
           />
           <span>
@@ -324,6 +354,7 @@ export function PaymentElementClient() {
         </div>
       ) : null}
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
+      {checkoutLocked ? <button type="button" onClick={startOver} className="mt-4 text-sm font-semibold text-blue-700 underline">Start over with a different email</button> : null}
       <section aria-label="Pre-contract payment summary" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
         <h3 className="font-semibold text-slate-950">Workflow Preflight</h3>
         <p>One-time payment: USD $49. No subscription.</p>

@@ -336,7 +336,7 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     /test-mode checkout remains operational and records server-derived consent metadata/,
     /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/,
     /a failed consent metadata update withholds the client secret until a stable retry succeeds/,
-    /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
+    /valid signed webhook records one entitlement and persistent confirmation dispatch suppresses late replays/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
     /paid payment recovery issues a verifiable short-lived entitlement/,

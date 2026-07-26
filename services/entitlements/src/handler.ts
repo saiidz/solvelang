@@ -16,7 +16,7 @@ const stripeClient = new Stripe(environment.STRIPE_SECRET_KEY, {
 });
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const stripe = createStripeGateway(stripeClient);
-const store = createEntitlementStore(documentClient, environment.ENTITLEMENTS_TABLE);
+const store = createEntitlementStore(documentClient, environment.ENTITLEMENTS_TABLE, environment.CONFIRMATION_DISPATCH_TABLE, environment.WITHDRAWAL_THROTTLE_TABLE);
 const turnstile = createTurnstileGateway({
   secret: environment.TURNSTILE_SECRET_KEY,
   expectedHostname: new URL(environment.SITE_ORIGIN).hostname,

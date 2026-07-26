@@ -13,11 +13,13 @@ async function source(relativePath: string): Promise<string> {
 }
 
 test("Terms and Refund Policy pages contain their required customer-facing headings", async () => {
-  const [terms, refundPolicy, legalContent] = await Promise.all([
+  const [terms, refundPolicy, legalContent, canonicalLegalContent] = await Promise.all([
     source("app/terms/page.tsx"),
     source("app/refund-policy/page.tsx"),
+    source("app/legal-content.json"),
     readFile(path.join(siteRoot, "../services/entitlements/src/legal-content.json"), "utf8"),
   ]);
+  assert.equal(legalContent, canonicalLegalContent, "the build-local legal artifact must match the canonical entitlement contract exactly");
 
   for (const heading of ["Terms of Use", "Automated outputs and customer review", "Payments and immediate digital performance", "Consumer remedies and business liability"]) {
     assert.match(`${terms}\n${legalContent}`, new RegExp(heading));

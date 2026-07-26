@@ -11,6 +11,8 @@ const environmentSchema = z.object({
   TURNSTILE_SECRET_KEY: z.string().min(1),
   ENTITLEMENT_SIGNING_SECRET: z.string().min(32),
   ENTITLEMENTS_TABLE: z.string().min(1),
+  CONFIRMATION_DISPATCH_TABLE: z.string().min(1),
+  WITHDRAWAL_THROTTLE_TABLE: z.string().min(1),
   SITE_ORIGIN: z.string().url(),
 }).superRefine((value, context) => {
   const expectedPrefix = value.ENTITLEMENT_MODE === "production" ? "sk_live_" : "sk_test_";

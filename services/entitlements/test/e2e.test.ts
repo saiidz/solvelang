@@ -61,6 +61,8 @@ function responseBody(response: { body?: string }): Record<string, unknown> {
 
 class MemoryStore implements EntitlementStore {
   records = new Map<string, EntitlementRecord>();
+  dispatches = new Map<string, "in_progress" | "queued">();
+  throttleAttempts = new Map<string, number>();
   writes = 0;
   refundWrites = 0;
 
@@ -87,6 +89,28 @@ class MemoryStore implements EntitlementStore {
 
   async get(scanIdToFind: string): Promise<EntitlementRecord | undefined> {
     return this.records.get(scanIdToFind);
+  }
+
+  async reserveConfirmationDispatch(key: string): Promise<"created" | "in_progress" | "queued"> {
+    const existing = this.dispatches.get(key);
+    if (existing) return existing;
+    this.dispatches.set(key, "in_progress");
+    return "created";
+  }
+
+  async markConfirmationDispatchQueued(key: string): Promise<void> {
+    this.dispatches.set(key, "queued");
+  }
+
+  async releaseConfirmationDispatch(key: string): Promise<void> {
+    this.dispatches.delete(key);
+  }
+
+  async consumeWithdrawalRateLimit(key: string): Promise<boolean> {
+    const attempts = this.throttleAttempts.get(key) ?? 0;
+    if (attempts >= 5) return false;
+    this.throttleAttempts.set(key, attempts + 1);
+    return true;
   }
 }
 
@@ -422,8 +446,8 @@ test("explicitly enabled production checkout creates a PaymentIntent", async () 
   assert.equal(checkoutRequests.length, 1);
 });
 
-test("valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent", async () => {
-  const { service, store } = createFixture();
+test("valid signed webhook records one entitlement and persistent confirmation dispatch suppresses late replays", async () => {
+  const { service, store, confirmations } = createFixture();
   const event = apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" });
   const duplicate = apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-duplicate-signature" });
 
@@ -437,6 +461,8 @@ test("valid signed webhook records one entitlement and replay or duplicate deliv
   assert.deepEqual(responseBody(first), { received: true });
   assert.deepEqual(responseBody(replay), { received: true });
   assert.equal(store.writes, 1);
+  assert.equal(confirmations.length, 1);
+  assert.equal(store.dispatches.get(`contract:${paymentIntentId}:${termsVersion}`), "queued");
   assert.deepEqual(store.records.get(scanId), {
     scanId,
     sessionId: paymentIntentId,

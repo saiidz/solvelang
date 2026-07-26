@@ -51,6 +51,10 @@ function fixture() {
     async putIfAbsent() { throw new Error(forbidden.join(" | ")); },
     async updateRefundStatus() { throw new Error(forbidden.join(" | ")); },
     async get() { throw new Error(forbidden.join(" | ")); },
+    async reserveConfirmationDispatch() { throw new Error(forbidden.join(" | ")); },
+    async markConfirmationDispatchQueued() { throw new Error(forbidden.join(" | ")); },
+    async releaseConfirmationDispatch() { throw new Error(forbidden.join(" | ")); },
+    async consumeWithdrawalRateLimit() { throw new Error(forbidden.join(" | ")); },
   };
   const service = createEntitlementService({
     config: {

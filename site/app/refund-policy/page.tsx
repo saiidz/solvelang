@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import legalContent from "../../../services/entitlements/src/legal-content.json";
+import legalContent from "../legal-content.json";
 
 const refundPolicySections = legalContent.refundPolicy as [string, string[]][];
 

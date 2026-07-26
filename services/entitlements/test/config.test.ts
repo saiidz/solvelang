@@ -8,7 +8,9 @@ const valid = {
   STRIPE_WEBHOOK_SECRET: "whsec_local_only",
   TURNSTILE_SECRET_KEY: "turnstile-test-secret",
   ENTITLEMENT_SIGNING_SECRET: "local-signing-secret-at-least-32-bytes",
-  ENTITLEMENTS_TABLE: "entitlements-test",
+    ENTITLEMENTS_TABLE: "entitlements-test",
+    CONFIRMATION_DISPATCH_TABLE: "confirmation-dispatch-test",
+    WITHDRAWAL_THROTTLE_TABLE: "withdrawal-throttle-test",
   SITE_ORIGIN: "https://www.solve-lang.com",
 };
 

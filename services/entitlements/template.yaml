@@ -101,6 +101,35 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  ConfirmationDispatchTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: dispatchKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: dispatchKey
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  WithdrawalThrottleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: throttleKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: throttleKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   EntitlementApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -122,6 +151,7 @@ Resources:
       ContentBasedDeduplication: false
       KmsMasterKeyId: alias/aws/sqs
       MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 90
 
   ConfirmationQueue:
     Type: AWS::SQS::Queue
@@ -130,9 +160,10 @@ Resources:
       ContentBasedDeduplication: false
       KmsMasterKeyId: alias/aws/sqs
       MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 90
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ConfirmationDeadLetterQueue.Arn
-        maxReceiveCount: 3
+        maxReceiveCount: 5
 
   EntitlementFunction:
     Type: AWS::Serverless::Function
@@ -166,9 +197,15 @@ Resources:
           TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret
           ENTITLEMENTS_TABLE: !Ref EntitlementsTable
+          CONFIRMATION_DISPATCH_TABLE: !Ref ConfirmationDispatchTable
+          WITHDRAWAL_THROTTLE_TABLE: !Ref WithdrawalThrottleTable
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntitlementsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfirmationDispatchTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WithdrawalThrottleTable
         - SQSSendMessagePolicy:
             QueueName: !GetAtt ConfirmationQueue.QueueName
       Events:
@@ -238,7 +275,7 @@ Resources:
             Effect: Allow
             Action:
               - ses:SendEmail
-            Resource: "*"
+            Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${DurableConfirmationSender}
       Events:
         Confirmations:
           Type: SQS

@@ -111,6 +111,10 @@ export type EntitlementStore = {
     updatedAt: string,
   ): Promise<"updated" | "duplicate_or_missing">;
   get(scanId: string): Promise<EntitlementRecord | undefined>;
+  reserveConfirmationDispatch(key: string, createdAt: string): Promise<"created" | "in_progress" | "queued">;
+  markConfirmationDispatchQueued(key: string): Promise<void>;
+  releaseConfirmationDispatch(key: string): Promise<void>;
+  consumeWithdrawalRateLimit(key: string, expiresAt: number): Promise<boolean>;
 };
 
 type SafeLogger = {
@@ -282,8 +286,14 @@ export function createEntitlementService({
       if (!config.durableConfirmationEnabled) {
         throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
       }
-      try {
-        await durableConfirmation.queueContractConfirmation({
+      const dispatchKey = `contract:${paymentIntent.id}:${TERMS_VERSION}`;
+      const dispatchState = await store.reserveConfirmationDispatch(dispatchKey, new Date(now()).toISOString());
+      if (dispatchState === "in_progress") {
+        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+      }
+      if (dispatchState === "created") {
+        try {
+          await durableConfirmation.queueContractConfirmation({
           email: paymentIntent.receiptEmail,
           paymentIntentId: paymentIntent.id,
           product: "Workflow Preflight",
@@ -296,10 +306,13 @@ export function createEntitlementService({
           supportEmail: "hello@solve-lang.com",
           termsText: CONTRACT_TERMS_TEXT,
           refundPolicyText: CONTRACT_REFUND_POLICY_TEXT,
-          idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
-        });
-      } catch {
-        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+            idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
+          });
+          await store.markConfirmationDispatchQueued(dispatchKey);
+        } catch {
+          await store.releaseConfirmationDispatch(dispatchKey).catch(() => undefined);
+          throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+        }
       }
       const timestamp = now();
       await store.putIfAbsent({
@@ -376,6 +389,10 @@ export function createEntitlementService({
       count: existingAttempt && existingAttempt.resetAt > timestamp ? existingAttempt.count + 1 : 1,
       resetAt: existingAttempt?.resetAt && existingAttempt.resetAt > timestamp ? existingAttempt.resetAt : timestamp + 15 * 60 * 1_000,
     });
+    const rateLimitKey = `withdrawal:${createHash("sha256").update(remoteIp).digest("hex")}:${Math.floor(timestamp / (15 * 60 * 1_000))}`;
+    if (!await store.consumeWithdrawalRateLimit(rateLimitKey, Math.floor(timestamp / 1_000) + 15 * 60)) {
+      return response(429, { error: "Withdrawal requests are temporarily unavailable. Please try again later." });
+    }
     try {
       const verified = await turnstile.verify({ token: turnstileToken, remoteIp, expectedAction: "withdrawal" });
       if (!verified) return response(403, { error: "Verification could not be completed." });
@@ -384,6 +401,8 @@ export function createEntitlementService({
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedName = name.trim().replace(/\s+/g, " ").toLowerCase();
+    const normalizedStatement = statement.trim().replace(/\s+/g, " ");
     let paymentIntent: PaymentIntentSnapshot;
     try {
       paymentIntent = await stripe.payments.retrieve(contractReference);
@@ -402,7 +421,7 @@ export function createEntitlementService({
         statement,
         receivedAt,
         supportEmail: "hello@solve-lang.com",
-        idempotencyKey: `withdrawal-${createHash("sha256").update(`${contractReference}:${requestId}`).digest("hex")}`,
+        idempotencyKey: `withdrawal-${createHash("sha256").update(`${requestId}:${contractReference}:${normalizedName}:${normalizedEmail}:${normalizedStatement}`).digest("hex")}`,
       });
     } catch {
       return response(503, { error: "Withdrawal confirmation is temporarily unavailable." });
