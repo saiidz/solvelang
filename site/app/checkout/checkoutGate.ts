@@ -1,3 +1,5 @@
+export const TERMS_VERSION = "2026-07-26";
+
 export type CheckoutGateState =
   | { phase: "awaiting_verification" }
   | { phase: "creating_checkout"; token: string }
@@ -41,5 +43,11 @@ export function checkoutConfigurationError({
   if (scanId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scanId)) {
     return "This checkout link is missing a valid scan ID.";
   }
+  return undefined;
+}
+
+export function checkoutConsentError(termsAccepted: boolean, termsVersion: string): string | undefined {
+  if (!termsAccepted) return "Accept the Terms of Use and Refund Policy before checkout can start.";
+  if (termsVersion !== TERMS_VERSION) return "Checkout terms are out of date. Refresh the page and try again.";
   return undefined;
 }

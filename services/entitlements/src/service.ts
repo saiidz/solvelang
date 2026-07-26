@@ -1,12 +1,15 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { z } from "zod";
 import { issueEntitlement } from "./token.js";
+import { TERMS_VERSION } from "./terms.js";
 import type { TurnstileGateway } from "./turnstile.js";
 
 const PRODUCT = "workflow-preflight-v1";
 const checkoutSchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1).max(2_048),
+  termsAccepted: z.literal(true),
+  termsVersion: z.literal(TERMS_VERSION),
 }).strict();
 const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
 const conversionEventSchema = z.object({
@@ -47,7 +50,12 @@ export type StripeEvent = {
 export type StripeGateway = {
   payments: {
     create(params: {
-      metadata: { scanId: string; product: typeof PRODUCT };
+      metadata: {
+        scanId: string;
+        product: typeof PRODUCT;
+        termsVersion: typeof TERMS_VERSION;
+        termsAcceptedAt: string;
+      };
     }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
     retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot>;
   };
@@ -171,7 +179,7 @@ export function createEntitlementService({
     if (!config.checkoutEnabled) {
       throw new RequestError(503, "Checkout is temporarily unavailable.", "checkout_disabled");
     }
-    const { scanId, turnstileToken } = checkoutSchema.parse(parseJson(event));
+    const { scanId, turnstileToken, termsVersion } = checkoutSchema.parse(parseJson(event));
     let verified: boolean;
     try {
       verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp });
@@ -185,7 +193,12 @@ export function createEntitlementService({
     let paymentIntent: PaymentIntentSnapshot;
     try {
       paymentIntent = await stripe.payments.create({
-        metadata: { scanId, product: PRODUCT },
+        metadata: {
+          scanId,
+          product: PRODUCT,
+          termsVersion,
+          termsAcceptedAt: new Date(now()).toISOString(),
+        },
       }, `preflight-${scanId}`);
     } catch (error) {
       throw stripeFailure(error);

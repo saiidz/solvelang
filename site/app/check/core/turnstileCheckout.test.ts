@@ -3,10 +3,12 @@ import test from "node:test";
 import {
   beginCheckout,
   checkoutConfigurationError,
+  checkoutConsentError,
   checkoutCreated,
   checkoutFailed,
   expireTurnstile,
   initialCheckoutGate,
+  TERMS_VERSION,
 } from "../../checkout/checkoutGate";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
@@ -21,6 +23,15 @@ test("a missing public Turnstile site key shows a safe configuration error befor
     }),
     "Checkout verification is not configured.",
   );
+});
+
+test("checkout requires current explicit Terms and Refund Policy consent before verification", () => {
+  assert.equal(
+    checkoutConsentError(false, TERMS_VERSION),
+    "Accept the Terms of Use and Refund Policy before checkout can start.",
+  );
+  assert.equal(checkoutConsentError(true, "2026-01-01"), "Checkout terms are out of date. Refresh the page and try again.");
+  assert.equal(checkoutConsentError(true, TERMS_VERSION), undefined);
 });
 
 test("Turnstile expiry before checkout creation requires a new verification", () => {

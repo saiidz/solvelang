@@ -567,6 +567,8 @@ else {
                 <p className="font-semibold text-white">Contact</p>
                 <a className="block hover:text-white" href="mailto:hello@solve-lang.com">hello@solve-lang.com</a>
                 <Link className="block hover:text-white" href="/audit/">Workflow X-Ray</Link>
+                <Link className="block hover:text-white" href="/terms/">Terms of Use</Link>
+                <Link className="block hover:text-white" href="/refund-policy/">Refund Policy</Link>
               </div>
             </div>
           </div>

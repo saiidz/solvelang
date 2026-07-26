@@ -10,11 +10,23 @@ import {
 } from "../src/service.js";
 import { issueEntitlement, verifyEntitlement } from "../src/token.js";
 import { createStripeGateway } from "../src/stripe.js";
+import { TERMS_VERSION } from "../src/terms.js";
 
 const scanId = "6c8e4b95-1e66-4dc3-9b67-af15f0742875";
 const paymentIntentId = "pi_test_paid_payment";
 const signingSecret = "entitlement-test-secret-at-least-32-bytes";
 const nowMs = Date.parse("2026-07-20T00:00:00.000Z");
+const termsVersion = TERMS_VERSION;
+
+function checkoutRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    scanId,
+    turnstileToken: "turnstile-valid-token",
+    termsAccepted: true,
+    termsVersion,
+    ...overrides,
+  };
+}
 
 function apiEvent(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): APIGatewayProxyEventV2 {
   return {
@@ -148,7 +160,7 @@ test("health exposes only a fixed non-sensitive test-mode readiness contract", a
 
 test("test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata", async () => {
   const { service, checkoutRequests, turnstileRequests } = createFixture();
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest()));
   assert.equal(result.statusCode, 200);
   assert.deepEqual(responseBody(result), {
     clientSecret: "pi_test_paid_payment_secret_test",
@@ -159,20 +171,43 @@ test("test-mode checkout remains operational and returns a PaymentIntent client 
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
-      metadata: { scanId, product: "workflow-preflight-v1" },
+      metadata: {
+        scanId,
+        product: "workflow-preflight-v1",
+        termsVersion,
+        termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+      },
     },
   });
 });
 
+test("missing, false, and unsupported terms consent fail before Turnstile or Stripe", async () => {
+  const requests = [
+    { scanId, turnstileToken: "turnstile-valid-token" },
+    checkoutRequest({ termsAccepted: false }),
+    checkoutRequest({ termsVersion: "unsupported-version" }),
+    checkoutRequest({ termsAcceptedAt: "client-supplied-value" }),
+  ];
+
+  for (const request of requests) {
+    const fixture = createFixture();
+    const result = await fixture.service(apiEvent("POST", "/checkout", request));
+    assert.equal(result.statusCode, 400);
+    assert.deepEqual(responseBody(result), { error: "Invalid request." });
+    assert.equal(fixture.turnstileRequests.length, 0);
+    assert.equal(fixture.checkoutRequests.length, 0);
+  }
+});
+
 test("checkout rejects missing and unavailable Turnstile verification before creating a PaymentIntent", async () => {
   const missing = createFixture();
-  const missingToken = await missing.service(apiEvent("POST", "/checkout", { scanId }));
+  const missingToken = await missing.service(apiEvent("POST", "/checkout", checkoutRequest({ turnstileToken: undefined })));
   assert.equal(missingToken.statusCode, 400);
   assert.equal(missing.checkoutRequests.length, 0);
   assert.equal(missing.turnstileRequests.length, 0);
 
   const unavailable = createFixture(undefined, {}, new Error("turnstile unavailable"));
-  const unavailableResult = await unavailable.service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const unavailableResult = await unavailable.service(apiEvent("POST", "/checkout", checkoutRequest()));
   assert.equal(unavailableResult.statusCode, 503);
   assert.deepEqual(responseBody(unavailableResult), { error: "Verification is temporarily unavailable." });
   assert.equal(unavailable.checkoutRequests.length, 0);
@@ -180,7 +215,7 @@ test("checkout rejects missing and unavailable Turnstile verification before cre
 
 test("checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent", async () => {
   const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, {}, false);
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-invalid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest({ turnstileToken: "turnstile-invalid-token" })));
 
   assert.equal(result.statusCode, 403);
   assert.deepEqual(responseBody(result), { error: "Verification could not be completed." });
@@ -190,7 +225,7 @@ test("checkout rejects an unsuccessful Turnstile verification before creating a 
 
 test("production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile", async () => {
   const { service, checkoutRequests, turnstileRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: false });
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", { scanId, opaque: "must-not-be-parsed" }));
 
   assert.equal(result.statusCode, 503);
   assert.deepEqual(responseBody(result), { error: "Checkout is temporarily unavailable." });
@@ -200,7 +235,7 @@ test("production bootstrap denies checkout without creating a PaymentIntent or v
 
 test("explicitly enabled production checkout creates a PaymentIntent", async () => {
   const { service, checkoutRequests } = createFixture(undefined, { mode: "production", checkoutEnabled: true });
-  const result = await service(apiEvent("POST", "/checkout", { scanId, turnstileToken: "turnstile-valid-token" }));
+  const result = await service(apiEvent("POST", "/checkout", checkoutRequest()));
 
   assert.equal(result.statusCode, 200);
   assert.equal(checkoutRequests.length, 1);
@@ -316,7 +351,14 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expand
   } as unknown as Stripe;
   const gateway = createStripeGateway(client);
 
-  await gateway.payments.create({ metadata: { scanId, product: "workflow-preflight-v1" } }, "idempotent-scan");
+  await gateway.payments.create({
+    metadata: {
+      scanId,
+      product: "workflow-preflight-v1",
+      termsVersion,
+      termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+    },
+  }, "idempotent-scan");
   const snapshot = await gateway.payments.retrieve(paymentIntentId);
 
   assert.deepEqual(calls[0], {
@@ -326,7 +368,12 @@ test("Stripe gateway creates exactly one $49 card PaymentIntent and reads expand
       currency: "usd",
       payment_method_types: ["card"],
       description: "SolveLang Workflow Preflight Report",
-      metadata: { scanId, product: "workflow-preflight-v1" },
+      metadata: {
+        scanId,
+        product: "workflow-preflight-v1",
+        termsVersion,
+        termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+      },
     }, { idempotencyKey: "idempotent-scan" }],
   });
   assert.deepEqual(calls[1], { method: "retrieve", args: [paymentIntentId, { expand: ["latest_charge"] }] });

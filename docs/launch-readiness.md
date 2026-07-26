@@ -40,6 +40,7 @@ Provide these through a protected local shell or CI environment. Do not commit t
 - `NEXT_PUBLIC_ENTITLEMENT_API_BASE`
 - `NPM_SCOPE_OWNERSHIP_VERIFIED=true`
 - `NPM_PRODUCTION_ENVIRONMENT_PROTECTED=true`
+- `LEGAL_CHECKOUT_REVIEW_VERIFIED=true` only after the owner completes the checkout legal checklist.
 
 The online run uses secrets only for authenticated probes. Reports contain control names, status, safe reasons, timestamps, commit SHA, and owner actions. They do not contain credential values, customer data, workflow JSON, report contents, or provider response bodies.
 
@@ -57,6 +58,7 @@ The control center verifies:
 - static privacy contracts that keep workflow/report payloads out of network requests and server error logs;
 - deterministic Stripe lifecycle coverage, including refund revocation, replay, expiry, signature rejection, and browser recovery;
 - server-side Turnstile verification before checkout can create a PaymentIntent;
+- enforceable checkout consent, versioned Terms and Refund Policy links, and a legal-review blocker before production checkout enablement;
 - the AWS stack, matching Stripe account, registered webhook, entitlement health endpoint, and public site when `--online` is used.
 
 Entitlement CI executes the deterministic lifecycle, privacy, browser recovery, and launch-control tests before `node ops/launch/assert-entitlement-gates.mjs` can pass. The code gates therefore require both the implementation contracts and their regression suites; a placeholder test filename is insufficient.

@@ -146,15 +146,20 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
   if (environment.ENTITLEMENT_MODE === "production") {
     const enabled = environment.CHECKOUT_ENABLED === "true";
     const signedWebhookVerified = environment.WEBHOOK_SIGNED_DELIVERY_VERIFIED === "true";
+    const legalReviewVerified = environment.LEGAL_CHECKOUT_REVIEW_VERIFIED === "true";
     controls.push(
-      enabled && signedWebhookVerified
-        ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after the protected signed-webhook verification confirmation.")
+      enabled && signedWebhookVerified && legalReviewVerified
+        ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after protected webhook and legal-review confirmations.")
         : control(
             "production-checkout-enablement",
             "Production checkout enablement",
             "blocked",
-            enabled ? "Production checkout cannot be enabled until signed webhook verification is confirmed." : "Production checkout remains disabled.",
-            "After the real webhook secret is installed and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
+            enabled && !signedWebhookVerified
+              ? "Production checkout cannot be enabled until signed webhook verification is confirmed."
+              : enabled && !legalReviewVerified
+                ? "Production checkout cannot be enabled until the legal checkout review is confirmed."
+                : "Production checkout remains disabled.",
+            "After the real webhook secret is installed, the legal checklist is complete, and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true, LEGAL_CHECKOUT_REVIEW_VERIFIED=true, and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
           ),
     );
   } else {
@@ -300,14 +305,19 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const checkoutGateTest = await readFile(path.join(root, "site/app/check/core/turnstileCheckout.test.ts"), "utf8");
   const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
   const paymentClient = await readFile(path.join(root, "site/app/checkout/PaymentElementClient.tsx"), "utf8");
+  const checkoutTerms = await readFile(path.join(root, "site/app/checkout/checkoutGate.ts"), "utf8");
+  const entitlementTerms = await readFile(path.join(root, "services/entitlements/src/terms.ts"), "utf8");
+  const termsPage = await readFile(path.join(root, "site/app/terms/page.tsx"), "utf8");
+  const refundPolicyPage = await readFile(path.join(root, "site/app/refund-policy/page.tsx"), "utf8");
+  const legalChecklist = await readFile(path.join(root, "docs/checkout-legal-owner-checklist.md"), "utf8");
   const turnstileGateway = await readFile(path.join(root, "services/entitlements/src/turnstile.ts"), "utf8");
   const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)
     && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)
     && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate)
     && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
-  const privacySafe = /body:\s*JSON\.stringify\(\{\s*scanId,\s*turnstileToken:\s*token\s*\}\)/.test(paymentClient)
+  const privacySafe = /body:\s*JSON\.stringify\(\{[\s\S]*scanId,[\s\S]*turnstileToken:\s*token,[\s\S]*termsAccepted:\s*true,[\s\S]*termsVersion:\s*TERMS_VERSION/.test(paymentClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
-    && /metadata:\s*\{\s*scanId,\s*product:\s*PRODUCT\s*\}/.test(entitlementService)
+    && /metadata:\s*\{[\s\S]*scanId,[\s\S]*product:\s*PRODUCT,[\s\S]*termsVersion,[\s\S]*termsAcceptedAt: new Date\(now\(\)\)\.toISOString\(\)/.test(entitlementService)
     && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
     && /conversion logging accepts only allowlisted event names/.test(entitlementPrivacyTest)
     && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
@@ -329,6 +339,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /refundStatus === ["']full["']/.test(entitlementService);
   const checkoutGate = /CHECKOUT_ENABLED:\s*z\.enum\(\["true", "false"\]\)\.default\("false"\)/.test(entitlementConfig)
     && /TURNSTILE_SECRET_KEY:\s*z\.string\(\)\.min\(1\)/.test(entitlementConfig)
+    && /termsAccepted:\s*z\.literal\(true\)/.test(entitlementService)
+    && /termsVersion:\s*z\.literal\(TERMS_VERSION\)/.test(entitlementService)
     && /if \(!config\.checkoutEnabled\)[\s\S]*RequestError\(503, "Checkout is temporarily unavailable\."/.test(entitlementService)
     && /verified = await turnstile\.verify[\s\S]*paymentIntent = await stripe\.payments\.create/.test(entitlementService)
     && /checkoutEnabled: environment\.CHECKOUT_ENABLED === "true"/.test(entitlementHandler)
@@ -339,15 +351,23 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /ProductionCheckoutRequiresVerifiedWebhook:[\s\S]*!Equals \[!Ref CheckoutEnabled, "false"\][\s\S]*!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/.test(entitlementTemplate)
     && /CHECKOUT_ENABLED:[\s\S]*WEBHOOK_SIGNED_DELIVERY_VERIFIED/.test(entitlementDeployWorkflow)
     && /TURNSTILE_SECRET_KEY:[\s\S]*secrets\.TURNSTILE_SECRET_KEY/.test(entitlementDeployWorkflow)
+    && /LEGAL_CHECKOUT_REVIEW_VERIFIED:[\s\S]*LegalCheckoutReviewVerified/.test(entitlementDeployWorkflow)
+    && /LegalCheckoutReviewVerified:[\s\S]*Default: "false"/.test(entitlementTemplate)
     && /checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent/.test(entitlementE2eTest)
     && /production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile/.test(entitlementE2eTest)
     && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest)
+    && /missing, false, and unsupported terms consent fail before Turnstile or Stripe/.test(entitlementE2eTest)
     && /expectedHostname/.test(turnstileGateway)
     && /idempotency_key/.test(turnstileGateway)
     && /NEXT_PUBLIC_TURNSTILE_SITE_KEY/.test(paymentClient)
     && /action: "checkout"/.test(paymentClient)
     && /Turnstile expiry after a client secret mounts preserves the payment form state/.test(checkoutGateTest)
-    && /duplicate Turnstile callbacks cannot start concurrent checkout requests/.test(checkoutGateTest);
+    && /duplicate Turnstile callbacks cannot start concurrent checkout requests/.test(checkoutGateTest)
+    && /export const TERMS_VERSION = "2026-07-26"/.test(checkoutTerms)
+    && /export const TERMS_VERSION = "2026-07-26"/.test(entitlementTerms)
+    && /Terms of Use/.test(termsPage)
+    && /Refund Policy/.test(refundPolicyPage)
+    && /LEGAL_CHECKOUT_REVIEW_VERIFIED/.test(legalChecklist);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",

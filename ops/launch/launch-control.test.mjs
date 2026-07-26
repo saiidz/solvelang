@@ -50,6 +50,7 @@ const validEnvironment = {
   NPM_PRODUCTION_ENVIRONMENT_PROTECTED: "true",
   CHECKOUT_ENABLED: "true",
   WEBHOOK_SIGNED_DELIVERY_VERIFIED: "true",
+  LEGAL_CHECKOUT_REVIEW_VERIFIED: "true",
 };
 
 test("missing launch prerequisites fail closed using names only", () => {
@@ -148,6 +149,25 @@ test("production checkout cannot be enabled before signed webhook verification i
   });
 
   assert.equal(report.controls.find((control) => control.id === "production-checkout-enablement")?.status, "blocked");
+});
+
+test("production checkout cannot be enabled before legal checkout review is confirmed", () => {
+  const report = evaluateLaunch({
+    environment: {
+      ...validEnvironment,
+      ENTITLEMENT_MODE: "production",
+      STRIPE_SECRET_KEY: "sk_live_secret-never-print",
+      ENTITLEMENT_STACK_NAME: "solvelang-entitlements-production",
+      LEGAL_CHECKOUT_REVIEW_VERIFIED: "false",
+    },
+    repository,
+    probes: {},
+    now: "2026-07-26T00:00:00.000Z",
+  });
+
+  const control = report.controls.find((item) => item.id === "production-checkout-enablement");
+  assert.equal(control?.status, "blocked");
+  assert.match(control?.detail ?? "", /legal checkout review/);
 });
 
 test("package, lock, release tag, and npm drift is a hard failure", () => {
@@ -302,6 +322,8 @@ test("SAM rejects production checkout enablement without signed-webhook verifica
   assert.match(template, /ProductionCheckoutRequiresVerifiedWebhook:/);
   assert.match(template, /!Equals \[!Ref CheckoutEnabled, "false"\]/);
   assert.match(template, /!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/);
+  assert.match(template, /LegalCheckoutReviewVerified:/);
+  assert.match(template, /!Equals \[!Ref LegalCheckoutReviewVerified, "true"\]/);
 });
 
 test("GitHub metadata satisfies npm gates and reports a missing entitlement test environment", () => {

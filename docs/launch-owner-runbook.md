@@ -13,6 +13,7 @@ Environment variables:
 - `ENTITLEMENT_STACK_NAME` (a different stack name in each environment)
 - `CHECKOUT_ENABLED` (`false` for every production bootstrap deployment; set to `true` only after the signed webhook verification step)
 - `WEBHOOK_SIGNED_DELIVERY_VERIFIED` (`false` until the real production webhook has accepted a Stripe-signed delivery with HTTP 200)
+- `LEGAL_CHECKOUT_REVIEW_VERIFIED` (`false` until the owner completes and verifies the legal checkout checklist)
 
 Environment secrets:
 
@@ -68,9 +69,10 @@ The first production setup requires three deployments. `POST /checkout` returns 
 5. Replace the bootstrap value in `entitlement-production` with Stripe's actual live `whsec_...` signing secret.
 6. Run the second production deployment with checkout still disabled.
 7. Send a real Stripe-signed test event from the live destination and confirm the Stripe-signed event returns HTTP 200.
-8. Only after that confirmation, set `WEBHOOK_SIGNED_DELIVERY_VERIFIED=true` and `CHECKOUT_ENABLED=true` in the protected production environment.
-9. Run the third production deployment. The workflow rejects `CHECKOUT_ENABLED=true` unless `WEBHOOK_SIGNED_DELIVERY_VERIFIED=true` is already configured.
-10. Verify `GET /health`, then only then point or activate the live frontend with the matching production API base and publishable key.
+8. Complete every item in the [checkout legal owner checklist](checkout-legal-owner-checklist.md). This includes Terms and Refund Policy review, deployed legal pages, clickwrap verification, registered-office and company-registration verification, CUI/VAT verification, support-contact verification, and applicable consumer-law review. Do not claim these details are complete before they are verified.
+9. Only after that confirmation, set `WEBHOOK_SIGNED_DELIVERY_VERIFIED=true`, `LEGAL_CHECKOUT_REVIEW_VERIFIED=true`, and `CHECKOUT_ENABLED=true` in the protected production environment.
+10. Run the third production deployment. The workflow rejects `CHECKOUT_ENABLED=true` unless signed-webhook and legal-review controls are already configured.
+11. Verify `GET /health`, then only then point or activate the live frontend with the matching production API base and publishable key.
 
 The bootstrap value must not remain configured after this sequence. Never weaken webhook verification, expose the secret, accept an unsigned event, or enable checkout early to avoid the guarded deployments.
 

@@ -6,10 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   beginCheckout,
   checkoutConfigurationError,
+  checkoutConsentError,
   checkoutCreated,
   checkoutFailed,
   expireTurnstile,
   initialCheckoutGate,
+  TERMS_VERSION,
   type CheckoutGateState,
 } from "./checkoutGate";
 
@@ -56,10 +58,12 @@ export function PaymentElementClient() {
   const stripeRef = useRef<Awaited<ReturnType<typeof loadStripe>>>(null);
   const scanIdRef = useRef("");
   const checkoutGateRef = useRef<CheckoutGateState>(initialCheckoutGate());
+  const termsAcceptedRef = useRef(false);
   const configuredRef = useRef(!checkoutConfiguration.error);
   const mountedRef = useRef(true);
   const [error, setError] = useState(checkoutConfiguration.error ?? "");
   const [turnstileReady, setTurnstileReady] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [ready, setReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState("");
@@ -71,11 +75,18 @@ export function PaymentElementClient() {
 
   const createCheckout = useCallback(async (token: string) => {
     try {
+      const consentError = checkoutConsentError(termsAcceptedRef.current, TERMS_VERSION);
+      if (consentError) throw new Error(consentError);
       const scanId = scanIdRef.current;
       const response = await fetch(`${apiBase}/checkout`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scanId, turnstileToken: token }),
+        body: JSON.stringify({
+          scanId,
+          turnstileToken: token,
+          termsAccepted: true,
+          termsVersion: TERMS_VERSION,
+        }),
       });
       const body = (await response.json()) as { clientSecret?: string; error?: string };
       if (!response.ok || !body.clientSecret) throw new Error(body.error || "Payment could not be started.");
@@ -122,6 +133,11 @@ export function PaymentElementClient() {
   }, [resetTurnstile]);
 
   const beginVerifiedCheckout = useCallback((token: string) => {
+    const consentError = checkoutConsentError(termsAcceptedRef.current, TERMS_VERSION);
+    if (consentError) {
+      setError(consentError);
+      return;
+    }
     const scanId = new URLSearchParams(window.location.search).get("scan_id") ?? "";
     const configurationError = checkoutConfigurationError({ apiBase, publishableKey, turnstileSiteKey, scanId });
     if (configurationError) {
@@ -143,8 +159,14 @@ export function PaymentElementClient() {
     setError(message);
   }, []);
 
+  const updateTermsAccepted = useCallback((accepted: boolean) => {
+    termsAcceptedRef.current = accepted;
+    setTermsAccepted(accepted);
+    if (accepted) setError("");
+  }, []);
+
   useEffect(() => {
-    if (!turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
+    if (!termsAccepted || !turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
 
     const widgetId = window.turnstile.render(turnstileContainerRef.current, {
       sitekey: turnstileSiteKey,
@@ -160,7 +182,7 @@ export function PaymentElementClient() {
       window.turnstile?.remove(widgetId);
       turnstileWidgetRef.current = null;
     };
-  }, [beginVerifiedCheckout, requireFreshVerification, turnstileReady]);
+  }, [beginVerifiedCheckout, requireFreshVerification, termsAccepted, turnstileReady]);
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -207,7 +229,21 @@ export function PaymentElementClient() {
 
   return (
     <div>
-      {turnstileSiteKey ? (
+      <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+        <label className="flex items-start gap-3" htmlFor="checkout-terms-consent">
+          <input
+            id="checkout-terms-consent"
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => updateTermsAccepted(event.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
+          />
+          <span>
+            I agree to the <a href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</a> and <a href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</a>. I request immediate performance and delivery of the digital service and acknowledge that, once processing or delivery begins, I may lose any statutory withdrawal right and the purchase is non-refundable except where required by law.
+          </span>
+        </label>
+      </div>
+      {termsAccepted && turnstileSiteKey ? (
         <Script
           src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
           strategy="afterInteractive"
@@ -220,7 +256,7 @@ export function PaymentElementClient() {
         </div>
       ) : null}
       {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">{status}</div> : null}
-      {turnstileSiteKey ? (
+      {termsAccepted && turnstileSiteKey ? (
         <div className="mb-5">
           <div ref={turnstileContainerRef} className="cf-turnstile" data-sitekey={turnstileSiteKey} data-action="checkout" aria-label="Human verification" />
         </div>
@@ -229,7 +265,7 @@ export function PaymentElementClient() {
       <button
         type="button"
         onClick={() => void submitPayment()}
-        disabled={!ready || submitting}
+        disabled={!termsAccepted || !ready || submitting}
         className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Processing…" : "Pay $49 securely"}

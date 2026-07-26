@@ -84,6 +84,7 @@ jobs:
           ENTITLEMENT_SIGNING_SECRET: ${{ secrets.ENTITLEMENT_SIGNING_SECRET }}
           CHECKOUT_ENABLED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.CHECKOUT_ENABLED || 'false' }}
           WEBHOOK_SIGNED_DELIVERY_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.WEBHOOK_SIGNED_DELIVERY_VERIFIED || 'false' }}
+          LEGAL_CHECKOUT_REVIEW_VERIFIED: ${{ inputs.environment == 'entitlement-test' && 'true' || vars.LEGAL_CHECKOUT_REVIEW_VERIFIED || 'false' }}
           STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         run: |
@@ -107,8 +108,9 @@ jobs:
               [[ "$STACK_NAME" == *production* ]] || { echo "Production stack name must identify the production environment." >&2; exit 1; }
               [[ "$CHECKOUT_ENABLED" == "true" || "$CHECKOUT_ENABLED" == "false" ]] || { echo "CHECKOUT_ENABLED must be true or false." >&2; exit 1; }
               [[ "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "true" || "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" == "false" ]] || { echo "WEBHOOK_SIGNED_DELIVERY_VERIFIED must be true or false." >&2; exit 1; }
-              if [[ "$CHECKOUT_ENABLED" == "true" && "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" != "true" ]]; then
-                echo "Production checkout requires a verified Stripe-signed webhook delivery." >&2
+              [[ "$LEGAL_CHECKOUT_REVIEW_VERIFIED" == "true" || "$LEGAL_CHECKOUT_REVIEW_VERIFIED" == "false" ]] || { echo "LEGAL_CHECKOUT_REVIEW_VERIFIED must be true or false." >&2; exit 1; }
+              if [[ "$CHECKOUT_ENABLED" == "true" && ( "$WEBHOOK_SIGNED_DELIVERY_VERIFIED" != "true" || "$LEGAL_CHECKOUT_REVIEW_VERIFIED" != "true" ) ]]; then
+                echo "Production checkout requires verified webhook and legal review controls." >&2
                 exit 1
               fi
               ;;
@@ -128,6 +130,7 @@ jobs:
               EntitlementMode="$ENTITLEMENT_MODE" \
               CheckoutEnabled="$CHECKOUT_ENABLED" \
               WebhookSignedDeliveryVerified="$WEBHOOK_SIGNED_DELIVERY_VERIFIED" \
+              LegalCheckoutReviewVerified="$LEGAL_CHECKOUT_REVIEW_VERIFIED" \
               SiteOrigin="$SITE_ORIGIN" \
               StripeSecretKey="$STRIPE_SECRET_KEY" \
               StripeWebhookSecret="$STRIPE_WEBHOOK_SECRET" \
