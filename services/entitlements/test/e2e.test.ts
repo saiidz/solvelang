@@ -6,8 +6,10 @@ import {
   createEntitlementService,
   type EntitlementRecord,
   type EntitlementStore,
+  type ConfirmationOutboxRecord,
   type StripeGateway,
 } from "../src/service.js";
+import { createHash } from "node:crypto";
 import { issueEntitlement, verifyEntitlement } from "../src/token.js";
 import { createStripeGateway } from "../src/stripe.js";
 import { TERMS_VERSION } from "../src/terms.js";
@@ -61,7 +63,7 @@ function responseBody(response: { body?: string }): Record<string, unknown> {
 
 class MemoryStore implements EntitlementStore {
   records = new Map<string, EntitlementRecord>();
-  dispatches = new Map<string, "in_progress" | "queued">();
+  dispatches = new Map<string, ConfirmationOutboxRecord>();
   throttleAttempts = new Map<string, number>();
   writes = 0;
   refundWrites = 0;
@@ -91,19 +93,21 @@ class MemoryStore implements EntitlementStore {
     return this.records.get(scanIdToFind);
   }
 
-  async reserveConfirmationDispatch(key: string): Promise<"created" | "in_progress" | "queued"> {
-    const existing = this.dispatches.get(key);
-    if (existing) return existing;
-    this.dispatches.set(key, "in_progress");
+  async commitPaidEntitlementAndOutbox(record: EntitlementRecord, outbox: ConfirmationOutboxRecord): Promise<"created" | "existing"> {
+    if (this.dispatches.has(outbox.dispatchKey)) return "existing";
+    this.records.set(record.scanId, record);
+    this.dispatches.set(outbox.dispatchKey, outbox);
+    this.writes += 1;
     return "created";
   }
 
-  async markConfirmationDispatchQueued(key: string): Promise<void> {
-    this.dispatches.set(key, "queued");
+  async getConfirmationOutbox(key: string): Promise<ConfirmationOutboxRecord | undefined> {
+    return this.dispatches.get(key);
   }
 
-  async releaseConfirmationDispatch(key: string): Promise<void> {
-    this.dispatches.delete(key);
+  async markConfirmationOutboxDispatched(key: string): Promise<void> {
+    const outbox = this.dispatches.get(key);
+    if (outbox) this.dispatches.set(key, { ...outbox, state: "dispatched" });
   }
 
   async consumeWithdrawalRateLimit(key: string): Promise<boolean> {
@@ -446,7 +450,7 @@ test("explicitly enabled production checkout creates a PaymentIntent", async () 
   assert.equal(checkoutRequests.length, 1);
 });
 
-test("valid signed webhook records one entitlement and persistent confirmation dispatch suppresses late replays", async () => {
+test("valid signed webhook atomically records one entitlement and durable outbox across late replays", async () => {
   const { service, store, confirmations } = createFixture();
   const event = apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" });
   const duplicate = apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-duplicate-signature" });
@@ -461,8 +465,8 @@ test("valid signed webhook records one entitlement and persistent confirmation d
   assert.deepEqual(responseBody(first), { received: true });
   assert.deepEqual(responseBody(replay), { received: true });
   assert.equal(store.writes, 1);
-  assert.equal(confirmations.length, 1);
-  assert.equal(store.dispatches.get(`contract:${paymentIntentId}:${termsVersion}`), "queued");
+  assert.equal(confirmations.length, 0);
+  assert.deepEqual(store.dispatches.get(`contract:${paymentIntentId}:${termsVersion}`)?.state, "pending");
   assert.deepEqual(store.records.get(scanId), {
     scanId,
     sessionId: paymentIntentId,
@@ -618,12 +622,13 @@ test("invalid webhook signatures are rejected without processing", async () => {
   assert.equal(store.writes, 0);
 });
 
-test("paid payment recovery issues a verifiable short-lived entitlement", async () => {
-  const { service, confirmations } = createFixture();
+test("paid payment recovery issues a verifiable short-lived entitlement after atomic outbox commit", async () => {
+  const { service, store, confirmations } = createFixture();
   await service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const result = await service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
   assert.equal(result.statusCode, 200);
-  assert.deepEqual(confirmations, [{
+  assert.deepEqual(confirmations, []);
+  assert.deepEqual(store.dispatches.get(`contract:${paymentIntentId}:${termsVersion}`)?.payload, {
     email: "buyer@example.test",
     paymentIntentId,
     product: "Workflow Preflight",
@@ -637,7 +642,7 @@ test("paid payment recovery issues a verifiable short-lived entitlement", async 
     termsText: (await import("../src/terms.js")).CONTRACT_TERMS_TEXT,
     refundPolicyText: (await import("../src/terms.js")).CONTRACT_REFUND_POLICY_TEXT,
     idempotencyKey: `contract-confirmation-${paymentIntentId}-${termsVersion}`,
-  }]);
+  });
   const body = responseBody(result);
   assert.equal(body.expiresAt, "2026-07-20T00:15:00.000Z");
   assert.deepEqual(verifyEntitlement(String(body.token), signingSecret, Math.floor(nowMs / 1000)), {
@@ -674,10 +679,8 @@ test("withdrawal requests require durable confirmation and record only a server 
   });
   const { idempotencyKey, ...withdrawalConfirmation } = confirmations[0];
   assert.deepEqual(withdrawalConfirmation, {
-    name: "Buyer Name",
     contractReference: paymentIntentId,
     email: "buyer@example.test",
-    statement: "I hereby withdraw from the Workflow Preflight contract.",
     receivedAt: "2026-07-20T00:00:00.000Z",
     supportEmail: "hello@solve-lang.com",
   });
@@ -719,6 +722,21 @@ test("withdrawal requires its own Turnstile action and limits repeated submissio
   }));
   assert.equal(sixth.statusCode, 429);
   assert.equal(limited.confirmations.length, 5);
+});
+
+test("withdrawal throttling stores a keyed IP pseudonym rather than an enumerable IP hash", async () => {
+  const { service, store } = createFixture();
+  await service(apiEvent("POST", "/withdraw", {
+    name: "Buyer Name",
+    contractReference: paymentIntentId,
+    email: "buyer@example.test",
+    statement: "I hereby withdraw from the Workflow Preflight contract.",
+    turnstileToken: "withdrawal-turnstile-token",
+    requestId: "6494ef6d-c1c6-4a70-a2b4-ae1af835b682",
+  }));
+  const key = [...store.throttleAttempts.keys()][0] ?? "";
+  assert.equal(key.includes("127.0.0.1"), false);
+  assert.equal(key.includes(createHash("sha256").update("127.0.0.1").digest("hex")), false);
 });
 
 test("full refunds revoke entitlement renewal while partial refunds remain eligible", async () => {

@@ -11,6 +11,7 @@ export type CheckoutConsent = {
 export type CheckoutGateState =
   | { phase: "awaiting_verification" }
   | { phase: "creating_checkout"; token: string; consent: CheckoutConsent }
+  | { phase: "checkout_retry_required"; consent: CheckoutConsent }
   | { phase: "payment_ready"; consent: CheckoutConsent };
 
 export function initialCheckoutGate(): CheckoutGateState {
@@ -26,8 +27,18 @@ export function checkoutCreated(state: CheckoutGateState): CheckoutGateState {
   return state.phase === "creating_checkout" ? { phase: "payment_ready", consent: state.consent } : state;
 }
 
-export function checkoutFailed(): CheckoutGateState {
-  return initialCheckoutGate();
+export function checkoutFailed(state: CheckoutGateState, definitelyNotCreated = false): CheckoutGateState {
+  if (state.phase !== "creating_checkout") return state;
+  return definitelyNotCreated ? initialCheckoutGate() : { phase: "checkout_retry_required", consent: state.consent };
+}
+
+export function retryCheckout(state: CheckoutGateState, token: string): CheckoutGateState {
+  if (!token || state.phase !== "checkout_retry_required") return state;
+  return { phase: "creating_checkout", token, consent: state.consent };
+}
+
+export function canStartOver(submitting: boolean, paymentStatus: string): boolean {
+  return !submitting && !paymentStatus.includes("Processing your payment") && !paymentStatus.includes("Payment is processing");
 }
 
 export function expireTurnstile(state: CheckoutGateState): CheckoutGateState {

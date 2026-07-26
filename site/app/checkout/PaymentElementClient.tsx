@@ -5,15 +5,18 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   beginCheckout,
+  canStartOver,
   checkoutConfigurationError,
   checkoutConsentError,
   checkoutCreated,
   checkoutFailed,
   expireTurnstile,
   initialCheckoutGate,
+  retryCheckout,
   TERMS_VERSION,
   type CheckoutGateState,
 } from "./checkoutGate";
+import { PENDING_PAID_SCAN_STORAGE_KEY, rotatePendingPaidScan } from "../check/core/pendingPaidScan";
 
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "";
@@ -105,7 +108,11 @@ export function PaymentElementClient() {
         }),
       });
       const body = (await response.json()) as { clientSecret?: string; error?: string };
-      if (!response.ok || !body.clientSecret) throw new Error(body.error || "Payment could not be started.");
+      if (!response.ok || !body.clientSecret) {
+        const failure = new Error(body.error || "Payment could not be started.");
+        Object.assign(failure, { definitelyNotCreated: response.status === 400 || response.status === 403 });
+        throw failure;
+      }
 
       const stripe = await loadStripe(publishableKey);
       if (!stripe) throw new Error("Stripe could not be loaded.");
@@ -136,12 +143,9 @@ export function PaymentElementClient() {
       checkoutGateRef.current = checkoutCreated(checkoutGateRef.current);
       setCheckoutPhase(checkoutGateRef.current.phase);
     } catch (caught) {
-      checkoutGateRef.current = checkoutFailed();
-      setCheckoutPhase("awaiting_verification");
-      paymentElementRef.current?.destroy();
-      paymentElementRef.current = null;
-      elementsRef.current = null;
-      stripeRef.current = null;
+      const definitelyNotCreated = caught instanceof Error && "definitelyNotCreated" in caught && caught.definitelyNotCreated === true;
+      checkoutGateRef.current = checkoutFailed(checkoutGateRef.current, definitelyNotCreated);
+      setCheckoutPhase(checkoutGateRef.current.phase);
       resetTurnstile();
       if (mountedRef.current) {
         setReady(false);
@@ -151,11 +155,11 @@ export function PaymentElementClient() {
   }, [resetTurnstile]);
 
   const beginVerifiedCheckout = useCallback((token: string) => {
-    const consentError = checkoutConsentError(currentConsent());
-    if (consentError) {
-      setError(consentError);
-      return;
-    }
+    const existing = checkoutGateRef.current;
+    const retrying = existing.phase === "checkout_retry_required";
+    const consent = retrying ? existing.consent : currentConsent();
+    const consentError = checkoutConsentError(consent);
+    if (consentError) { setError(consentError); return; }
     const scanId = new URLSearchParams(window.location.search).get("scan_id") ?? "";
     const configurationError = checkoutConfigurationError({ apiBase, publishableKey, turnstileSiteKey, scanId });
     if (configurationError) {
@@ -163,8 +167,7 @@ export function PaymentElementClient() {
       return;
     }
     scanIdRef.current = scanId;
-    const consent = currentConsent();
-    const next = beginCheckout(checkoutGateRef.current, token, consent);
+    const next = retrying ? retryCheckout(existing, token) : beginCheckout(existing, token, consent);
     if (next === checkoutGateRef.current) return;
     checkoutGateRef.current = next;
     setCheckoutPhase(next.phase);
@@ -207,13 +210,27 @@ export function PaymentElementClient() {
   const checkoutLocked = checkoutPhase !== "awaiting_verification";
 
   const startOver = useCallback(() => {
+    if (!canStartOver(submitting, status)) return;
+    const currentScanId = new URLSearchParams(window.location.search).get("scan_id") ?? "";
+    const nextScanId = crypto.randomUUID();
+    const nextPending = rotatePendingPaidScan(sessionStorage.getItem(PENDING_PAID_SCAN_STORAGE_KEY), currentScanId, nextScanId);
+    if (!nextPending) {
+      setError("Your pending report could not be updated. Keep this checkout open and return to your report.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(PENDING_PAID_SCAN_STORAGE_KEY, nextPending);
+    } catch {
+      setError("Your pending report could not be updated. Keep this checkout open and return to your report.");
+      return;
+    }
     paymentElementRef.current?.destroy();
     paymentElementRef.current = null;
     elementsRef.current = null;
     stripeRef.current = null;
     checkoutGateRef.current = initialCheckoutGate();
     setCheckoutPhase("awaiting_verification");
-    scanIdRef.current = crypto.randomUUID();
+    scanIdRef.current = nextScanId;
     window.history.replaceState(null, "", `/checkout/?scan_id=${encodeURIComponent(scanIdRef.current)}`);
     termsAcceptedRef.current = false;
     immediatePerformanceRequestedRef.current = false;
@@ -225,7 +242,7 @@ export function PaymentElementClient() {
     setStatus("");
     setError("");
     resetTurnstile();
-  }, [resetTurnstile]);
+  }, [resetTurnstile, status, submitting]);
 
   useEffect(() => {
     if (!checkoutRequirementsMet || !turnstileReady || !configuredRef.current || !turnstileContainerRef.current || !window.turnstile) return;
@@ -354,7 +371,7 @@ export function PaymentElementClient() {
         </div>
       ) : null}
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
-      {checkoutLocked ? <button type="button" onClick={startOver} className="mt-4 text-sm font-semibold text-blue-700 underline">Start over with a different email</button> : null}
+      {checkoutLocked ? <button type="button" onClick={startOver} disabled={!canStartOver(submitting, status)} className="mt-4 text-sm font-semibold text-blue-700 underline disabled:cursor-not-allowed disabled:opacity-60">Start over with a different email</button> : null}
       <section aria-label="Pre-contract payment summary" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
         <h3 className="font-semibold text-slate-950">Workflow Preflight</h3>
         <p>One-time payment: USD $49. No subscription.</p>

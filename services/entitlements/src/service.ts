@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { z } from "zod";
-import type { DurableConfirmationGateway } from "./confirmation.js";
+import type { ContractConfirmation, DurableConfirmationGateway } from "./confirmation.js";
 import { CONTRACT_REFUND_POLICY_TEXT, CONTRACT_TERMS_TEXT } from "./terms.js";
 import { issueEntitlement } from "./token.js";
 import { TERMS_VERSION } from "./terms.js";
@@ -101,6 +101,14 @@ export type EntitlementRecord = {
   expiresAt: number;
 };
 
+export type ConfirmationOutboxRecord = {
+  dispatchKey: string;
+  state: "pending" | "dispatched";
+  payload: ContractConfirmation;
+  createdAt: string;
+  expiresAt: number;
+};
+
 export type EntitlementStore = {
   putIfAbsent(record: EntitlementRecord): Promise<"created" | "duplicate">;
   updateRefundStatus(
@@ -111,9 +119,9 @@ export type EntitlementStore = {
     updatedAt: string,
   ): Promise<"updated" | "duplicate_or_missing">;
   get(scanId: string): Promise<EntitlementRecord | undefined>;
-  reserveConfirmationDispatch(key: string, createdAt: string): Promise<"created" | "in_progress" | "queued">;
-  markConfirmationDispatchQueued(key: string): Promise<void>;
-  releaseConfirmationDispatch(key: string): Promise<void>;
+  commitPaidEntitlementAndOutbox(record: EntitlementRecord, outbox: ConfirmationOutboxRecord): Promise<"created" | "existing">;
+  getConfirmationOutbox(key: string): Promise<ConfirmationOutboxRecord | undefined>;
+  markConfirmationOutboxDispatched(key: string): Promise<void>;
   consumeWithdrawalRateLimit(key: string, expiresAt: number): Promise<boolean>;
 };
 
@@ -286,14 +294,9 @@ export function createEntitlementService({
       if (!config.durableConfirmationEnabled) {
         throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
       }
+      const timestamp = now();
       const dispatchKey = `contract:${paymentIntent.id}:${TERMS_VERSION}`;
-      const dispatchState = await store.reserveConfirmationDispatch(dispatchKey, new Date(now()).toISOString());
-      if (dispatchState === "in_progress") {
-        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
-      }
-      if (dispatchState === "created") {
-        try {
-          await durableConfirmation.queueContractConfirmation({
+      const confirmation: ContractConfirmation = {
           email: paymentIntent.receiptEmail,
           paymentIntentId: paymentIntent.id,
           product: "Workflow Preflight",
@@ -306,16 +309,9 @@ export function createEntitlementService({
           supportEmail: "hello@solve-lang.com",
           termsText: CONTRACT_TERMS_TEXT,
           refundPolicyText: CONTRACT_REFUND_POLICY_TEXT,
-            idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
-          });
-          await store.markConfirmationDispatchQueued(dispatchKey);
-        } catch {
-          await store.releaseConfirmationDispatch(dispatchKey).catch(() => undefined);
-          throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
-        }
-      }
-      const timestamp = now();
-      await store.putIfAbsent({
+          idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
+      };
+      const entitlement: EntitlementRecord = {
         scanId,
         sessionId: paymentIntent.id,
         paymentStatus: "paid",
@@ -323,7 +319,16 @@ export function createEntitlementService({
         stripeEventId: stripeEvent.id,
         createdAt: new Date(timestamp).toISOString(),
         expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
-      });
+      };
+      const outbox: ConfirmationOutboxRecord = {
+        dispatchKey,
+        state: "pending",
+        payload: confirmation,
+        createdAt: new Date(timestamp).toISOString(),
+        // Keep the encrypted payload for 30 days for event replay suppression and support handling.
+        expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
+      };
+      await store.commitPaidEntitlementAndOutbox(entitlement, outbox);
     }
     if (stripeEvent.type === "charge.refunded" && stripeEvent.refund) {
       const paymentIntent = await stripe.payments.retrieve(stripeEvent.refund.paymentIntentId);
@@ -389,7 +394,10 @@ export function createEntitlementService({
       count: existingAttempt && existingAttempt.resetAt > timestamp ? existingAttempt.count + 1 : 1,
       resetAt: existingAttempt?.resetAt && existingAttempt.resetAt > timestamp ? existingAttempt.resetAt : timestamp + 15 * 60 * 1_000,
     });
-    const rateLimitKey = `withdrawal:${createHash("sha256").update(remoteIp).digest("hex")}:${Math.floor(timestamp / (15 * 60 * 1_000))}`;
+    const ipPseudonym = createHmac("sha256", config.entitlementSigningSecret)
+      .update(`withdrawal-rate-limit:v1:${remoteIp}`)
+      .digest("hex");
+    const rateLimitKey = `withdrawal:${ipPseudonym}:${Math.floor(timestamp / (15 * 60 * 1_000))}`;
     if (!await store.consumeWithdrawalRateLimit(rateLimitKey, Math.floor(timestamp / 1_000) + 15 * 60)) {
       return response(429, { error: "Withdrawal requests are temporarily unavailable. Please try again later." });
     }
@@ -416,9 +424,7 @@ export function createEntitlementService({
     try {
       await durableConfirmation.queueWithdrawalConfirmation({
         email,
-        name,
         contractReference,
-        statement,
         receivedAt,
         supportEmail: "hello@solve-lang.com",
         idempotencyKey: `withdrawal-${createHash("sha256").update(`${requestId}:${contractReference}:${normalizedName}:${normalizedEmail}:${normalizedStatement}`).digest("hex")}`,

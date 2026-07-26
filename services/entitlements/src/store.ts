@@ -1,7 +1,7 @@
-import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { EntitlementRecord, EntitlementStore } from "./service.js";
+import { GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type { ConfirmationOutboxRecord, EntitlementRecord, EntitlementStore } from "./service.js";
 
-type DocumentCommand = DeleteCommand | GetCommand | PutCommand | UpdateCommand;
+type DocumentCommand = GetCommand | PutCommand | TransactWriteCommand | UpdateCommand;
 type DocumentClient = {
   send(command: DocumentCommand): Promise<{ Item?: Record<string, unknown> }>;
 };
@@ -49,37 +49,50 @@ export function createEntitlementStore(client: DocumentClient, tableName: string
       }));
       return result.Item as EntitlementRecord | undefined;
     },
-    async reserveConfirmationDispatch(key, createdAt) {
+    async commitPaidEntitlementAndOutbox(record, outbox) {
       try {
-        await client.send(new PutCommand({
-          TableName: dispatchTableName,
-          Item: { dispatchKey: key, state: "in_progress", createdAt },
-          ConditionExpression: "attribute_not_exists(dispatchKey)",
+        await client.send(new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: tableName,
+                Item: record,
+                ConditionExpression: "attribute_not_exists(scanId)",
+              },
+            },
+            {
+              Put: {
+                TableName: dispatchTableName,
+                Item: outbox,
+                ConditionExpression: "attribute_not_exists(dispatchKey)",
+              },
+            },
+          ],
         }));
         return "created";
       } catch (error) {
-        if (!(error instanceof Error) || error.name !== "ConditionalCheckFailedException") throw error;
-        const result = await client.send(new GetCommand({ TableName: dispatchTableName, Key: { dispatchKey: key }, ConsistentRead: true }));
-        return result.Item?.state === "queued" ? "queued" : "in_progress";
+        if (!(error instanceof Error) || error.name !== "TransactionCanceledException") throw error;
+        const result = await client.send(new GetCommand({ TableName: dispatchTableName, Key: { dispatchKey: outbox.dispatchKey }, ConsistentRead: true }));
+        if (!result.Item) throw error;
+        return "existing";
       }
     },
-    async markConfirmationDispatchQueued(key) {
+    async getConfirmationOutbox(key) {
+      const result = await client.send(new GetCommand({
+        TableName: dispatchTableName,
+        Key: { dispatchKey: key },
+        ConsistentRead: true,
+      }));
+      return result.Item as ConfirmationOutboxRecord | undefined;
+    },
+    async markConfirmationOutboxDispatched(key) {
       await client.send(new UpdateCommand({
         TableName: dispatchTableName,
         Key: { dispatchKey: key },
-        ConditionExpression: "#state = :inProgress",
-        UpdateExpression: "SET #state = :queued",
+        ConditionExpression: "#state = :pending",
+        UpdateExpression: "SET #state = :dispatched",
         ExpressionAttributeNames: { "#state": "state" },
-        ExpressionAttributeValues: { ":inProgress": "in_progress", ":queued": "queued" },
-      }));
-    },
-    async releaseConfirmationDispatch(key) {
-      await client.send(new DeleteCommand({
-        TableName: dispatchTableName,
-        Key: { dispatchKey: key },
-        ConditionExpression: "#state = :inProgress",
-        ExpressionAttributeNames: { "#state": "state" },
-        ExpressionAttributeValues: { ":inProgress": "in_progress" },
+        ExpressionAttributeValues: { ":pending": "pending", ":dispatched": "dispatched" },
       }));
     },
     async consumeWithdrawalRateLimit(key, expiresAt) {

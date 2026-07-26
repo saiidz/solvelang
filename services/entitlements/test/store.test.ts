@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, TransactWriteCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { createEntitlementStore } from "../src/store.js";
 import type { EntitlementRecord } from "../src/service.js";
 
@@ -14,7 +14,7 @@ const record: EntitlementRecord = {
 };
 
 test("Dynamo store conditionally persists only the allowlisted entitlement record", async () => {
-  const commands: Array<DeleteCommand | PutCommand | GetCommand | UpdateCommand> = [];
+  const commands: Array<DeleteCommand | PutCommand | GetCommand | TransactWriteCommand | UpdateCommand> = [];
   const store = createEntitlementStore({
     async send(command) {
       commands.push(command);

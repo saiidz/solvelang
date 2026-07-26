@@ -1,10 +1,5 @@
-import type { PreflightReport } from "./n8nPreflight";
-
-export type PendingPaidScan = {
-  scanId: string;
-  report: PreflightReport;
-  fileName: string;
-};
+import { parsePendingPaidScan, type PendingPaidScan } from "./pendingPaidScan";
+export type { PendingPaidScan } from "./pendingPaidScan";
 
 type RecoveryResponse = {
   ok: boolean;
@@ -50,7 +45,8 @@ export async function recoverPaidScan(options: RecoveryOptions): Promise<{ pendi
   const redirectStatus = params.get("redirect_status");
   if (!returnedScanId || !paymentIntentId || redirectStatus !== "succeeded" || !options.stored || !options.apiBase) return null;
 
-  const pending = JSON.parse(options.stored) as PendingPaidScan;
+  const pending = parsePendingPaidScan(options.stored);
+  if (!pending) throw new Error("Payment could not be verified.");
   if (pending.scanId !== returnedScanId) throw new Error("The returned payment does not match this scan.");
 
   const wait = options.wait ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));

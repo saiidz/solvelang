@@ -306,6 +306,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const entitlementTemplate = await readFile(path.join(root, "services/entitlements/template.yaml"), "utf8");
   const entitlementDeployWorkflow = await readFile(path.join(root, ".github/workflows/deploy-entitlements.yml"), "utf8");
   const entitlementE2eTest = await readFile(path.join(root, "services/entitlements/test/e2e.test.ts"), "utf8");
+  const confirmationWorkerTest = await readFile(path.join(root, "services/entitlements/test/confirmation-worker.test.ts"), "utf8");
+  const confirmationDispatcherTest = await readFile(path.join(root, "services/entitlements/test/confirmation-dispatcher.test.ts"), "utf8");
   const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
   const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
   const checkoutGateTest = await readFile(path.join(root, "site/app/check/core/turnstileCheckout.test.ts"), "utf8");
@@ -336,13 +338,16 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     /test-mode checkout remains operational and records server-derived consent metadata/,
     /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/,
     /a failed consent metadata update withholds the client secret until a stable retry succeeds/,
-    /valid signed webhook records one entitlement and persistent confirmation dispatch suppresses late replays/,
+    /valid signed webhook atomically records one entitlement and durable outbox across late replays/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
     /paid payment recovery issues a verifiable short-lived entitlement/,
     /expired, invalid, and tampered entitlement tokens are rejected/,
   ];
   const testModeE2eHarness = requiredLifecycleEvidence.every((pattern) => pattern.test(entitlementE2eTest))
+    && /outbox dispatch retries queue or update ambiguity without losing the committed confirmation/.test(confirmationDispatcherTest)
+    && /confirmation delivery leases recover safely and never acknowledge active or ambiguous records/.test(confirmationWorkerTest)
+    && /strict confirmation schemas reject missing consent fields and arbitrary payload fields/.test(confirmationWorkerTest)
     && /browser return verifies entitlement server-side and removes payment parameters/.test(browserRecoveryTest)
     && /browser recovery fails closed for mismatched scans and unverifiable payment/.test(browserRecoveryTest);
   const refundAware = /full refunds revoke entitlement renewal while partial refunds remain eligible/.test(entitlementE2eTest)

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   beginCheckout,
+  canStartOver,
   checkoutConfigurationError,
   checkoutConsentError,
   checkoutCreated,
   checkoutFailed,
   expireTurnstile,
   initialCheckoutGate,
+  retryCheckout,
   TERMS_VERSION,
 } from "../../checkout/checkoutGate";
 
@@ -93,9 +95,16 @@ test("duplicate Turnstile callbacks cannot start concurrent checkout requests", 
   assert.deepEqual(beginCheckout(paymentReady, "third-token", consent), paymentReady);
 });
 
-test("checkout creation failure returns to Turnstile verification for a fresh single-use token", () => {
-  assert.deepEqual(checkoutFailed(), initialCheckoutGate());
-  assert.equal(beginCheckout(checkoutFailed(), "fresh-token", consent).phase, "creating_checkout");
+test("ambiguous checkout failure freezes the original snapshot for a fresh verification retry", () => {
+  const creating = beginCheckout(initialCheckoutGate(), "first-token", consent);
+  const frozen = checkoutFailed(creating);
+  assert.equal(frozen.phase, "checkout_retry_required");
+  const retried = retryCheckout(frozen, "fresh-token");
+  assert.equal(retried.phase, "creating_checkout");
+  if (retried.phase === "creating_checkout") {
+    assert.deepEqual(retried.consent, consent);
+  }
+  assert.deepEqual(checkoutFailed(creating, true), initialCheckoutGate());
 });
 
 test("checkout snapshots the email and required consent once creation begins", () => {
@@ -104,4 +113,11 @@ test("checkout snapshots the email and required consent once creation begins", (
   if (snapshot.phase !== "creating_checkout") return;
   assert.deepEqual(snapshot.consent, consent);
   assert.notEqual(snapshot.consent, consent);
+});
+
+test("Start over is blocked while Stripe confirmation or processing is in flight", () => {
+  assert.equal(canStartOver(true, ""), false);
+  assert.equal(canStartOver(false, "Processing your payment securely…"), false);
+  assert.equal(canStartOver(false, "Payment is processing. Keep this page open."), false);
+  assert.equal(canStartOver(false, ""), true);
 });

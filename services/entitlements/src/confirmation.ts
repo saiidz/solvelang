@@ -19,9 +19,7 @@ export type ContractConfirmation = {
 
 export type WithdrawalConfirmation = {
   email: string;
-  name: string;
   contractReference: string;
-  statement: string;
   receivedAt: string;
   supportEmail: "hello@solve-lang.com";
   idempotencyKey: string;
