@@ -1,4 +1,5 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { DurableConfirmationGateway } from "./confirmation.js";
 import { CONTRACT_REFUND_POLICY_TEXT, CONTRACT_TERMS_TEXT } from "./terms.js";
@@ -19,9 +20,11 @@ const checkoutSchema = z.object({
 const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
 const withdrawalSchema = z.object({
   name: z.string().trim().min(1).max(160),
-  contractReference: z.string().trim().min(4).max(160),
+  contractReference: z.string().trim().startsWith("pi_").max(160),
   email: z.string().email().max(254),
   statement: z.string().trim().min(8).max(1_000),
+  turnstileToken: z.string().min(1).max(2_048),
+  requestId: z.string().uuid(),
 }).strict();
 const conversionEventSchema = z.object({
   name: z.enum([
@@ -190,6 +193,10 @@ export function createEntitlementService({
   now = Date.now,
   logger = console,
 }: ServiceDependencies): (event: APIGatewayProxyEventV2) => Promise<JsonResponse> {
+  // This short-lived per-container limit supplements Turnstile and avoids
+  // queueing repeated legal notices from one source during a burst.
+  const withdrawalAttempts = new Map<string, { count: number; resetAt: number }>();
+
   function response(statusCode: number, body: unknown): JsonResponse {
     return {
       statusCode,
@@ -217,7 +224,7 @@ export function createEntitlementService({
     } = checkoutSchema.parse(parseJson(event));
     let verified: boolean;
     try {
-      verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp });
+      verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp, expectedAction: "checkout" });
     } catch {
       throw new RequestError(503, "Verification is temporarily unavailable.", "turnstile_unavailable");
     }
@@ -268,18 +275,42 @@ export function createEntitlementService({
     if (stripeEvent.type === "payment_intent.succeeded" && stripeEvent.paymentIntent) {
       const paymentIntent = stripeEvent.paymentIntent;
       const scanId = paymentIntent.metadata?.scanId;
-      if (scanId && paymentIntent.metadata?.product === PRODUCT && paymentIntent.paymentStatus === "paid") {
-        const timestamp = now();
-        await store.putIfAbsent({
-          scanId,
-          sessionId: paymentIntent.id,
-          paymentStatus: "paid",
-          refundStatus: paymentIntent.refundStatus,
-          stripeEventId: stripeEvent.id,
-          createdAt: new Date(timestamp).toISOString(),
-          expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
-        });
+      const termsAcceptedAt = paymentIntent.metadata?.termsAcceptedAt;
+      if (!scanId || paymentIntent.metadata?.product !== PRODUCT || paymentIntent.paymentStatus !== "paid" || !paymentIntent.receiptEmail || paymentIntent.metadata?.termsVersion !== TERMS_VERSION || paymentIntent.metadata?.immediatePerformanceRequested !== "true" || paymentIntent.metadata?.withdrawalAcknowledged !== "true" || !termsAcceptedAt) {
+        throw new RequestError(400, "Invalid webhook.", "invalid_payment_confirmation");
       }
+      if (!config.durableConfirmationEnabled) {
+        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+      }
+      try {
+        await durableConfirmation.queueContractConfirmation({
+          email: paymentIntent.receiptEmail,
+          paymentIntentId: paymentIntent.id,
+          product: "Workflow Preflight",
+          total: "USD $49",
+          termsVersion: TERMS_VERSION,
+          termsAcceptedAt,
+          immediatePerformanceRequested: true,
+          withdrawalAcknowledged: true,
+          deliveryDescription: "An automated Workflow Preflight report is processed and delivered immediately after successful payment.",
+          supportEmail: "hello@solve-lang.com",
+          termsText: CONTRACT_TERMS_TEXT,
+          refundPolicyText: CONTRACT_REFUND_POLICY_TEXT,
+          idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
+        });
+      } catch {
+        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+      }
+      const timestamp = now();
+      await store.putIfAbsent({
+        scanId,
+        sessionId: paymentIntent.id,
+        paymentStatus: "paid",
+        refundStatus: paymentIntent.refundStatus,
+        stripeEventId: stripeEvent.id,
+        createdAt: new Date(timestamp).toISOString(),
+        expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
+      });
     }
     if (stripeEvent.type === "charge.refunded" && stripeEvent.refund) {
       const paymentIntent = await stripe.payments.retrieve(stripeEvent.refund.paymentIntentId);
@@ -323,37 +354,6 @@ export function createEntitlementService({
     ) {
       return response(403, { code: "payment_ineligible", error: "No matching eligible payment was found." });
     }
-    if (!config.durableConfirmationEnabled || !paymentIntent.receiptEmail) {
-      return response(503, { code: "confirmation_unavailable", error: "Contract confirmation is temporarily unavailable." });
-    }
-    const termsAcceptedAt = paymentIntent.metadata?.termsAcceptedAt;
-    if (
-      paymentIntent.metadata?.termsVersion !== TERMS_VERSION
-      || paymentIntent.metadata?.immediatePerformanceRequested !== "true"
-      || paymentIntent.metadata?.withdrawalAcknowledged !== "true"
-      || !termsAcceptedAt
-    ) {
-      return response(403, { code: "confirmation_incomplete", error: "Payment consent could not be verified." });
-    }
-    try {
-      await durableConfirmation.queueContractConfirmation({
-        email: paymentIntent.receiptEmail,
-        paymentIntentId: paymentIntent.id,
-        product: "Workflow Preflight",
-        total: "USD $49",
-        termsVersion: TERMS_VERSION,
-        termsAcceptedAt,
-        immediatePerformanceRequested: true,
-        withdrawalAcknowledged: true,
-        deliveryDescription: "An automated Workflow Preflight report is processed and delivered immediately after successful payment.",
-        supportEmail: "hello@solve-lang.com",
-        termsText: CONTRACT_TERMS_TEXT,
-        refundPolicyText: CONTRACT_REFUND_POLICY_TEXT,
-        idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
-      });
-    } catch {
-      return response(503, { code: "confirmation_unavailable", error: "Contract confirmation is temporarily unavailable." });
-    }
     const exp = Math.floor(now() / 1000) + 15 * 60;
     return response(200, {
       token: issueEntitlement({ version: 1, scanId, sessionId, exp }, config.entitlementSigningSecret),
@@ -362,9 +362,36 @@ export function createEntitlementService({
   }
 
   async function createWithdrawal(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
-    const { name, contractReference, email, statement } = withdrawalSchema.parse(parseJson(event));
+    const { name, contractReference, email, statement, turnstileToken, requestId } = withdrawalSchema.parse(parseJson(event));
     if (!config.durableConfirmationEnabled) {
       return response(503, { error: "Withdrawal confirmation is temporarily unavailable." });
+    }
+    const remoteIp = event.requestContext.http.sourceIp;
+    const timestamp = now();
+    const existingAttempt = withdrawalAttempts.get(remoteIp);
+    if (existingAttempt && existingAttempt.resetAt > timestamp && existingAttempt.count >= 5) {
+      return response(429, { error: "Withdrawal requests are temporarily unavailable. Please try again later." });
+    }
+    withdrawalAttempts.set(remoteIp, {
+      count: existingAttempt && existingAttempt.resetAt > timestamp ? existingAttempt.count + 1 : 1,
+      resetAt: existingAttempt?.resetAt && existingAttempt.resetAt > timestamp ? existingAttempt.resetAt : timestamp + 15 * 60 * 1_000,
+    });
+    try {
+      const verified = await turnstile.verify({ token: turnstileToken, remoteIp, expectedAction: "withdrawal" });
+      if (!verified) return response(403, { error: "Verification could not be completed." });
+    } catch {
+      return response(503, { error: "Verification is temporarily unavailable." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    let paymentIntent: PaymentIntentSnapshot;
+    try {
+      paymentIntent = await stripe.payments.retrieve(contractReference);
+    } catch {
+      return response(202, { message: "Your request needs support review. Email hello@solve-lang.com with your Stripe receipt reference." });
+    }
+    if (paymentIntent.metadata?.product !== PRODUCT || paymentIntent.receiptEmail?.trim().toLowerCase() !== normalizedEmail) {
+      return response(202, { message: "Your request needs support review. Email hello@solve-lang.com with your Stripe receipt reference." });
     }
     const receivedAt = new Date(now()).toISOString();
     try {
@@ -375,7 +402,7 @@ export function createEntitlementService({
         statement,
         receivedAt,
         supportEmail: "hello@solve-lang.com",
-        idempotencyKey: `withdrawal-${contractReference}`,
+        idempotencyKey: `withdrawal-${createHash("sha256").update(`${contractReference}:${requestId}`).digest("hex")}`,
       });
     } catch {
       return response(503, { error: "Withdrawal confirmation is temporarily unavailable." });

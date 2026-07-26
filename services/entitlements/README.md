@@ -20,6 +20,9 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - Checkout accepts a Cloudflare Turnstile token only after the checkout page renders the configured widget. The Lambda verifies it server-side with `TURNSTILE_SECRET_KEY`, the API Gateway client IP, the expected `SITE_ORIGIN` hostname, and the exact `checkout` action before it creates a PaymentIntent. Verification rejection, malformed responses, and provider unavailability never create a PaymentIntent.
 - Checkout requires `termsAccepted: true` and the supported terms version before Turnstile verification. It never stores the checkbox text, Turnstile token, IP address, user agent, workflow content, or secrets in PaymentIntent metadata.
 - Checkout creates the PaymentIntent with stable scan and terms metadata under `preflight-${scanId}`, then records the server-derived Stripe creation time as `termsAcceptedAt` with a separate stable consent-update idempotency key before returning the client secret. Retries therefore recover the same intent without changing Stripe parameters.
+- A signed `payment_intent.succeeded` webhook queues the complete versioned contract confirmation before creating the DynamoDB entitlement record. Browser recovery only reads that record and never queues customer email.
+- `disabled`, `test-sink`, and `aws-ses-sqs` are the only durable confirmation providers. Test mode uses the privacy-safe in-memory sink; production rejects it and requires the encrypted FIFO SQS queue, DLQ, SES worker, and a verified sender before checkout can be enabled.
+- Withdrawal requests require a distinct `withdrawal` Turnstile action, exact hostname verification, a five-second fail-closed provider timeout, a short per-container rate limit, a UUID retry identifier, and a matching Workflow Preflight PaymentIntent receipt email. Unverifiable references receive only a support-review response.
 
 ## Health endpoint
 

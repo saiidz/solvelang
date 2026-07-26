@@ -148,7 +148,7 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
     const signedWebhookVerified = environment.WEBHOOK_SIGNED_DELIVERY_VERIFIED === "true";
     const legalReviewVerified = environment.LEGAL_CHECKOUT_REVIEW_VERIFIED === "true";
     const legalIdentityVerified = environment.LEGAL_IDENTITY_VERIFIED === "true";
-    const durableConfirmationApproved = environment.DURABLE_CONFIRMATION_PROVIDER === "approved";
+    const durableConfirmationApproved = environment.DURABLE_CONFIRMATION_PROVIDER === "aws-ses-sqs";
     controls.push(
       enabled && signedWebhookVerified && legalReviewVerified && legalIdentityVerified && durableConfirmationApproved
         ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after protected webhook, legal, identity, and durable-confirmation controls.")
@@ -163,9 +163,9 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
                 : enabled && !legalIdentityVerified
                   ? "Production checkout cannot be enabled until the operator identity and final consumer price are verified."
                   : enabled && !durableConfirmationApproved
-                    ? "Production checkout cannot be enabled until an approved durable confirmation provider is configured."
+                    ? "Production checkout cannot be enabled until the aws-ses-sqs durable confirmation provider is configured."
                 : "Production checkout remains disabled.",
-            "After the real webhook secret is installed, the legal checklist and operator identity are complete, a durable provider is approved, and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true, LEGAL_CHECKOUT_REVIEW_VERIFIED=true, LEGAL_IDENTITY_VERIFIED=true, DURABLE_CONFIRMATION_PROVIDER=approved, and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
+            "After the real webhook secret is installed, the legal checklist and operator identity are complete, the aws-ses-sqs provider is configured, and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true, LEGAL_CHECKOUT_REVIEW_VERIFIED=true, LEGAL_IDENTITY_VERIFIED=true, DURABLE_CONFIRMATION_PROVIDER=aws-ses-sqs, and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
           ),
     );
   } else {
@@ -365,13 +365,13 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     entitlementTemplate.includes('Path: /withdraw'),
     entitlementDeployWorkflow.includes('LEGAL_IDENTITY_VERIFIED') && entitlementDeployWorkflow.includes('DURABLE_CONFIRMATION_PROVIDER'),
     entitlementE2eTest.includes("missing, false, and unsupported consent fields fail before Turnstile or Stripe"),
-    entitlementE2eTest.includes("report recovery fails closed until durable contract confirmation is queued"),
+    entitlementE2eTest.includes("report recovery remains unavailable until the signed webhook queues durable confirmation"),
     entitlementE2eTest.includes("withdrawal requests require durable confirmation and record only a server timestamp"),
     turnstileGateway.includes("expectedHostname") && turnstileGateway.includes("idempotency_key"),
     paymentClient.includes("NEXT_PUBLIC_TURNSTILE_SITE_KEY") && paymentClient.includes('action: "checkout"'),
     checkoutGateTest.includes("Turnstile expiry after a client secret mounts preserves the payment form state"),
     checkoutTerms.includes('export const TERMS_VERSION = "2026-07-26-v2"'),
-    entitlementTerms.includes('export const TERMS_VERSION = "2026-07-26-v2"'),
+    entitlementTerms.includes('legal-content.json'),
     termsPage.includes("Terms of Use") && refundPolicyPage.includes("Refund Policy"),
     legalChecklist.includes("LEGAL_CHECKOUT_REVIEW_VERIFIED"),
   ].every(Boolean);

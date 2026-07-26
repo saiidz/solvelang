@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const TURNSTILE_ACTION = "checkout";
+export type TurnstileAction = "checkout" | "withdrawal";
 
 type SiteverifyResponse = {
   success: true;
@@ -10,7 +10,7 @@ type SiteverifyResponse = {
 };
 
 export type TurnstileGateway = {
-  verify(input: { token: string; remoteIp: string }): Promise<boolean>;
+  verify(input: { token: string; remoteIp: string; expectedAction: TurnstileAction }): Promise<boolean>;
 };
 
 export type TurnstileGatewayOptions = {
@@ -33,7 +33,7 @@ export function createTurnstileGateway({
   createIdempotencyKey = randomUUID,
 }: TurnstileGatewayOptions): TurnstileGateway {
   return {
-    async verify({ token, remoteIp }) {
+    async verify({ token, remoteIp, expectedAction }) {
       const response = await fetchImpl(TURNSTILE_VERIFY_URL, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -55,7 +55,7 @@ export function createTurnstileGateway({
       }
       return isSiteverifyResponse(result)
         && result.hostname === expectedHostname
-        && result.action === TURNSTILE_ACTION;
+        && result.action === expectedAction;
     },
   };
 }

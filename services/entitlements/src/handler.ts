@@ -3,7 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
 import { parseEntitlementEnvironment } from "./config.js";
-import { createUnavailableDurableConfirmationGateway } from "./confirmation.js";
+import { createSqsConfirmationGateway, createTestConfirmationSink, createUnavailableDurableConfirmationGateway } from "./confirmation.js";
 import { createEntitlementService } from "./service.js";
 import { createStripeGateway } from "./stripe.js";
 import { createEntitlementStore } from "./store.js";
@@ -21,7 +21,11 @@ const turnstile = createTurnstileGateway({
   secret: environment.TURNSTILE_SECRET_KEY,
   expectedHostname: new URL(environment.SITE_ORIGIN).hostname,
 });
-const durableConfirmation = createUnavailableDurableConfirmationGateway();
+const durableConfirmation = environment.DURABLE_CONFIRMATION_PROVIDER === "test-sink"
+  ? createTestConfirmationSink()
+  : environment.DURABLE_CONFIRMATION_PROVIDER === "aws-ses-sqs"
+    ? createSqsConfirmationGateway({ queueUrl: environment.DURABLE_CONFIRMATION_QUEUE_URL! })
+    : createUnavailableDurableConfirmationGateway();
 
 const service = createEntitlementService({
   config: {
@@ -30,7 +34,7 @@ const service = createEntitlementService({
     entitlementSigningSecret: environment.ENTITLEMENT_SIGNING_SECRET,
     mode: environment.ENTITLEMENT_MODE,
     checkoutEnabled: environment.CHECKOUT_ENABLED === "true",
-    durableConfirmationEnabled: environment.DURABLE_CONFIRMATION_PROVIDER === "approved",
+    durableConfirmationEnabled: environment.DURABLE_CONFIRMATION_PROVIDER !== "disabled",
   },
   stripe,
   store,

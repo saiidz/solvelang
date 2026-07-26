@@ -31,7 +31,7 @@ test("checkout defaults disabled until explicitly enabled", () => {
   assert.throws(() => parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "enabled" }), /CHECKOUT_ENABLED/);
 });
 
-test("production checkout requires an approved durable confirmation provider", () => {
+test("production checkout requires an implemented durable confirmation provider and its configuration", () => {
   const production = {
     ...valid,
     ENTITLEMENT_MODE: "production",
@@ -41,8 +41,11 @@ test("production checkout requires an approved durable confirmation provider", (
   assert.throws(() => parseEntitlementEnvironment(production), /DURABLE_CONFIRMATION_PROVIDER/);
   assert.equal(parseEntitlementEnvironment({
     ...production,
-    DURABLE_CONFIRMATION_PROVIDER: "approved",
-  }).DURABLE_CONFIRMATION_PROVIDER, "approved");
+    DURABLE_CONFIRMATION_PROVIDER: "aws-ses-sqs",
+    DURABLE_CONFIRMATION_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/confirmations.fifo",
+    DURABLE_CONFIRMATION_SENDER: "receipts@solve-lang.com",
+  }).DURABLE_CONFIRMATION_PROVIDER, "aws-ses-sqs");
+  assert.throws(() => parseEntitlementEnvironment({ ...production, DURABLE_CONFIRMATION_PROVIDER: "test-sink" }), /test-sink/);
 });
 
 test("test and production environments reject Stripe keys from the wrong mode", () => {

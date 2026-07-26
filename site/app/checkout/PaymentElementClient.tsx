@@ -286,7 +286,7 @@ export function PaymentElementClient() {
             className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
           />
           <span>
-            I have read and agree to the Terms of Use and Refund Policy, version 2026-07-26-v2.
+            I have read and agree to the Terms of Use and Refund Policy, version {TERMS_VERSION}.
           </span>
         </label>
         <label className="flex items-start gap-3" htmlFor="checkout-immediate-performance-consent">

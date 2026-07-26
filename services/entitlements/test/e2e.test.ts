@@ -108,7 +108,7 @@ function createFixture(payment: {
 }, configOverrides: Record<string, unknown> = {}, turnstileResult: boolean | Error = true) {
   const checkoutRequests: Array<{ params: Record<string, unknown>; idempotencyKey: string }> = [];
   const metadataUpdates: Array<{ paymentIntentId: string; metadata: Record<string, unknown>; idempotencyKey: string }> = [];
-  const turnstileRequests: Array<{ token: string; remoteIp: string }> = [];
+  const turnstileRequests: Array<{ token: string; remoteIp: string; expectedAction: "checkout" | "withdrawal" }> = [];
   const confirmations: Array<Record<string, unknown>> = [];
   const store = new MemoryStore();
   const stripe: StripeGateway = {
@@ -140,15 +140,28 @@ function createFixture(payment: {
         return {
           id: signature === "valid-duplicate-signature" ? "evt_test_duplicate" : "evt_test_paid",
           type: "payment_intent.succeeded",
-          paymentIntent: { id: paymentIntentId, paymentStatus: "paid", refundStatus: "none", metadata: { scanId, product: "workflow-preflight-v1" } },
+          paymentIntent: {
+            id: paymentIntentId,
+            paymentStatus: "paid",
+            receiptEmail: "buyer@example.test",
+            refundStatus: "none",
+            metadata: {
+              scanId,
+              product: "workflow-preflight-v1",
+              termsVersion,
+              termsAcceptedAt: "2026-07-20T00:00:00.000Z",
+              immediatePerformanceRequested: "true",
+              withdrawalAcknowledged: "true",
+            },
+          },
         };
       },
     },
   };
   const logs: unknown[][] = [];
   const turnstile = {
-    async verify({ token, remoteIp }: { token: string; remoteIp: string }) {
-      turnstileRequests.push({ token, remoteIp });
+    async verify({ token, remoteIp, expectedAction }: { token: string; remoteIp: string; expectedAction: "checkout" | "withdrawal" }) {
+      turnstileRequests.push({ token, remoteIp, expectedAction });
       if (turnstileResult instanceof Error) throw turnstileResult;
       return turnstileResult;
     },
@@ -193,7 +206,7 @@ test("test-mode checkout remains operational and records server-derived consent 
     paymentId: paymentIntentId,
   });
   assert.equal(checkoutRequests.length, 1);
-  assert.deepEqual(turnstileRequests, [{ token: "turnstile-valid-token", remoteIp: "127.0.0.1" }]);
+  assert.deepEqual(turnstileRequests, [{ token: "turnstile-valid-token", remoteIp: "127.0.0.1", expectedAction: "checkout" }]);
   assert.deepEqual(checkoutRequests[0], {
     idempotencyKey: `preflight-${scanId}`,
     params: {
@@ -387,7 +400,7 @@ test("checkout rejects an unsuccessful Turnstile verification before creating a 
 
   assert.equal(result.statusCode, 403);
   assert.deepEqual(responseBody(result), { error: "Verification could not be completed." });
-  assert.deepEqual(turnstileRequests, [{ token: "turnstile-invalid-token", remoteIp: "127.0.0.1" }]);
+  assert.deepEqual(turnstileRequests, [{ token: "turnstile-invalid-token", remoteIp: "127.0.0.1", expectedAction: "checkout" }]);
   assert.equal(checkoutRequests.length, 0);
 });
 
@@ -609,12 +622,12 @@ test("paid payment recovery issues a verifiable short-lived entitlement", async 
   });
 });
 
-test("report recovery fails closed until durable contract confirmation is queued", async () => {
+test("report recovery remains unavailable until the signed webhook queues durable confirmation", async () => {
   const fixture = createFixture(undefined, { durableConfirmationEnabled: false });
   await fixture.service(apiEvent("POST", "/webhook", { opaque: "stripe fixture" }, { "stripe-signature": "valid-test-signature" }));
   const result = await fixture.service(apiEvent("POST", "/entitlement", { scanId, sessionId: paymentIntentId }));
-  assert.equal(result.statusCode, 503);
-  assert.deepEqual(responseBody(result), { code: "confirmation_unavailable", error: "Contract confirmation is temporarily unavailable." });
+  assert.equal(result.statusCode, 409);
+  assert.deepEqual(responseBody(result), { code: "payment_pending", error: "Payment succeeded and is awaiting webhook verification." });
   assert.equal(fixture.confirmations.length, 0);
 });
 
@@ -625,21 +638,61 @@ test("withdrawal requests require durable confirmation and record only a server 
     contractReference: paymentIntentId,
     email: "buyer@example.test",
     statement: "I hereby withdraw from the Workflow Preflight contract.",
+    turnstileToken: "withdrawal-turnstile-token",
+    requestId: "6494ef6d-c1c6-4a70-a2b4-ae1af835b682",
   }));
   assert.equal(result.statusCode, 202);
   assert.deepEqual(responseBody(result), {
     receivedAt: "2026-07-20T00:00:00.000Z",
     message: "Your withdrawal request was received. Eligibility will be reviewed under applicable law.",
   });
-  assert.deepEqual(confirmations[0], {
+  const { idempotencyKey, ...withdrawalConfirmation } = confirmations[0];
+  assert.deepEqual(withdrawalConfirmation, {
     name: "Buyer Name",
     contractReference: paymentIntentId,
     email: "buyer@example.test",
     statement: "I hereby withdraw from the Workflow Preflight contract.",
     receivedAt: "2026-07-20T00:00:00.000Z",
     supportEmail: "hello@solve-lang.com",
-    idempotencyKey: `withdrawal-${paymentIntentId}`,
   });
+  assert.match(String(idempotencyKey), /^withdrawal-[a-f0-9]{64}$/);
+  assert.equal(String(idempotencyKey).includes("buyer@example.test"), false);
+});
+
+test("withdrawal requires its own Turnstile action and limits repeated submissions", async () => {
+  const missing = createFixture();
+  const baseRequest = {
+    name: "Buyer Name",
+    contractReference: paymentIntentId,
+    email: "buyer@example.test",
+    statement: "I hereby withdraw from the Workflow Preflight contract.",
+    requestId: "6494ef6d-c1c6-4a70-a2b4-ae1af835b682",
+  };
+  assert.equal((await missing.service(apiEvent("POST", "/withdraw", baseRequest))).statusCode, 400);
+  assert.equal(missing.confirmations.length, 0);
+
+  const rejected = createFixture(undefined, {}, false);
+  const rejectedResult = await rejected.service(apiEvent("POST", "/withdraw", { ...baseRequest, turnstileToken: "rejected" }));
+  assert.equal(rejectedResult.statusCode, 403);
+  assert.deepEqual(rejected.turnstileRequests, [{ token: "rejected", remoteIp: "127.0.0.1", expectedAction: "withdrawal" }]);
+  assert.equal(rejected.confirmations.length, 0);
+
+  const limited = createFixture();
+  for (let index = 0; index < 5; index += 1) {
+    const result = await limited.service(apiEvent("POST", "/withdraw", {
+      ...baseRequest,
+      turnstileToken: `token-${index}`,
+      requestId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    }));
+    assert.equal(result.statusCode, 202);
+  }
+  const sixth = await limited.service(apiEvent("POST", "/withdraw", {
+    ...baseRequest,
+    turnstileToken: "token-6",
+    requestId: "00000000-0000-4000-8000-000000000006",
+  }));
+  assert.equal(sixth.statusCode, 429);
+  assert.equal(limited.confirmations.length, 5);
 });
 
 test("full refunds revoke entitlement renewal while partial refunds remain eligible", async () => {

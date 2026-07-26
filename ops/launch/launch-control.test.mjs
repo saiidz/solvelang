@@ -52,7 +52,7 @@ const validEnvironment = {
   WEBHOOK_SIGNED_DELIVERY_VERIFIED: "true",
   LEGAL_CHECKOUT_REVIEW_VERIFIED: "true",
   LEGAL_IDENTITY_VERIFIED: "true",
-  DURABLE_CONFIRMATION_PROVIDER: "approved",
+  DURABLE_CONFIRMATION_PROVIDER: "aws-ses-sqs",
 };
 
 test("missing launch prerequisites fail closed using names only", () => {

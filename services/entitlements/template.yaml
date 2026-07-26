@@ -36,8 +36,12 @@ Parameters:
     Type: String
     AllowedValues:
       - disabled
-      - approved
+      - test-sink
+      - aws-ses-sqs
     Default: disabled
+  DurableConfirmationSender:
+    Type: String
+    Default: ""
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -73,8 +77,12 @@ Rules:
         AssertDescription: Production checkout requires verified operator identity and final consumer price information.
       - Assert: !Or
           - !Equals [!Ref CheckoutEnabled, "false"]
-          - !Equals [!Ref DurableConfirmationProvider, approved]
-        AssertDescription: Production checkout requires an approved durable contract-confirmation provider.
+          - !Equals [!Ref DurableConfirmationProvider, aws-ses-sqs]
+        AssertDescription: Production checkout requires the aws-ses-sqs durable contract-confirmation provider.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Not [!Equals [!Ref DurableConfirmationSender, ""]]
+        AssertDescription: Production checkout requires a verified durable confirmation sender configured by the owner.
 
 Resources:
   EntitlementsTable:
@@ -107,6 +115,25 @@ Resources:
           - content-type
           - stripe-signature
 
+  ConfirmationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+
+  ConfirmationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ConfirmationDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
   EntitlementFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -132,6 +159,8 @@ Resources:
           ENTITLEMENT_MODE: !Ref EntitlementMode
           CHECKOUT_ENABLED: !Ref CheckoutEnabled
           DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
+          DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue
+          DURABLE_CONFIRMATION_SENDER: !Ref DurableConfirmationSender
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
@@ -140,6 +169,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntitlementsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ConfirmationQueue.QueueName
       Events:
         Health:
           Type: HttpApi
@@ -177,6 +208,43 @@ Resources:
             ApiId: !Ref EntitlementApi
             Path: /events
             Method: POST
+
+  ConfirmationWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/confirmation-worker.ts
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        Format: cjs
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/confirmation-worker.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          DURABLE_CONFIRMATION_SENDER: !Ref DurableConfirmationSender
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ConfirmationQueue.QueueName
+        - Statement:
+            Effect: Allow
+            Action:
+              - ses:SendEmail
+            Resource: "*"
+      Events:
+        Confirmations:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ConfirmationQueue.Arn
+            BatchSize: 1
 
 Outputs:
   ApiBaseUrl:
