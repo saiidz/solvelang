@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { JsonLd } from "./components/JsonLd";
+import { LanguageSuggestion } from "./components/LanguageSuggestion";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,6 +37,10 @@ export const metadata: Metadata = {
   ],
   alternates: {
     canonical: "https://www.solve-lang.com/",
+    languages: {
+      en: "https://www.solve-lang.com/",
+      "x-default": "https://www.solve-lang.com/",
+    },
   },
   openGraph: {
     siteName: "SolveLang",
@@ -116,6 +121,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
         {children}
+        <LanguageSuggestion />
       </body>
     </html>
   );

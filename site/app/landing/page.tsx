@@ -1,6 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Suspense } from "react";
 import { JsonLd } from "../components/JsonLd";
+import { LanguageSelector } from "../components/LanguageSelector";
+import { defaultLocale } from "../i18n/locales";
 
 const workflowAuditGmailUrl =
   "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20X-Ray";
@@ -122,6 +125,9 @@ export default function Page() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <Suspense fallback={<span className="w-12" aria-hidden="true" />}>
+              <LanguageSelector current={defaultLocale} />
+            </Suspense>
             <a
               href="https://github.com/saiidz/solvelang"
               target="_blank"
