@@ -13,6 +13,7 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
     return {
       id: paymentIntent.id,
       clientSecret: paymentIntent.client_secret,
+      createdAt: paymentIntent.created,
       paymentStatus: paymentIntent.status === "succeeded" ? "paid" : "unpaid",
       refundStatus,
       metadata: paymentIntent.metadata,
@@ -30,6 +31,9 @@ export function createStripeGateway(client: Stripe, options?: { receivedAt?: () 
           metadata: params.metadata,
         }, { idempotencyKey });
         return snapshot(paymentIntent);
+      },
+      async updateMetadata(paymentIntentId, metadata, idempotencyKey) {
+        await client.paymentIntents.update(paymentIntentId, { metadata }, { idempotencyKey });
       },
       async retrieve(paymentIntentId) {
         const paymentIntent = await client.paymentIntents.retrieve(paymentIntentId, { expand: ["latest_charge"] });

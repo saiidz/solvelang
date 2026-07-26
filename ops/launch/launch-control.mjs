@@ -317,13 +317,17 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
   const privacySafe = /body:\s*JSON\.stringify\(\{[\s\S]*scanId,[\s\S]*turnstileToken:\s*token,[\s\S]*termsAccepted:\s*true,[\s\S]*termsVersion:\s*TERMS_VERSION/.test(paymentClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
-    && /metadata:\s*\{[\s\S]*scanId,[\s\S]*product:\s*PRODUCT,[\s\S]*termsVersion,[\s\S]*termsAcceptedAt: new Date\(now\(\)\)\.toISOString\(\)/.test(entitlementService)
+    && /metadata:\s*\{[\s\S]*scanId,[\s\S]*product:\s*PRODUCT,[\s\S]*termsVersion,\s*\}/.test(entitlementService)
+    && /const termsAcceptedAt = consentTimestamp\(paymentIntent\.createdAt\)/.test(entitlementService)
+    && /await stripe\.payments\.updateMetadata\([\s\S]*\{ termsAcceptedAt \},[\s\S]*preflight-\$\{scanId\}-consent-\$\{termsVersion\}/.test(entitlementService)
     && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
     && /conversion logging accepts only allowlisted event names/.test(entitlementPrivacyTest)
     && !/logger\.(?:info|error)\([^\n]*(?:error\.message|event\.body|rawBody)/.test(entitlementService)
     && !/console\.error\([^\n]*(?:error\.message|event\.body)/.test(entitlementHandler);
   const requiredLifecycleEvidence = [
-    /test-mode checkout remains operational and returns a PaymentIntent client secret with minimal metadata/,
+    /test-mode checkout remains operational and records server-derived consent metadata/,
+    /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/,
+    /a failed consent metadata update withholds the client secret until a stable retry succeeds/,
     /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
@@ -357,6 +361,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile/.test(entitlementE2eTest)
     && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest)
     && /missing, false, and unsupported terms consent fail before Turnstile or Stripe/.test(entitlementE2eTest)
+    && /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/.test(entitlementE2eTest)
+    && /a failed consent metadata update withholds the client secret until a stable retry succeeds/.test(entitlementE2eTest)
     && /expectedHostname/.test(turnstileGateway)
     && /idempotency_key/.test(turnstileGateway)
     && /NEXT_PUBLIC_TURNSTILE_SITE_KEY/.test(paymentClient)

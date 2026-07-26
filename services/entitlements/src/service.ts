@@ -35,6 +35,7 @@ export type EntitlementConfig = {
 export type PaymentIntentSnapshot = {
   id: string;
   clientSecret?: string | null;
+  createdAt?: number;
   paymentStatus?: string | null;
   refundStatus: "none" | "partial" | "full";
   metadata?: Record<string, string> | null;
@@ -54,9 +55,13 @@ export type StripeGateway = {
         scanId: string;
         product: typeof PRODUCT;
         termsVersion: typeof TERMS_VERSION;
-        termsAcceptedAt: string;
       };
     }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
+    updateMetadata(
+      paymentIntentId: string,
+      metadata: { termsAcceptedAt: string },
+      idempotencyKey: string,
+    ): Promise<void>;
     retrieve(paymentIntentId: string): Promise<PaymentIntentSnapshot>;
   };
   webhooks: {
@@ -152,6 +157,13 @@ function rawBody(event: APIGatewayProxyEventV2): Buffer {
   return event.isBase64Encoded ? Buffer.from(event.body, "base64") : Buffer.from(event.body, "utf8");
 }
 
+function consentTimestamp(createdAt: number | undefined): string {
+  if (typeof createdAt !== "number" || !Number.isSafeInteger(createdAt) || createdAt <= 0) {
+    throw new RequestError(502, "Payment is temporarily unavailable.", "payment_created_at_unavailable");
+  }
+  return new Date(createdAt * 1_000).toISOString();
+}
+
 export function createEntitlementService({
   config,
   stripe,
@@ -197,9 +209,18 @@ export function createEntitlementService({
           scanId,
           product: PRODUCT,
           termsVersion,
-          termsAcceptedAt: new Date(now()).toISOString(),
         },
       }, `preflight-${scanId}`);
+    } catch (error) {
+      throw stripeFailure(error);
+    }
+    const termsAcceptedAt = consentTimestamp(paymentIntent.createdAt);
+    try {
+      await stripe.payments.updateMetadata(
+        paymentIntent.id,
+        { termsAcceptedAt },
+        `preflight-${scanId}-consent-${termsVersion}`,
+      );
     } catch (error) {
       throw stripeFailure(error);
     }

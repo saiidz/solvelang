@@ -19,6 +19,7 @@ Serverless Stripe PaymentIntent creation, webhook verification, signed report en
 - `CHECKOUT_ENABLED` defaults to `false`; when disabled, `POST /checkout` returns a fixed HTTP 503 before parsing the request or calling Stripe.
 - Checkout accepts a Cloudflare Turnstile token only after the checkout page renders the configured widget. The Lambda verifies it server-side with `TURNSTILE_SECRET_KEY`, the API Gateway client IP, the expected `SITE_ORIGIN` hostname, and the exact `checkout` action before it creates a PaymentIntent. Verification rejection, malformed responses, and provider unavailability never create a PaymentIntent.
 - Checkout requires `termsAccepted: true` and the supported terms version before Turnstile verification. It never stores the checkbox text, Turnstile token, IP address, user agent, workflow content, or secrets in PaymentIntent metadata.
+- Checkout creates the PaymentIntent with stable scan and terms metadata under `preflight-${scanId}`, then records the server-derived Stripe creation time as `termsAcceptedAt` with a separate stable consent-update idempotency key before returning the client secret. Retries therefore recover the same intent without changing Stripe parameters.
 
 ## Health endpoint
 

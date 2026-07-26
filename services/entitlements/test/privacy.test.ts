@@ -39,6 +39,7 @@ function fixture() {
   const stripe: StripeGateway = {
     payments: {
       async create() { throw new Error(forbidden.join(" | ")); },
+      async updateMetadata() { throw new Error(forbidden.join(" | ")); },
       async retrieve() { throw new Error(forbidden.join(" | ")); },
     },
     webhooks: {
