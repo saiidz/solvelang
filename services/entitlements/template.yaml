@@ -329,6 +329,7 @@ Resources:
       Environment:
         Variables:
           CONFIRMATION_DISPATCH_TABLE: !Ref ConfirmationDispatchTable
+          DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
           DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue
       Policies:
         - DynamoDBCrudPolicy:

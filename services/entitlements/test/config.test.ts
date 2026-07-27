@@ -47,6 +47,15 @@ test("production checkout requires an implemented durable confirmation provider 
     DURABLE_CONFIRMATION_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/confirmations.fifo",
     DURABLE_CONFIRMATION_SENDER: "receipts@solve-lang.com",
   }).DURABLE_CONFIRMATION_PROVIDER, "aws-ses-sqs");
+});
+
+test("production checkout rejects the test-sink confirmation provider", () => {
+  const production = {
+    ...valid,
+    ENTITLEMENT_MODE: "production",
+    STRIPE_SECRET_KEY: "sk_live_local_only",
+    CHECKOUT_ENABLED: "true",
+  };
   assert.throws(() => parseEntitlementEnvironment({ ...production, DURABLE_CONFIRMATION_PROVIDER: "test-sink" }), /test-sink/);
 });
 

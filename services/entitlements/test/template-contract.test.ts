@@ -24,6 +24,7 @@ test("confirmation outbox and delivery ledgers use encrypted TTL-backed tables a
   assert.match(functionBlock("ConfirmationDeliveryTable"), /AttributeName: expiresAt/);
   const dispatcher = functionBlock("ConfirmationDispatcherFunction");
   assert.match(dispatcher, /CONFIRMATION_DISPATCH_TABLE: !Ref ConfirmationDispatchTable/);
+  assert.match(dispatcher, /DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider/);
   assert.match(dispatcher, /DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue/);
   assert.match(dispatcher, /Type: DynamoDB/);
 });
