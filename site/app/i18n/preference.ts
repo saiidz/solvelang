@@ -20,6 +20,14 @@ export function storedLocale(value: string | null): LocaleCode | undefined {
 export function browserLocale(languages: readonly string[]): LocaleCode | undefined {
   for (const value of languages) {
     const lower = value.toLowerCase();
+    const parts = lower.split("-");
+    if (parts[0] === "zh") {
+      if (parts.includes("hans")) return "zh-Hans";
+      if (parts.includes("hant")) return "zh-Hant";
+      const region = parts.find((part) => part.length === 2 && part !== "zh");
+      if (region === "cn" || region === "sg") return "zh-Hans";
+      if (region === "tw" || region === "hk" || region === "mo") return "zh-Hant";
+    }
     const exact = locales.find((locale) => locale.code.toLowerCase() === lower);
     if (exact) return exact.code as LocaleCode;
     const base = lower.split("-")[0];

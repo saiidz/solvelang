@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { alternatesForRoute } from "../../i18n/seo";
-export const metadata: Metadata = { title: "Billing FAQ — SolveLang", description: "Billing and payment answers for SolveLang Workflow Preflight.", alternates: alternatesForRoute("billing") };
+export const metadata: Metadata = { title: "Billing FAQ", description: "Billing and payment answers for SolveLang Workflow Preflight.", alternates: alternatesForRoute("billing") };
 const items=[
   ["How is payment handled?","Stripe Payment Element processes the $49 card payment on SolveLang. SolveLang does not receive or store full card details."],
   ["What does one purchase unlock?","One successful PaymentIntent unlocks the complete report for the matching scan ID. Entitlements are short-lived and bound to that PaymentIntent."],

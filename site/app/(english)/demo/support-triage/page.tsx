@@ -3,7 +3,7 @@ import Link from "next/link";
 import { JsonLd } from "../../../components/JsonLd";
 
 export const metadata: Metadata = {
-  title: "Support Triage Demo — SolveLang",
+  title: "Support Triage Demo",
   description:
     "See how SolveLang maps a messy support inbox into ownership, priority, reply drafts, and next steps.",
 };

@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node qa/prepare-i18n-preview.mjs",
     "dev": "next dev",
+    "prebuild": "node qa/prepare-i18n-preview.mjs",
     "build": "next build",
     "verify:i18n-export": "node qa/verify-i18n-export.mjs",
     "start": "next start",

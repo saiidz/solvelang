@@ -3,7 +3,7 @@ import Link from "next/link";
 import { WorkflowPreflight } from "../../check/WorkflowPreflight";
 
 export const metadata: Metadata = {
-  title: "Free n8n Workflow Validator and Preflight — SolveLang",
+  title: "Free n8n Workflow Validator and Preflight",
   description:
     "Upload an exported n8n workflow and receive an automated deterministic preflight score, risk findings, and downloadable evidence without sending workflow data to a server.",
 };

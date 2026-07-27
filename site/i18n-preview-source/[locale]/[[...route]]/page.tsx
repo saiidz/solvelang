@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { dictionaryFor } from "../../i18n/dictionaries";
 import { localeForSegment } from "../../i18n/locales";
 import { alternatesForRoute } from "../../i18n/seo";
+import { RomanianLegalDraft } from "../../i18n/romanianLegal";
 import { draftPreviewEnabled, normalisePublicRoute, pathForLocale, productionLocalizedParams, type PublicRouteSegment } from "../../i18n/routes";
 
 type Props = { params: Promise<{ locale: string; route?: string[] }> };
@@ -20,8 +21,7 @@ function routeTitle(route: PublicRouteSegment, dictionary: ReturnType<typeof dic
 }
 
 export function generateStaticParams() {
-  const params = productionLocalizedParams();
-  return params.length > 0 ? params : [{ locale: "__i18n_disabled__", route: [] }];
+  return productionLocalizedParams();
 }
 
 export const dynamic = "force-static";
@@ -29,31 +29,30 @@ export const dynamicParams = false;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale: segment, route: routeParts } = await params;
-  if (segment === "__i18n_disabled__") return { robots: { index: false, follow: false } };
   const locale = localeForSegment(segment);
   const route = normalisePublicRoute(routeParts);
   if (!locale || route === undefined) return {};
   const dictionary = dictionaryFor(locale.code as never);
   const alternates = alternatesForRoute(route, undefined, locale.code);
   return {
-    title: `${routeTitle(route, dictionary)} | SolveLang`,
+    title: routeTitle(route, dictionary),
     description: dictionary.draftNotice,
     alternates,
     robots: { index: locale.publicationState === "reviewed", follow: true },
-    openGraph: { title: `${routeTitle(route, dictionary)} | SolveLang`, description: dictionary.draftNotice, url: alternates.canonical, locale: locale.code },
-    twitter: { card: "summary", title: `${routeTitle(route, dictionary)} | SolveLang`, description: dictionary.draftNotice },
+    openGraph: { title: routeTitle(route, dictionary), description: dictionary.draftNotice, url: alternates.canonical, locale: locale.code },
+    twitter: { card: "summary", title: routeTitle(route, dictionary), description: dictionary.draftNotice },
   };
 }
 
 export default async function LocalizedPublicPage({ params }: Props) {
   const { locale: segment, route: routeParts } = await params;
-  if (segment === "__i18n_disabled__") {
-    return <main aria-hidden="true" className="hidden">Localized routes are not published.</main>;
-  }
   const locale = localeForSegment(segment);
   const route = normalisePublicRoute(routeParts);
   if (!locale || route === undefined || locale.code === "en" || (locale.publicationState !== "reviewed" && !draftPreviewEnabled())) notFound();
   const dictionary = dictionaryFor(locale.code as never);
+  if (locale.code === "ro" && ["terms", "refund-policy", "preflight-privacy", "withdraw"].includes(route)) {
+    return <RomanianLegalDraft route={route} />;
+  }
   const checkoutBlocked = route === "checkout" || route === "check";
   return <main lang={locale.code} dir={locale.direction} className="min-h-screen bg-slate-50 px-6 py-14 text-slate-950 sm:py-20">
     <article className="mx-auto max-w-3xl space-y-7 leading-7 text-slate-700">

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { JsonLd } from "../../components/JsonLd";
 
 export const metadata: Metadata = {
-  title: "Workflow X-Ray Audit — SolveLang",
+  title: "Workflow X-Ray Audit",
   description:
     "Send one messy workflow and get next steps for turning it into a readable SolveLang workflow map, draft, and automation path.",
 };

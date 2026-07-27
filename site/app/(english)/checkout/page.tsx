@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PaymentElementClient } from "../../checkout/PaymentElementClient";
 
 export const metadata: Metadata = {
-  title: "Secure Checkout | SolveLang",
+  title: "Secure Checkout",
   description: "Complete your SolveLang Workflow Preflight purchase securely with Stripe.",
   robots: { index: false, follow: false },
 };

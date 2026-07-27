@@ -3,7 +3,7 @@ import Link from "next/link";
 import { alternatesForRoute } from "../../i18n/seo";
 
 export const metadata: Metadata = {
-  title: "Resources — SolveLang",
+  title: "Resources",
   description:
     "A static index of SolveLang demos, audit resources, browser preview, local runtime, and crawlability files for AI discovery.",
   alternates: alternatesForRoute("resources"),

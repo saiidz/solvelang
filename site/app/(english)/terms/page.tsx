@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import legalContent from "../legal-content.json";
+import legalContent from "../../legal-content.json";
 import { alternatesForRoute } from "../../i18n/seo";
 
 export const metadata: Metadata = {

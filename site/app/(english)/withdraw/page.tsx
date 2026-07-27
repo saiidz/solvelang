@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { WithdrawalRequestClient } from "./WithdrawalRequestClient";
+import { WithdrawalRequestClient } from "../../withdraw/WithdrawalRequestClient";
+import { alternatesForRoute } from "../../i18n/seo";
 
 export const metadata: Metadata = {
-  title: "Withdrawal Request | SolveLang",
+  title: "Withdrawal Request",
   description: "Submit a SolveLang Workflow Preflight withdrawal request for review.",
-  alternates: { canonical: "/withdraw/" },
+  alternates: alternatesForRoute("withdraw"),
 };
 
 export default function WithdrawPage() {

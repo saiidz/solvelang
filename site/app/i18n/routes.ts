@@ -62,6 +62,21 @@ export function isPaymentSensitiveRoute(route: PublicRouteSegment): boolean {
     || route === "success";
 }
 
+function routeForPathname(pathname: string): PublicRouteSegment | undefined {
+  const parts = pathname.split("/").filter(Boolean);
+  return normalisePublicRoute(localeForSegment(parts[0]) ? parts.slice(1) : parts);
+}
+
+export function isLanguageSuggestionEligiblePath(pathname: string): boolean {
+  const route = routeForPathname(pathname);
+  return route !== undefined
+    && publicRoutes.find((candidate) => candidate.segment === route)?.classification === "localizable-public";
+}
+
+export function canApplyLanguageSuggestion(requestPath: string, currentPath: string): boolean {
+  return requestPath === currentPath && isLanguageSuggestionEligiblePath(currentPath);
+}
+
 export function draftPreviewEnabled(environment: NodeJS.ProcessEnv = process.env): boolean {
   return environment.I18N_DRAFT_PREVIEW === "true";
 }

@@ -115,7 +115,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
         {children}
-        <LanguageSuggestion countryHintEndpoint={process.env.I18N_COUNTRY_HINT_ENDPOINT ?? ""} />
+        <LanguageSuggestion countryHintEndpoint={process.env.NEXT_PUBLIC_COUNTRY_HINT_ENDPOINT ?? ""} />
       </body>
     </html>
   );

@@ -6,6 +6,10 @@
 
 The locale registry at `site/app/i18n/locales.ts` is canonical. It records the BCP 47 and hreflang values, lowercase URL segment, direction, publication state, revision, marketing/legal/checkout review status, checkout allowance, reviewer, and review date. Do not mark a translation reviewed because it was machine generated.
 
+Production builds materialize no localized App Router tree while English is the only reviewed locale, so the production localized-route count is zero. The route source lives in `site/i18n-preview-source/[locale]` and is copied into App Router only when `I18N_DRAFT_PREVIEW=true` is explicitly set. The current draft preview produces 432 noindex routes (27 draft locales across 16 localizable routes); those routes remain excluded from the production sitemap and hreflang.
+
+Romanian legal drafts are maintained once in `site/app/i18n/romanianLegal.tsx` and are rendered only through that explicit preview mechanism. Romanian remains `publicationState=draft`, its checkout remains disabled, and its legal, identity, marketing, and checkout translations still require human review.
+
 ## Adding or retiring a locale
 
 Add one registry entry and a complete dictionary. Build-time dictionary validation must pass. Keep the locale `draft` until a named human reviewer has completed marketing review. Legal pages and checkout require separate legal and checkout-translation review. Only then may a locale become `reviewed`; it still needs explicit checkout allowance before any localized checkout can be offered. To retire a locale, mark it `disabled`, remove it from reviewed sitemap/hreflang generation, retain a reviewed migration decision, and avoid redirecting it by visitor IP.

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: "Browser Preview — SolveLang",
+  title: "Browser Preview",
   description:
     "Try the browser-safe SolveLang preview for simple workflow scripts. It runs locally in the browser and does not call a server.",
 };

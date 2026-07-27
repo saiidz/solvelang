@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from "next/link";
 import { alternatesForRoute } from "../../i18n/seo";
 
-export const metadata: Metadata = { title: "Workflow Preflight Support — SolveLang", description: "Self-service help for SolveLang Workflow Preflight scanning, checkout, reports, privacy, and refunds.", alternates: alternatesForRoute("support") };
+export const metadata: Metadata = { title: "Workflow Preflight Support", description: "Self-service help for SolveLang Workflow Preflight scanning, checkout, reports, privacy, and refunds.", alternates: alternatesForRoute("support") };
 
 const sections = [
   ["The file will not scan", "Export one n8n workflow as JSON. The file must be non-empty, under 2 MB, and contain a nodes array with no more than 5,000 nodes."],

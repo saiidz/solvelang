@@ -1,7 +1,0 @@
-import Link from "next/link";
-import type { Metadata } from "next";
-export const metadata: Metadata = { robots: { index: false, follow: true } };
-
-export default function RomanianPreflightPrivacyPage() {
-  return <main className="min-h-screen bg-slate-50 px-6 py-14 text-slate-950 sm:py-20"><article className="mx-auto max-w-3xl space-y-7 leading-7 text-slate-700"><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/ro/terms/">Termeni</Link><Link href="/ro/refund-policy/">Rambursari</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Confidentialitate Workflow Preflight</h1><p>Scanarea initiala ruleaza in browser. La plata, API-ul primeste un identificator opac, emailul validat pentru confirmare si chitanta Stripe, versiunea termenilor si consimtamantul necesar. Emailul nu este stocat in DynamoDB si nu este inclus in metadatele PaymentIntent.</p><p>Metadatele PaymentIntent contin doar identificatorul opac, produsul, versiunea termenilor, momentul de acceptare derivat de server si confirmarile necesare. Numele workflow-ului, parametrii nodurilor, acreditari, continutul raportului, tokenul Turnstile, IP-ul si agentul utilizatorului nu sunt incluse.</p><p className="text-sm">Aceasta traducere automata necesita verificare juridica si a proprietarului inainte de activarea platii in productie.</p></article></main>;
-}

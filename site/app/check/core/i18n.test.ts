@@ -3,7 +3,16 @@ import test from "node:test";
 import { dictionaries, dictionaryFor, requiredDictionaryKeys, technicalTerms, validateReviewedDictionary } from "../../i18n/dictionaries";
 import { defaultLocale, locales, publishedLocales, reviewedLocales } from "../../i18n/locales";
 import { browserLocale, storedLocale, suggestedLocale, validateCountryHint } from "../../i18n/preference";
-import { localizableRoutes, normalisePublicRoute, pathForLocale, productionLocalizedParams, publicRoutes, safeLocalePath } from "../../i18n/routes";
+import {
+  canApplyLanguageSuggestion,
+  isLanguageSuggestionEligiblePath,
+  localizableRoutes,
+  normalisePublicRoute,
+  pathForLocale,
+  productionLocalizedParams,
+  publicRoutes,
+  safeLocalePath,
+} from "../../i18n/routes";
 import { alternatesForRoute, sitemapEntries } from "../../i18n/seo";
 
 test("locale registry has unique valid static route and hreflang definitions", () => {
@@ -71,6 +80,29 @@ test("language preference order and country hint validation are deterministic an
   assert.equal(validateCountryHint({ country: "fr" }), undefined);
   assert.equal(validateCountryHint({ country: "FR", city: "Paris" }), undefined);
   assert.equal(validateCountryHint({ city: "Paris" }), undefined);
+});
+
+test("Chinese browser locale aliases honor explicit scripts before region mappings", () => {
+  assert.equal(browserLocale(["zh-CN"]), "zh-Hans");
+  assert.equal(browserLocale(["zh-SG"]), "zh-Hans");
+  assert.equal(browserLocale(["zh-TW"]), "zh-Hant");
+  assert.equal(browserLocale(["zh-HK"]), "zh-Hant");
+  assert.equal(browserLocale(["zh-MO"]), "zh-Hant");
+  assert.equal(browserLocale(["zh-Hant-CN"]), "zh-Hant");
+  assert.equal(browserLocale(["zh-Hans-TW"]), "zh-Hans");
+  assert.equal(suggestedLocale({ browser: browserLocale(["zh-CN"]) }), "en");
+  assert.equal(suggestedLocale({ browser: browserLocale(["zh-TW"]) }), "en");
+});
+
+test("language suggestions clear on sensitive routes and ignore stale navigation responses", () => {
+  assert.equal(isLanguageSuggestionEligiblePath("/support/"), true);
+  assert.equal(isLanguageSuggestionEligiblePath("/check/"), false);
+  assert.equal(isLanguageSuggestionEligiblePath("/checkout/"), false);
+  assert.equal(isLanguageSuggestionEligiblePath("/success/"), false);
+  assert.equal(isLanguageSuggestionEligiblePath("/run/"), false);
+  assert.equal(canApplyLanguageSuggestion("/support/", "/support/"), true);
+  assert.equal(canApplyLanguageSuggestion("/support/", "/checkout/"), false);
+  assert.equal(canApplyLanguageSuggestion("/about/", "/check/"), false);
 });
 
 test("hreflang is route-specific, self-referencing, reciprocal, and excludes drafts", () => {
