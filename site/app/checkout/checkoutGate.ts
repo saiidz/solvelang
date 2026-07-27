@@ -1,25 +1,44 @@
-export const TERMS_VERSION = "2026-07-26";
+export const TERMS_VERSION = "2026-07-26-v2";
+
+export type CheckoutConsent = {
+  customerEmail: string;
+  termsAccepted: boolean;
+  immediatePerformanceRequested: boolean;
+  withdrawalAcknowledged: boolean;
+  termsVersion: string;
+};
 
 export type CheckoutGateState =
   | { phase: "awaiting_verification" }
-  | { phase: "creating_checkout"; token: string }
-  | { phase: "payment_ready" };
+  | { phase: "creating_checkout"; token: string; consent: CheckoutConsent }
+  | { phase: "checkout_retry_required"; consent: CheckoutConsent }
+  | { phase: "payment_ready"; consent: CheckoutConsent };
 
 export function initialCheckoutGate(): CheckoutGateState {
   return { phase: "awaiting_verification" };
 }
 
-export function beginCheckout(state: CheckoutGateState, token: string): CheckoutGateState {
+export function beginCheckout(state: CheckoutGateState, token: string, consent: CheckoutConsent): CheckoutGateState {
   if (!token || state.phase !== "awaiting_verification") return state;
-  return { phase: "creating_checkout", token };
+  return { phase: "creating_checkout", token, consent: { ...consent } };
 }
 
 export function checkoutCreated(state: CheckoutGateState): CheckoutGateState {
-  return state.phase === "creating_checkout" ? { phase: "payment_ready" } : state;
+  return state.phase === "creating_checkout" ? { phase: "payment_ready", consent: state.consent } : state;
 }
 
-export function checkoutFailed(): CheckoutGateState {
-  return initialCheckoutGate();
+export function checkoutFailed(state: CheckoutGateState, definitelyNotCreated = false): CheckoutGateState {
+  if (state.phase !== "creating_checkout") return state;
+  return definitelyNotCreated ? initialCheckoutGate() : { phase: "checkout_retry_required", consent: state.consent };
+}
+
+export function retryCheckout(state: CheckoutGateState, token: string): CheckoutGateState {
+  if (!token || state.phase !== "checkout_retry_required") return state;
+  return { phase: "creating_checkout", token, consent: state.consent };
+}
+
+export function canStartOver(submitting: boolean, paymentStatus: string): boolean {
+  return !submitting && !paymentStatus.includes("Processing your payment") && !paymentStatus.includes("Payment is processing");
 }
 
 export function expireTurnstile(state: CheckoutGateState): CheckoutGateState {
@@ -46,8 +65,14 @@ export function checkoutConfigurationError({
   return undefined;
 }
 
-export function checkoutConsentError(termsAccepted: boolean, termsVersion: string): string | undefined {
-  if (!termsAccepted) return "Accept the Terms of Use and Refund Policy before checkout can start.";
-  if (termsVersion !== TERMS_VERSION) return "Checkout terms are out of date. Refresh the page and try again.";
+export function checkoutConsentError(consent: CheckoutConsent): string | undefined {
+  if (!consent.customerEmail || !/^\S+@\S+\.\S+$/.test(consent.customerEmail)) {
+    return "Enter a valid email address for your contract confirmation and Stripe receipt.";
+  }
+  if (!consent.termsAccepted) return "Accept the Terms of Use and Refund Policy before checkout can start.";
+  if (!consent.immediatePerformanceRequested || !consent.withdrawalAcknowledged) {
+    return "Confirm the immediate-performance and withdrawal acknowledgement before checkout can start.";
+  }
+  if (consent.termsVersion !== TERMS_VERSION) return "Checkout terms are out of date. Refresh the page and try again.";
   return undefined;
 }

@@ -1,0 +1,7 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+export const metadata: Metadata = { robots: { index: false, follow: true } };
+
+export default function RomanianWithdrawPage() {
+  return <main className="min-h-screen bg-slate-50 px-6 py-14 text-slate-950 sm:py-20"><article className="mx-auto max-w-3xl space-y-7 leading-7 text-slate-700"><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/withdraw/">English withdrawal form</Link><Link href="/ro/terms/">Termeni</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Cerere de retragere</h1><p>Puteti transmite declaratia de retragere prin formularul in limba engleza sau la hello@solve-lang.com. Nu includeti numere de card, continutul workflow-ului, acreditari sau secrete. Cererea este confirmata pe suport durabil numai dupa configurarea furnizorului aws-ses-sqs; nu reprezinta o decizie automata privind eligibilitatea sau o promisiune de rambursare.</p><p className="text-sm">Aceasta traducere automata necesita verificare juridica si a proprietarului inainte de activarea platii in productie.</p></article></main>;
+}

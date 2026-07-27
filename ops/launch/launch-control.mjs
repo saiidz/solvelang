@@ -147,9 +147,11 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
     const enabled = environment.CHECKOUT_ENABLED === "true";
     const signedWebhookVerified = environment.WEBHOOK_SIGNED_DELIVERY_VERIFIED === "true";
     const legalReviewVerified = environment.LEGAL_CHECKOUT_REVIEW_VERIFIED === "true";
+    const legalIdentityVerified = environment.LEGAL_IDENTITY_VERIFIED === "true";
+    const durableConfirmationApproved = environment.DURABLE_CONFIRMATION_PROVIDER === "aws-ses-sqs";
     controls.push(
-      enabled && signedWebhookVerified && legalReviewVerified
-        ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after protected webhook and legal-review confirmations.")
+      enabled && signedWebhookVerified && legalReviewVerified && legalIdentityVerified && durableConfirmationApproved
+        ? control("production-checkout-enablement", "Production checkout enablement", "pass", "Production checkout is explicitly enabled after protected webhook, legal, identity, and durable-confirmation controls.")
         : control(
             "production-checkout-enablement",
             "Production checkout enablement",
@@ -158,8 +160,12 @@ export function evaluateLaunch({ environment, repository, probes = {}, now = new
               ? "Production checkout cannot be enabled until signed webhook verification is confirmed."
               : enabled && !legalReviewVerified
                 ? "Production checkout cannot be enabled until the legal checkout review is confirmed."
+                : enabled && !legalIdentityVerified
+                  ? "Production checkout cannot be enabled until the operator identity and final consumer price are verified."
+                  : enabled && !durableConfirmationApproved
+                    ? "Production checkout cannot be enabled until the aws-ses-sqs durable confirmation provider is configured."
                 : "Production checkout remains disabled.",
-            "After the real webhook secret is installed, the legal checklist is complete, and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true, LEGAL_CHECKOUT_REVIEW_VERIFIED=true, and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
+            "After the real webhook secret is installed, the legal checklist and operator identity are complete, the aws-ses-sqs provider is configured, and Stripe-signed delivery returns HTTP 200, set WEBHOOK_SIGNED_DELIVERY_VERIFIED=true, LEGAL_CHECKOUT_REVIEW_VERIFIED=true, LEGAL_IDENTITY_VERIFIED=true, DURABLE_CONFIRMATION_PROVIDER=aws-ses-sqs, and CHECKOUT_ENABLED=true in entitlement-production, then deploy again.",
           ),
     );
   } else {
@@ -300,6 +306,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const entitlementTemplate = await readFile(path.join(root, "services/entitlements/template.yaml"), "utf8");
   const entitlementDeployWorkflow = await readFile(path.join(root, ".github/workflows/deploy-entitlements.yml"), "utf8");
   const entitlementE2eTest = await readFile(path.join(root, "services/entitlements/test/e2e.test.ts"), "utf8");
+  const confirmationWorkerTest = await readFile(path.join(root, "services/entitlements/test/confirmation-worker.test.ts"), "utf8");
+  const confirmationDispatcherTest = await readFile(path.join(root, "services/entitlements/test/confirmation-dispatcher.test.ts"), "utf8");
   const entitlementPrivacyTest = await readFile(path.join(root, "services/entitlements/test/privacy.test.ts"), "utf8");
   const browserRecoveryTest = await readFile(path.join(root, "site/app/check/core/paidRecovery.test.ts"), "utf8");
   const checkoutGateTest = await readFile(path.join(root, "site/app/check/core/turnstileCheckout.test.ts"), "utf8");
@@ -315,9 +323,11 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)
     && /Path:\s*\/health[\s\S]*Method:\s*GET/.test(entitlementTemplate)
     && /health exposes only a fixed non-sensitive test-mode readiness contract/.test(entitlementE2eTest);
-  const privacySafe = /body:\s*JSON\.stringify\(\{[\s\S]*scanId,[\s\S]*turnstileToken:\s*token,[\s\S]*termsAccepted:\s*true,[\s\S]*termsVersion:\s*TERMS_VERSION/.test(paymentClient)
+  const privacySafe = /body:\s*JSON\.stringify\(\{[\s\S]*scanId,[\s\S]*turnstileToken:\s*token,[\s\S]*customerEmail:[\s\S]*termsAccepted:\s*true,[\s\S]*immediatePerformanceRequested:\s*true,[\s\S]*withdrawalAcknowledged:\s*true,[\s\S]*termsVersion:\s*TERMS_VERSION/.test(paymentClient)
     && /body:\s*JSON\.stringify\(\{\s*name\s*\}\)/.test(preflightClient)
-    && /metadata:\s*\{[\s\S]*scanId,[\s\S]*product:\s*PRODUCT,[\s\S]*termsVersion,\s*\}/.test(entitlementService)
+    && /receiptEmail:\s*customerEmail/.test(entitlementService)
+    && /immediatePerformanceRequested:\s*"true"/.test(entitlementService)
+    && /withdrawalAcknowledged:\s*"true"/.test(entitlementService)
     && /const termsAcceptedAt = consentTimestamp\(paymentIntent\.createdAt\)/.test(entitlementService)
     && /await stripe\.payments\.updateMetadata\([\s\S]*\{ termsAcceptedAt \},[\s\S]*preflight-\$\{scanId\}-consent-\$\{termsVersion\}/.test(entitlementService)
     && /workflow and secret material never reaches client errors or structured logs/.test(entitlementPrivacyTest)
@@ -328,52 +338,48 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     /test-mode checkout remains operational and records server-derived consent metadata/,
     /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/,
     /a failed consent metadata update withholds the client secret until a stable retry succeeds/,
-    /valid signed webhook records one entitlement and replay or duplicate delivery remains idempotent/,
+    /valid signed webhook atomically records one entitlement and durable outbox across late replays/,
     /Stripe gateway verifies a deterministic local test signature without network access/,
     /invalid webhook signatures are rejected without processing/,
     /paid payment recovery issues a verifiable short-lived entitlement/,
     /expired, invalid, and tampered entitlement tokens are rejected/,
   ];
   const testModeE2eHarness = requiredLifecycleEvidence.every((pattern) => pattern.test(entitlementE2eTest))
+    && /outbox dispatch retries queue or update ambiguity without losing the committed confirmation/.test(confirmationDispatcherTest)
+    && /confirmation delivery leases recover safely and never acknowledge active or ambiguous records/.test(confirmationWorkerTest)
+    && /strict confirmation schemas reject missing consent fields and arbitrary payload fields/.test(confirmationWorkerTest)
     && /browser return verifies entitlement server-side and removes payment parameters/.test(browserRecoveryTest)
     && /browser recovery fails closed for mismatched scans and unverifiable payment/.test(browserRecoveryTest);
   const refundAware = /full refunds revoke entitlement renewal while partial refunds remain eligible/.test(entitlementE2eTest)
     && /signed refund webhook records verified full refund state idempotently/.test(entitlementE2eTest)
     && /charge\.refunded/.test(entitlementService)
     && /refundStatus === ["']full["']/.test(entitlementService);
-  const checkoutGate = /CHECKOUT_ENABLED:\s*z\.enum\(\["true", "false"\]\)\.default\("false"\)/.test(entitlementConfig)
-    && /TURNSTILE_SECRET_KEY:\s*z\.string\(\)\.min\(1\)/.test(entitlementConfig)
-    && /termsAccepted:\s*z\.literal\(true\)/.test(entitlementService)
-    && /termsVersion:\s*z\.literal\(TERMS_VERSION\)/.test(entitlementService)
-    && /if \(!config\.checkoutEnabled\)[\s\S]*RequestError\(503, "Checkout is temporarily unavailable\."/.test(entitlementService)
-    && /verified = await turnstile\.verify[\s\S]*paymentIntent = await stripe\.payments\.create/.test(entitlementService)
-    && /checkoutEnabled: environment\.CHECKOUT_ENABLED === "true"/.test(entitlementHandler)
-    && /createTurnstileGateway\(\{[\s\S]*secret: environment\.TURNSTILE_SECRET_KEY,[\s\S]*expectedHostname: new URL\(environment\.SITE_ORIGIN\)\.hostname/.test(entitlementHandler)
-    && /CheckoutEnabled:[\s\S]*Default: "false"/.test(entitlementTemplate)
-    && /TurnstileSecretKey:[\s\S]*NoEcho: true/.test(entitlementTemplate)
-    && /WebhookSignedDeliveryVerified:[\s\S]*Default: "false"/.test(entitlementTemplate)
-    && /ProductionCheckoutRequiresVerifiedWebhook:[\s\S]*!Equals \[!Ref CheckoutEnabled, "false"\][\s\S]*!Equals \[!Ref WebhookSignedDeliveryVerified, "true"\]/.test(entitlementTemplate)
-    && /CHECKOUT_ENABLED:[\s\S]*WEBHOOK_SIGNED_DELIVERY_VERIFIED/.test(entitlementDeployWorkflow)
-    && /TURNSTILE_SECRET_KEY:[\s\S]*secrets\.TURNSTILE_SECRET_KEY/.test(entitlementDeployWorkflow)
-    && /LEGAL_CHECKOUT_REVIEW_VERIFIED:[\s\S]*LegalCheckoutReviewVerified/.test(entitlementDeployWorkflow)
-    && /LegalCheckoutReviewVerified:[\s\S]*Default: "false"/.test(entitlementTemplate)
-    && /checkout rejects an unsuccessful Turnstile verification before creating a PaymentIntent/.test(entitlementE2eTest)
-    && /production bootstrap denies checkout without creating a PaymentIntent or verifying Turnstile/.test(entitlementE2eTest)
-    && /explicitly enabled production checkout creates a PaymentIntent/.test(entitlementE2eTest)
-    && /missing, false, and unsupported terms consent fail before Turnstile or Stripe/.test(entitlementE2eTest)
-    && /a lost PaymentIntent create response retries with stable parameters and recovers the original client secret/.test(entitlementE2eTest)
-    && /a failed consent metadata update withholds the client secret until a stable retry succeeds/.test(entitlementE2eTest)
-    && /expectedHostname/.test(turnstileGateway)
-    && /idempotency_key/.test(turnstileGateway)
-    && /NEXT_PUBLIC_TURNSTILE_SITE_KEY/.test(paymentClient)
-    && /action: "checkout"/.test(paymentClient)
-    && /Turnstile expiry after a client secret mounts preserves the payment form state/.test(checkoutGateTest)
-    && /duplicate Turnstile callbacks cannot start concurrent checkout requests/.test(checkoutGateTest)
-    && /export const TERMS_VERSION = "2026-07-26"/.test(checkoutTerms)
-    && /export const TERMS_VERSION = "2026-07-26"/.test(entitlementTerms)
-    && /Terms of Use/.test(termsPage)
-    && /Refund Policy/.test(refundPolicyPage)
-    && /LEGAL_CHECKOUT_REVIEW_VERIFIED/.test(legalChecklist);
+  const checkoutGate = [
+    entitlementConfig.includes('CHECKOUT_ENABLED: z.enum(["true", "false"]).default("false")'),
+    entitlementConfig.includes("TURNSTILE_SECRET_KEY: z.string().min(1)"),
+    entitlementService.includes("termsAccepted: z.literal(true)"),
+    entitlementService.includes("immediatePerformanceRequested: z.literal(true)"),
+    entitlementService.includes("withdrawalAcknowledged: z.literal(true)"),
+    entitlementService.includes("termsVersion: z.literal(TERMS_VERSION)"),
+    entitlementService.includes('if (!config.checkoutEnabled)'),
+    entitlementService.includes('RequestError(503, "Checkout is temporarily unavailable."'),
+    entitlementService.indexOf("verified = await turnstile.verify") < entitlementService.indexOf("paymentIntent = await stripe.payments.create"),
+    entitlementHandler.includes('checkoutEnabled: environment.CHECKOUT_ENABLED === "true"'),
+    entitlementTemplate.includes('CheckoutEnabled:') && entitlementTemplate.includes('Default: "false"'),
+    entitlementTemplate.includes('LegalIdentityVerified:') && entitlementTemplate.includes('DurableConfirmationProvider:'),
+    entitlementTemplate.includes('Path: /withdraw'),
+    entitlementDeployWorkflow.includes('LEGAL_IDENTITY_VERIFIED') && entitlementDeployWorkflow.includes('DURABLE_CONFIRMATION_PROVIDER'),
+    entitlementE2eTest.includes("missing, false, and unsupported consent fields fail before Turnstile or Stripe"),
+    entitlementE2eTest.includes("report recovery remains unavailable until the signed webhook queues durable confirmation"),
+    entitlementE2eTest.includes("withdrawal requests require durable confirmation and record only a server timestamp"),
+    turnstileGateway.includes("expectedHostname") && turnstileGateway.includes("idempotency_key"),
+    paymentClient.includes("NEXT_PUBLIC_TURNSTILE_SITE_KEY") && paymentClient.includes('action: "checkout"'),
+    checkoutGateTest.includes("Turnstile expiry after a client secret mounts preserves the payment form state"),
+    checkoutTerms.includes('export const TERMS_VERSION = "2026-07-26-v2"'),
+    entitlementTerms.includes('legal-content.json'),
+    termsPage.includes("Terms of Use") && refundPolicyPage.includes("Refund Policy"),
+    legalChecklist.includes("LEGAL_CHECKOUT_REVIEW_VERIFIED"),
+  ].every(Boolean);
   return {
     commitSha: git(root, ["rev-parse", "HEAD"]),
     clean: git(root, ["status", "--porcelain"]) === "",

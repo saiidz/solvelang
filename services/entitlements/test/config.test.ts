@@ -8,12 +8,18 @@ const valid = {
   STRIPE_WEBHOOK_SECRET: "whsec_local_only",
   TURNSTILE_SECRET_KEY: "turnstile-test-secret",
   ENTITLEMENT_SIGNING_SECRET: "local-signing-secret-at-least-32-bytes",
-  ENTITLEMENTS_TABLE: "entitlements-test",
+    ENTITLEMENTS_TABLE: "entitlements-test",
+    CONFIRMATION_DISPATCH_TABLE: "confirmation-dispatch-test",
+    WITHDRAWAL_THROTTLE_TABLE: "withdrawal-throttle-test",
   SITE_ORIGIN: "https://www.solve-lang.com",
 };
 
 test("test-mode environment accepts complete protected configuration", () => {
-  assert.deepEqual(parseEntitlementEnvironment(valid), { ...valid, CHECKOUT_ENABLED: "false" });
+  assert.deepEqual(parseEntitlementEnvironment(valid), {
+    ...valid,
+    CHECKOUT_ENABLED: "false",
+    DURABLE_CONFIRMATION_PROVIDER: "disabled",
+  });
 });
 
 test("checkout defaults disabled until explicitly enabled", () => {
@@ -25,6 +31,32 @@ test("checkout defaults disabled until explicitly enabled", () => {
   assert.equal(production.CHECKOUT_ENABLED, "false");
   assert.equal((parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "true" }) as Record<string, string>).CHECKOUT_ENABLED, "true");
   assert.throws(() => parseEntitlementEnvironment({ ...valid, CHECKOUT_ENABLED: "enabled" }), /CHECKOUT_ENABLED/);
+});
+
+test("production checkout requires an implemented durable confirmation provider and its configuration", () => {
+  const production = {
+    ...valid,
+    ENTITLEMENT_MODE: "production",
+    STRIPE_SECRET_KEY: "sk_live_local_only",
+    CHECKOUT_ENABLED: "true",
+  };
+  assert.throws(() => parseEntitlementEnvironment(production), /DURABLE_CONFIRMATION_PROVIDER/);
+  assert.equal(parseEntitlementEnvironment({
+    ...production,
+    DURABLE_CONFIRMATION_PROVIDER: "aws-ses-sqs",
+    DURABLE_CONFIRMATION_QUEUE_URL: "https://sqs.us-east-1.amazonaws.com/123456789012/confirmations.fifo",
+    DURABLE_CONFIRMATION_SENDER: "receipts@solve-lang.com",
+  }).DURABLE_CONFIRMATION_PROVIDER, "aws-ses-sqs");
+});
+
+test("production checkout rejects the test-sink confirmation provider", () => {
+  const production = {
+    ...valid,
+    ENTITLEMENT_MODE: "production",
+    STRIPE_SECRET_KEY: "sk_live_local_only",
+    CHECKOUT_ENABLED: "true",
+  };
+  assert.throws(() => parseEntitlementEnvironment({ ...production, DURABLE_CONFIRMATION_PROVIDER: "test-sink" }), /test-sink/);
 });
 
 test("test and production environments reject Stripe keys from the wrong mode", () => {

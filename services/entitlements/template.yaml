@@ -26,6 +26,22 @@ Parameters:
       - "true"
       - "false"
     Default: "false"
+  LegalIdentityVerified:
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    Default: "false"
+  DurableConfirmationProvider:
+    Type: String
+    AllowedValues:
+      - disabled
+      - test-sink
+      - aws-ses-sqs
+    Default: disabled
+  DurableConfirmationSender:
+    Type: String
+    Default: ""
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -55,6 +71,18 @@ Rules:
           - !Equals [!Ref CheckoutEnabled, "false"]
           - !Equals [!Ref LegalCheckoutReviewVerified, "true"]
         AssertDescription: Production checkout requires verified legal review and clickwrap readiness.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref LegalIdentityVerified, "true"]
+        AssertDescription: Production checkout requires verified operator identity and final consumer price information.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Equals [!Ref DurableConfirmationProvider, aws-ses-sqs]
+        AssertDescription: Production checkout requires the aws-ses-sqs durable contract-confirmation provider.
+      - Assert: !Or
+          - !Equals [!Ref CheckoutEnabled, "false"]
+          - !Not [!Equals [!Ref DurableConfirmationSender, ""]]
+        AssertDescription: Production checkout requires a verified durable confirmation sender configured by the owner.
 
 Resources:
   EntitlementsTable:
@@ -66,6 +94,56 @@ Resources:
           AttributeType: S
       KeySchema:
         - AttributeName: scanId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ConfirmationDispatchTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: dispatchKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: dispatchKey
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  WithdrawalThrottleTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: throttleKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: throttleKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ConfirmationDeliveryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deliveryKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deliveryKey
           KeyType: HASH
       TimeToLiveSpecification:
         AttributeName: expiresAt
@@ -86,6 +164,27 @@ Resources:
         AllowHeaders:
           - content-type
           - stripe-signature
+
+  ConfirmationDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 90
+
+  ConfirmationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      KmsMasterKeyId: alias/aws/sqs
+      MessageRetentionPeriod: 1209600
+      VisibilityTimeout: 90
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ConfirmationDeadLetterQueue.Arn
+        maxReceiveCount: 5
 
   EntitlementFunction:
     Type: AWS::Serverless::Function
@@ -111,14 +210,25 @@ Resources:
           SITE_ORIGIN: !Ref SiteOrigin
           ENTITLEMENT_MODE: !Ref EntitlementMode
           CHECKOUT_ENABLED: !Ref CheckoutEnabled
+          DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
+          DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue
+          DURABLE_CONFIRMATION_SENDER: !Ref DurableConfirmationSender
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_WEBHOOK_SECRET: !Ref StripeWebhookSecret
           TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           ENTITLEMENT_SIGNING_SECRET: !Ref EntitlementSigningSecret
           ENTITLEMENTS_TABLE: !Ref EntitlementsTable
+          CONFIRMATION_DISPATCH_TABLE: !Ref ConfirmationDispatchTable
+          WITHDRAWAL_THROTTLE_TABLE: !Ref WithdrawalThrottleTable
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntitlementsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfirmationDispatchTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WithdrawalThrottleTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ConfirmationQueue.QueueName
       Events:
         Health:
           Type: HttpApi
@@ -144,12 +254,95 @@ Resources:
             ApiId: !Ref EntitlementApi
             Path: /entitlement
             Method: POST
+        Withdraw:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref EntitlementApi
+            Path: /withdraw
+            Method: POST
         Events:
           Type: HttpApi
           Properties:
             ApiId: !Ref EntitlementApi
             Path: /events
             Method: POST
+
+  ConfirmationWorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/confirmation-worker.ts
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        Format: cjs
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/confirmation-worker.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          DURABLE_CONFIRMATION_SENDER: !Ref DurableConfirmationSender
+          DURABLE_CONFIRMATION_DELIVERY_TABLE: !Ref ConfirmationDeliveryTable
+      Policies:
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ConfirmationQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfirmationDeliveryTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - ses:SendEmail
+            Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${DurableConfirmationSender}
+      Events:
+        Confirmations:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ConfirmationQueue.Arn
+            BatchSize: 1
+
+  ConfirmationDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/confirmation-dispatcher.ts
+        Minify: true
+        Target: es2022
+        Sourcemap: false
+        Format: cjs
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/confirmation-dispatcher.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          CONFIRMATION_DISPATCH_TABLE: !Ref ConfirmationDispatchTable
+          DURABLE_CONFIRMATION_PROVIDER: !Ref DurableConfirmationProvider
+          DURABLE_CONFIRMATION_QUEUE_URL: !Ref ConfirmationQueue
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ConfirmationDispatchTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ConfirmationQueue.QueueName
+      Events:
+        ConfirmationOutbox:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt ConfirmationDispatchTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 1
 
 Outputs:
   ApiBaseUrl:

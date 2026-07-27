@@ -2,11 +2,11 @@
 
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import { analyzeN8nWorkflow, createHtmlReport, parseN8nWorkflow, type PreflightReport } from "./core/n8nPreflight";
-import { recoverPaidScan, type PendingPaidScan } from "./core/paidRecovery";
+import { recoverPaidScan } from "./core/paidRecovery";
+import { PENDING_PAID_SCAN_STORAGE_KEY, type PendingPaidScan } from "./core/pendingPaidScan";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const apiBase = process.env.NEXT_PUBLIC_ENTITLEMENT_API_BASE?.replace(/\/$/, "") ?? "";
-const STORAGE_KEY = "solvelang.preflight.pending.v1";
 
 function download(name: string, content: string, type: string) {
   const blob = new Blob([content], { type });
@@ -47,7 +47,7 @@ export function WorkflowPreflight() {
     let cancelled = false;
 
     async function restorePaidScan() {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
+      const stored = sessionStorage.getItem(PENDING_PAID_SCAN_STORAGE_KEY);
       const hasPaymentReturn = new URLSearchParams(window.location.search).has("payment_intent");
       if (hasPaymentReturn) {
         setRecoveryState("verifying");
@@ -60,7 +60,7 @@ export function WorkflowPreflight() {
           search: window.location.search,
           stored,
           verify: (url, init) => window.fetch(url, init),
-          clearPending: () => sessionStorage.removeItem(STORAGE_KEY),
+          clearPending: () => sessionStorage.removeItem(PENDING_PAID_SCAN_STORAGE_KEY),
           replaceUrl: (url) => window.history.replaceState({}, "", url),
           onRetry: (attempt) => {
             if (!cancelled) {
@@ -121,7 +121,7 @@ export function WorkflowPreflight() {
     if (!report || !scanId || !apiBase) return;
     setBusy(true);
     setError("");
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
+    sessionStorage.setItem(PENDING_PAID_SCAN_STORAGE_KEY, JSON.stringify({ scanId, report, fileName } satisfies PendingPaidScan));
     recordEvent("checkout_started");
     window.location.assign(`/checkout/?scan_id=${encodeURIComponent(scanId)}`);
   }

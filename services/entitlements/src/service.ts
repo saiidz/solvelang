@@ -1,5 +1,8 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import { createHash, createHmac } from "node:crypto";
 import { z } from "zod";
+import type { ContractConfirmation, DurableConfirmationGateway } from "./confirmation.js";
+import { CONTRACT_REFUND_POLICY_TEXT, CONTRACT_TERMS_TEXT } from "./terms.js";
 import { issueEntitlement } from "./token.js";
 import { TERMS_VERSION } from "./terms.js";
 import type { TurnstileGateway } from "./turnstile.js";
@@ -8,10 +11,21 @@ const PRODUCT = "workflow-preflight-v1";
 const checkoutSchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1).max(2_048),
+  customerEmail: z.string().email().max(254),
   termsAccepted: z.literal(true),
+  immediatePerformanceRequested: z.literal(true),
+  withdrawalAcknowledged: z.literal(true),
   termsVersion: z.literal(TERMS_VERSION),
 }).strict();
 const entitlementSchema = z.object({ scanId: z.string().uuid(), sessionId: z.string().startsWith("pi_") }).strict();
+const withdrawalSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  contractReference: z.string().trim().startsWith("pi_").max(160),
+  email: z.string().email().max(254),
+  statement: z.string().trim().min(8).max(1_000),
+  turnstileToken: z.string().min(1).max(2_048),
+  requestId: z.string().uuid(),
+}).strict();
 const conversionEventSchema = z.object({
   name: z.enum([
     "check_page_view",
@@ -30,11 +44,13 @@ export type EntitlementConfig = {
   entitlementSigningSecret: string;
   mode: "test" | "production";
   checkoutEnabled: boolean;
+  durableConfirmationEnabled: boolean;
 };
 
 export type PaymentIntentSnapshot = {
   id: string;
   clientSecret?: string | null;
+  receiptEmail?: string | null;
   createdAt?: number;
   paymentStatus?: string | null;
   refundStatus: "none" | "partial" | "full";
@@ -55,7 +71,10 @@ export type StripeGateway = {
         scanId: string;
         product: typeof PRODUCT;
         termsVersion: typeof TERMS_VERSION;
+        immediatePerformanceRequested: "true";
+        withdrawalAcknowledged: "true";
       };
+      receiptEmail: string;
     }, idempotencyKey: string): Promise<PaymentIntentSnapshot>;
     updateMetadata(
       paymentIntentId: string,
@@ -82,6 +101,14 @@ export type EntitlementRecord = {
   expiresAt: number;
 };
 
+export type ConfirmationOutboxRecord = {
+  dispatchKey: string;
+  state: "pending" | "dispatched";
+  payload: ContractConfirmation;
+  createdAt: string;
+  expiresAt: number;
+};
+
 export type EntitlementStore = {
   putIfAbsent(record: EntitlementRecord): Promise<"created" | "duplicate">;
   updateRefundStatus(
@@ -92,6 +119,10 @@ export type EntitlementStore = {
     updatedAt: string,
   ): Promise<"updated" | "duplicate_or_missing">;
   get(scanId: string): Promise<EntitlementRecord | undefined>;
+  commitPaidEntitlementAndOutbox(record: EntitlementRecord, outbox: ConfirmationOutboxRecord): Promise<"created" | "existing">;
+  getConfirmationOutbox(key: string): Promise<ConfirmationOutboxRecord | undefined>;
+  markConfirmationOutboxDispatched(key: string): Promise<void>;
+  consumeWithdrawalRateLimit(key: string, expiresAt: number): Promise<boolean>;
 };
 
 type SafeLogger = {
@@ -104,6 +135,7 @@ type ServiceDependencies = {
   stripe: StripeGateway;
   store: EntitlementStore;
   turnstile: TurnstileGateway;
+  durableConfirmation: DurableConfirmationGateway;
   now?: () => number;
   logger?: SafeLogger;
 };
@@ -169,9 +201,14 @@ export function createEntitlementService({
   stripe,
   store,
   turnstile,
+  durableConfirmation,
   now = Date.now,
   logger = console,
 }: ServiceDependencies): (event: APIGatewayProxyEventV2) => Promise<JsonResponse> {
+  // This short-lived per-container limit supplements Turnstile and avoids
+  // queueing repeated legal notices from one source during a burst.
+  const withdrawalAttempts = new Map<string, { count: number; resetAt: number }>();
+
   function response(statusCode: number, body: unknown): JsonResponse {
     return {
       statusCode,
@@ -191,10 +228,15 @@ export function createEntitlementService({
     if (!config.checkoutEnabled) {
       throw new RequestError(503, "Checkout is temporarily unavailable.", "checkout_disabled");
     }
-    const { scanId, turnstileToken, termsVersion } = checkoutSchema.parse(parseJson(event));
+    const {
+      scanId,
+      turnstileToken,
+      customerEmail,
+      termsVersion,
+    } = checkoutSchema.parse(parseJson(event));
     let verified: boolean;
     try {
-      verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp });
+      verified = await turnstile.verify({ token: turnstileToken, remoteIp: event.requestContext.http.sourceIp, expectedAction: "checkout" });
     } catch {
       throw new RequestError(503, "Verification is temporarily unavailable.", "turnstile_unavailable");
     }
@@ -209,7 +251,10 @@ export function createEntitlementService({
           scanId,
           product: PRODUCT,
           termsVersion,
+          immediatePerformanceRequested: "true",
+          withdrawalAcknowledged: "true",
         },
+        receiptEmail: customerEmail,
       }, `preflight-${scanId}`);
     } catch (error) {
       throw stripeFailure(error);
@@ -242,18 +287,48 @@ export function createEntitlementService({
     if (stripeEvent.type === "payment_intent.succeeded" && stripeEvent.paymentIntent) {
       const paymentIntent = stripeEvent.paymentIntent;
       const scanId = paymentIntent.metadata?.scanId;
-      if (scanId && paymentIntent.metadata?.product === PRODUCT && paymentIntent.paymentStatus === "paid") {
-        const timestamp = now();
-        await store.putIfAbsent({
-          scanId,
-          sessionId: paymentIntent.id,
-          paymentStatus: "paid",
-          refundStatus: paymentIntent.refundStatus,
-          stripeEventId: stripeEvent.id,
-          createdAt: new Date(timestamp).toISOString(),
-          expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
-        });
+      const termsAcceptedAt = paymentIntent.metadata?.termsAcceptedAt;
+      if (!scanId || paymentIntent.metadata?.product !== PRODUCT || paymentIntent.paymentStatus !== "paid" || !paymentIntent.receiptEmail || paymentIntent.metadata?.termsVersion !== TERMS_VERSION || paymentIntent.metadata?.immediatePerformanceRequested !== "true" || paymentIntent.metadata?.withdrawalAcknowledged !== "true" || !termsAcceptedAt) {
+        throw new RequestError(400, "Invalid webhook.", "invalid_payment_confirmation");
       }
+      if (!config.durableConfirmationEnabled) {
+        throw new RequestError(503, "Confirmation is temporarily unavailable.", "confirmation_queue_unavailable");
+      }
+      const timestamp = now();
+      const dispatchKey = `contract:${paymentIntent.id}:${TERMS_VERSION}`;
+      const confirmation: ContractConfirmation = {
+          email: paymentIntent.receiptEmail,
+          paymentIntentId: paymentIntent.id,
+          product: "Workflow Preflight",
+          total: "USD $49",
+          termsVersion: TERMS_VERSION,
+          termsAcceptedAt,
+          immediatePerformanceRequested: true,
+          withdrawalAcknowledged: true,
+          deliveryDescription: "An automated Workflow Preflight report is processed and delivered immediately after successful payment.",
+          supportEmail: "hello@solve-lang.com",
+          termsText: CONTRACT_TERMS_TEXT,
+          refundPolicyText: CONTRACT_REFUND_POLICY_TEXT,
+          idempotencyKey: `contract-confirmation-${paymentIntent.id}-${TERMS_VERSION}`,
+      };
+      const entitlement: EntitlementRecord = {
+        scanId,
+        sessionId: paymentIntent.id,
+        paymentStatus: "paid",
+        refundStatus: paymentIntent.refundStatus,
+        stripeEventId: stripeEvent.id,
+        createdAt: new Date(timestamp).toISOString(),
+        expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
+      };
+      const outbox: ConfirmationOutboxRecord = {
+        dispatchKey,
+        state: "pending",
+        payload: confirmation,
+        createdAt: new Date(timestamp).toISOString(),
+        // Keep the encrypted payload for 30 days for event replay suppression and support handling.
+        expiresAt: Math.floor(timestamp / 1000) + 60 * 60 * 24 * 30,
+      };
+      await store.commitPaidEntitlementAndOutbox(entitlement, outbox);
     }
     if (stripeEvent.type === "charge.refunded" && stripeEvent.refund) {
       const paymentIntent = await stripe.payments.retrieve(stripeEvent.refund.paymentIntentId);
@@ -304,6 +379,62 @@ export function createEntitlementService({
     });
   }
 
+  async function createWithdrawal(event: APIGatewayProxyEventV2): Promise<JsonResponse> {
+    const { name, contractReference, email, statement, turnstileToken, requestId } = withdrawalSchema.parse(parseJson(event));
+    if (!config.durableConfirmationEnabled) {
+      return response(503, { error: "Withdrawal confirmation is temporarily unavailable." });
+    }
+    const remoteIp = event.requestContext.http.sourceIp;
+    const timestamp = now();
+    const existingAttempt = withdrawalAttempts.get(remoteIp);
+    if (existingAttempt && existingAttempt.resetAt > timestamp && existingAttempt.count >= 5) {
+      return response(429, { error: "Withdrawal requests are temporarily unavailable. Please try again later." });
+    }
+    withdrawalAttempts.set(remoteIp, {
+      count: existingAttempt && existingAttempt.resetAt > timestamp ? existingAttempt.count + 1 : 1,
+      resetAt: existingAttempt?.resetAt && existingAttempt.resetAt > timestamp ? existingAttempt.resetAt : timestamp + 15 * 60 * 1_000,
+    });
+    const ipPseudonym = createHmac("sha256", config.entitlementSigningSecret)
+      .update(`withdrawal-rate-limit:v1:${remoteIp}`)
+      .digest("hex");
+    const rateLimitKey = `withdrawal:${ipPseudonym}:${Math.floor(timestamp / (15 * 60 * 1_000))}`;
+    if (!await store.consumeWithdrawalRateLimit(rateLimitKey, Math.floor(timestamp / 1_000) + 15 * 60)) {
+      return response(429, { error: "Withdrawal requests are temporarily unavailable. Please try again later." });
+    }
+    try {
+      const verified = await turnstile.verify({ token: turnstileToken, remoteIp, expectedAction: "withdrawal" });
+      if (!verified) return response(403, { error: "Verification could not be completed." });
+    } catch {
+      return response(503, { error: "Verification is temporarily unavailable." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedName = name.trim().replace(/\s+/g, " ").toLowerCase();
+    const normalizedStatement = statement.trim().replace(/\s+/g, " ");
+    let paymentIntent: PaymentIntentSnapshot;
+    try {
+      paymentIntent = await stripe.payments.retrieve(contractReference);
+    } catch {
+      return response(202, { message: "Your request needs support review. Email hello@solve-lang.com with your Stripe receipt reference." });
+    }
+    if (paymentIntent.metadata?.product !== PRODUCT || paymentIntent.receiptEmail?.trim().toLowerCase() !== normalizedEmail) {
+      return response(202, { message: "Your request needs support review. Email hello@solve-lang.com with your Stripe receipt reference." });
+    }
+    const receivedAt = new Date(now()).toISOString();
+    try {
+      await durableConfirmation.queueWithdrawalConfirmation({
+        email,
+        contractReference,
+        receivedAt,
+        supportEmail: "hello@solve-lang.com",
+        idempotencyKey: `withdrawal-${createHash("sha256").update(`${requestId}:${contractReference}:${normalizedName}:${normalizedEmail}:${normalizedStatement}`).digest("hex")}`,
+      });
+    } catch {
+      return response(503, { error: "Withdrawal confirmation is temporarily unavailable." });
+    }
+    return response(202, { receivedAt, message: "Your withdrawal request was received. Eligibility will be reviewed under applicable law." });
+  }
+
   function recordConversion(event: APIGatewayProxyEventV2): JsonResponse {
     const { name } = conversionEventSchema.parse(parseJson(event));
     logger.info({ type: "conversion_event", name, at: new Date(now()).toISOString() });
@@ -321,6 +452,7 @@ export function createEntitlementService({
       if (method === "POST" && path.endsWith("/checkout")) return await createCheckout(event);
       if (method === "POST" && path.endsWith("/webhook")) return await handleWebhook(event);
       if (method === "POST" && path.endsWith("/entitlement")) return await createEntitlement(event);
+      if (method === "POST" && path.endsWith("/withdraw")) return await createWithdrawal(event);
       if (method === "POST" && path.endsWith("/events")) return recordConversion(event);
       return response(404, { error: "Not found." });
     } catch (error) {

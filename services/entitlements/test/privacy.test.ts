@@ -14,6 +14,7 @@ const forbidden = [
   "turnstile-response-do-not-log",
   "entitlement-signing-do-not-log",
   "raw-webhook-payload-do-not-log",
+  "buyer@example.test",
 ];
 
 function event(path: string, body: string, signature?: string): APIGatewayProxyEventV2 {
@@ -50,6 +51,10 @@ function fixture() {
     async putIfAbsent() { throw new Error(forbidden.join(" | ")); },
     async updateRefundStatus() { throw new Error(forbidden.join(" | ")); },
     async get() { throw new Error(forbidden.join(" | ")); },
+    async commitPaidEntitlementAndOutbox() { throw new Error(forbidden.join(" | ")); },
+    async getConfirmationOutbox() { throw new Error(forbidden.join(" | ")); },
+    async markConfirmationOutboxDispatched() { throw new Error(forbidden.join(" | ")); },
+    async consumeWithdrawalRateLimit() { throw new Error(forbidden.join(" | ")); },
   };
   const service = createEntitlementService({
     config: {
@@ -58,11 +63,16 @@ function fixture() {
       entitlementSigningSecret: "entitlement-signing-do-not-log-32-bytes",
       mode: "test",
       checkoutEnabled: true,
+      durableConfirmationEnabled: true,
     },
     stripe,
     store,
     turnstile: {
       async verify() { throw new Error(forbidden.join(" | ")); },
+    },
+    durableConfirmation: {
+      async queueContractConfirmation() { throw new Error(forbidden.join(" | ")); },
+      async queueWithdrawalConfirmation() { throw new Error(forbidden.join(" | ")); },
     },
     now: () => 0,
     logger: {
@@ -81,8 +91,11 @@ test("workflow and secret material never reaches client errors or structured log
       request: event("/checkout", JSON.stringify({
         scanId: "6c8e4b95-1e66-4dc3-9b67-af15f0742875",
         turnstileToken: "turnstile-response-do-not-log",
+        customerEmail: "buyer@example.test",
         termsAccepted: true,
-        termsVersion: "2026-07-26",
+        immediatePerformanceRequested: true,
+        withdrawalAcknowledged: true,
+        termsVersion: "2026-07-26-v2",
       })),
       status: 503,
     },
