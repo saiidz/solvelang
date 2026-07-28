@@ -109,10 +109,12 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
       plan: plan.name,
       subscriptionStatus,
       currentPeriodEnd: validateTimestamp(input.currentPeriodEnd, "Current period end"),
+      subscriptionEventCreatedAt: validateTimestamp(input.subscriptionEventCreatedAt ?? timestamp, "Subscription event timestamp"),
       ...(input.graceUntil === undefined ? {} : { graceUntil: validateTimestamp(input.graceUntil, "Grace period end") }),
       updatedAt: new Date(timestamp).toISOString(),
     };
-    await store.putAccount(account);
+    const outcome = await store.putAccount(account);
+    if (outcome === "stale") return await store.getAccount(account.accountId);
     return account;
   }
 
