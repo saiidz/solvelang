@@ -4,6 +4,7 @@ import { getApiPlan, usagePeriod } from "./plans.js";
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["trialing", "active"]);
 const ALL_SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "past_due", "canceled", "unpaid", "incomplete"]);
 const ALLOWED_SCOPES = new Set(["repository:audit"]);
+const CHECKOUT_RESERVATION_MS = 15 * 60 * 1_000;
 
 export class ApiAccessError extends Error {
   constructor(statusCode, code, publicMessage) {
@@ -97,6 +98,18 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
   async function getSubscriptionAccount(input) {
     const accountId = cleanId(typeof input === "string" ? input : input?.accountId, "Account ID");
     return await store.getAccount(accountId);
+  }
+
+  async function reserveSubscriptionCheckout(input) {
+    const timestamp = now();
+    const accountId = cleanId(input.accountId, "Account ID");
+    const requestId = cleanId(input.requestId, "Checkout request ID");
+    const expiresAt = timestamp + CHECKOUT_RESERVATION_MS;
+    const outcome = await store.reserveSubscriptionCheckout({ accountId, requestId, now: timestamp, expiresAt });
+    if (outcome === "conflict") {
+      throw new ApiAccessError(409, "subscription_checkout_conflict", "This account already has an active or pending subscription attempt.");
+    }
+    return { accountId, requestId, expiresAt, duplicate: outcome === "duplicate" };
   }
 
   async function provisionSubscription(input) {
@@ -238,5 +251,13 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     };
   }
 
-  return { getSubscriptionAccount, provisionSubscription, issueApiKey, revokeApiKey, authorize, consumeUsage };
+  return {
+    getSubscriptionAccount,
+    reserveSubscriptionCheckout,
+    provisionSubscription,
+    issueApiKey,
+    revokeApiKey,
+    authorize,
+    consumeUsage,
+  };
 }
