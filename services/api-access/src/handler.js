@@ -26,6 +26,7 @@ if (environment.subscriptionBillingEnabled) {
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
   subscriptionCheckout = createSubscriptionCheckoutService({
     gateway: stripeGateway,
+    apiAccessService: service,
     priceIds: environment.priceIds,
     siteOrigin: environment.siteOrigin,
     enabled: true,
