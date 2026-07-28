@@ -27,9 +27,10 @@ function stripeEvent(overrides = {}) {
   };
 }
 
-function lifecycleApiService({ existing, provision } = {}) {
+function lifecycleApiService({ existing, provision, reserve } = {}) {
   return {
     getSubscriptionAccount: async () => existing,
+    reserveSubscriptionCheckout: reserve ?? (async () => ({ duplicate: false })),
     provisionSubscription: provision ?? (async (input) => input),
   };
 }
