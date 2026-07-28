@@ -45,6 +45,7 @@ test("ingests an immutable GitHub snapshot deterministically and feeds the inven
   assert.equal(forward.snapshot.source.kind, "github");
   assert.equal(forward.snapshot.source.revision, "a".repeat(40));
   assert.match(forward.snapshot.source.fingerprint, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(forward.ingestion.entriesSeen, 5);
   assert.equal(forward.ingestion.filesIngested, 4);
   assert.equal(forward.ingestion.directoriesIgnored, 1);
   assert.equal(forward.ingestion.networkAccess, false);
@@ -78,8 +79,19 @@ test("ingests archive entries, strips one shared wrapper, and binds revision to 
   assert.equal(result.snapshot.source.displayName, "project.zip");
   assert.equal(result.snapshot.source.revision, `sha256:${await sha256Hex(archiveBytes)}`);
   assert.equal(result.ingestion.wrapperDirectoryRemoved, "project");
+  assert.equal(result.ingestion.entriesSeen, 4);
   assert.deepEqual(result.snapshot.files.map(({ path }) => path), ["README.md", "src/index.ts"]);
   assert.equal(result.ingestion.directoriesIgnored, 1);
+});
+
+test("checks archive depth after removing the shared wrapper", async () => {
+  const result = await ingestArchiveSnapshotEntries({
+    archiveName: "project.zip",
+    archiveBytes: encoder.encode("archive"),
+    entries: [textEntry("project/src/index.ts", "export {};")],
+    limits: { maxDepth: 2 },
+  });
+  assert.equal(result.snapshot.files[0].path, "src/index.ts");
 });
 
 test("does not remove a wrapper when files exist at different archive roots", async () => {
@@ -104,7 +116,7 @@ test("rejects traversal, absolute paths, backslashes, symlinks, and duplicate no
   }), /duplicate normalized path/);
 });
 
-test("rejects malformed source identities and archive names", async () => {
+test("rejects malformed source identities, archive names, and empty archive transport", async () => {
   await assert.rejects(() => ingestGitHubSnapshotEntries({
     repositoryFullName: "not-a-full-name",
     commitSha: "1".repeat(40),
@@ -120,6 +132,11 @@ test("rejects malformed source identities and archive names", async () => {
     archiveBytes: encoder.encode("archive"),
     entries: [],
   }), /supported archive suffix/);
+  await assert.rejects(() => ingestArchiveSnapshotEntries({
+    archiveName: "project.zip",
+    archiveBytes: new Uint8Array(),
+    entries: [],
+  }), /cannot be empty/);
 });
 
 test("rejects byte-size mismatches and enforces entry, file, archive, depth, and total limits", async () => {
@@ -162,21 +179,25 @@ test("retains only bounded valid UTF-8 text and never returns raw byte arrays", 
     commitSha: "2".repeat(40),
     entries: [
       textEntry("small.txt", "visible"),
+      textEntry(".env", "TOKEN=local-only"),
+      textEntry("cert.pem", "PRIVATE KEY PLACEHOLDER"),
       textEntry("large.txt", "not retained"),
       binaryEntry("invalid.txt", [0xff, 0xfe, 0xfd]),
       binaryEntry("nul.txt", [65, 0, 66]),
       binaryEntry("asset.bin", [1, 2, 3]),
     ],
-    limits: { maxTextBytes: 8 },
+    limits: { maxTextBytes: 24 },
   });
 
   assert.equal(result.snapshot.files.find(({ path }) => path === "small.txt")?.text, "visible");
-  assert.equal(result.snapshot.files.find(({ path }) => path === "large.txt")?.text, undefined);
+  assert.equal(result.snapshot.files.find(({ path }) => path === ".env")?.text, "TOKEN=local-only");
+  assert.equal(result.snapshot.files.find(({ path }) => path === "cert.pem")?.text, "PRIVATE KEY PLACEHOLDER");
+  assert.equal(result.snapshot.files.find(({ path }) => path === "large.txt")?.text, "not retained");
   assert.equal(result.snapshot.files.find(({ path }) => path === "invalid.txt")?.text, undefined);
   assert.equal(result.snapshot.files.find(({ path }) => path === "nul.txt")?.text, undefined);
   assert.equal(result.snapshot.files.find(({ path }) => path === "asset.bin")?.text, undefined);
   assert.ok(!JSON.stringify(result).includes('"bytes"'));
-  assert.equal(result.ingestion.textFilesRetained, 1);
+  assert.equal(result.ingestion.textFilesRetained, 4);
 });
 
 test("rejects invalid hash-provider output before producing a snapshot", async () => {
