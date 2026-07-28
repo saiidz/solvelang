@@ -12,12 +12,8 @@ function requireTables(documentClient, values) {
   }
 }
 
-function isExpectedConditionalCancellation(error) {
-  if (error?.name !== "TransactionCanceledException") return false;
-  const reasons = error.CancellationReasons;
-  return Array.isArray(reasons)
-    && reasons.length > 0
-    && reasons.every((reason) => !reason?.Code || reason.Code === "None" || reason.Code === "ConditionalCheckFailed");
+function isTransactionCanceled(error) {
+  return error?.name === "TransactionCanceledException";
 }
 
 function usageMethods(documentClient, { usageTable, idempotencyTable }) {
@@ -32,7 +28,6 @@ function usageMethods(documentClient, { usageTable, idempotencyTable }) {
       const dedupeKey = `${accountId}:${period}:${idempotencyKey}`;
       try {
         await documentClient.send(new TransactWriteCommand({
-          ReturnCancellationReasons: true,
           TransactItems: [
             {
               Put: {
@@ -62,7 +57,7 @@ function usageMethods(documentClient, { usageTable, idempotencyTable }) {
         }));
         return { status: "consumed", used: await getUsage(usageKey) };
       } catch (error) {
-        if (!isExpectedConditionalCancellation(error)) throw error;
+        if (!isTransactionCanceled(error)) throw error;
         const duplicate = await documentClient.send(new GetCommand({
           TableName: idempotencyTable,
           Key: { idempotencyKey: dedupeKey },
@@ -74,7 +69,8 @@ function usageMethods(documentClient, { usageTable, idempotencyTable }) {
             ? { status: "duplicate", used }
             : { status: "idempotency_conflict", used };
         }
-        return { status: "quota_exceeded", used };
+        if (used + units > limit) return { status: "quota_exceeded", used };
+        throw error;
       }
     },
   };
@@ -184,7 +180,6 @@ export function createDynamoApiAccessStore(documentClient, {
     async putKeyWithLimit(key, maxActiveKeys) {
       try {
         await documentClient.send(new TransactWriteCommand({
-          ReturnCancellationReasons: true,
           TransactItems: [
             {
               Update: {
@@ -206,7 +201,7 @@ export function createDynamoApiAccessStore(documentClient, {
         }));
         return "created";
       } catch (error) {
-        if (!isExpectedConditionalCancellation(error)) throw error;
+        if (!isTransactionCanceled(error)) throw error;
         const [existingKey, account] = await Promise.all([
           documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId: key.keyId }, ConsistentRead: true })),
           documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId: key.accountId }, ConsistentRead: true })),
@@ -225,7 +220,6 @@ export function createDynamoApiAccessStore(documentClient, {
     async revokeKeyAndDecrement(keyId, accountId, revokedAt) {
       try {
         await documentClient.send(new TransactWriteCommand({
-          ReturnCancellationReasons: true,
           TransactItems: [
             {
               Update: {
@@ -249,7 +243,7 @@ export function createDynamoApiAccessStore(documentClient, {
         }));
         return "revoked";
       } catch (error) {
-        if (!isExpectedConditionalCancellation(error)) throw error;
+        if (!isTransactionCanceled(error)) throw error;
         const key = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
         if (!key.Item || key.Item.accountId !== accountId) return "not_found";
         if (key.Item.revokedAt) return "already_revoked";
