@@ -30,9 +30,9 @@ Reports must be reproducible for the same normalized repository snapshot, engine
 Stable identifiers are derived from non-secret normalized inputs:
 
 - report IDs use a source fingerprint plus engine/ruleset identity
-- finding IDs use rule ID, normalized path, normalized location, and evidence fingerprints
+- finding IDs use rule ID, normalized path, normalized location, and non-secret evidence fingerprints
 - duplicate group IDs use sorted member paths and content fingerprints
-- secret warning IDs use path, location, pattern class, and an HMAC fingerprint; never the matched value
+- secret warning IDs use path, location, pattern class, and exposure only; they never depend on the matched value or ephemeral HMAC
 
 Findings are emitted in this fixed order:
 
@@ -42,7 +42,7 @@ Findings are emitted in this fixed order:
 4. starting line
 5. stable finding ID
 
-Object keys are serialized in canonical order when the integrity digest is calculated.
+Object keys are serialized in canonical order when the integrity digest is calculated. `integrity.canonicalJsonSha256` is the SHA-256 of the canonical report with that digest field omitted, avoiding a self-referential hash.
 
 ## 4. Evidence model
 
@@ -119,11 +119,12 @@ Additional rules:
 - stop adding findings at the finding limit while preserving summary counts where possible
 - mark the report `partial` and list every truncation reason when a limit is reached
 - do not execute package-manager, build, test, shell, hook, or repository scripts
-- do not fetch dependencies, submodules, Git LFS objects, remote references, or external URLs in v0
+- do not fetch dependencies, submodules, Git LFS objects, remote references, or external URLs during analysis
+- keep snapshot acquisition separate from the analysis engine; `execution.networkAccess: false` describes analysis after the immutable source snapshot is acquired
 
 ## 8. Input normalization
 
-GitHub input is pinned to an immutable commit revision before scanning. Archive input is hashed before extraction.
+GitHub input is pinned to an immutable commit revision before scanning. Archive input is hashed before extraction and does not require GitHub-only fields such as a default branch or repository URL.
 
 Normalization:
 
@@ -193,7 +194,7 @@ Repository Audit v0 is not ready until:
 - archive traversal and symlink escape tests pass
 - limit and truncation behavior is deterministic
 - secret canary tests prove raw values never appear in JSON, HTML, logs, errors, snapshots, or test output
-- no scanner path executes repository code or makes network requests
+- no analysis-engine path executes repository code or makes network requests after snapshot acquisition
 - destructive recommendations always require approval and include rollback steps
 - malformed or unverifiable reports fail closed
 - machine-readable and HTML reports contain equivalent findings and evidence
