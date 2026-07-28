@@ -258,8 +258,9 @@ test("honors cancellation before and during acquisition", async () => {
 test("keeps acquisition credentials and raw bytes out of returned metadata", async () => {
   const client = new FakeGitHubClient() as FakeGitHubClient & { token: string };
   client.token = "ghp_DO_NOT_LEAK_ACQUISITION_CANARY";
-  addBlob(client, "1", "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 10\n");
-  client.tree = { truncated: false, entries: [treeEntry("asset.dat", "1", 64)] };
+  const pointer = "version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 10\n";
+  addBlob(client, "1", pointer);
+  client.tree = { truncated: false, entries: [treeEntry("asset.dat", "1", encoder.encode(pointer).byteLength)] };
   const acquired = await acquireGitHubRepositorySnapshot({
     client,
     repositoryFullName: "example/repo",
