@@ -6,6 +6,36 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 
+function requireTables(documentClient, values) {
+  if (!documentClient) throw new Error("DynamoDB document client is required.");
+  for (const [name, value] of Object.entries(values)) {
+    if (typeof value !== "string" || !value) throw new Error(`${name} is required.`);
+  }
+}
+
+export function createDynamoApiKeyAuthorizerStore(documentClient, { accountsTable, keysTable }) {
+  requireTables(documentClient, { accountsTable, keysTable });
+  return {
+    async getAccount(accountId) {
+      const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
+      return response.Item;
+    },
+    async getKey(keyId) {
+      const response = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
+      return response.Item;
+    },
+    async touchKey(keyId, lastUsedAt) {
+      await documentClient.send(new UpdateCommand({
+        TableName: keysTable,
+        Key: { keyId },
+        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
+        ConditionExpression: "attribute_exists(keyId) AND attribute_not_exists(revokedAt)",
+        ExpressionAttributeValues: { ":lastUsedAt": lastUsedAt },
+      }));
+    },
+  };
+}
+
 export function createDynamoApiAccessStore(documentClient, {
   accountsTable,
   keysTable,
@@ -13,10 +43,7 @@ export function createDynamoApiAccessStore(documentClient, {
   usageTable,
   idempotencyTable,
 }) {
-  if (!documentClient) throw new Error("DynamoDB document client is required.");
-  for (const [name, value] of Object.entries({ accountsTable, keysTable, keysAccountIndex, usageTable, idempotencyTable })) {
-    if (typeof value !== "string" || !value) throw new Error(`${name} is required.`);
-  }
+  requireTables(documentClient, { accountsTable, keysTable, keysAccountIndex, usageTable, idempotencyTable });
 
   async function getUsage(usageKey) {
     const response = await documentClient.send(new GetCommand({ TableName: usageTable, Key: { usageKey }, ConsistentRead: true }));
@@ -86,7 +113,7 @@ export function createDynamoApiAccessStore(documentClient, {
             {
               Put: {
                 TableName: idempotencyTable,
-                Item: { idempotencyKey: dedupeKey, accountId, period, expiresAt },
+                Item: { idempotencyKey: dedupeKey, accountId, period, units, expiresAt },
                 ConditionExpression: "attribute_not_exists(idempotencyKey)",
               },
             },
@@ -117,7 +144,12 @@ export function createDynamoApiAccessStore(documentClient, {
           ConsistentRead: true,
         }));
         const used = await getUsage(usageKey);
-        return duplicate.Item ? { status: "duplicate", used } : { status: "quota_exceeded", used };
+        if (duplicate.Item) {
+          return duplicate.Item.units === units
+            ? { status: "duplicate", used }
+            : { status: "idempotency_conflict", used };
+        }
+        return { status: "quota_exceeded", used };
       }
     },
   };
