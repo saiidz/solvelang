@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: SolveLang API subscription keys, authorization, and hard usage limits
+Description: SolveLang API subscription keys, billing lifecycle, authorization, and hard usage limits
 
 Parameters:
   ApiAccessEnabled:
@@ -11,6 +11,10 @@ Parameters:
     Type: String
     AllowedValues: [test, live]
     Default: test
+  SubscriptionBillingEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
@@ -22,6 +26,42 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+  StripeSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+  StripeSubscriptionWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+  StripeApiDeveloperPriceId:
+    Type: String
+    Default: ""
+  StripeApiProPriceId:
+    Type: String
+    Default: ""
+  StripeApiBusinessPriceId:
+    Type: String
+    Default: ""
+
+Rules:
+  SubscriptionBillingRemainsTestOnly:
+    RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
+        AssertDescription: Subscription billing requires API access to be enabled.
+      - Assert: !Equals [!Ref ApiAccessMode, test]
+        AssertDescription: Subscription billing is test-mode only until production review is complete.
+      - Assert: !Not [!Equals [!Ref StripeSecretKey, ""]]
+        AssertDescription: Test subscription billing requires a Stripe secret key.
+      - Assert: !Not [!Equals [!Ref StripeSubscriptionWebhookSecret, ""]]
+        AssertDescription: Test subscription billing requires a signed webhook secret.
+      - Assert: !Not [!Equals [!Ref StripeApiDeveloperPriceId, ""]]
+        AssertDescription: Developer plan Stripe price ID is required.
+      - Assert: !Not [!Equals [!Ref StripeApiProPriceId, ""]]
+        AssertDescription: Pro plan Stripe price ID is required.
+      - Assert: !Not [!Equals [!Ref StripeApiBusinessPriceId, ""]]
+        AssertDescription: Business plan Stripe price ID is required.
 
 Resources:
   ApiAccountsTable:
@@ -91,6 +131,22 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  ApiSubscriptionEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: eventId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: eventId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   ApiAccessHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -103,6 +159,7 @@ Resources:
           - content-type
           - idempotency-key
           - x-solvelang-admin-secret
+          - stripe-signature
       Auth:
         Authorizers:
           SolveLangApiKeyAuthorizer:
@@ -127,6 +184,7 @@ Resources:
         Variables:
           API_ACCESS_ENABLED: !Ref ApiAccessEnabled
           API_ACCESS_MODE: !Ref ApiAccessMode
+          API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
           SITE_ORIGIN: !Ref SiteOrigin
@@ -135,6 +193,12 @@ Resources:
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex
           API_USAGE_TABLE: !Ref ApiUsageTable
           API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+          API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
+          STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
+          STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
+          STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -144,6 +208,8 @@ Resources:
             TableName: !Ref ApiUsageTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiUsageIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiSubscriptionEventsTable
       Events:
         Health:
           Type: HttpApi
@@ -151,6 +217,18 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /health
             Method: GET
+        SubscriptionCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/checkout
+            Method: POST
+        SubscriptionWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /stripe/subscriptions/webhook
+            Method: POST
         ProvisionSubscription:
           Type: HttpApi
           Properties:
@@ -218,3 +296,7 @@ Outputs:
     Value: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
   ApiAccessEnabledState:
     Value: !Ref ApiAccessEnabled
+  SubscriptionBillingEnabledState:
+    Value: !Ref SubscriptionBillingEnabled
+  StripeSubscriptionWebhookUrl:
+    Value: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/stripe/subscriptions/webhook
