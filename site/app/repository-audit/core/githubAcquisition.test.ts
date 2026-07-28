@@ -207,7 +207,7 @@ test("rejects malformed blob identity, encoding, base64, and size responses", as
   await expectBlobFailure({ encoding: "utf-8" }, /encoding/);
   await expectBlobFailure({ content: "%%%=" }, /base64/);
   await expectBlobFailure({ byteSize: 2 }, /response size/);
-  await expectBlobFailure({ content: toBase64("abcd"), byteSize: 4 }, /size changed/);
+  await expectBlobFailure({ content: toBase64("abcd"), byteSize: 4 }, /declared encoded size/);
 });
 
 test("bounds concurrent blob requests and preserves deterministic snapshot order", async () => {
