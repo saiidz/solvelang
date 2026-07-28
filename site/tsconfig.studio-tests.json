@@ -10,6 +10,6 @@
     "target": "ES2022",
     "types": ["node"]
   },
-  "include": ["app/studio/core/**/*.ts", "app/check/core/**/*.ts"],
+  "include": ["app/studio/core/**/*.ts", "app/check/core/**/*.ts", "app/repository-audit/core/**/*.ts"],
   "exclude": ["node_modules", ".next", "out"]
 }
