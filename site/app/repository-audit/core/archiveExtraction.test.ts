@@ -185,7 +185,7 @@ test("rejects TAR links, checksum corruption, oversized entries, and excessive d
     name: "large.tar",
     bytes: tarArchive([{ name: "large.bin", content: new Uint8Array(3) }]),
     limits: { maxEntryBytes: 2, maxTotalUncompressedBytes: 4, maxExpandedArchiveBytes: 4096 },
-  }), /entry exceeds/);
+  }), /(?:record|entry) exceeds/);
   await assert.rejects(() => extractRepositoryArchive({
     name: "deep.tar",
     bytes: tarArchive([{ name: "a/b/c.txt", content: encoder.encode("x") }]),
