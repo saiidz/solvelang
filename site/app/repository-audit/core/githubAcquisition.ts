@@ -94,6 +94,10 @@ function validateRepositoryFullName(input: string): string {
   if (typeof input !== "string") throw new Error("GitHub repository name must be a string.");
   const value = input.trim();
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) throw new Error("GitHub repository name must use owner/repository form.");
+  const [owner, repository] = value.split("/");
+  if ([owner, repository].some((component) => component === "." || component === "..")) {
+    throw new Error("GitHub repository name contains an invalid component.");
+  }
   return value;
 }
 
@@ -111,15 +115,49 @@ function validateGitObjectSha(input: string, label: string): string {
   return input.toLowerCase();
 }
 
-function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new DOMException("GitHub repository acquisition was cancelled.", "AbortError");
+function abortError(): Error {
+  if (typeof DOMException === "function") return new DOMException("GitHub repository acquisition was cancelled.", "AbortError");
+  const error = new Error("GitHub repository acquisition was cancelled.");
+  error.name = "AbortError";
+  return error;
 }
 
-function decodeBase64(input: string): Uint8Array {
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+function isAbortError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "name" in error && (error as { name?: unknown }).name === "AbortError");
+}
+
+async function callGitHub<T>(operation: string, signal: AbortSignal | undefined, call: () => Promise<T>): Promise<T> {
+  throwIfAborted(signal);
+  try {
+    const result = await call();
+    throwIfAborted(signal);
+    return result;
+  } catch (error) {
+    if (signal?.aborted || isAbortError(error)) throw abortError();
+    throw new Error(`GitHub ${operation} failed.`);
+  }
+}
+
+function validateClient(client: RepositoryGitHubClient): void {
+  if (!client || typeof client !== "object") throw new Error("A GitHub acquisition client is required.");
+  for (const method of ["resolveReference", "listRecursiveTree", "getBlob"] as const) {
+    if (typeof client[method] !== "function") throw new Error(`GitHub acquisition client is missing ${method}().`);
+  }
+}
+
+function decodeBase64(input: string, expectedByteSize: number): Uint8Array {
   if (typeof input !== "string") throw new Error("GitHub blob content is invalid.");
+  const expectedEncodedLength = Math.ceil(expectedByteSize / 3) * 4;
+  const maximumTransportLength = expectedEncodedLength + Math.ceil(expectedEncodedLength / 60) + 16;
+  if (input.length > maximumTransportLength) throw new Error("GitHub blob content exceeds the declared encoded size.");
   const compact = input.replace(/\s+/g, "");
+  if (compact.length !== expectedEncodedLength) throw new Error("GitHub blob content does not match the declared encoded size.");
   if (compact.length === 0) return new Uint8Array();
-  if (compact.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(compact)) {
     throw new Error("GitHub blob content is not valid base64.");
   }
   if (typeof globalThis.atob !== "function") throw new Error("Base64 decoding is unavailable in this environment.");
@@ -129,6 +167,7 @@ function decodeBase64(input: string): Uint8Array {
   } catch {
     throw new Error("GitHub blob content is not valid base64.");
   }
+  if (decoded.length !== expectedByteSize) throw new Error("GitHub blob content does not match the declared byte size.");
   const bytes = new Uint8Array(decoded.length);
   for (let index = 0; index < decoded.length; index += 1) bytes[index] = decoded.charCodeAt(index);
   return bytes;
@@ -163,7 +202,7 @@ function validateTree(tree: GitHubRecursiveTree, limits: GitHubAcquisitionLimits
     if (path.split("/").length > limits.maxDepth) throw new Error(`GitHub tree entry exceeds the ${limits.maxDepth}-segment depth limit: ${path}`);
     const sha = validateGitObjectSha(entry.sha, `GitHub tree object for ${path}`);
     if (typeof entry.mode !== "string" || !/^[0-7]{6}$/.test(entry.mode)) throw new Error(`GitHub tree mode is invalid: ${path}`);
-    if (!(["blob", "tree", "commit"] as const).includes(entry.type)) throw new Error(`GitHub tree type is unsupported: ${path}`);
+    if (!(typeof entry.type === "string" && ["blob", "tree", "commit"].includes(entry.type))) throw new Error(`GitHub tree type is unsupported: ${path}`);
     return { ...entry, path, sha };
   }).sort((left, right) => compareText(left.path, right.path));
 
@@ -201,18 +240,19 @@ async function downloadBlob(
   planned: PlannedBlob,
   signal?: AbortSignal,
 ): Promise<RepositorySnapshotEntry> {
-  throwIfAborted(signal);
-  const response = await client.getBlob({ repositoryFullName, blobSha: planned.sha, signal });
-  throwIfAborted(signal);
+  const response = await callGitHub(`blob download for ${planned.path}`, signal, () => client.getBlob({
+    repositoryFullName,
+    blobSha: planned.sha,
+    signal,
+  }));
   if (!response || typeof response !== "object") throw new Error(`GitHub returned an invalid blob response for ${planned.path}.`);
   const responseSha = validateGitObjectSha(response.sha, `GitHub blob response for ${planned.path}`);
   if (responseSha !== planned.sha) throw new Error(`GitHub blob identity changed during acquisition: ${planned.path}`);
   if (response.encoding !== "base64") throw new Error(`GitHub blob encoding is unsupported: ${planned.path}`);
-  const bytes = decodeBase64(response.content);
+  const bytes = decodeBase64(response.content, planned.byteSize);
   if (response.byteSize !== undefined && (!Number.isSafeInteger(response.byteSize) || response.byteSize < 0 || response.byteSize !== bytes.byteLength)) {
     throw new Error(`GitHub blob response size is invalid: ${planned.path}`);
   }
-  if (bytes.byteLength !== planned.byteSize) throw new Error(`GitHub blob size changed during acquisition: ${planned.path}`);
   return {
     path: planned.path,
     kind: "file",
@@ -246,20 +286,27 @@ export async function acquireGitHubRepositorySnapshot(input: {
   hashProvider?: RepositoryHashProvider;
   signal?: AbortSignal;
 }): Promise<GitHubAcquisitionResult> {
-  if (!input.client || typeof input.client !== "object") throw new Error("A GitHub acquisition client is required.");
+  if (!input || typeof input !== "object") throw new Error("GitHub acquisition input is required.");
+  validateClient(input.client);
   const limits = validateLimits(input.limits ?? {});
   const repositoryFullName = validateRepositoryFullName(input.repositoryFullName);
   const reference = validateReference(input.reference);
   throwIfAborted(input.signal);
 
-  const resolved = await input.client.resolveReference({ repositoryFullName, reference, signal: input.signal });
-  throwIfAborted(input.signal);
+  const resolved = await callGitHub("reference resolution", input.signal, () => input.client.resolveReference({
+    repositoryFullName,
+    reference,
+    signal: input.signal,
+  }));
   if (!resolved || typeof resolved !== "object") throw new Error("GitHub returned an invalid resolved reference.");
   const commitSha = validateGitObjectSha(resolved.commitSha, "Resolved GitHub commit");
   const treeSha = validateGitObjectSha(resolved.treeSha, "Resolved GitHub tree");
 
-  const tree = await input.client.listRecursiveTree({ repositoryFullName, treeSha, signal: input.signal });
-  throwIfAborted(input.signal);
+  const tree = await callGitHub("recursive tree request", input.signal, () => input.client.listRecursiveTree({
+    repositoryFullName,
+    treeSha,
+    signal: input.signal,
+  }));
   const validated = validateTree(tree, limits);
   const apiRequests = 2 + validated.blobs.length;
   if (apiRequests > limits.maxApiRequests) throw new Error(`GitHub acquisition exceeds the ${limits.maxApiRequests}-request limit.`);
