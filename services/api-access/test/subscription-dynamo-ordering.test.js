@@ -30,7 +30,8 @@ test("Dynamo account updates conditionally preserve newer Stripe lifecycle state
   const store = createDynamoApiAccessStore(client, tables);
   assert.equal(await store.putAccount(account()), "updated");
   assert.equal(command.constructor.name, "UpdateCommand");
-  assert.match(command.input.ConditionExpression, /subscriptionEventCreatedAt/);
+  assert.equal(command.input.ExpressionAttributeNames["#eventCreatedAt"], "subscriptionEventCreatedAt");
+  assert.match(command.input.ConditionExpression, /#eventCreatedAt/);
   assert.equal(command.input.ExpressionAttributeValues[":eventCreatedAt"], 1_785_254_400_000);
   assert.match(command.input.UpdateExpression, /activeKeyCount = if_not_exists/);
 });
