@@ -1,13 +1,13 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { createApiKeyAuthorizer } from "./authorizer.js";
-import { parseApiAccessEnvironment } from "./config.js";
-import { createDynamoApiAccessStore } from "./dynamo-store.js";
+import { parseApiKeyAuthorizerEnvironment } from "./config.js";
+import { createDynamoApiKeyAuthorizerStore } from "./dynamo-store.js";
 import { createApiAccessService } from "./service.js";
 
-const environment = parseApiAccessEnvironment(process.env);
+const environment = parseApiKeyAuthorizerEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
-const store = createDynamoApiAccessStore(documentClient, environment);
+const store = createDynamoApiKeyAuthorizerStore(documentClient, environment);
 const service = createApiAccessService({
   store,
   pepper: environment.pepper,
