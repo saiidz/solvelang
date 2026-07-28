@@ -5,6 +5,7 @@ site/out/
 site/dist/
 site/build/
 site/.studio-test-dist/
+site/app/\[locale\]/
 site/.env.local
 site/.env*.local
 

@@ -315,8 +315,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const paymentClient = await readFile(path.join(root, "site/app/checkout/PaymentElementClient.tsx"), "utf8");
   const checkoutTerms = await readFile(path.join(root, "site/app/checkout/checkoutGate.ts"), "utf8");
   const entitlementTerms = await readFile(path.join(root, "services/entitlements/src/terms.ts"), "utf8");
-  const termsPage = await readFile(path.join(root, "site/app/terms/page.tsx"), "utf8");
-  const refundPolicyPage = await readFile(path.join(root, "site/app/refund-policy/page.tsx"), "utf8");
+  const termsPage = await readFile(path.join(root, "site/app/(english)/terms/page.tsx"), "utf8");
+  const refundPolicyPage = await readFile(path.join(root, "site/app/(english)/refund-policy/page.tsx"), "utf8");
   const legalChecklist = await readFile(path.join(root, "docs/checkout-legal-owner-checklist.md"), "utf8");
   const turnstileGateway = await readFile(path.join(root, "services/entitlements/src/turnstile.ts"), "utf8");
   const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)

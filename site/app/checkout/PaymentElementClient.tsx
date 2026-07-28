@@ -1,6 +1,7 @@
 "use client";
 
 import { loadStripe, type StripeElements, type StripePaymentElement } from "@stripe/stripe-js";
+import Link from "next/link";
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -349,7 +350,7 @@ export function PaymentElementClient() {
           </span>
         </label>
         <p className="text-xs leading-5 text-slate-600">
-          Read the <a href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</a> and <a href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</a> before confirming.
+          Read the <Link href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</Link> and <Link href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</Link> before confirming.
         </p>
       </div>
       {checkoutRequirementsMet && turnstileSiteKey ? (
