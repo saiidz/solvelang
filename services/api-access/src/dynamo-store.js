@@ -125,6 +125,7 @@ export function createDynamoApiAccessStore(documentClient, {
         "#subscription": "stripeSubscriptionId",
         "#updatedAt": "updatedAt",
         "#eventCreatedAt": "subscriptionEventCreatedAt",
+        "#eventOrder": "subscriptionEventOrder",
       };
       const values = {
         ":email": account.email,
@@ -135,6 +136,7 @@ export function createDynamoApiAccessStore(documentClient, {
         ":subscription": account.stripeSubscriptionId,
         ":updatedAt": account.updatedAt,
         ":eventCreatedAt": account.subscriptionEventCreatedAt,
+        ":eventOrder": account.subscriptionEventOrder,
         ":zero": 0,
       };
       const updates = [
@@ -146,6 +148,7 @@ export function createDynamoApiAccessStore(documentClient, {
         "#subscription = :subscription",
         "#updatedAt = :updatedAt",
         "#eventCreatedAt = :eventCreatedAt",
+        "#eventOrder = :eventOrder",
         "activeKeyCount = if_not_exists(activeKeyCount, :zero)",
       ];
       let removeExpression;
@@ -160,7 +163,7 @@ export function createDynamoApiAccessStore(documentClient, {
           TableName: accountsTable,
           Key: { accountId: account.accountId },
           UpdateExpression: `SET ${updates.join(", ")}${removeExpression ?? ""}`,
-          ConditionExpression: "attribute_not_exists(#eventCreatedAt) OR #eventCreatedAt <= :eventCreatedAt",
+          ConditionExpression: "attribute_not_exists(#eventOrder) OR #eventOrder < :eventOrder",
           ExpressionAttributeNames: names,
           ExpressionAttributeValues: values,
         }));
