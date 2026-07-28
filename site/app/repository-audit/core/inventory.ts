@@ -162,6 +162,13 @@ const configurationNames = new Set([
   "poetry.lock", "pyproject.toml", "requirements.txt", "rust-toolchain.toml", "tsconfig.json", "vercel.json", "wrangler.toml", "yarn.lock",
 ]);
 
+type TruncationReason = RepositoryInventoryAnalysis["execution"]["truncationReasons"][number];
+type NormalizedFile = RepositoryFileInput & { path: string; class: RepositoryFileClass };
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function assertFiniteNonNegativeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} must be a non-negative safe integer.`);
 }
@@ -175,9 +182,8 @@ export function normalizeRepositoryPath(input: string): string {
   if (input.includes("\0")) throw new Error("Repository paths cannot contain NUL bytes.");
   if (input.startsWith("/") || /^[A-Za-z]:/.test(input)) throw new Error(`Repository path must be relative: ${input}`);
   if (input.includes("\\")) throw new Error(`Repository path must use POSIX separators: ${input}`);
-  const segments = input.split("/");
   const normalized: string[] = [];
-  for (const segment of segments) {
+  for (const segment of input.split("/")) {
     if (!segment || segment === ".") continue;
     if (segment === "..") throw new Error(`Repository path cannot traverse outside the snapshot: ${input}`);
     normalized.push(segment);
@@ -208,15 +214,13 @@ function isBackupPath(path: string): boolean {
 }
 
 function isVendorPath(path: string): boolean {
-  const segments = path.toLowerCase().split("/");
-  return segments.some((segment) => ["node_modules", "vendor", ".venv", "venv", "pods"].includes(segment));
+  return path.toLowerCase().split("/").some((segment) => ["node_modules", "vendor", ".venv", "venv", "pods"].includes(segment));
 }
 
 function isGeneratedPath(path: string, explicit = false): boolean {
   if (explicit) return true;
   const lower = path.toLowerCase();
-  const segments = lower.split("/");
-  if (segments.some((segment) => [".next", "coverage", "dist", "generated", "out", "target"].includes(segment))) return true;
+  if (lower.split("/").some((segment) => [".next", "coverage", "dist", "generated", "out", "target"].includes(segment))) return true;
   return /(?:\.generated\.[^.]+|\.min\.(?:css|js)|\.map)$/.test(lower);
 }
 
@@ -261,12 +265,14 @@ export function classifyRepositoryFile(file: Pick<RepositoryFileInput, "path" | 
 }
 
 function stableHash(value: string): string {
-  let hash = 0xcbf29ce484222325n;
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
   for (let index = 0; index < value.length; index += 1) {
-    hash ^= BigInt(value.charCodeAt(index));
-    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+    const code = value.charCodeAt(index);
+    left = Math.imul((left ^ code) >>> 0, 0x01000193) >>> 0;
+    right = Math.imul((right ^ ((code + index) >>> 0)) >>> 0, 0x85ebca6b) >>> 0;
   }
-  return hash.toString(16).padStart(16, "0");
+  return left.toString(16).padStart(8, "0") + right.toString(16).padStart(8, "0");
 }
 
 function confidence(level: RepositoryConfidence["level"], score: number, basis: string): RepositoryConfidence {
@@ -283,10 +289,16 @@ function evidence(path: string, kind: RepositoryEvidence["kind"], file?: { byteS
   };
 }
 
+function boundedText(file: NormalizedFile | undefined, maxTextBytes: number): string | undefined {
+  if (!file?.text || file.byteSize > maxTextBytes || file.text.length > maxTextBytes) return undefined;
+  return file.text;
+}
+
 function parsePackageJson(file: NormalizedFile | undefined, maxTextBytes: number): Record<string, unknown> | undefined {
-  if (!file?.text || file.byteSize > maxTextBytes) return undefined;
+  const text = boundedText(file, maxTextBytes);
+  if (!text) return undefined;
   try {
-    const parsed: unknown = JSON.parse(file.text);
+    const parsed: unknown = JSON.parse(text);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : undefined;
   } catch {
     return undefined;
@@ -308,8 +320,6 @@ function packageDependencies(manifest: Record<string, unknown> | undefined): Rec
   };
 }
 
-type NormalizedFile = RepositoryFileInput & { path: string; class: RepositoryFileClass };
-
 function languageDetections(files: NormalizedFile[]): RepositoryDetection[] {
   const definitions: Array<[string, Set<string>]> = [
     ["TypeScript", new Set(["ts", "tsx"])], ["JavaScript", new Set(["js", "jsx", "mjs", "cjs"])], ["Rust", new Set(["rs"])],
@@ -328,14 +338,13 @@ function languageDetections(files: NormalizedFile[]): RepositoryDetection[] {
       evidence: matches.slice(0, 3).map((file) => evidence(file.path, "file")),
     });
   }
-  return detections.sort((left, right) => left.name.localeCompare(right.name));
+  return detections.sort((left, right) => compareText(left.name, right.name));
 }
 
 function frameworkDetections(files: NormalizedFile[], maxTextBytes: number): RepositoryDetection[] {
-  const byPath = new Map(files.map((file) => [file.path.toLowerCase(), file]));
+  const byPath = new Map(files.map((file): [string, NormalizedFile] => [file.path.toLowerCase(), file]));
   const packageFile = byPath.get("package.json");
-  const packageJson = parsePackageJson(packageFile, maxTextBytes);
-  const dependencies = packageDependencies(packageJson);
+  const dependencies = packageDependencies(parsePackageJson(packageFile, maxTextBytes));
   const detections: RepositoryDetection[] = [];
   const addPackageFramework = (dependency: string, name: string) => {
     if (!(dependency in dependencies) || !packageFile) return;
@@ -355,15 +364,19 @@ function frameworkDetections(files: NormalizedFile[], maxTextBytes: number): Rep
   addPackageFramework("fastify", "Fastify");
 
   const composer = byPath.get("composer.json");
-  if (composer?.text && composer.byteSize <= maxTextBytes && composer.text.includes("laravel/framework")) {
-    detections.push({ name: "Laravel", confidence: confidence("high", 0.98, "laravel/framework is declared in composer.json."), evidence: [evidence(composer.path, "manifest")] });
+  if (boundedText(composer, maxTextBytes)?.includes("laravel/framework")) {
+    detections.push({ name: "Laravel", confidence: confidence("high", 0.98, "laravel/framework is declared in composer.json."), evidence: [evidence(composer!.path, "manifest")] });
   }
-  if (byPath.has("cargo.toml")) detections.push({ name: "Rust/Cargo", confidence: confidence("high", 1, "Cargo.toml is present."), evidence: [evidence("Cargo.toml", "manifest")] });
-  if (byPath.has("go.mod")) detections.push({ name: "Go modules", confidence: confidence("high", 1, "go.mod is present."), evidence: [evidence("go.mod", "manifest")] });
-  if (files.some((file) => /^manage\.py$/i.test(file.path)) && files.some((file) => file.text?.includes("django"))) {
-    detections.push({ name: "Django", confidence: confidence("medium", 0.8, "manage.py and a Django reference are present."), evidence: [evidence("manage.py", "file")] });
+  const cargo = byPath.get("cargo.toml");
+  if (cargo) detections.push({ name: "Rust/Cargo", confidence: confidence("high", 1, "Cargo.toml is present."), evidence: [evidence(cargo.path, "manifest")] });
+  const goModule = byPath.get("go.mod");
+  if (goModule) detections.push({ name: "Go modules", confidence: confidence("high", 1, "go.mod is present."), evidence: [evidence(goModule.path, "manifest")] });
+  const managePy = files.find((file) => /^manage\.py$/i.test(file.path));
+  const djangoReference = files.some((file) => boundedText(file, maxTextBytes)?.toLowerCase().includes("django"));
+  if (managePy && djangoReference) {
+    detections.push({ name: "Django", confidence: confidence("medium", 0.8, "manage.py and a bounded Django reference are present."), evidence: [evidence(managePy.path, "file")] });
   }
-  return detections.sort((left, right) => left.name.localeCompare(right.name));
+  return detections.sort((left, right) => compareText(left.name, right.name));
 }
 
 function packageManagerDetections(files: NormalizedFile[]): RepositoryDetection[] {
@@ -372,18 +385,21 @@ function packageManagerDetections(files: NormalizedFile[]): RepositoryDetection[
     ["Cargo", ["cargo.lock", "cargo.toml"]], ["Composer", ["composer.lock", "composer.json"]], ["Poetry", ["poetry.lock", "pyproject.toml"]],
     ["pip", ["requirements.txt"]], ["Go modules", ["go.mod", "go.sum"]],
   ];
-  const lowerPaths = new Map(files.map((file) => [file.path.toLowerCase(), file]));
-  return definitions.flatMap(([name, candidates]) => {
+  const lowerPaths = new Map(files.map((file): [string, NormalizedFile] => [file.path.toLowerCase(), file]));
+  const results: RepositoryDetection[] = [];
+  for (const [name, candidates] of definitions) {
     const matched = candidates.map((candidate) => lowerPaths.get(candidate)).filter((file): file is NormalizedFile => Boolean(file));
-    return matched.length === 0 ? [] : [{
+    if (matched.length === 0) continue;
+    results.push({
       name,
       confidence: confidence("high", 1, `${matched.map((file) => file.path).join(" and ")} ${matched.length === 1 ? "is" : "are"} present.`),
       evidence: matched.map((file) => evidence(file.path, "manifest")),
-    }];
-  }).sort((left, right) => left.name.localeCompare(right.name));
+    });
+  }
+  return results.sort((left, right) => compareText(left.name, right.name));
 }
 
-function deploymentDetections(files: NormalizedFile[]): RepositoryDetection[] {
+function deploymentDetections(files: NormalizedFile[], maxTextBytes: number): RepositoryDetection[] {
   const results: RepositoryDetection[] = [];
   const match = (name: string, predicate: (file: NormalizedFile) => boolean, basis: string) => {
     const matches = files.filter(predicate);
@@ -396,8 +412,8 @@ function deploymentDetections(files: NormalizedFile[]): RepositoryDetection[] {
   match("Netlify", (file) => /(?:^|\/)netlify\.toml$/i.test(file.path), "netlify.toml is present.");
   match("AWS Amplify", (file) => /(?:^|\/)amplify\.ya?ml$/i.test(file.path), "Amplify build configuration is present.");
   match("Kubernetes", (file) => /(?:^|\/)(?:k8s|kubernetes|charts?)(?:\/|$)/i.test(file.path), "Kubernetes or Helm paths are present.");
-  match("AWS SAM", (file) => /(?:^|\/)(?:template|sam-template)\.ya?ml$/i.test(file.path) && Boolean(file.text?.includes("AWS::Serverless")), "An AWS SAM transform or resource is present.");
-  return results.sort((left, right) => left.name.localeCompare(right.name));
+  match("AWS SAM", (file) => /(?:^|\/)(?:template|sam-template)\.ya?ml$/i.test(file.path) && Boolean(boundedText(file, maxTextBytes)?.includes("AWS::Serverless")), "An AWS SAM transform or resource is present.");
+  return results.sort((left, right) => compareText(left.name, right.name));
 }
 
 function validateLimits(overrides: Partial<RepositoryScanLimits>): RepositoryScanLimits {
@@ -408,12 +424,14 @@ function validateLimits(overrides: Partial<RepositoryScanLimits>): RepositorySca
 }
 
 function validateSource(source: RepositorySnapshot["source"]): void {
+  if (source.kind !== "github" && source.kind !== "archive") throw new Error("Repository source kind must be github or archive.");
   if (!source.displayName.trim()) throw new Error("Repository source displayName is required.");
   if (!source.revision.trim()) throw new Error("Repository source revision is required.");
   if (!/^sha256:[a-f0-9]{64}$/.test(source.fingerprint)) throw new Error("Repository source fingerprint must be a lowercase SHA-256 value.");
 }
 
 function normalizedFiles(snapshot: RepositorySnapshot): NormalizedFile[] {
+  if (!Array.isArray(snapshot.files)) throw new Error("Repository snapshot files must be an array.");
   const seen = new Set<string>();
   return snapshot.files.map((file, index) => {
     const path = normalizeRepositoryPath(file.path);
@@ -421,15 +439,17 @@ function normalizedFiles(snapshot: RepositorySnapshot): NormalizedFile[] {
     seen.add(path);
     assertFiniteNonNegativeInteger(file.byteSize, `files[${index}].byteSize`);
     if (file.sha256 && !/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`Invalid SHA-256 for ${path}.`);
+    if (file.text !== undefined && typeof file.text !== "string") throw new Error(`Invalid text content for ${path}.`);
+    if (file.generated !== undefined && typeof file.generated !== "boolean") throw new Error(`Invalid generated flag for ${path}.`);
     return { ...file, path, class: classifyRepositoryFile({ path, generated: file.generated }) };
-  }).sort((left, right) => left.path.localeCompare(right.path));
+  }).sort((left, right) => compareText(left.path, right.path));
 }
 
-function capFindings(findings: RepositoryFinding[], limit: number, reasons: Set<RepositoryInventoryAnalysis["execution"]["truncationReasons"][number]>): RepositoryFinding[] {
+function capFindings(findings: RepositoryFinding[], limit: number, reasons: Set<TruncationReason>): RepositoryFinding[] {
   const sorted = findings.sort((left, right) => severityOrder[left.severity] - severityOrder[right.severity]
-    || left.ruleId.localeCompare(right.ruleId)
-    || left.evidence[0].path.localeCompare(right.evidence[0].path)
-    || left.id.localeCompare(right.id));
+    || compareText(left.ruleId, right.ruleId)
+    || compareText(left.evidence[0].path, right.evidence[0].path)
+    || compareText(left.id, right.id));
   if (sorted.length > limit) reasons.add("finding-count");
   return sorted.slice(0, limit);
 }
@@ -438,37 +458,33 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
   validateSource(snapshot.source);
   const limits = validateLimits(limitOverrides);
   const allFiles = normalizedFiles(snapshot);
-  const reasons = new Set<RepositoryInventoryAnalysis["execution"]["truncationReasons"][number]>();
+  const reasons = new Set<TruncationReason>();
   const accepted: NormalizedFile[] = [];
   let bytesScanned = 0;
-  let skipped = 0;
 
-  for (const file of allFiles) {
-    if (accepted.length >= limits.maxFiles) {
+  for (let index = 0; index < allFiles.length; index += 1) {
+    const file = allFiles[index];
+    if (index >= limits.maxFiles) {
       reasons.add("file-count");
-      skipped += 1;
       continue;
     }
     if (pathDepth(file.path) > limits.maxDepth) {
       reasons.add("depth");
-      skipped += 1;
       continue;
     }
     if (file.byteSize > limits.maxFileBytes) {
       reasons.add("file-size");
-      skipped += 1;
       continue;
     }
     if (bytesScanned + file.byteSize > limits.maxTotalBytes) {
       reasons.add("total-bytes");
-      skipped += 1;
       continue;
     }
     accepted.push(file);
     bytesScanned += file.byteSize;
   }
 
-  const classCounts = new Map<RepositoryFileClass, number>(fileClassOrder.map((item) => [item, 0]));
+  const classCounts = new Map<RepositoryFileClass, number>(fileClassOrder.map((item): [RepositoryFileClass, number] => [item, 0]));
   for (const file of accepted) classCounts.set(file.class, (classCounts.get(file.class) ?? 0) + 1);
 
   const backupFiles = accepted.filter((file) => file.class === "backup");
@@ -485,7 +501,7 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
   const duplicateGroups = [...hashGroups.entries()]
     .filter(([, members]) => members.length > 1)
     .map(([sha256, members]) => {
-      const sortedMembers = members.sort((left, right) => left.path.localeCompare(right.path));
+      const sortedMembers = [...members].sort((left, right) => compareText(left.path, right.path));
       return {
         groupId: `dup_${stableHash(`${sha256}:${sortedMembers.map((file) => file.path).join("|")}`)}`,
         matchType: "exact-content" as const,
@@ -493,7 +509,7 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
         members: sortedMembers.map((file) => evidence(file.path, "hash", { byteSize: file.byteSize, sha256 })),
       };
     })
-    .sort((left, right) => left.members[0].path.localeCompare(right.members[0].path));
+    .sort((left, right) => compareText(left.members[0].path, right.members[0].path));
 
   const findings: RepositoryFinding[] = [];
   for (const group of duplicateGroups) {
@@ -591,14 +607,14 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
     execution: {
       status: reasons.size === 0 ? "complete" : "partial",
       truncated: reasons.size > 0,
-      truncationReasons: [...reasons].sort(),
+      truncationReasons: [...reasons].sort(compareText),
       networkAccess: false,
       writeAccess: false,
     },
     summary: {
       filesSeen: allFiles.length,
       filesScanned: accepted.length,
-      filesSkipped: skipped,
+      filesSkipped: allFiles.length - accepted.length,
       bytesScanned,
       directoriesSeen: directorySet.size,
     },
@@ -607,7 +623,7 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
       languages: languageDetections(accepted),
       frameworks: frameworkDetections(accepted, limits.maxManifestTextBytes),
       packageManagers: packageManagerDetections(accepted),
-      deploymentTargets: deploymentDetections(accepted),
+      deploymentTargets: deploymentDetections(accepted, limits.maxManifestTextBytes),
       largeFiles: largeFiles.map((file) => evidence(file.path, "size", { byteSize: file.byteSize, sha256: file.sha256 })),
     },
     detections: {
