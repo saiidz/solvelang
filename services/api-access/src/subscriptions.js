@@ -87,7 +87,11 @@ function subscriptionConflict(existing, subscriptionId, incomingStatus) {
 
 export function createSubscriptionCheckoutService({ gateway, apiAccessService, priceIds, siteOrigin, enabled = false }) {
   if (!gateway || typeof gateway.createCheckoutSession !== "function") throw new Error("Stripe subscription gateway is required.");
-  if (!apiAccessService || typeof apiAccessService.getSubscriptionAccount !== "function") throw new Error("API access service is required.");
+  if (!apiAccessService
+    || typeof apiAccessService.getSubscriptionAccount !== "function"
+    || typeof apiAccessService.reserveSubscriptionCheckout !== "function") {
+    throw new Error("API access service is required.");
+  }
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
 
   return {
@@ -105,6 +109,7 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
       if (typeof priceId !== "string" || !/^price_[A-Za-z0-9]+$/.test(priceId)) {
         throw new ApiAccessError(503, "subscription_price_unavailable", "API subscription pricing is not configured.");
       }
+      await apiAccessService.reserveSubscriptionCheckout({ accountId, requestId });
       const session = await gateway.createCheckoutSession({
         accountId,
         requestId,
