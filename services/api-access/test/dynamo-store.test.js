@@ -31,13 +31,16 @@ function transactionCanceled() {
   return Object.assign(new Error("transaction canceled"), { name: "TransactionCanceledException" });
 }
 
-test("subscription updates preserve the atomic active-key counter", async () => {
+test("subscription updates preserve the atomic active-key counter and strict event order", async () => {
   const client = new ScriptedClient([{
     command: "UpdateCommand",
     inspect(input) {
       assert.equal(input.TableName, "accounts");
       assert.match(input.UpdateExpression, /activeKeyCount = if_not_exists\(activeKeyCount, :zero\)/);
-      assert.match(input.UpdateExpression, /REMOVE graceUntil/);
+      assert.match(input.UpdateExpression, /#eventOrder = :eventOrder/);
+      assert.match(input.UpdateExpression, /REMOVE pendingCheckoutRequestId, pendingCheckoutExpiresAt, graceUntil/);
+      assert.equal(input.ConditionExpression, "attribute_not_exists(#eventOrder) OR #eventOrder < :eventOrder");
+      assert.equal(input.ExpressionAttributeValues[":eventOrder"], 1_785_254_400_022);
       assert.equal(input.ExpressionAttributeValues[":zero"], 0);
     },
   }]);
@@ -48,6 +51,8 @@ test("subscription updates preserve the atomic active-key counter", async () => 
     plan: "pro",
     subscriptionStatus: "active",
     currentPeriodEnd: 1_800_000_000_000,
+    subscriptionEventCreatedAt: 1_785_254_400_000,
+    subscriptionEventOrder: 1_785_254_400_022,
     stripeCustomerId: "cus_1",
     stripeSubscriptionId: "sub_1",
     updatedAt: "2026-07-28T12:00:00.000Z",

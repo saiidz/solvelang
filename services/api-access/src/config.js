@@ -24,10 +24,26 @@ function usage(environment) {
   };
 }
 
+function billing(environment) {
+  const enabled = environment.API_SUBSCRIPTION_BILLING_ENABLED === "true";
+  return {
+    subscriptionBillingEnabled: enabled,
+    subscriptionEventsTable: required(environment, "API_SUBSCRIPTION_EVENTS_TABLE"),
+    stripeSecretKey: enabled ? required(environment, "STRIPE_SECRET_KEY") : undefined,
+    stripeWebhookSecret: enabled ? required(environment, "STRIPE_SUBSCRIPTION_WEBHOOK_SECRET") : undefined,
+    priceIds: {
+      developer: enabled ? required(environment, "STRIPE_API_DEVELOPER_PRICE_ID") : undefined,
+      pro: enabled ? required(environment, "STRIPE_API_PRO_PRICE_ID") : undefined,
+      business: enabled ? required(environment, "STRIPE_API_BUSINESS_PRICE_ID") : undefined,
+    },
+  };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   return {
     ...shared(environment),
     ...usage(environment),
+    ...billing(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
     siteOrigin: required(environment, "SITE_ORIGIN"),
   };

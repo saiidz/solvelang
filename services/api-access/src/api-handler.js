@@ -8,16 +8,33 @@ function secureEqual(left, right) {
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function parseJson(event) {
-  if (!event?.body) return {};
-  const text = event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
-  return JSON.parse(text);
+function bodyText(event) {
+  if (!event?.body) return "";
+  return event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
 }
 
-export function createApiAccessHandler({ service, enabled = false, adminSecret, siteOrigin, logger = console }) {
+function parseJson(event) {
+  const text = bodyText(event);
+  return text ? JSON.parse(text) : {};
+}
+
+export function createApiAccessHandler({
+  service,
+  enabled = false,
+  adminSecret,
+  siteOrigin,
+  subscriptionBillingEnabled = false,
+  subscriptionCheckout,
+  subscriptionLifecycle,
+  stripeGateway,
+  logger = console,
+}) {
   if (!service) throw new Error("API access service is required.");
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
+  if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionLifecycle || !stripeGateway)) {
+    throw new Error("Stripe subscription services are required when billing is enabled.");
+  }
 
   function response(statusCode, body) {
     return {
@@ -26,7 +43,7 @@ export function createApiAccessHandler({ service, enabled = false, adminSecret, 
         "content-type": "application/json; charset=utf-8",
         "access-control-allow-origin": siteOrigin,
         "access-control-allow-methods": "GET,POST,OPTIONS",
-        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret",
+        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret,stripe-signature",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
@@ -45,8 +62,28 @@ export function createApiAccessHandler({ service, enabled = false, adminSecret, 
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
       if (method === "OPTIONS") return response(204, {});
       if (method === "GET" && path.endsWith("/health")) {
-        return response(200, { status: "ok", service: "solvelang-api-access", enabled });
+        return response(200, {
+          status: "ok",
+          service: "solvelang-api-access",
+          enabled,
+          subscriptionBillingEnabled,
+        });
       }
+
+      if (method === "POST" && path.endsWith("/stripe/subscriptions/webhook")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        const signature = event?.headers?.["stripe-signature"] ?? event?.headers?.["Stripe-Signature"];
+        if (typeof signature !== "string" || !signature) throw new ApiAccessError(400, "invalid_webhook", "Invalid webhook.");
+        let stripeEvent;
+        try {
+          stripeEvent = stripeGateway.constructWebhookEvent(Buffer.from(bodyText(event), "utf8"), signature);
+        } catch {
+          throw new ApiAccessError(400, "invalid_webhook_signature", "Invalid webhook.");
+        }
+        const result = await subscriptionLifecycle.processEvent(stripeEvent);
+        return response(200, { received: true, handled: result.handled, duplicate: result.duplicate });
+      }
+
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
 
       if (method === "GET" && path.endsWith("/v1/whoami")) {
@@ -58,11 +95,15 @@ export function createApiAccessHandler({ service, enabled = false, adminSecret, 
           plan: context.plan,
           scopes: typeof context.scopes === "string" ? context.scopes.split(" ").filter(Boolean) : [],
           subscriptionStatus: context.subscriptionStatus,
+          usageRemaining: context.usageRemaining,
         });
       }
 
       requireAdmin(event);
       const body = parseJson(event);
+      if (method === "POST" && path.endsWith("/internal/subscriptions/checkout")) {
+        return response(201, await subscriptionCheckout.createCheckout(body));
+      }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
         return response(200, { account: await service.provisionSubscription(body) });
       }
