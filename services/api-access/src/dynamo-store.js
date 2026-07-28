@@ -13,102 +13,27 @@ function requireTables(documentClient, values) {
   }
 }
 
-export function createDynamoApiKeyAuthorizerStore(documentClient, { accountsTable, keysTable }) {
-  requireTables(documentClient, { accountsTable, keysTable });
-  return {
-    async getAccount(accountId) {
-      const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
-      return response.Item;
-    },
-    async getKey(keyId) {
-      const response = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
-      return response.Item;
-    },
-    async touchKey(keyId, lastUsedAt) {
-      await documentClient.send(new UpdateCommand({
-        TableName: keysTable,
-        Key: { keyId },
-        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
-        ConditionExpression: "attribute_exists(keyId) AND attribute_not_exists(revokedAt)",
-        ExpressionAttributeValues: { ":lastUsedAt": lastUsedAt },
-      }));
-    },
-  };
+function isExpectedConditionalCancellation(error) {
+  if (error?.name !== "TransactionCanceledException") return false;
+  const reasons = error.CancellationReasons;
+  return Array.isArray(reasons)
+    && reasons.length > 0
+    && reasons.every((reason) => !reason?.Code || reason.Code === "None" || reason.Code === "ConditionalCheckFailed");
 }
 
-export function createDynamoApiAccessStore(documentClient, {
-  accountsTable,
-  keysTable,
-  keysAccountIndex,
-  usageTable,
-  idempotencyTable,
-}) {
-  requireTables(documentClient, { accountsTable, keysTable, keysAccountIndex, usageTable, idempotencyTable });
-
+function usageMethods(documentClient, { usageTable, idempotencyTable }) {
   async function getUsage(usageKey) {
     const response = await documentClient.send(new GetCommand({ TableName: usageTable, Key: { usageKey }, ConsistentRead: true }));
     return Number.isSafeInteger(response.Item?.used) ? response.Item.used : 0;
   }
 
   return {
-    async putAccount(account) {
-      await documentClient.send(new PutCommand({ TableName: accountsTable, Item: account }));
-    },
-
-    async getAccount(accountId) {
-      const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
-      return response.Item;
-    },
-
-    async listKeys(accountId) {
-      const response = await documentClient.send(new QueryCommand({
-        TableName: keysTable,
-        IndexName: keysAccountIndex,
-        KeyConditionExpression: "accountId = :accountId",
-        ExpressionAttributeValues: { ":accountId": accountId },
-        ConsistentRead: false,
-      }));
-      return response.Items ?? [];
-    },
-
-    async putKey(key) {
-      await documentClient.send(new PutCommand({
-        TableName: keysTable,
-        Item: key,
-        ConditionExpression: "attribute_not_exists(keyId)",
-      }));
-    },
-
-    async getKey(keyId) {
-      const response = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
-      return response.Item;
-    },
-
-    async revokeKey(keyId, accountId, revokedAt) {
-      await documentClient.send(new UpdateCommand({
-        TableName: keysTable,
-        Key: { keyId },
-        UpdateExpression: "SET revokedAt = if_not_exists(revokedAt, :revokedAt)",
-        ConditionExpression: "accountId = :accountId",
-        ExpressionAttributeValues: { ":accountId": accountId, ":revokedAt": revokedAt },
-      }));
-    },
-
-    async touchKey(keyId, lastUsedAt) {
-      await documentClient.send(new UpdateCommand({
-        TableName: keysTable,
-        Key: { keyId },
-        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
-        ConditionExpression: "attribute_exists(keyId) AND attribute_not_exists(revokedAt)",
-        ExpressionAttributeValues: { ":lastUsedAt": lastUsedAt },
-      }));
-    },
-
     async consumeUsage({ accountId, period, units, limit, idempotencyKey, expiresAt }) {
       const usageKey = `${accountId}:${period}`;
       const dedupeKey = `${accountId}:${period}:${idempotencyKey}`;
       try {
         await documentClient.send(new TransactWriteCommand({
+          ReturnCancellationReasons: true,
           TransactItems: [
             {
               Put: {
@@ -137,7 +62,8 @@ export function createDynamoApiAccessStore(documentClient, {
           ],
         }));
         return { status: "consumed", used: await getUsage(usageKey) };
-      } catch {
+      } catch (error) {
+        if (!isExpectedConditionalCancellation(error)) throw error;
         const duplicate = await documentClient.send(new GetCommand({
           TableName: idempotencyTable,
           Key: { idempotencyKey: dedupeKey },
@@ -152,5 +78,154 @@ export function createDynamoApiAccessStore(documentClient, {
         return { status: "quota_exceeded", used };
       }
     },
+  };
+}
+
+export function createDynamoApiKeyAuthorizerStore(documentClient, {
+  accountsTable,
+  keysTable,
+  usageTable,
+  idempotencyTable,
+}) {
+  requireTables(documentClient, { accountsTable, keysTable, usageTable, idempotencyTable });
+  return {
+    async getAccount(accountId) {
+      const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
+      return response.Item;
+    },
+    async getKey(keyId) {
+      const response = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
+      return response.Item;
+    },
+    async touchKey(keyId, lastUsedAt) {
+      await documentClient.send(new UpdateCommand({
+        TableName: keysTable,
+        Key: { keyId },
+        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
+        ConditionExpression: "attribute_exists(keyId) AND attribute_not_exists(revokedAt)",
+        ExpressionAttributeValues: { ":lastUsedAt": lastUsedAt },
+      }));
+    },
+    ...usageMethods(documentClient, { usageTable, idempotencyTable }),
+  };
+}
+
+export function createDynamoApiAccessStore(documentClient, {
+  accountsTable,
+  keysTable,
+  keysAccountIndex,
+  usageTable,
+  idempotencyTable,
+}) {
+  requireTables(documentClient, { accountsTable, keysTable, keysAccountIndex, usageTable, idempotencyTable });
+
+  return {
+    async putAccount(account) {
+      await documentClient.send(new PutCommand({ TableName: accountsTable, Item: account }));
+    },
+
+    async getAccount(accountId) {
+      const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
+      return response.Item;
+    },
+
+    async listKeys(accountId) {
+      const response = await documentClient.send(new QueryCommand({
+        TableName: keysTable,
+        IndexName: keysAccountIndex,
+        KeyConditionExpression: "accountId = :accountId",
+        ExpressionAttributeValues: { ":accountId": accountId },
+        ConsistentRead: false,
+      }));
+      return response.Items ?? [];
+    },
+
+    async putKeyWithLimit(key, maxActiveKeys) {
+      try {
+        await documentClient.send(new TransactWriteCommand({
+          ReturnCancellationReasons: true,
+          TransactItems: [
+            {
+              Update: {
+                TableName: accountsTable,
+                Key: { accountId: key.accountId },
+                UpdateExpression: "SET activeKeyCount = if_not_exists(activeKeyCount, :zero) + :one",
+                ConditionExpression: "attribute_exists(accountId) AND (attribute_not_exists(activeKeyCount) OR activeKeyCount < :limit)",
+                ExpressionAttributeValues: { ":zero": 0, ":one": 1, ":limit": maxActiveKeys },
+              },
+            },
+            {
+              Put: {
+                TableName: keysTable,
+                Item: key,
+                ConditionExpression: "attribute_not_exists(keyId)",
+              },
+            },
+          ],
+        }));
+        return "created";
+      } catch (error) {
+        if (!isExpectedConditionalCancellation(error)) throw error;
+        const [existingKey, account] = await Promise.all([
+          documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId: key.keyId }, ConsistentRead: true })),
+          documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId: key.accountId }, ConsistentRead: true })),
+        ]);
+        if (existingKey.Item) return "key_collision";
+        if (Number.isSafeInteger(account.Item?.activeKeyCount) && account.Item.activeKeyCount >= maxActiveKeys) return "limit_reached";
+        throw error;
+      }
+    },
+
+    async getKey(keyId) {
+      const response = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
+      return response.Item;
+    },
+
+    async revokeKeyAndDecrement(keyId, accountId, revokedAt) {
+      try {
+        await documentClient.send(new TransactWriteCommand({
+          ReturnCancellationReasons: true,
+          TransactItems: [
+            {
+              Update: {
+                TableName: keysTable,
+                Key: { keyId },
+                UpdateExpression: "SET revokedAt = :revokedAt",
+                ConditionExpression: "accountId = :accountId AND attribute_not_exists(revokedAt)",
+                ExpressionAttributeValues: { ":accountId": accountId, ":revokedAt": revokedAt },
+              },
+            },
+            {
+              Update: {
+                TableName: accountsTable,
+                Key: { accountId },
+                UpdateExpression: "SET activeKeyCount = activeKeyCount - :one",
+                ConditionExpression: "attribute_exists(accountId) AND activeKeyCount > :zero",
+                ExpressionAttributeValues: { ":zero": 0, ":one": 1 },
+              },
+            },
+          ],
+        }));
+        return "revoked";
+      } catch (error) {
+        if (!isExpectedConditionalCancellation(error)) throw error;
+        const key = await documentClient.send(new GetCommand({ TableName: keysTable, Key: { keyId }, ConsistentRead: true }));
+        if (!key.Item || key.Item.accountId !== accountId) return "not_found";
+        if (key.Item.revokedAt) return "already_revoked";
+        throw error;
+      }
+    },
+
+    async touchKey(keyId, lastUsedAt) {
+      await documentClient.send(new UpdateCommand({
+        TableName: keysTable,
+        Key: { keyId },
+        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
+        ConditionExpression: "attribute_exists(keyId) AND attribute_not_exists(revokedAt)",
+        ExpressionAttributeValues: { ":lastUsedAt": lastUsedAt },
+      }));
+    },
+
+    ...usageMethods(documentClient, { usageTable, idempotencyTable }),
   };
 }
