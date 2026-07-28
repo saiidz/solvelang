@@ -94,6 +94,11 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("API key pepper must contain at least 32 characters.");
   if (mode !== "test" && mode !== "live") throw new Error("API access mode must be test or live.");
 
+  async function getSubscriptionAccount(input) {
+    const accountId = cleanId(typeof input === "string" ? input : input?.accountId, "Account ID");
+    return await store.getAccount(accountId);
+  }
+
   async function provisionSubscription(input) {
     const timestamp = now();
     const plan = getApiPlan(input.plan);
@@ -101,6 +106,11 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     if (!ALL_SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
       throw new ApiAccessError(400, "invalid_subscription_status", "Subscription status is invalid.");
     }
+    const subscriptionEventCreatedAt = validateTimestamp(input.subscriptionEventCreatedAt ?? timestamp, "Subscription event timestamp");
+    const subscriptionEventOrder = validateTimestamp(
+      input.subscriptionEventOrder ?? Math.floor(subscriptionEventCreatedAt / 1_000) * 100,
+      "Subscription event order",
+    );
     const account = {
       accountId: cleanId(input.accountId, "Account ID"),
       email: cleanEmail(input.email),
@@ -109,7 +119,8 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
       plan: plan.name,
       subscriptionStatus,
       currentPeriodEnd: validateTimestamp(input.currentPeriodEnd, "Current period end"),
-      subscriptionEventCreatedAt: validateTimestamp(input.subscriptionEventCreatedAt ?? timestamp, "Subscription event timestamp"),
+      subscriptionEventCreatedAt,
+      subscriptionEventOrder,
       ...(input.graceUntil === undefined ? {} : { graceUntil: validateTimestamp(input.graceUntil, "Grace period end") }),
       updatedAt: new Date(timestamp).toISOString(),
     };
@@ -227,5 +238,5 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     };
   }
 
-  return { provisionSubscription, issueApiKey, revokeApiKey, authorize, consumeUsage };
+  return { getSubscriptionAccount, provisionSubscription, issueApiKey, revokeApiKey, authorize, consumeUsage };
 }
