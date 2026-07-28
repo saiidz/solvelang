@@ -3,7 +3,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
   if (typeof webhookSecret !== "string" || !webhookSecret) throw new Error("Stripe webhook secret is required.");
 
   return {
-    async createCheckoutSession({ accountId, email, plan, priceId, customerId, successUrl, cancelUrl }) {
+    async createCheckoutSession({ accountId, requestId, email, plan, priceId, customerId, successUrl, cancelUrl }) {
       return stripe.checkout.sessions.create({
         mode: "subscription",
         client_reference_id: accountId,
@@ -11,9 +11,9 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: successUrl,
         cancel_url: cancelUrl,
-        metadata: { accountId, plan },
+        metadata: { accountId, plan, requestId },
         subscription_data: { metadata: { accountId, email, plan } },
-      }, { idempotencyKey: `api-subscription-checkout-${accountId}-${plan}` });
+      }, { idempotencyKey: `api-subscription-checkout-${requestId}` });
     },
 
     constructWebhookEvent(rawBody, signature) {
