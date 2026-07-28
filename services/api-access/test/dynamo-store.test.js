@@ -38,7 +38,7 @@ test("subscription updates preserve the atomic active-key counter and strict eve
       assert.equal(input.TableName, "accounts");
       assert.match(input.UpdateExpression, /activeKeyCount = if_not_exists\(activeKeyCount, :zero\)/);
       assert.match(input.UpdateExpression, /#eventOrder = :eventOrder/);
-      assert.match(input.UpdateExpression, /REMOVE graceUntil/);
+      assert.match(input.UpdateExpression, /REMOVE pendingCheckoutRequestId, pendingCheckoutExpiresAt, graceUntil/);
       assert.equal(input.ConditionExpression, "attribute_not_exists(#eventOrder) OR #eventOrder < :eventOrder");
       assert.equal(input.ExpressionAttributeValues[":eventOrder"], 1_785_254_400_022);
       assert.equal(input.ExpressionAttributeValues[":zero"], 0);
