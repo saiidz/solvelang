@@ -49,12 +49,13 @@ export const defaultRepositoryIngestionLimits: RepositoryIngestionLimits = Objec
 });
 
 const textExtensions = new Set([
-  "c", "cc", "conf", "cpp", "cs", "css", "csv", "env", "go", "graphql", "gql", "h", "hpp", "html", "ini", "java",
-  "js", "json", "jsx", "kt", "kts", "md", "mdx", "mjs", "cjs", "php", "properties", "py", "rb", "rs", "rst", "scss",
-  "sh", "sql", "svelte", "toml", "ts", "tsx", "txt", "vue", "xml", "yaml", "yml",
+  "c", "cc", "cfg", "conf", "config", "cpp", "cs", "css", "csv", "env", "go", "gradle", "graphql", "gql", "h", "hpp",
+  "html", "ini", "java", "js", "json", "jsx", "key", "kt", "kts", "lock", "log", "md", "mdx", "mjs", "cjs", "pem",
+  "php", "properties", "py", "rb", "rs", "rst", "scss", "sh", "sql", "svelte", "tf", "tfvars", "toml", "ts", "tsx", "txt",
+  "vue", "xml", "yaml", "yml",
 ]);
 const textNames = new Set([
-  ".dockerignore", ".editorconfig", ".env.example", ".gitattributes", ".gitignore", ".npmrc", "dockerfile", "license", "makefile",
+  ".dockerignore", ".editorconfig", ".gitattributes", ".gitignore", ".npmrc", "dockerfile", "license", "makefile",
 ]);
 
 function compareText(left: string, right: string): number {
@@ -96,7 +97,7 @@ function extension(path: string): string {
 
 function isInspectableText(path: string): boolean {
   const name = basename(path).toLowerCase();
-  return textNames.has(name) || textExtensions.has(extension(path));
+  return textNames.has(name) || /^\.env(?:\..+)?$/.test(name) || textExtensions.has(extension(path));
 }
 
 function decodeInspectableText(path: string, bytes: Uint8Array, maxTextBytes: number): string | undefined {
@@ -152,9 +153,10 @@ function normalizeEntries(entries: readonly RepositorySnapshotEntry[], limits: R
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     if (!entry || typeof entry !== "object") throw new Error(`Snapshot entry ${index + 1} is invalid.`);
-    if (!(["file", "directory", "symlink"] as const).includes(entry.kind)) throw new Error(`Snapshot entry ${index + 1} has an unsupported kind.`);
+    if (!(typeof entry.kind === "string" && ["file", "directory", "symlink"].includes(entry.kind))) {
+      throw new Error(`Snapshot entry ${index + 1} has an unsupported kind.`);
+    }
     const path = normalizeRepositoryPath(entry.path);
-    if (path.split("/").length > limits.maxDepth) throw new Error(`Snapshot entry exceeds the ${limits.maxDepth}-segment depth limit: ${path}`);
     if (entry.kind === "symlink") throw new Error(`Symbolic links are not accepted by Repository Audit ingestion: ${path}`);
 
     if (entry.kind === "directory") {
@@ -167,8 +169,9 @@ function normalizeEntries(entries: readonly RepositorySnapshotEntry[], limits: R
 
     if (!(entry.bytes instanceof Uint8Array)) throw new Error(`File entry is missing Uint8Array content: ${path}`);
     const bytes = new Uint8Array(entry.bytes);
-    if (entry.declaredByteSize !== undefined && entry.declaredByteSize !== bytes.byteLength) {
-      throw new Error(`Declared byte size does not match extracted content: ${path}`);
+    if (entry.declaredByteSize !== undefined) {
+      if (!Number.isSafeInteger(entry.declaredByteSize) || entry.declaredByteSize < 0) throw new Error(`Declared byte size is invalid: ${path}`);
+      if (entry.declaredByteSize !== bytes.byteLength) throw new Error(`Declared byte size does not match extracted content: ${path}`);
     }
     if (bytes.byteLength > limits.maxEntryBytes) throw new Error(`File exceeds the ${limits.maxEntryBytes}-byte ingestion limit: ${path}`);
     totalBytes += bytes.byteLength;
@@ -179,6 +182,14 @@ function normalizeEntries(entries: readonly RepositorySnapshotEntry[], limits: R
     normalized.push({ path, kind: "file", bytes, generated: entry.generated });
   }
   return normalized;
+}
+
+function validateDepth(entries: readonly NormalizedEntry[], limits: RepositoryIngestionLimits): void {
+  for (const entry of entries) {
+    if (entry.path.split("/").length > limits.maxDepth) {
+      throw new Error(`Snapshot entry exceeds the ${limits.maxDepth}-segment depth limit: ${entry.path}`);
+    }
+  }
 }
 
 function sharedArchiveWrapper(entries: readonly NormalizedEntry[]): string | undefined {
@@ -218,6 +229,7 @@ function rejectDuplicatePaths(entries: readonly NormalizedEntry[]): void {
 async function buildSnapshot(
   source: Omit<RepositorySnapshot["source"], "fingerprint">,
   entries: readonly NormalizedEntry[],
+  entriesSeen: number,
   limits: RepositoryIngestionLimits,
   hashProvider: RepositoryHashProvider,
 ): Promise<RepositoryIngestionResult> {
@@ -256,7 +268,7 @@ async function buildSnapshot(
     snapshot: { source: { ...source, fingerprint: `sha256:${fingerprint}` }, files },
     ingestion: {
       status: "complete",
-      entriesSeen: entries.length,
+      entriesSeen,
       filesIngested: files.length,
       directoriesIgnored,
       totalBytes,
@@ -278,9 +290,11 @@ export async function ingestGitHubSnapshotEntries(input: {
   const repositoryFullName = validateGitHubRepositoryName(input.repositoryFullName);
   const commitSha = validateGitCommit(input.commitSha);
   const entries = normalizeEntries(input.entries, limits);
+  validateDepth(entries, limits);
   return buildSnapshot(
     { kind: "github", displayName: repositoryFullName, revision: commitSha },
     entries,
+    input.entries.length,
     limits,
     input.hashProvider ?? sha256Hex,
   );
@@ -296,15 +310,18 @@ export async function ingestArchiveSnapshotEntries(input: {
   const limits = validateLimits(input.limits ?? {});
   const archiveName = normalizeArchiveName(input.archiveName);
   if (!(input.archiveBytes instanceof Uint8Array)) throw new Error("Archive bytes must be provided as a Uint8Array.");
+  if (input.archiveBytes.byteLength === 0) throw new Error("Archive bytes cannot be empty.");
   if (input.archiveBytes.byteLength > limits.maxArchiveBytes) throw new Error(`Archive exceeds the ${limits.maxArchiveBytes}-byte upload limit.`);
+  const normalized = normalizeEntries(input.entries, limits);
+  const stripped = stripArchiveWrapper(normalized);
+  validateDepth(stripped.entries, limits);
   const hashProvider = input.hashProvider ?? sha256Hex;
   const archiveSha256 = await hashProvider(new Uint8Array(input.archiveBytes));
   if (!/^[a-f0-9]{64}$/.test(archiveSha256)) throw new Error("Hash provider returned an invalid archive SHA-256 value.");
-  const normalized = normalizeEntries(input.entries, limits);
-  const stripped = stripArchiveWrapper(normalized);
   const result = await buildSnapshot(
     { kind: "archive", displayName: archiveName, revision: `sha256:${archiveSha256}` },
     stripped.entries,
+    input.entries.length,
     limits,
     hashProvider,
   );
