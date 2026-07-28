@@ -200,6 +200,9 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     if (result.status === "quota_exceeded") {
       throw new ApiAccessError(429, "monthly_quota_exceeded", "The monthly API request limit has been reached.");
     }
+    if (result.status === "idempotency_conflict") {
+      throw new ApiAccessError(409, "idempotency_conflict", "The idempotency key was already used with different usage units.");
+    }
     return {
       accountId,
       plan: account.plan,
