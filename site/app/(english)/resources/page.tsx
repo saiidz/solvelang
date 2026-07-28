@@ -28,6 +28,18 @@ const resourceGroups = [
     ],
   },
   {
+    title: "Repository Audit",
+    description:
+      "Inspect a repository archive locally before changing files, dependencies, or structure.",
+    links: [
+      {
+        label: "Open Repository Audit",
+        href: "/repository-audit/",
+        note: "Upload ZIP or TAR and receive deterministic inventory, duplicate and backup findings, and downloadable evidence.",
+      },
+    ],
+  },
+  {
     title: "Workflow X-Ray resources",
     description:
       "Understand how SolveLang turns a messy process into a readable workflow map before production automation is wired.",
@@ -123,11 +135,10 @@ export default function ResourcesPage() {
             Resources
           </p>
           <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight sm:text-6xl">
-            SolveLang resources for workflow mapping and AI discovery.
+            SolveLang resources for workflow mapping and repository analysis.
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">
-            SolveLang is early beta. Use these resources to understand the
-            workflow-mapping model before production automation is wired.
+            Use the local-first tools to inspect a workflow or repository before production automation or cleanup begins.
           </p>
         </div>
       </section>
