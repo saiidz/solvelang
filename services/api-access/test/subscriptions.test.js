@@ -76,6 +76,20 @@ test("Checkout rejects a second active or pending subscription but allows replac
     (error) => error instanceof ApiAccessError && error.code === "subscription_already_exists",
   );
 
+  const pending = createSubscriptionCheckoutService({
+    gateway,
+    apiAccessService: lifecycleApiService({
+      reserve: async () => { throw new ApiAccessError(409, "subscription_checkout_conflict", "conflict"); },
+    }),
+    priceIds,
+    siteOrigin: "https://www.solve-lang.com",
+    enabled: true,
+  });
+  await assert.rejects(
+    () => pending.createCheckout({ accountId: "acct_1", requestId: "request_pending", email: "dev@example.com", plan: "pro" }),
+    (error) => error instanceof ApiAccessError && error.code === "subscription_checkout_conflict",
+  );
+
   const canceled = createSubscriptionCheckoutService({
     gateway,
     apiAccessService: lifecycleApiService({ existing: { stripeSubscriptionId: "sub_old", subscriptionStatus: "canceled" } }),
