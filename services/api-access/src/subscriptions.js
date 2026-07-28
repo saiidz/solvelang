@@ -7,6 +7,9 @@ const SUPPORTED_SUBSCRIPTION_EVENTS = new Set([
   "customer.subscription.deleted",
 ]);
 const SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "past_due", "canceled", "unpaid", "incomplete"]);
+const REPLACEABLE_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid"]);
+const STATUS_ORDER = Object.freeze({ trialing: 1, active: 2, incomplete: 4, past_due: 6, unpaid: 8, canceled: 9 });
+const PLAN_RESTRICTIVENESS = Object.freeze({ business: 1, pro: 2, developer: 3 });
 
 function cleanText(value, label, maximum = 254) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_event", `${label} is invalid.`);
@@ -46,22 +49,55 @@ function subscriptionObject(event) {
   return subscription;
 }
 
-function subscriptionPriceId(subscription) {
+function subscriptionItem(subscription) {
   const items = subscription?.items?.data;
   if (!Array.isArray(items) || items.length !== 1) {
     throw new ApiAccessError(400, "invalid_subscription_items", "Subscription must contain exactly one API plan.");
   }
-  return cleanId(items[0]?.price?.id, "Subscription price ID");
+  const item = items[0];
+  const priceId = cleanId(item?.price?.id, "Subscription price ID");
+  if (!Number.isSafeInteger(item?.current_period_end) || item.current_period_end <= 0) {
+    throw new ApiAccessError(400, "invalid_subscription_period", "Subscription period is invalid.");
+  }
+  return { priceId, currentPeriodEnd: item.current_period_end };
 }
 
-export function createSubscriptionCheckoutService({ gateway, priceIds, siteOrigin, enabled = false }) {
+function eventOrder(created, status, plan) {
+  const order = created * 1_000 + STATUS_ORDER[status] * 10 + PLAN_RESTRICTIVENESS[plan];
+  if (!Number.isSafeInteger(order)) throw new ApiAccessError(400, "invalid_subscription_event", "Subscription event order is invalid.");
+  return order;
+}
+
+function eventRecord({ eventId, eventType, subscriptionId, accountId, createdAtMs }) {
+  return {
+    eventId,
+    eventType,
+    subscriptionId,
+    accountId,
+    createdAt: new Date(createdAtMs).toISOString(),
+    expiresAt: Math.floor(createdAtMs / 1_000) + 60 * 60 * 24 * 400,
+  };
+}
+
+function subscriptionConflict(existing, subscriptionId, incomingStatus) {
+  if (!existing?.stripeSubscriptionId || existing.stripeSubscriptionId === subscriptionId) return false;
+  return !REPLACEABLE_SUBSCRIPTION_STATUSES.has(existing.subscriptionStatus)
+    || REPLACEABLE_SUBSCRIPTION_STATUSES.has(incomingStatus);
+}
+
+export function createSubscriptionCheckoutService({ gateway, apiAccessService, priceIds, siteOrigin, enabled = false }) {
   if (!gateway || typeof gateway.createCheckoutSession !== "function") throw new Error("Stripe subscription gateway is required.");
+  if (!apiAccessService || typeof apiAccessService.getSubscriptionAccount !== "function") throw new Error("API access service is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
 
   return {
     async createCheckout(input) {
       if (!enabled) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
       const accountId = cleanId(input.accountId, "Account ID");
+      const existing = await apiAccessService.getSubscriptionAccount(accountId);
+      if (existing?.stripeSubscriptionId && !REPLACEABLE_SUBSCRIPTION_STATUSES.has(existing.subscriptionStatus)) {
+        throw new ApiAccessError(409, "subscription_already_exists", "This account already has a subscription that must be managed instead of replaced.");
+      }
       const requestId = cleanId(input.requestId, "Checkout request ID");
       const email = cleanEmail(input.email);
       const plan = getApiPlan(input.plan).name;
@@ -86,7 +122,9 @@ export function createSubscriptionCheckoutService({ gateway, priceIds, siteOrigi
 }
 
 export function createSubscriptionLifecycleService({ apiAccessService, eventStore, priceIds, gracePeriodMs = 3 * 24 * 60 * 60 * 1_000 }) {
-  if (!apiAccessService || typeof apiAccessService.provisionSubscription !== "function") throw new Error("API access service is required.");
+  if (!apiAccessService || typeof apiAccessService.provisionSubscription !== "function" || typeof apiAccessService.getSubscriptionAccount !== "function") {
+    throw new Error("API access service is required.");
+  }
   if (!eventStore || typeof eventStore.putEventIfAbsent !== "function") throw new Error("Subscription event store is required.");
   if (!Number.isSafeInteger(gracePeriodMs) || gracePeriodMs < 0) throw new Error("Grace period is invalid.");
 
@@ -105,15 +143,21 @@ export function createSubscriptionLifecycleService({ apiAccessService, eventStor
       const email = cleanEmail(metadata.email);
       const customerId = cleanId(typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id, "Stripe customer ID");
       const subscriptionId = cleanId(subscription.id, "Stripe subscription ID");
-      const plan = planForPrice(subscriptionPriceId(subscription), priceIds);
+      const item = subscriptionItem(subscription);
+      const plan = planForPrice(item.priceId, priceIds);
       const rawStatus = eventType === "customer.subscription.deleted" ? "canceled" : cleanText(subscription.status, "Subscription status", 32);
       if (!SUBSCRIPTION_STATUSES.has(rawStatus)) {
         throw new ApiAccessError(400, "invalid_subscription_status", "Subscription status is invalid.");
       }
-      if (!Number.isSafeInteger(subscription.current_period_end) || subscription.current_period_end <= 0) {
-        throw new ApiAccessError(400, "invalid_subscription_period", "Subscription period is invalid.");
-      }
       const createdAtMs = event.created * 1_000;
+      const record = eventRecord({ eventId, eventType, subscriptionId, accountId, createdAtMs });
+      const existing = await apiAccessService.getSubscriptionAccount(accountId);
+      if (subscriptionConflict(existing, subscriptionId, rawStatus)
+        || (existing?.stripeSubscriptionId === subscriptionId && existing.subscriptionStatus === "canceled" && rawStatus !== "canceled")) {
+        const duplicate = await eventStore.putEventIfAbsent(record) === "duplicate";
+        return { handled: true, duplicate, ignored: "subscription_conflict", account: existing };
+      }
+
       const account = await apiAccessService.provisionSubscription({
         accountId,
         email,
@@ -121,18 +165,12 @@ export function createSubscriptionLifecycleService({ apiAccessService, eventStor
         stripeSubscriptionId: subscriptionId,
         plan,
         subscriptionStatus: rawStatus,
-        currentPeriodEnd: subscription.current_period_end * 1_000,
+        currentPeriodEnd: item.currentPeriodEnd * 1_000,
         subscriptionEventCreatedAt: createdAtMs,
+        subscriptionEventOrder: eventOrder(event.created, rawStatus, plan),
         ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
       });
-      const duplicate = await eventStore.putEventIfAbsent({
-        eventId,
-        eventType,
-        subscriptionId,
-        accountId,
-        createdAt: new Date(createdAtMs).toISOString(),
-        expiresAt: Math.floor(createdAtMs / 1_000) + 60 * 60 * 24 * 400,
-      }) === "duplicate";
+      const duplicate = await eventStore.putEventIfAbsent(record) === "duplicate";
       return { handled: true, duplicate, account };
     },
   };
