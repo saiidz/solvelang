@@ -143,14 +143,15 @@ test("fails closed on duplicate paths, invalid hashes, and invalid source finger
   assert.throws(() => analyzeRepositoryInventory({ source: { ...source, fingerprint: "bad" }, files: [] }), /fingerprint/);
 });
 
-test("applies bounded file, size, depth, byte, and finding limits with explicit partial status", () => {
+test("applies bounded size, depth, byte, and finding limits with explicit partial status", () => {
   const report = analyzeRepositoryInventory(snapshot([
     { path: "a.ts", byteSize: 10, sha256: hash("7") },
     { path: "b.ts", byteSize: 10, sha256: hash("7") },
+    { path: "c.generated.js", byteSize: 1, sha256: hash("6") },
     { path: "deep/one/two/three.ts", byteSize: 10, sha256: hash("8") },
     { path: "huge.bin", byteSize: 200, sha256: hash("9") },
   ]), {
-    maxFiles: 4,
+    maxFiles: 5,
     maxTotalBytes: 25,
     maxFileBytes: 100,
     maxDepth: 3,
