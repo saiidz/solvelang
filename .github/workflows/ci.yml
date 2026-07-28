@@ -60,16 +60,7 @@ jobs:
         run: test "${I18N_DRAFT_PREVIEW:-false}" = "false"
 
       - name: Run deterministic Studio and preflight tests
-        run: npm run test:studio > deterministic-test.log 2>&1
-
-      - name: Upload deterministic test failure log
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: deterministic-test-failure
-          path: site/deterministic-test.log
-          if-no-files-found: error
-          retention-days: 1
+        run: npm run test:studio
 
       - name: Run lint
         run: npm run lint
