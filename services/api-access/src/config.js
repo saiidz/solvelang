@@ -17,16 +17,25 @@ function shared(environment) {
   };
 }
 
-export function parseApiAccessEnvironment(environment = process.env) {
+function usage(environment) {
   return {
-    ...shared(environment),
-    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
-    siteOrigin: required(environment, "SITE_ORIGIN"),
     usageTable: required(environment, "API_USAGE_TABLE"),
     idempotencyTable: required(environment, "API_USAGE_IDEMPOTENCY_TABLE"),
   };
 }
 
+export function parseApiAccessEnvironment(environment = process.env) {
+  return {
+    ...shared(environment),
+    ...usage(environment),
+    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
+    siteOrigin: required(environment, "SITE_ORIGIN"),
+  };
+}
+
 export function parseApiKeyAuthorizerEnvironment(environment = process.env) {
-  return shared(environment);
+  return {
+    ...shared(environment),
+    ...usage(environment),
+  };
 }
