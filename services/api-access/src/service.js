@@ -72,6 +72,23 @@ function validateTimestamp(value, label, optional = false) {
   return value;
 }
 
+function issuedKeyResponse(generated, record) {
+  return {
+    apiKey: generated.apiKey,
+    env: `SOLVELANG_API_KEY=${generated.apiKey}\nSOLVELANG_API_BASE=https://api.solve-lang.com/v1\n`,
+    key: {
+      keyId: record.keyId,
+      accountId: record.accountId,
+      name: record.name,
+      mode: record.mode,
+      prefix: record.prefix,
+      lastFour: record.lastFour,
+      scopes: [...record.scopes],
+      createdAt: record.createdAt,
+    },
+  };
+}
+
 export function createApiAccessService({ store, pepper, mode = "test", now = Date.now, randomBytes }) {
   if (!store || typeof store !== "object") throw new Error("API access store is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("API key pepper must contain at least 32 characters.");
@@ -92,7 +109,7 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
       plan: plan.name,
       subscriptionStatus,
       currentPeriodEnd: validateTimestamp(input.currentPeriodEnd, "Current period end"),
-      graceUntil: validateTimestamp(input.graceUntil, "Grace period end", true),
+      ...(input.graceUntil === undefined ? {} : { graceUntil: validateTimestamp(input.graceUntil, "Grace period end") }),
       updatedAt: new Date(timestamp).toISOString(),
     };
     await store.putAccount(account);
@@ -105,50 +122,44 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     const account = await store.getAccount(accountId);
     assertAccountAccess(account, timestamp);
     const plan = getApiPlan(account.plan);
-    const activeKeys = (await store.listKeys(accountId)).filter((key) => !key.revokedAt);
-    if (activeKeys.length >= plan.maxActiveKeys) {
-      throw new ApiAccessError(409, "key_limit_reached", "The active API key limit has been reached for this plan.");
-    }
     const scopes = cleanScopes(input.scopes ?? plan.scopes, plan);
-    const generated = generateApiKey(mode, randomBytes);
-    const record = {
-      keyId: generated.keyId,
-      accountId,
-      name: cleanText(input.name, "API key name", 80),
-      mode,
-      secretFingerprint: fingerprintApiKey({ ...generated, pepper }),
-      prefix: generated.prefix,
-      lastFour: generated.lastFour,
-      scopes,
-      createdAt: new Date(timestamp).toISOString(),
-      lastUsedAt: undefined,
-      revokedAt: undefined,
-    };
-    await store.putKey(record);
-    return {
-      apiKey: generated.apiKey,
-      env: `SOLVELANG_API_KEY=${generated.apiKey}\nSOLVELANG_API_BASE=https://api.solve-lang.com/v1\n`,
-      key: {
-        keyId: record.keyId,
+    const name = cleanText(input.name, "API key name", 80);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const generated = generateApiKey(mode, randomBytes);
+      const record = {
+        keyId: generated.keyId,
         accountId,
-        name: record.name,
+        name,
         mode,
-        prefix: record.prefix,
-        lastFour: record.lastFour,
+        secretFingerprint: fingerprintApiKey({ ...generated, pepper }),
+        prefix: generated.prefix,
+        lastFour: generated.lastFour,
         scopes,
-        createdAt: record.createdAt,
-      },
-    };
+        createdAt: new Date(timestamp).toISOString(),
+      };
+      const outcome = await store.putKeyWithLimit(record, plan.maxActiveKeys);
+      if (outcome === "created") return issuedKeyResponse(generated, record);
+      if (outcome === "limit_reached") {
+        throw new ApiAccessError(409, "key_limit_reached", "The active API key limit has been reached for this plan.");
+      }
+    }
+    throw new ApiAccessError(503, "key_generation_failed", "A new API key could not be created.");
   }
 
   async function revokeApiKey(input) {
     const accountId = cleanId(input.accountId, "Account ID");
     const keyId = cleanId(input.keyId, "API key ID");
-    const key = await store.getKey(keyId);
-    if (!key || key.accountId !== accountId) throw new ApiAccessError(404, "key_not_found", "API key was not found.");
-    if (key.revokedAt) return { keyId, revokedAt: key.revokedAt, alreadyRevoked: true };
+    const existing = await store.getKey(keyId);
+    if (!existing || existing.accountId !== accountId) throw new ApiAccessError(404, "key_not_found", "API key was not found.");
+    if (existing.revokedAt) return { keyId, revokedAt: existing.revokedAt, alreadyRevoked: true };
     const revokedAt = new Date(now()).toISOString();
-    await store.revokeKey(keyId, accountId, revokedAt);
+    const outcome = await store.revokeKeyAndDecrement(keyId, accountId, revokedAt);
+    if (outcome === "not_found") throw new ApiAccessError(404, "key_not_found", "API key was not found.");
+    if (outcome === "already_revoked") {
+      const latest = await store.getKey(keyId);
+      return { keyId, revokedAt: latest?.revokedAt ?? revokedAt, alreadyRevoked: true };
+    }
     return { keyId, revokedAt, alreadyRevoked: false };
   }
 
