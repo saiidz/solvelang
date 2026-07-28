@@ -151,9 +151,9 @@ export function createDynamoApiAccessStore(documentClient, {
         "#eventOrder = :eventOrder",
         "activeKeyCount = if_not_exists(activeKeyCount, :zero)",
       ];
-      let removeExpression;
+      const removals = ["pendingCheckoutRequestId", "pendingCheckoutExpiresAt"];
       if (account.graceUntil === undefined) {
-        removeExpression = " REMOVE graceUntil";
+        removals.push("graceUntil");
       } else {
         updates.push("graceUntil = :graceUntil");
         values[":graceUntil"] = account.graceUntil;
@@ -162,7 +162,7 @@ export function createDynamoApiAccessStore(documentClient, {
         await documentClient.send(new UpdateCommand({
           TableName: accountsTable,
           Key: { accountId: account.accountId },
-          UpdateExpression: `SET ${updates.join(", ")}${removeExpression ?? ""}`,
+          UpdateExpression: `SET ${updates.join(", ")} REMOVE ${removals.join(", ")}`,
           ConditionExpression: "attribute_not_exists(#eventOrder) OR #eventOrder < :eventOrder",
           ExpressionAttributeNames: names,
           ExpressionAttributeValues: values,
@@ -177,6 +177,39 @@ export function createDynamoApiAccessStore(documentClient, {
     async getAccount(accountId) {
       const response = await documentClient.send(new GetCommand({ TableName: accountsTable, Key: { accountId }, ConsistentRead: true }));
       return response.Item;
+    },
+
+    async reserveSubscriptionCheckout({ accountId, requestId, now, expiresAt }) {
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: accountsTable,
+          Key: { accountId },
+          UpdateExpression: "SET pendingCheckoutRequestId = :requestId, pendingCheckoutExpiresAt = :expiresAt",
+          ConditionExpression: "(attribute_not_exists(stripeSubscriptionId) OR #status IN (:canceled, :unpaid)) AND (attribute_not_exists(pendingCheckoutExpiresAt) OR pendingCheckoutExpiresAt <= :now OR pendingCheckoutRequestId = :requestId)",
+          ExpressionAttributeNames: { "#status": "subscriptionStatus" },
+          ExpressionAttributeValues: {
+            ":requestId": requestId,
+            ":expiresAt": expiresAt,
+            ":now": now,
+            ":canceled": "canceled",
+            ":unpaid": "unpaid",
+          },
+        }));
+        return "created";
+      } catch (error) {
+        if (error?.name !== "ConditionalCheckFailedException") throw error;
+        const response = await documentClient.send(new GetCommand({
+          TableName: accountsTable,
+          Key: { accountId },
+          ConsistentRead: true,
+        }));
+        const account = response.Item;
+        const replaceable = !account?.stripeSubscriptionId || account.subscriptionStatus === "canceled" || account.subscriptionStatus === "unpaid";
+        if (replaceable && account?.pendingCheckoutRequestId === requestId && account.pendingCheckoutExpiresAt > now) {
+          return "duplicate";
+        }
+        return "conflict";
+      }
     },
 
     async listKeys(accountId) {
