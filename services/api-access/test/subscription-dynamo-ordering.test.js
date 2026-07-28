@@ -18,21 +18,24 @@ function account() {
     subscriptionStatus: "active",
     currentPeriodEnd: 1_800_000_000_000,
     subscriptionEventCreatedAt: 1_785_254_400_000,
+    subscriptionEventOrder: 1_785_254_400_022,
     stripeCustomerId: "cus_1",
     stripeSubscriptionId: "sub_1",
     updatedAt: "2026-07-28T12:00:00.000Z",
   };
 }
 
-test("Dynamo account updates conditionally preserve newer Stripe lifecycle state", async () => {
+test("Dynamo account updates require a strictly newer lifecycle order", async () => {
   let command;
   const client = { send: async (input) => { command = input; return {}; } };
   const store = createDynamoApiAccessStore(client, tables);
   assert.equal(await store.putAccount(account()), "updated");
   assert.equal(command.constructor.name, "UpdateCommand");
   assert.equal(command.input.ExpressionAttributeNames["#eventCreatedAt"], "subscriptionEventCreatedAt");
-  assert.match(command.input.ConditionExpression, /#eventCreatedAt/);
+  assert.equal(command.input.ExpressionAttributeNames["#eventOrder"], "subscriptionEventOrder");
+  assert.equal(command.input.ConditionExpression, "attribute_not_exists(#eventOrder) OR #eventOrder < :eventOrder");
   assert.equal(command.input.ExpressionAttributeValues[":eventCreatedAt"], 1_785_254_400_000);
+  assert.equal(command.input.ExpressionAttributeValues[":eventOrder"], 1_785_254_400_022);
   assert.match(command.input.UpdateExpression, /activeKeyCount = if_not_exists/);
 });
 
