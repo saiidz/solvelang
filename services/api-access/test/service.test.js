@@ -9,18 +9,33 @@ class MemoryStore {
   usage = new Map();
   idempotency = new Map();
 
-  async putAccount(account) { this.accounts.set(account.accountId, structuredClone(account)); }
+  async putAccount(account) {
+    const previous = this.accounts.get(account.accountId);
+    this.accounts.set(account.accountId, structuredClone({
+      ...account,
+      activeKeyCount: previous?.activeKeyCount ?? account.activeKeyCount ?? 0,
+    }));
+  }
   async getAccount(accountId) { return structuredClone(this.accounts.get(accountId)); }
   async listKeys(accountId) { return [...this.keys.values()].filter((key) => key.accountId === accountId).map((key) => structuredClone(key)); }
-  async putKey(key) {
-    if (this.keys.has(key.keyId)) throw new Error("duplicate key id");
+  async putKeyWithLimit(key, maxActiveKeys) {
+    if (this.keys.has(key.keyId)) return "key_collision";
+    const account = this.accounts.get(key.accountId);
+    if (!account) throw new Error("account missing");
+    if ((account.activeKeyCount ?? 0) >= maxActiveKeys) return "limit_reached";
+    account.activeKeyCount = (account.activeKeyCount ?? 0) + 1;
     this.keys.set(key.keyId, structuredClone(key));
+    return "created";
   }
   async getKey(keyId) { return structuredClone(this.keys.get(keyId)); }
-  async revokeKey(keyId, accountId, revokedAt) {
+  async revokeKeyAndDecrement(keyId, accountId, revokedAt) {
     const key = this.keys.get(keyId);
-    if (!key || key.accountId !== accountId) throw new Error("key missing");
+    if (!key || key.accountId !== accountId) return "not_found";
+    if (key.revokedAt) return "already_revoked";
     key.revokedAt = revokedAt;
+    const account = this.accounts.get(accountId);
+    account.activeKeyCount = Math.max(0, (account.activeKeyCount ?? 0) - 1);
+    return "revoked";
   }
   async touchKey(keyId, lastUsedAt) {
     const key = this.keys.get(keyId);
@@ -79,8 +94,11 @@ test("issues a one-time API key and stores only its fingerprint", async () => {
   assert.equal(stored.accountId, "acct_test_1");
   assert.equal(stored.secret, undefined);
   assert.equal(stored.apiKey, undefined);
+  assert.equal(Object.hasOwn(stored, "lastUsedAt"), false);
+  assert.equal(Object.hasOwn(stored, "revokedAt"), false);
   assert.equal(stored.secretFingerprint, fingerprintApiKey({ ...parsed, pepper }));
   assert.ok(!JSON.stringify(stored).includes(parsed.secret));
+  assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 1);
 });
 
 test("authorizes valid bearer keys and rejects substitutions, wrong modes, and missing scopes", async () => {
@@ -102,17 +120,37 @@ test("authorizes valid bearer keys and rejects substitutions, wrong modes, and m
   await assert.rejects(() => service.authorize({ authorization: `Bearer ${issued.apiKey}`, requiredScope: "admin:all" }), (error) => error instanceof ApiAccessError && error.code === "missing_scope");
 });
 
-test("enforces plan key limits and revocation", async () => {
-  const { service } = await activeService("developer");
+test("enforces atomic plan key limits and decrements on revocation", async () => {
+  const { store, service } = await activeService("developer");
   const first = await service.issueApiKey({ accountId: "acct_test_1", name: "First" });
   await service.issueApiKey({ accountId: "acct_test_1", name: "Second" });
+  assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 2);
   await assert.rejects(() => service.issueApiKey({ accountId: "acct_test_1", name: "Third" }), (error) => error instanceof ApiAccessError && error.code === "key_limit_reached");
 
   const revoked = await service.revokeApiKey({ accountId: "acct_test_1", keyId: first.key.keyId });
   assert.equal(revoked.alreadyRevoked, false);
+  assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 1);
   await assert.rejects(() => service.authorize({ authorization: `Bearer ${first.apiKey}` }), (error) => error instanceof ApiAccessError && error.code === "invalid_api_key");
   const replacement = await service.issueApiKey({ accountId: "acct_test_1", name: "Replacement" });
   assert.ok(replacement.apiKey);
+  assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 2);
+});
+
+test("preserves active key counters across subscription lifecycle updates", async () => {
+  const { store, service } = await activeService("developer");
+  await service.issueApiKey({ accountId: "acct_test_1", name: "Existing" });
+  await service.provisionSubscription({
+    accountId: "acct_test_1",
+    email: "dev@example.com",
+    stripeCustomerId: "cus_test_1",
+    stripeSubscriptionId: "sub_test_1",
+    plan: "pro",
+    subscriptionStatus: "active",
+    currentPeriodEnd: fixedNow + 60 * 24 * 60 * 60 * 1_000,
+  });
+  const account = await store.getAccount("acct_test_1");
+  assert.equal(account.plan, "pro");
+  assert.equal(account.activeKeyCount, 1);
 });
 
 test("allows a bounded past-due grace period and fails closed afterward", async () => {
