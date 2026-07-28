@@ -115,6 +115,22 @@ function validateGitObjectSha(input: string, label: string): string {
   return input.toLowerCase();
 }
 
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function gitBlobObjectId(bytes: Uint8Array, expectedObjectId: string): Promise<string> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error("Secure Git object hashing is unavailable in this environment.");
+  const header = new TextEncoder().encode(`blob ${bytes.byteLength}\0`);
+  const object = new Uint8Array(header.byteLength + bytes.byteLength);
+  object.set(header, 0);
+  object.set(bytes, header.byteLength);
+  const algorithm = expectedObjectId.length === 40 ? "SHA-1" : "SHA-256";
+  const digest = await subtle.digest(algorithm, object.buffer);
+  return bytesToHex(new Uint8Array(digest));
+}
+
 function abortError(): Error {
   if (typeof DOMException === "function") return new DOMException("GitHub repository acquisition was cancelled.", "AbortError");
   const error = new Error("GitHub repository acquisition was cancelled.");
@@ -152,7 +168,7 @@ function validateClient(client: RepositoryGitHubClient): void {
 function decodeBase64(input: string, expectedByteSize: number): Uint8Array {
   if (typeof input !== "string") throw new Error("GitHub blob content is invalid.");
   const expectedEncodedLength = Math.ceil(expectedByteSize / 3) * 4;
-  const maximumTransportLength = expectedEncodedLength + Math.ceil(expectedEncodedLength / 60) + 16;
+  const maximumTransportLength = expectedEncodedLength + (2 * Math.ceil(expectedEncodedLength / 60)) + 16;
   if (input.length > maximumTransportLength) throw new Error("GitHub blob content exceeds the declared encoded size.");
   const compact = input.replace(/\s+/g, "");
   if (compact.length !== expectedEncodedLength) throw new Error("GitHub blob content does not match the declared encoded size.");
@@ -253,6 +269,10 @@ async function downloadBlob(
   if (response.byteSize !== undefined && (!Number.isSafeInteger(response.byteSize) || response.byteSize < 0 || response.byteSize !== bytes.byteLength)) {
     throw new Error(`GitHub blob response size is invalid: ${planned.path}`);
   }
+  throwIfAborted(signal);
+  const computedObjectId = await gitBlobObjectId(bytes, planned.sha);
+  throwIfAborted(signal);
+  if (computedObjectId !== planned.sha) throw new Error(`GitHub blob content does not match the tree object ID: ${planned.path}`);
   return {
     path: planned.path,
     kind: "file",
