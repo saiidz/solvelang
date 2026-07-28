@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { analyzeRepositoryInventory } from "./inventory";
 import {
@@ -12,16 +13,26 @@ import {
 const encoder = new TextEncoder();
 const commitSha = "a".repeat(40);
 const treeSha = "b".repeat(40);
+const fixtureShas = new Map<string, string>();
+
+function bytesOf(value: string | Uint8Array): Uint8Array {
+  return typeof value === "string" ? encoder.encode(value) : value;
+}
+
+function gitBlobSha(value: string | Uint8Array, algorithm: "sha1" | "sha256" = "sha1"): string {
+  const bytes = bytesOf(value);
+  return createHash(algorithm).update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
+}
 
 function toBase64(value: string | Uint8Array): string {
-  const bytes = typeof value === "string" ? encoder.encode(value) : value;
+  const bytes = bytesOf(value);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return globalThis.btoa(binary);
 }
 
-function treeEntry(path: string, shaCharacter: string, size: number, mode = "100644") {
-  return { path, mode, type: "blob" as const, sha: shaCharacter.repeat(40), size };
+function treeEntry(path: string, fixtureKey: string, size: number, mode = "100644") {
+  return { path, mode, type: "blob" as const, sha: fixtureShas.get(fixtureKey) ?? fixtureKey.repeat(40), size };
 }
 
 class FakeGitHubClient implements RepositoryGitHubClient {
@@ -57,9 +68,10 @@ class FakeGitHubClient implements RepositoryGitHubClient {
   }
 }
 
-function addBlob(client: FakeGitHubClient, shaCharacter: string, value: string | Uint8Array, overrides: Partial<GitHubBlob> = {}) {
-  const bytes = typeof value === "string" ? encoder.encode(value) : value;
-  const sha = shaCharacter.repeat(40);
+function addBlob(client: FakeGitHubClient, fixtureKey: string, value: string | Uint8Array, overrides: Partial<GitHubBlob> = {}) {
+  const bytes = bytesOf(value);
+  const sha = gitBlobSha(bytes);
+  fixtureShas.set(fixtureKey, sha);
   client.blobs.set(sha, {
     sha,
     encoding: "base64",
@@ -192,7 +204,7 @@ test("enforces tree, blob, total-byte, depth, and API-request limits before blob
   assert.equal(requests.calls.filter((call) => call.startsWith("blob:")).length, 0);
 });
 
-test("rejects malformed blob identity, encoding, base64, and size responses", async () => {
+test("rejects malformed or corrupted blob responses", async () => {
   async function expectBlobFailure(overrides: Partial<GitHubBlob>, pattern: RegExp) {
     const client = new FakeGitHubClient();
     addBlob(client, "1", "abc", overrides);
@@ -208,6 +220,19 @@ test("rejects malformed blob identity, encoding, base64, and size responses", as
   await expectBlobFailure({ content: "%%%=" }, /base64/);
   await expectBlobFailure({ byteSize: 2 }, /response size/);
   await expectBlobFailure({ content: toBase64("abcd"), byteSize: 4 }, /declared encoded size/);
+  await expectBlobFailure({ content: toBase64("xyz"), byteSize: 3 }, /tree object ID/);
+});
+
+test("supports SHA-256 Git object IDs", async () => {
+  const client = new FakeGitHubClient();
+  const value = "sha256 repository blob";
+  const sha = gitBlobSha(value, "sha256");
+  client.resolved = { commitSha: "a".repeat(64), treeSha: "b".repeat(64) };
+  client.blobs.set(sha, { sha, encoding: "base64", content: toBase64(value), byteSize: encoder.encode(value).byteLength });
+  client.tree = { truncated: false, entries: [{ path: "a.txt", mode: "100644", type: "blob", sha, size: encoder.encode(value).byteLength }] };
+  const acquired = await acquireGitHubRepositorySnapshot({ client, repositoryFullName: "example/repo", reference: "main" });
+  assert.equal(acquired.acquisition.commitSha.length, 64);
+  assert.equal(acquired.result.snapshot.files[0].path, "a.txt");
 });
 
 test("bounds concurrent blob requests and preserves deterministic snapshot order", async () => {
