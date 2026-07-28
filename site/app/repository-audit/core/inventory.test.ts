@@ -168,6 +168,33 @@ test("applies bounded size, depth, byte, and finding limits with explicit partia
   assert.equal(report.summary.filesSkipped, 2);
 });
 
+test("counts every sorted candidate against the file limit, including skipped files", () => {
+  const report = analyzeRepositoryInventory(snapshot([
+    { path: "a-too-large.bin", byteSize: 200, sha256: hash("a") },
+    { path: "b.ts", byteSize: 1, sha256: hash("b") },
+  ]), {
+    maxFiles: 1,
+    maxFileBytes: 100,
+    maxTotalBytes: 100,
+    largeFileThresholdBytes: 50,
+  });
+  assert.deepEqual(report.execution.truncationReasons, ["file-count", "file-size"]);
+  assert.equal(report.summary.filesScanned, 0);
+  assert.equal(report.summary.filesSkipped, 2);
+});
+
+test("does not inspect manifest text beyond the configured text boundary", () => {
+  const report = analyzeRepositoryInventory(snapshot([
+    {
+      path: "package.json",
+      byteSize: 1,
+      sha256: hash("a"),
+      text: JSON.stringify({ dependencies: { next: "16.2.7" } }),
+    },
+  ]), { maxManifestTextBytes: 10 });
+  assert.deepEqual(report.inventory.frameworks, []);
+});
+
 test("never serializes manifest text or secret-shaped values into inventory output", () => {
   const canary = "sk_test_DO_NOT_LEAK_REPOSITORY_AUDIT_CANARY";
   const report = analyzeRepositoryInventory(snapshot([
