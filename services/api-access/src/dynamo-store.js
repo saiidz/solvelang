@@ -1,6 +1,5 @@
 import {
   GetCommand,
-  PutCommand,
   QueryCommand,
   TransactWriteCommand,
   UpdateCommand,
@@ -121,7 +120,49 @@ export function createDynamoApiAccessStore(documentClient, {
 
   return {
     async putAccount(account) {
-      await documentClient.send(new PutCommand({ TableName: accountsTable, Item: account }));
+      const names = {
+        "#email": "email",
+        "#plan": "plan",
+        "#status": "subscriptionStatus",
+        "#periodEnd": "currentPeriodEnd",
+        "#customer": "stripeCustomerId",
+        "#subscription": "stripeSubscriptionId",
+        "#updatedAt": "updatedAt",
+      };
+      const values = {
+        ":email": account.email,
+        ":plan": account.plan,
+        ":status": account.subscriptionStatus,
+        ":periodEnd": account.currentPeriodEnd,
+        ":customer": account.stripeCustomerId,
+        ":subscription": account.stripeSubscriptionId,
+        ":updatedAt": account.updatedAt,
+        ":zero": 0,
+      };
+      const updates = [
+        "#email = :email",
+        "#plan = :plan",
+        "#status = :status",
+        "#periodEnd = :periodEnd",
+        "#customer = :customer",
+        "#subscription = :subscription",
+        "#updatedAt = :updatedAt",
+        "activeKeyCount = if_not_exists(activeKeyCount, :zero)",
+      ];
+      let removeExpression;
+      if (account.graceUntil === undefined) {
+        removeExpression = " REMOVE graceUntil";
+      } else {
+        updates.push("graceUntil = :graceUntil");
+        values[":graceUntil"] = account.graceUntil;
+      }
+      await documentClient.send(new UpdateCommand({
+        TableName: accountsTable,
+        Key: { accountId: account.accountId },
+        UpdateExpression: `SET ${updates.join(", ")}${removeExpression ?? ""}`,
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+      }));
     },
 
     async getAccount(accountId) {
