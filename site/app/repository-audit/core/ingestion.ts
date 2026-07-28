@@ -204,18 +204,28 @@ function sharedArchiveWrapper(entries: readonly NormalizedEntry[]): string | und
   }) ? candidate : undefined;
 }
 
-function stripArchiveWrapper(entries: readonly NormalizedEntry[]): { entries: NormalizedEntry[]; wrapper?: string } {
+function stripArchiveWrapper(entries: readonly NormalizedEntry[]): {
+  entries: NormalizedEntry[];
+  wrapper?: string;
+  removedDirectories: number;
+} {
   const wrapper = sharedArchiveWrapper(entries);
-  if (!wrapper) return { entries: [...entries] };
+  if (!wrapper) return { entries: [...entries], removedDirectories: 0 };
   const prefix = `${wrapper}/`;
-  return {
-    wrapper,
-    entries: entries.flatMap((entry) => {
-      if (entry.path === wrapper && entry.kind === "directory") return [];
-      if (!entry.path.startsWith(prefix)) throw new Error("Archive wrapper normalization became inconsistent.");
-      return [{ ...entry, path: entry.path.slice(prefix.length) }];
-    }),
-  };
+  let removedDirectories = 0;
+  const stripped = entries.flatMap((entry) => {
+    if (entry.path === wrapper && entry.kind === "directory") {
+      removedDirectories += 1;
+      return [];
+    }
+    if (entry.path.startsWith(prefix)) return [{ ...entry, path: entry.path.slice(prefix.length) }];
+    if (entry.kind === "directory") {
+      removedDirectories += 1;
+      return [];
+    }
+    throw new Error("Archive wrapper normalization became inconsistent.");
+  });
+  return { wrapper, entries: stripped, removedDirectories };
 }
 
 function rejectDuplicatePaths(entries: readonly NormalizedEntry[]): void {
@@ -230,6 +240,7 @@ async function buildSnapshot(
   source: Omit<RepositorySnapshot["source"], "fingerprint">,
   entries: readonly NormalizedEntry[],
   entriesSeen: number,
+  preIgnoredDirectories: number,
   limits: RepositoryIngestionLimits,
   hashProvider: RepositoryHashProvider,
 ): Promise<RepositoryIngestionResult> {
@@ -237,7 +248,7 @@ async function buildSnapshot(
   const sorted = [...entries].sort((left, right) => compareText(left.path, right.path));
   const files: RepositoryFileInput[] = [];
   const descriptors: string[] = [];
-  let directoriesIgnored = 0;
+  let directoriesIgnored = preIgnoredDirectories;
   let totalBytes = 0;
   let textFilesRetained = 0;
 
@@ -295,6 +306,7 @@ export async function ingestGitHubSnapshotEntries(input: {
     { kind: "github", displayName: repositoryFullName, revision: commitSha },
     entries,
     input.entries.length,
+    0,
     limits,
     input.hashProvider ?? sha256Hex,
   );
@@ -322,6 +334,7 @@ export async function ingestArchiveSnapshotEntries(input: {
     { kind: "archive", displayName: archiveName, revision: `sha256:${archiveSha256}` },
     stripped.entries,
     input.entries.length,
+    stripped.removedDirectories,
     limits,
     hashProvider,
   );
