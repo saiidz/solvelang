@@ -62,6 +62,7 @@ export function createSubscriptionCheckoutService({ gateway, priceIds, siteOrigi
     async createCheckout(input) {
       if (!enabled) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
       const accountId = cleanId(input.accountId, "Account ID");
+      const requestId = cleanId(input.requestId, "Checkout request ID");
       const email = cleanEmail(input.email);
       const plan = getApiPlan(input.plan).name;
       const priceId = priceIds[plan];
@@ -70,6 +71,7 @@ export function createSubscriptionCheckoutService({ gateway, priceIds, siteOrigi
       }
       const session = await gateway.createCheckoutSession({
         accountId,
+        requestId,
         email,
         plan,
         priceId,
@@ -120,6 +122,7 @@ export function createSubscriptionLifecycleService({ apiAccessService, eventStor
         plan,
         subscriptionStatus: rawStatus,
         currentPeriodEnd: subscription.current_period_end * 1_000,
+        subscriptionEventCreatedAt: createdAtMs,
         ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
       });
       const duplicate = await eventStore.putEventIfAbsent({
