@@ -142,14 +142,6 @@ const fileClassOrder: RepositoryFileClass[] = [
   "unknown",
 ];
 
-const severityOrder: Record<RepositorySeverity, number> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  info: 4,
-};
-
 const sourceExtensions = new Set([
   "c", "cc", "cpp", "cs", "css", "go", "h", "hpp", "html", "java", "js", "jsx", "kt", "kts", "mjs", "cjs",
   "php", "py", "rb", "rs", "scss", "sh", "sql", "swift", "ts", "tsx", "vue", "svelte",
@@ -164,6 +156,7 @@ const configurationNames = new Set([
 
 type TruncationReason = RepositoryInventoryAnalysis["execution"]["truncationReasons"][number];
 type NormalizedFile = RepositoryFileInput & { path: string; class: RepositoryFileClass };
+type DuplicateGroup = RepositoryInventoryAnalysis["detections"]["duplicates"][number];
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -320,6 +313,12 @@ function packageDependencies(manifest: Record<string, unknown> | undefined): Rec
   };
 }
 
+function safeDependencyVersion(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!/^[v~^<>=*0-9][0-9A-Za-z.*+~^<>=|, _-]{0,99}$/.test(trimmed)) return undefined;
+  return trimmed;
+}
+
 function languageDetections(files: NormalizedFile[]): RepositoryDetection[] {
   const definitions: Array<[string, Set<string>]> = [
     ["TypeScript", new Set(["ts", "tsx"])], ["JavaScript", new Set(["js", "jsx", "mjs", "cjs"])], ["Rust", new Set(["rs"])],
@@ -348,9 +347,10 @@ function frameworkDetections(files: NormalizedFile[], maxTextBytes: number): Rep
   const detections: RepositoryDetection[] = [];
   const addPackageFramework = (dependency: string, name: string) => {
     if (!(dependency in dependencies) || !packageFile) return;
+    const safeVersion = safeDependencyVersion(dependencies[dependency]);
     detections.push({
       name,
-      version: dependencies[dependency],
+      ...(safeVersion ? { version: safeVersion } : {}),
       confidence: confidence("high", 0.99, `${dependency} is declared in package.json.`),
       evidence: [evidence(packageFile.path, "manifest")],
     });
@@ -445,13 +445,90 @@ function normalizedFiles(snapshot: RepositorySnapshot): NormalizedFile[] {
   }).sort((left, right) => compareText(left.path, right.path));
 }
 
-function capFindings(findings: RepositoryFinding[], limit: number, reasons: Set<TruncationReason>): RepositoryFinding[] {
-  const sorted = findings.sort((left, right) => severityOrder[left.severity] - severityOrder[right.severity]
-    || compareText(left.ruleId, right.ruleId)
-    || compareText(left.evidence[0].path, right.evidence[0].path)
-    || compareText(left.id, right.id));
-  if (sorted.length > limit) reasons.add("finding-count");
-  return sorted.slice(0, limit);
+function reviewMembers(group: DuplicateGroup): RepositoryEvidence[] | undefined {
+  const backups = group.members.filter((member) => isBackupPath(member.path));
+  if (backups.length === 0) return group.members;
+  const active = group.members.filter((member) => !isBackupPath(member.path));
+  if (active.length > 1) return active;
+  if (active.length === 0 && backups.length > 1) return backups;
+  return undefined;
+}
+
+function duplicateReviewFinding(members: RepositoryEvidence[]): RepositoryFinding {
+  const memberKey = members.map((member) => `${member.path}:${member.sha256 ?? ""}`).join("|");
+  return {
+    id: `raf_${stableHash(`RA010:${memberKey}`)}`,
+    ruleId: "RA010",
+    category: "duplication",
+    severity: "medium",
+    title: "Exact duplicate files detected",
+    recommendation: "review",
+    explanation: `${members.length} files have the same SHA-256 digest. Their distinct paths may still serve intentional packaging or compatibility purposes.`,
+    confidence: confidence("high", 1, "All listed files have identical SHA-256 digests."),
+    impact: "Unnecessary duplicates increase repository size and create unclear ownership, but automatic removal could break consumers.",
+    evidence: members,
+    destructive: false,
+    approvalRequired: false,
+    validation: ["Confirm whether each path has a documented consumer or packaging purpose."],
+    rollback: [],
+  };
+}
+
+function backupFinding(backup: RepositoryEvidence, activeMembers: RepositoryEvidence[]): RepositoryFinding {
+  return {
+    id: `raf_${stableHash(`RA012:${backup.path}:${backup.sha256 ?? ""}`)}`,
+    ruleId: "RA012",
+    category: "backup-files",
+    severity: "medium",
+    title: "Tracked backup file duplicates an active file",
+    recommendation: "delete-candidate",
+    explanation: `${backup.path} is byte-for-byte identical to an active repository file. It is only a candidate for removal after reference and build validation.`,
+    confidence: confidence("high", 1, "The backup naming pattern and exact SHA-256 match agree."),
+    impact: "Duplicate backup files increase maintenance ambiguity and may preserve stale or accidentally deployed code.",
+    evidence: [backup, ...activeMembers.slice(0, 3)],
+    destructive: true,
+    approvalRequired: true,
+    validation: ["Search for direct references to the backup path.", "Run the repository's existing tests and build on a dedicated cleanup branch."],
+    rollback: ["Restore the file from the dedicated cleanup branch commit if validation or review fails."],
+  };
+}
+
+function largeFileFinding(file: NormalizedFile): RepositoryFinding {
+  return {
+    id: `raf_${stableHash(`RA023:${file.path}:${file.byteSize}`)}`,
+    ruleId: "RA023",
+    category: "large-files",
+    severity: "low",
+    title: "Large tracked file requires review",
+    recommendation: "review",
+    explanation: `${file.path} is ${file.byteSize} bytes, meeting the configured large-file threshold.`,
+    confidence: confidence("high", 1, "The finding is based on the recorded file byte size."),
+    impact: "Large files may slow cloning, CI, packaging, and browser-side audit ingestion.",
+    evidence: [evidence(file.path, "size", { byteSize: file.byteSize, sha256: file.sha256 })],
+    destructive: false,
+    approvalRequired: false,
+    validation: ["Confirm the file is required and assess whether a smaller deterministic fixture or external artifact is appropriate."],
+    rollback: [],
+  };
+}
+
+function generatedFileFinding(file: NormalizedFile): RepositoryFinding {
+  return {
+    id: `raf_${stableHash(`RA020:${file.path}`)}`,
+    ruleId: "RA020",
+    category: "generated-files",
+    severity: "info",
+    title: "Generated output is present",
+    recommendation: "keep",
+    explanation: `${file.path} is classified as generated output. Tracking generated artifacts can be intentional and is not treated as a cleanup instruction.`,
+    confidence: confidence(file.generated ? "high" : "medium", file.generated ? 1 : 0.78, file.generated ? "The snapshot explicitly marked the file as generated." : "The path or suffix matches a generated-output convention."),
+    impact: "Generated output should have a documented reproducibility and release policy.",
+    evidence: [evidence(file.path, "generated-marker", { byteSize: file.byteSize, sha256: file.sha256 })],
+    destructive: false,
+    approvalRequired: false,
+    validation: ["Document how the artifact is reproduced and verified."],
+    rollback: [],
+  };
 }
 
 export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOverrides: Partial<RepositoryScanLimits> = {}): RepositoryInventoryAnalysis {
@@ -498,7 +575,7 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
     group.push(file);
     hashGroups.set(file.sha256, group);
   }
-  const duplicateGroups = [...hashGroups.entries()]
+  const duplicateGroups: DuplicateGroup[] = [...hashGroups.entries()]
     .filter(([, members]) => members.length > 1)
     .map(([sha256, members]) => {
       const sortedMembers = [...members].sort((left, right) => compareText(left.path, right.path));
@@ -511,88 +588,38 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
     })
     .sort((left, right) => compareText(left.members[0].path, right.members[0].path));
 
+  const duplicateCandidates = duplicateGroups
+    .map((group) => reviewMembers(group))
+    .filter((members): members is RepositoryEvidence[] => Boolean(members))
+    .sort((left, right) => compareText(left[0].path, right[0].path));
+  const backupCandidates = duplicateGroups
+    .flatMap((group) => {
+      const active = group.members.filter((member) => !isBackupPath(member.path));
+      if (active.length === 0) return [];
+      return group.members.filter((member) => isBackupPath(member.path)).map((backup) => ({ backup, active }));
+    })
+    .sort((left, right) => compareText(left.backup.path, right.backup.path));
+
+  const potentialFindingCount = duplicateCandidates.length + backupCandidates.length + largeFiles.length + generatedFiles.length;
+  if (potentialFindingCount > limits.maxFindings) reasons.add("finding-count");
   const findings: RepositoryFinding[] = [];
-  for (const group of duplicateGroups) {
-    const backupMembers = group.members.filter((member) => isBackupPath(member.path));
-    const activeMembers = group.members.filter((member) => !isBackupPath(member.path));
-    if (backupMembers.length > 0 && activeMembers.length > 0) {
-      for (const backup of backupMembers) {
-        findings.push({
-          id: `raf_${stableHash(`RA012:${backup.path}:${backup.sha256 ?? ""}`)}`,
-          ruleId: "RA012",
-          category: "backup-files",
-          severity: "medium",
-          title: "Tracked backup file duplicates an active file",
-          recommendation: "delete-candidate",
-          explanation: `${backup.path} is byte-for-byte identical to an active repository file. It is only a candidate for removal after reference and build validation.`,
-          confidence: confidence("high", 1, "The backup naming pattern and exact SHA-256 match agree."),
-          impact: "Duplicate backup files increase maintenance ambiguity and may preserve stale or accidentally deployed code.",
-          evidence: [backup, ...activeMembers.slice(0, 3)],
-          destructive: true,
-          approvalRequired: true,
-          validation: ["Search for direct references to the backup path.", "Run the repository's existing tests and build on a dedicated cleanup branch."],
-          rollback: ["Restore the file from the dedicated cleanup branch commit if validation or review fails."],
-        });
-      }
-      continue;
-    }
-    findings.push({
-      id: `raf_${stableHash(`RA010:${group.groupId}`)}`,
-      ruleId: "RA010",
-      category: "duplication",
-      severity: "medium",
-      title: "Exact duplicate files detected",
-      recommendation: "review",
-      explanation: `${group.members.length} files have the same SHA-256 digest. Their distinct paths may still serve intentional packaging or compatibility purposes.`,
-      confidence: confidence("high", 1, "All listed files have identical SHA-256 digests."),
-      impact: "Unnecessary duplicates increase repository size and create unclear ownership, but automatic removal could break consumers.",
-      evidence: group.members,
-      destructive: false,
-      approvalRequired: false,
-      validation: ["Confirm whether each path has a documented consumer or packaging purpose."],
-      rollback: [],
-    });
+  const append = (factory: () => RepositoryFinding): boolean => {
+    if (findings.length >= limits.maxFindings) return false;
+    findings.push(factory());
+    return true;
+  };
+
+  for (const members of duplicateCandidates) if (!append(() => duplicateReviewFinding(members))) break;
+  if (findings.length < limits.maxFindings) {
+    for (const candidate of backupCandidates) if (!append(() => backupFinding(candidate.backup, candidate.active))) break;
+  }
+  if (findings.length < limits.maxFindings) {
+    for (const file of largeFiles) if (!append(() => largeFileFinding(file))) break;
+  }
+  if (findings.length < limits.maxFindings) {
+    for (const file of generatedFiles) if (!append(() => generatedFileFinding(file))) break;
   }
 
-  for (const file of largeFiles) {
-    findings.push({
-      id: `raf_${stableHash(`RA023:${file.path}:${file.byteSize}`)}`,
-      ruleId: "RA023",
-      category: "large-files",
-      severity: "low",
-      title: "Large tracked file requires review",
-      recommendation: "review",
-      explanation: `${file.path} is ${file.byteSize} bytes, meeting the configured large-file threshold.`,
-      confidence: confidence("high", 1, "The finding is based on the recorded file byte size."),
-      impact: "Large files may slow cloning, CI, packaging, and browser-side audit ingestion.",
-      evidence: [evidence(file.path, "size", { byteSize: file.byteSize, sha256: file.sha256 })],
-      destructive: false,
-      approvalRequired: false,
-      validation: ["Confirm the file is required and assess whether a smaller deterministic fixture or external artifact is appropriate."],
-      rollback: [],
-    });
-  }
-
-  for (const file of generatedFiles) {
-    findings.push({
-      id: `raf_${stableHash(`RA020:${file.path}`)}`,
-      ruleId: "RA020",
-      category: "generated-files",
-      severity: "info",
-      title: "Generated output is present",
-      recommendation: "keep",
-      explanation: `${file.path} is classified as generated output. Tracking generated artifacts can be intentional and is not treated as a cleanup instruction.`,
-      confidence: confidence(file.generated ? "high" : "medium", file.generated ? 1 : 0.78, file.generated ? "The snapshot explicitly marked the file as generated." : "The path or suffix matches a generated-output convention."),
-      impact: "Generated output should have a documented reproducibility and release policy.",
-      evidence: [evidence(file.path, "generated-marker", { byteSize: file.byteSize, sha256: file.sha256 })],
-      destructive: false,
-      approvalRequired: false,
-      validation: ["Document how the artifact is reproduced and verified."],
-      rollback: [],
-    });
-  }
-
-  const cappedFindings = capFindings(findings, limits.maxFindings, reasons);
   const directorySet = new Set<string>();
   for (const file of accepted) {
     const segments = file.path.split("/");
@@ -631,6 +658,6 @@ export function analyzeRepositoryInventory(snapshot: RepositorySnapshot, limitOv
       backupCandidates: backupFiles.map((file) => evidence(file.path, "name-pattern", { byteSize: file.byteSize, sha256: file.sha256 })),
       generatedCandidates: generatedFiles.map((file) => evidence(file.path, "generated-marker", { byteSize: file.byteSize, sha256: file.sha256 })),
     },
-    findings: cappedFindings,
+    findings,
   };
 }
