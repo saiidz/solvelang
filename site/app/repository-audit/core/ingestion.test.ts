@@ -81,7 +81,7 @@ test("ingests archive entries, strips one shared wrapper, and binds revision to 
   assert.equal(result.ingestion.wrapperDirectoryRemoved, "project");
   assert.equal(result.ingestion.entriesSeen, 4);
   assert.deepEqual(result.snapshot.files.map(({ path }) => path), ["README.md", "src/index.ts"]);
-  assert.equal(result.ingestion.directoriesIgnored, 1);
+  assert.equal(result.ingestion.directoriesIgnored, 2);
 });
 
 test("checks archive depth after removing the shared wrapper", async () => {
@@ -92,6 +92,21 @@ test("checks archive depth after removing the shared wrapper", async () => {
     limits: { maxDepth: 2 },
   });
   assert.equal(result.snapshot.files[0].path, "src/index.ts");
+});
+
+test("ignores unrelated empty directories when regular files share a wrapper", async () => {
+  const result = await ingestArchiveSnapshotEntries({
+    archiveName: "project.zip",
+    archiveBytes: encoder.encode("archive"),
+    entries: [
+      { path: "__MACOSX", kind: "directory" },
+      { path: "project", kind: "directory" },
+      textEntry("project/src/index.ts", "export {};"),
+    ],
+  });
+  assert.equal(result.ingestion.wrapperDirectoryRemoved, "project");
+  assert.equal(result.ingestion.directoriesIgnored, 2);
+  assert.deepEqual(result.snapshot.files.map(({ path }) => path), ["src/index.ts"]);
 });
 
 test("does not remove a wrapper when files exist at different archive roots", async () => {
