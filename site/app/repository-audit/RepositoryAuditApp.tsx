@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useMemo, useState } from "react";
+import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { extractRepositoryArchive, type RepositoryArchiveExtractionResult } from "./core/archiveExtraction";
 import { analyzeRepositoryInventory, type RepositoryInventoryAnalysis, type RepositorySeverity } from "./core/inventory";
 import { ingestArchiveSnapshotEntries, type RepositoryIngestionResult, type RepositorySnapshotEntry } from "./core/ingestion";
@@ -75,6 +75,7 @@ export function RepositoryAuditApp() {
   const [error, setError] = useState("");
   const [dragging, setDragging] = useState(false);
   const [selectedName, setSelectedName] = useState("");
+  const busyRef = useRef(false);
 
   const technologies = useMemo(() => {
     if (!result) return [];
@@ -124,6 +125,8 @@ export function RepositoryAuditApp() {
   }
 
   async function scanArchive(file: File): Promise<void> {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setResult(null);
@@ -153,11 +156,14 @@ export function RepositoryAuditApp() {
       setError(caught instanceof Error ? caught.message : "The repository archive could not be scanned.");
       recordEvent("repository_audit_failed");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function runSample(): Promise<void> {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     setResult(null);
@@ -170,6 +176,7 @@ export function RepositoryAuditApp() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The sample repository could not be scanned.");
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -192,16 +199,18 @@ export function RepositoryAuditApp() {
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">Upload a repository archive</h2>
           <p className="mt-3 max-w-2xl leading-7 text-slate-600">Export a repository as ZIP or TAR. The archive is extracted and analyzed in this browser; files are not uploaded to SolveLang.</p>
           <label
-            onDragEnter={() => setDragging(true)}
+            aria-disabled={busy}
+            onDragEnter={() => { if (!busyRef.current) setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event: DragEvent<HTMLLabelElement>) => {
               event.preventDefault();
               setDragging(false);
+              if (busyRef.current) return;
               const file = event.dataTransfer.files?.[0];
               if (file) void scanArchive(file);
             }}
-            className={`mt-8 flex min-h-60 cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed px-6 text-center transition ${dragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-slate-50 hover:border-slate-500"}`}
+            className={`mt-8 flex min-h-60 flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed px-6 text-center transition ${busy ? "cursor-not-allowed border-slate-200 bg-slate-100 opacity-70" : dragging ? "cursor-pointer border-blue-500 bg-blue-50" : "cursor-pointer border-slate-300 bg-slate-50 hover:border-slate-500"}`}
           >
             <span className="text-4xl" aria-hidden="true">⇧</span>
             <span className="mt-4 text-lg font-semibold">Drop a repository archive here</span>
