@@ -7,7 +7,7 @@ class MemoryStore {
   accounts = new Map();
   keys = new Map();
   usage = new Map();
-  idempotency = new Set();
+  idempotency = new Map();
 
   async putAccount(account) { this.accounts.set(account.accountId, structuredClone(account)); }
   async getAccount(accountId) { return structuredClone(this.accounts.get(accountId)); }
@@ -30,9 +30,13 @@ class MemoryStore {
     const dedupeKey = `${accountId}:${period}:${idempotencyKey}`;
     const usageKey = `${accountId}:${period}`;
     const current = this.usage.get(usageKey) ?? 0;
-    if (this.idempotency.has(dedupeKey)) return { status: "duplicate", used: current };
+    if (this.idempotency.has(dedupeKey)) {
+      return this.idempotency.get(dedupeKey) === units
+        ? { status: "duplicate", used: current }
+        : { status: "idempotency_conflict", used: current };
+    }
     if (current + units > limit) return { status: "quota_exceeded", used: current };
-    this.idempotency.add(dedupeKey);
+    this.idempotency.set(dedupeKey, units);
     this.usage.set(usageKey, current + units);
     return { status: "consumed", used: current + units };
   }
@@ -141,6 +145,11 @@ test("enforces hard monthly quotas with idempotent consumption", async () => {
   const duplicate = await service.consumeUsage({ accountId: "acct_test_1", units: 999, idempotencyKey: "req_1" });
   assert.equal(duplicate.used, 999);
   assert.equal(duplicate.duplicate, true);
+
+  await assert.rejects(
+    () => service.consumeUsage({ accountId: "acct_test_1", units: 1, idempotencyKey: "req_1" }),
+    (error) => error instanceof ApiAccessError && error.code === "idempotency_conflict" && error.statusCode === 409,
+  );
 
   const last = await service.consumeUsage({ accountId: "acct_test_1", units: 1, idempotencyKey: "req_2" });
   assert.equal(last.used, 1_000);
