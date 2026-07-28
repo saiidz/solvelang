@@ -1,0 +1,92 @@
+import { timingSafeEqual } from "node:crypto";
+import { ApiAccessError } from "./service.js";
+
+function secureEqual(left, right) {
+  if (typeof left !== "string" || typeof right !== "string") return false;
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseJson(event) {
+  if (!event?.body) return {};
+  const text = event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+  return JSON.parse(text);
+}
+
+export function createApiAccessHandler({ service, enabled = false, adminSecret, siteOrigin, logger = console }) {
+  if (!service) throw new Error("API access service is required.");
+  if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
+  if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
+
+  function response(statusCode, body) {
+    return {
+      statusCode,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "access-control-allow-origin": siteOrigin,
+        "access-control-allow-methods": "GET,POST,OPTIONS",
+        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+      body: JSON.stringify(body),
+    };
+  }
+
+  function requireAdmin(event) {
+    const presented = event?.headers?.["x-solvelang-admin-secret"] ?? event?.headers?.["X-SolveLang-Admin-Secret"];
+    if (!secureEqual(presented, adminSecret)) throw new ApiAccessError(403, "admin_denied", "Administrative access was denied.");
+  }
+
+  return async function handle(event) {
+    try {
+      const method = event?.requestContext?.http?.method ?? "GET";
+      const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
+      if (method === "OPTIONS") return response(204, {});
+      if (method === "GET" && path.endsWith("/health")) {
+        return response(200, { status: "ok", service: "solvelang-api-access", enabled });
+      }
+      if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
+
+      if (method === "GET" && path.endsWith("/v1/whoami")) {
+        const context = event?.requestContext?.authorizer?.lambda;
+        if (!context?.accountId || !context?.keyId) throw new ApiAccessError(401, "not_authorized", "API authorization is required.");
+        return response(200, {
+          accountId: context.accountId,
+          keyId: context.keyId,
+          plan: context.plan,
+          scopes: typeof context.scopes === "string" ? context.scopes.split(" ").filter(Boolean) : [],
+          subscriptionStatus: context.subscriptionStatus,
+        });
+      }
+
+      requireAdmin(event);
+      const body = parseJson(event);
+      if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
+        return response(200, { account: await service.provisionSubscription(body) });
+      }
+      if (method === "POST" && path.endsWith("/internal/keys")) {
+        return response(201, await service.issueApiKey(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/keys/revoke")) {
+        return response(200, await service.revokeApiKey(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/usage/consume")) {
+        return response(200, await service.consumeUsage(body));
+      }
+      return response(404, { error: "Not found." });
+    } catch (error) {
+      if (error instanceof ApiAccessError) {
+        logger.error({ type: "api_access_error", code: error.code });
+        return response(error.statusCode, { error: error.publicMessage, code: error.code });
+      }
+      if (error instanceof SyntaxError) {
+        logger.error({ type: "api_access_error", code: "invalid_json" });
+        return response(400, { error: "Invalid request.", code: "invalid_request" });
+      }
+      logger.error({ type: "api_access_error", code: "request_failed" });
+      return response(500, { error: "Request failed.", code: "request_failed" });
+    }
+  };
+}
