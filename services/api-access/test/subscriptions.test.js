@@ -28,7 +28,7 @@ function stripeEvent(overrides = {}) {
   };
 }
 
-test("subscription Checkout stays disabled and uses configured recurring prices when enabled", async () => {
+test("subscription Checkout stays disabled and uses unique request IDs when enabled", async () => {
   const calls = [];
   const gateway = {
     createCheckoutSession: async (input) => {
@@ -37,13 +37,14 @@ test("subscription Checkout stays disabled and uses configured recurring prices 
     },
   };
   const disabled = createSubscriptionCheckoutService({ gateway, priceIds, siteOrigin: "https://www.solve-lang.com", enabled: false });
-  await assert.rejects(() => disabled.createCheckout({ accountId: "acct_1", email: "dev@example.com", plan: "pro" }), (error) => error instanceof ApiAccessError && error.code === "subscription_checkout_disabled");
+  await assert.rejects(() => disabled.createCheckout({ accountId: "acct_1", requestId: "request_1", email: "dev@example.com", plan: "pro" }), (error) => error instanceof ApiAccessError && error.code === "subscription_checkout_disabled");
 
   const enabled = createSubscriptionCheckoutService({ gateway, priceIds, siteOrigin: "https://www.solve-lang.com", enabled: true });
-  const result = await enabled.createCheckout({ accountId: "acct_1", email: "Dev@example.com", plan: "pro" });
+  const result = await enabled.createCheckout({ accountId: "acct_1", requestId: "request_1", email: "Dev@example.com", plan: "pro" });
   assert.deepEqual(result, { sessionId: "cs_test_1", url: "https://checkout.stripe.test/session" });
   assert.deepEqual(calls[0], {
     accountId: "acct_1",
+    requestId: "request_1",
     email: "dev@example.com",
     plan: "pro",
     priceId: "price_pro123",
@@ -53,7 +54,7 @@ test("subscription Checkout stays disabled and uses configured recurring prices 
   });
 });
 
-test("maps signed subscription updates into API account state", async () => {
+test("maps signed subscription updates into ordered API account state", async () => {
   const provisioned = [];
   const events = [];
   const lifecycle = createSubscriptionLifecycleService({
@@ -61,7 +62,8 @@ test("maps signed subscription updates into API account state", async () => {
     eventStore: { putEventIfAbsent: async (input) => { events.push(input); return "created"; } },
     priceIds,
   });
-  const result = await lifecycle.processEvent(stripeEvent());
+  const event = stripeEvent();
+  const result = await lifecycle.processEvent(event);
   assert.equal(result.handled, true);
   assert.equal(result.duplicate, false);
   assert.deepEqual(provisioned[0], {
@@ -72,6 +74,7 @@ test("maps signed subscription updates into API account state", async () => {
     plan: "pro",
     subscriptionStatus: "active",
     currentPeriodEnd: 1_787_846_400_000,
+    subscriptionEventCreatedAt: event.created * 1_000,
   });
   assert.equal(events[0].eventId, "evt_1");
   assert.equal(events[0].accountId, "acct_1");
@@ -90,6 +93,7 @@ test("uses the Stripe event timestamp for a bounded past-due grace period", asyn
   await lifecycle.processEvent(event);
   assert.equal(account.subscriptionStatus, "past_due");
   assert.equal(account.graceUntil, event.created * 1_000 + 60_000);
+  assert.equal(account.subscriptionEventCreatedAt, event.created * 1_000);
 });
 
 test("subscription deletion cancels access and duplicate delivery remains idempotent", async () => {
