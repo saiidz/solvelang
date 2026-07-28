@@ -124,6 +124,7 @@ export function createDynamoApiAccessStore(documentClient, {
         "#customer": "stripeCustomerId",
         "#subscription": "stripeSubscriptionId",
         "#updatedAt": "updatedAt",
+        "#eventCreatedAt": "subscriptionEventCreatedAt",
       };
       const values = {
         ":email": account.email,
@@ -133,6 +134,7 @@ export function createDynamoApiAccessStore(documentClient, {
         ":customer": account.stripeCustomerId,
         ":subscription": account.stripeSubscriptionId,
         ":updatedAt": account.updatedAt,
+        ":eventCreatedAt": account.subscriptionEventCreatedAt,
         ":zero": 0,
       };
       const updates = [
@@ -143,6 +145,7 @@ export function createDynamoApiAccessStore(documentClient, {
         "#customer = :customer",
         "#subscription = :subscription",
         "#updatedAt = :updatedAt",
+        "#eventCreatedAt = :eventCreatedAt",
         "activeKeyCount = if_not_exists(activeKeyCount, :zero)",
       ];
       let removeExpression;
@@ -152,13 +155,20 @@ export function createDynamoApiAccessStore(documentClient, {
         updates.push("graceUntil = :graceUntil");
         values[":graceUntil"] = account.graceUntil;
       }
-      await documentClient.send(new UpdateCommand({
-        TableName: accountsTable,
-        Key: { accountId: account.accountId },
-        UpdateExpression: `SET ${updates.join(", ")}${removeExpression ?? ""}`,
-        ExpressionAttributeNames: names,
-        ExpressionAttributeValues: values,
-      }));
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: accountsTable,
+          Key: { accountId: account.accountId },
+          UpdateExpression: `SET ${updates.join(", ")}${removeExpression ?? ""}`,
+          ConditionExpression: "attribute_not_exists(#eventCreatedAt) OR #eventCreatedAt <= :eventCreatedAt",
+          ExpressionAttributeNames: names,
+          ExpressionAttributeValues: values,
+        }));
+        return "updated";
+      } catch (error) {
+        if (error?.name === "ConditionalCheckFailedException") return "stale";
+        throw error;
+      }
     },
 
     async getAccount(accountId) {
