@@ -197,22 +197,14 @@ Resources:
           API_ACCESS_ENABLED: !Ref ApiAccessEnabled
           API_ACCESS_MODE: !Ref ApiAccessMode
           API_KEY_PEPPER: !Ref ApiKeyPepper
-          API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
-          SITE_ORIGIN: !Ref SiteOrigin
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex
-          API_USAGE_TABLE: !Ref ApiUsageTable
-          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ApiAccountsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiKeysTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ApiUsageTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ApiUsageIdempotencyTable
 
 Outputs:
   ApiAccessBaseUrl:
