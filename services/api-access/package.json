@@ -1,0 +1,13 @@
+{
+  "name": "solvelang-api-access",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1090.0",
+    "@aws-sdk/lib-dynamodb": "3.1090.0"
+  }
+}

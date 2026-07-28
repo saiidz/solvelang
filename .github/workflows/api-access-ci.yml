@@ -1,0 +1,36 @@
+name: API Access CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/api-access/**'
+      - '.github/workflows/api-access-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/api-access/**'
+      - '.github/workflows/api-access-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-access
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API key, subscription, authorizer, and quota tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+      - name: Build API access stack
+        run: sam build --template template.yaml

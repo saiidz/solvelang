@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang API subscription keys, authorization, and hard usage limits
+
+Parameters:
+  ApiAccessEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ApiAccessMode:
+    Type: String
+    AllowedValues: [test, live]
+    Default: test
+  SiteOrigin:
+    Type: String
+    Default: https://www.solve-lang.com
+  ApiKeyPepper:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+  ApiAccessAdminSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+
+Resources:
+  ApiAccountsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: accountId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: accountId
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
+  ApiKeysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: keyId
+          AttributeType: S
+        - AttributeName: accountId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: keyId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: AccountIdIndex
+          KeySchema:
+            - AttributeName: accountId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+
+  ApiUsageTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: usageKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: usageKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ApiUsageIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: idempotencyKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: idempotencyKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  ApiAccessHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref SiteOrigin
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders:
+          - authorization
+          - content-type
+          - idempotency-key
+          - x-solvelang-admin-secret
+      Auth:
+        Authorizers:
+          SolveLangApiKeyAuthorizer:
+            FunctionArn: !GetAtt ApiKeyAuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: '2.0'
+            EnableSimpleResponses: true
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 0
+
+  ApiAccessFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          API_ACCESS_ENABLED: !Ref ApiAccessEnabled
+          API_ACCESS_MODE: !Ref ApiAccessMode
+          API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
+          SITE_ORIGIN: !Ref SiteOrigin
+          API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
+          API_KEYS_TABLE: !Ref ApiKeysTable
+          API_KEYS_ACCOUNT_INDEX: AccountIdIndex
+          API_USAGE_TABLE: !Ref ApiUsageTable
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiAccountsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiKeysTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiUsageTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiUsageIdempotencyTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /health
+            Method: GET
+        ProvisionSubscription:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/provision
+            Method: POST
+        IssueKey:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/keys
+            Method: POST
+        RevokeKey:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/keys/revoke
+            Method: POST
+        ConsumeUsage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/usage/consume
+            Method: POST
+        WhoAmI:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /v1/whoami
+            Method: GET
+            Auth:
+              Authorizer: SolveLangApiKeyAuthorizer
+
+  ApiKeyAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/authorizer-handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 5
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          API_ACCESS_ENABLED: !Ref ApiAccessEnabled
+          API_ACCESS_MODE: !Ref ApiAccessMode
+          API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
+          API_KEYS_TABLE: !Ref ApiKeysTable
+          API_KEYS_ACCOUNT_INDEX: AccountIdIndex
+          API_USAGE_TABLE: !Ref ApiUsageTable
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ApiAccountsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiKeysTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiUsageTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiUsageIdempotencyTable
+
+Outputs:
+  ApiAccessBaseUrl:
+    Value: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  ApiAccessEnabledState:
+    Value: !Ref ApiAccessEnabled
