@@ -41,6 +41,7 @@ const ZIP_END = 0x06054b50;
 const ZIP_UTF8_FLAG = 0x0800;
 const ZIP_ENCRYPTED_FLAGS = 0x0041;
 const TAR_BLOCK = 512;
+const MAX_PAX_RECORDS = 1_024;
 
 function assertPositiveSafeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${name} must be a positive safe integer.`);
@@ -56,10 +57,6 @@ function validateLimits(overrides: Partial<RepositoryArchiveExtractionLimits>): 
     throw new Error("maxTotalUncompressedBytes cannot exceed maxExpandedArchiveBytes.");
   }
   return limits;
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function archiveName(input: string): string {
@@ -91,6 +88,7 @@ function pathDepth(path: string): number {
 }
 
 function validateExtractedPath(path: string, limits: RepositoryArchiveExtractionLimits): string {
+  if (/[\u0000-\u001f\u007f]/.test(path)) throw new Error("Archive paths cannot contain control characters.");
   const normalized = normalizeRepositoryPath(path);
   if (pathDepth(normalized) > limits.maxDepth) throw new Error(`Archive entry exceeds the ${limits.maxDepth}-segment depth limit: ${normalized}`);
   return normalized;
@@ -169,7 +167,7 @@ function findZipEnd(bytes: Uint8Array): number {
 function zipFilename(bytes: Uint8Array, flags: number): string {
   if ((flags & ZIP_UTF8_FLAG) !== 0) return decodeUtf8(bytes, "ZIP filename");
   if (bytes.some((value) => value > 0x7f)) throw new Error("ZIP filenames must be UTF-8 or ASCII.");
-  return String.fromCharCode(...bytes);
+  return decodeUtf8(bytes, "ZIP filename");
 }
 
 function zipUnixType(versionMadeBy: number, externalAttributes: number): number {
@@ -235,6 +233,7 @@ async function extractZip(bytes: Uint8Array, limits: RepositoryArchiveExtraction
     const isDirectory = decodedName.endsWith("/") || unixType === 0x4000;
 
     if (isDirectory) {
+      if (compressedSize !== 0 || uncompressedSize !== 0) throw new Error(`ZIP directory unexpectedly contains data: ${normalized}`);
       entries.push({ path: normalized, kind: "directory" });
       directories += 1;
       offset = recordEnd;
@@ -302,26 +301,103 @@ function isZeroBlock(bytes: Uint8Array, offset: number): boolean {
   return true;
 }
 
+type PaxAttributes = Record<string, string>;
+
+function parsePaxAttributes(bytes: Uint8Array, label: string): PaxAttributes {
+  const attributes: PaxAttributes = {};
+  let offset = 0;
+  let records = 0;
+  while (offset < bytes.byteLength) {
+    records += 1;
+    if (records > MAX_PAX_RECORDS) throw new Error(`${label} exceeds the ${MAX_PAX_RECORDS}-record safety limit.`);
+    let space = offset;
+    while (space < bytes.byteLength && bytes[space] !== 0x20) space += 1;
+    if (space === bytes.byteLength) throw new Error(`${label} record length is missing.`);
+    const lengthText = decodeUtf8(bytes.subarray(offset, space), `${label} record length`);
+    if (!/^[1-9][0-9]*$/.test(lengthText)) throw new Error(`${label} record length is invalid.`);
+    const recordLength = Number(lengthText);
+    if (!Number.isSafeInteger(recordLength) || recordLength < 5) throw new Error(`${label} record length is outside the safe range.`);
+    const recordEnd = offset + recordLength;
+    if (recordEnd > bytes.byteLength || bytes[recordEnd - 1] !== 0x0a) throw new Error(`${label} record exceeds its payload bounds.`);
+    const body = decodeUtf8(bytes.subarray(space + 1, recordEnd - 1), `${label} record`);
+    const equals = body.indexOf("=");
+    if (equals <= 0) throw new Error(`${label} record is missing a key/value separator.`);
+    const key = body.slice(0, equals);
+    const value = body.slice(equals + 1);
+    if (!/^[A-Za-z0-9_.-]+$/.test(key)) throw new Error(`${label} key is invalid.`);
+    if (value.includes("\0")) throw new Error(`${label} value contains a NUL byte.`);
+    attributes[key] = value;
+    offset = recordEnd;
+  }
+  return attributes;
+}
+
+function paxDecimal(attributes: PaxAttributes, key: string, fallback: number, label: string): number {
+  const value = attributes[key];
+  if (value === undefined) return fallback;
+  if (!/^(?:0|[1-9][0-9]*)$/.test(value)) throw new Error(`${label} is not a valid decimal integer.`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`${label} is outside the safe integer range.`);
+  return parsed;
+}
+
+function allRemainingZero(bytes: Uint8Array, offset: number): boolean {
+  for (let index = offset; index < bytes.byteLength; index += 1) if (bytes[index] !== 0) return false;
+  return true;
+}
+
 function extractTar(bytes: Uint8Array, archiveBytes: number, format: RepositoryArchiveFormat, limits: RepositoryArchiveExtractionLimits): RepositoryArchiveExtractionResult {
+  if (bytes.byteLength < TAR_BLOCK * 2 || bytes.byteLength % TAR_BLOCK !== 0) {
+    throw new Error("TAR archive is truncated or is not aligned to 512-byte blocks.");
+  }
   const entries: RepositorySnapshotEntry[] = [];
   const seen = new Set<string>();
   let offset = 0;
   let files = 0;
   let directories = 0;
   let totalUncompressed = 0;
+  let recordsSeen = 0;
+  let terminated = false;
+  let globalPax: PaxAttributes = {};
+  let nextPax: PaxAttributes | undefined;
 
   while (offset + TAR_BLOCK <= bytes.byteLength) {
-    if (isZeroBlock(bytes, offset)) break;
-    if (entries.length >= limits.maxEntries) throw new Error(`TAR archive exceeds the ${limits.maxEntries}-entry limit.`);
+    if (isZeroBlock(bytes, offset)) {
+      if (offset + TAR_BLOCK * 2 > bytes.byteLength || !isZeroBlock(bytes, offset + TAR_BLOCK)) {
+        throw new Error("TAR archive is missing the required two-block terminator.");
+      }
+      if (!allRemainingZero(bytes, offset)) throw new Error("TAR archive contains nonzero data after its terminator.");
+      terminated = true;
+      break;
+    }
+    recordsSeen += 1;
+    if (recordsSeen > limits.maxEntries) throw new Error(`TAR archive exceeds the ${limits.maxEntries}-record limit.`);
     verifyTarChecksum(bytes, offset);
-    const name = tarText(bytes, offset, 100, "TAR filename");
+    const headerName = tarText(bytes, offset, 100, "TAR filename");
     const prefix = tarText(bytes, offset + 345, 155, "TAR prefix");
-    const rawPath = prefix ? `${prefix}/${name}` : name;
+    const headerPath = prefix ? `${prefix}/${headerName}` : headerName;
+    const headerSize = tarOctal(bytes, offset + 124, 12, `TAR size for ${headerPath || "record"}`);
+    const type = bytes[offset + 156];
+    if (headerSize > limits.maxEntryBytes) throw new Error(`TAR record exceeds the ${limits.maxEntryBytes}-byte limit: ${headerPath || "metadata"}`);
+    const headerDataOffset = offset + TAR_BLOCK;
+    const headerPaddedSize = Math.ceil(headerSize / TAR_BLOCK) * TAR_BLOCK;
+    if (headerDataOffset + headerPaddedSize > bytes.byteLength) throw new Error(`TAR record exceeds archive bounds: ${headerPath || "metadata"}`);
+
+    if (type === 0x67 || type === 0x78) {
+      const attributes = parsePaxAttributes(bytes.slice(headerDataOffset, headerDataOffset + headerSize), type === 0x67 ? "Global PAX header" : "PAX header");
+      if (type === 0x67) globalPax = { ...globalPax, ...attributes };
+      else nextPax = { ...(nextPax ?? {}), ...attributes };
+      offset = headerDataOffset + headerPaddedSize;
+      continue;
+    }
+
+    const attributes = { ...globalPax, ...(nextPax ?? {}) };
+    nextPax = undefined;
+    const rawPath = attributes.path ?? headerPath;
     const path = validateExtractedPath(rawPath, limits);
     if (seen.has(path)) throw new Error(`Archive contains a duplicate normalized path: ${path}`);
     seen.add(path);
-    const size = tarOctal(bytes, offset + 124, 12, `TAR size for ${path}`);
-    const type = bytes[offset + 156];
+    const size = paxDecimal(attributes, "size", headerSize, `PAX size for ${path}`);
     if (size > limits.maxEntryBytes) throw new Error(`TAR entry exceeds the ${limits.maxEntryBytes}-byte limit: ${path}`);
     const dataOffset = offset + TAR_BLOCK;
     const paddedSize = Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
@@ -345,6 +421,8 @@ function extractTar(bytes: Uint8Array, archiveBytes: number, format: RepositoryA
     }
     offset = dataOffset + paddedSize;
   }
+  if (!terminated) throw new Error("TAR archive ended without a valid two-block terminator.");
+  if (nextPax) throw new Error("TAR archive ended with PAX metadata that was not applied to an entry.");
   return {
     format,
     entries,
