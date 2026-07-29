@@ -80,6 +80,7 @@ export function createCustomerAuthService({
     const throttleKey = digest(pepper, "email-throttle", email);
     const throttle = await store.reserveEmailRequest({
       throttleKey,
+      now: Math.floor(timestamp / 1_000),
       expiresAt: Math.floor((timestamp + EMAIL_THROTTLE_MS) / 1_000),
     });
     if (throttle === "limited") return { accepted: true };
