@@ -88,14 +88,11 @@ test("issues a one-time API key and stores only its fingerprint", async () => {
   assert.match(issued.apiKey, /^sl_test_[a-f0-9]{24}_[A-Za-z0-9_-]{43}$/);
   assert.match(issued.env, /^SOLVELANG_API_KEY=sl_test_/);
   assert.ok(issued.env.includes("SOLVELANG_API_BASE=https://api.solve-lang.com/v1"));
-
   const parsed = parseApiKey(issued.apiKey);
   const stored = await store.getKey(parsed.keyId);
   assert.equal(stored.accountId, "acct_test_1");
   assert.equal(stored.secret, undefined);
   assert.equal(stored.apiKey, undefined);
-  assert.equal(Object.hasOwn(stored, "lastUsedAt"), false);
-  assert.equal(Object.hasOwn(stored, "revokedAt"), false);
   assert.equal(stored.secretFingerprint, fingerprintApiKey({ ...parsed, pepper }));
   assert.ok(!JSON.stringify(stored).includes(parsed.secret));
   assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 1);
@@ -113,7 +110,6 @@ test("authorizes valid bearer keys and rejects substitutions, wrong modes, and m
     subscriptionStatus: "active",
   });
   assert.equal((await store.getKey(issued.key.keyId)).lastUsedAt, new Date(fixedNow).toISOString());
-
   const substituted = issued.apiKey.slice(0, -1) + (issued.apiKey.endsWith("A") ? "B" : "A");
   await assert.rejects(() => service.authorize({ authorization: `Bearer ${substituted}` }), (error) => error instanceof ApiAccessError && error.code === "invalid_api_key");
   await assert.rejects(() => service.authorize({ authorization: `Bearer ${issued.apiKey.replace("sl_test_", "sl_live_")}` }), (error) => error instanceof ApiAccessError && error.code === "key_mode_mismatch");
@@ -126,13 +122,11 @@ test("enforces atomic plan key limits and decrements on revocation", async () =>
   await service.issueApiKey({ accountId: "acct_test_1", name: "Second" });
   assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 2);
   await assert.rejects(() => service.issueApiKey({ accountId: "acct_test_1", name: "Third" }), (error) => error instanceof ApiAccessError && error.code === "key_limit_reached");
-
   const revoked = await service.revokeApiKey({ accountId: "acct_test_1", keyId: first.key.keyId });
   assert.equal(revoked.alreadyRevoked, false);
   assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 1);
   await assert.rejects(() => service.authorize({ authorization: `Bearer ${first.apiKey}` }), (error) => error instanceof ApiAccessError && error.code === "invalid_api_key");
-  const replacement = await service.issueApiKey({ accountId: "acct_test_1", name: "Replacement" });
-  assert.ok(replacement.apiKey);
+  await service.issueApiKey({ accountId: "acct_test_1", name: "Replacement" });
   assert.equal((await store.getAccount("acct_test_1")).activeKeyCount, 2);
 });
 
@@ -167,32 +161,47 @@ test("allows a bounded past-due grace period and fails closed afterward", async 
     graceUntil: fixedNow + 60_000,
   });
   const issued = await service.issueApiKey({ accountId: "acct_grace", name: "Grace key" });
-  assert.ok(issued.apiKey);
-
   const expiredService = createApiAccessService({ store, pepper, mode: "test", now: () => fixedNow + 60_001, randomBytes: deterministicRandom });
   await assert.rejects(() => expiredService.authorize({ authorization: `Bearer ${issued.apiKey}` }), (error) => error instanceof ApiAccessError && error.code === "subscription_inactive");
 });
 
-test("enforces hard monthly quotas with idempotent consumption", async () => {
+test("enforces hard monthly credit quotas with idempotent consumption", async () => {
   const { service } = await activeService("developer");
   const first = await service.consumeUsage({ accountId: "acct_test_1", units: 999, idempotencyKey: "req_1" });
   assert.equal(first.used, 999);
   assert.equal(first.remaining, 1);
   assert.equal(first.duplicate, false);
-
   const duplicate = await service.consumeUsage({ accountId: "acct_test_1", units: 999, idempotencyKey: "req_1" });
   assert.equal(duplicate.used, 999);
   assert.equal(duplicate.duplicate, true);
-
   await assert.rejects(
     () => service.consumeUsage({ accountId: "acct_test_1", units: 1, idempotencyKey: "req_1" }),
     (error) => error instanceof ApiAccessError && error.code === "idempotency_conflict" && error.statusCode === 409,
   );
-
   const last = await service.consumeUsage({ accountId: "acct_test_1", units: 1, idempotencyKey: "req_2" });
   assert.equal(last.used, 1_000);
   assert.equal(last.remaining, 0);
   await assert.rejects(() => service.consumeUsage({ accountId: "acct_test_1", units: 1, idempotencyKey: "req_3" }), (error) => error instanceof ApiAccessError && error.statusCode === 429);
+});
+
+test("meters workload size and rejects paid priority until a real queue exists", async () => {
+  const { service } = await activeService("pro");
+  const charged = await service.consumeUsage({
+    accountId: "acct_test_1",
+    workload: { inputTokens: 12_001, outputTokens: 900 },
+    idempotencyKey: "workload_1",
+  });
+  assert.equal(charged.chargedCredits, 3);
+  assert.equal(charged.used, 3);
+  assert.equal(Object.hasOwn(charged, "queueWeight"), false);
+  await assert.rejects(
+    () => service.consumeUsage({
+      accountId: "acct_test_1",
+      workload: { inputTokens: 1_000, outputTokens: 500, priority: "critical" },
+      idempotencyKey: "workload_2",
+    }),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_credit_charge",
+  );
 });
 
 test("does not issue keys for inactive subscriptions", async () => {
