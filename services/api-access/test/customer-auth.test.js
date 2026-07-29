@@ -4,9 +4,18 @@ import { accountIdForEmail, createCustomerAuthService } from "../src/customer-au
 import { ApiAccessError } from "../src/service.js";
 
 class MemoryAuthStore {
+  source = new Map();
   throttle = new Set();
   magic = new Map();
   sessions = new Map();
+
+  async reserveSourceRequest({ sourceKey, window, limit }) {
+    const key = `${sourceKey}:${window}`;
+    const count = this.source.get(key) ?? 0;
+    if (count >= limit) return "limited";
+    this.source.set(key, count + 1);
+    return "created";
+  }
 
   async reserveEmailRequest({ throttleKey }) {
     if (this.throttle.has(throttleKey)) return "limited";
@@ -71,7 +80,7 @@ function cookieValue(cookie) {
 
 test("sends a fragment-based, single-use magic link and stores only a fingerprint", async () => {
   const { store, sent, service } = setup();
-  assert.deepEqual(await service.requestMagicLink({ email: " Dev@Example.com " }), { accepted: true });
+  assert.deepEqual(await service.requestMagicLink({ email: " Dev@Example.com " }, { sourceIp: "203.0.113.1" }), { accepted: true });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].email, "dev@example.com");
   assert.match(sent[0].url, /^https:\/\/www\.solve-lang\.com\/account\/api-keys\/#magic_token=ml_/);
@@ -85,21 +94,33 @@ test("sends a fragment-based, single-use magic link and stores only a fingerprin
 
 test("email throttling returns the same generic response and does not send twice", async () => {
   const { sent, service } = setup();
-  await service.requestMagicLink({ email: "dev@example.com" });
-  assert.deepEqual(await service.requestMagicLink({ email: "dev@example.com" }), { accepted: true });
+  await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.1" });
+  assert.deepEqual(await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.1" }), { accepted: true });
   assert.equal(sent.length, 1);
 });
 
-test("verifies once, sets a secure HttpOnly cookie, and authenticates the session", async () => {
+test("source throttling limits varied recipient addresses without revealing the limit", async () => {
   const { sent, service } = setup();
-  await service.requestMagicLink({ email: "dev@example.com" });
+  for (let index = 0; index < 11; index += 1) {
+    assert.deepEqual(
+      await service.requestMagicLink({ email: `dev${index}@example.com` }, { sourceIp: "203.0.113.44" }),
+      { accepted: true },
+    );
+  }
+  assert.equal(sent.length, 10);
+});
+
+test("verifies once, sets a secure partitioned cookie, and authenticates the session", async () => {
+  const { sent, service } = setup();
+  await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.1" });
   const token = tokenFromUrl(sent[0].url);
   const verified = await service.verifyMagicLink({ token });
   assert.equal(verified.email, "dev@example.com");
   assert.match(verified.cookie, /^sl_api_session=sess_/);
   assert.match(verified.cookie, /HttpOnly/);
   assert.match(verified.cookie, /Secure/);
-  assert.match(verified.cookie, /SameSite=Lax/);
+  assert.match(verified.cookie, /SameSite=None/);
+  assert.match(verified.cookie, /Partitioned/);
   assert.equal(typeof verified.csrfToken, "string");
 
   const session = await service.authenticate(`other=x; sl_api_session=${encodeURIComponent(cookieValue(verified.cookie))}`);
@@ -112,12 +133,13 @@ test("verifies once, sets a secure HttpOnly cookie, and authenticates the sessio
   await assert.rejects(() => service.verifyMagicLink({ token }), (error) => error instanceof ApiAccessError && error.code === "invalid_magic_link");
 });
 
-test("logout revokes the server session and clears the cookie", async () => {
+test("logout revokes the server session and clears the partitioned cookie", async () => {
   const { sent, service } = setup();
-  await service.requestMagicLink({ email: "dev@example.com" });
+  await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.1" });
   const verified = await service.verifyMagicLink({ token: tokenFromUrl(sent[0].url) });
   const rawCookie = `sl_api_session=${encodeURIComponent(cookieValue(verified.cookie))}`;
   const cleared = await service.logout(rawCookie);
   assert.match(cleared, /Max-Age=0/);
+  assert.match(cleared, /Partitioned/);
   await assert.rejects(() => service.authenticate(rawCookie), (error) => error instanceof ApiAccessError && error.code === "invalid_session");
 });
