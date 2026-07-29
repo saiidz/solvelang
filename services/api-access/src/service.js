@@ -259,10 +259,6 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
       limit: plan.monthlyCredits,
       remaining: Math.max(0, plan.monthlyCredits - result.used),
       chargedCredits: charge.chargedCredits,
-      baseCredits: charge.baseCredits,
-      priority: charge.priority,
-      priorityMultiplier: charge.priorityMultiplier,
-      queueWeight: charge.queueWeight,
       duplicate: result.status === "duplicate",
     };
   }
