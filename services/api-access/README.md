@@ -1,36 +1,27 @@
 # SolveLang API Access
 
-This service is the fail-closed foundation for recurring SolveLang API subscriptions, weighted credit metering, paid processing priority, and customer-managed API keys.
+This service is the fail-closed foundation for recurring SolveLang API subscriptions, weighted credit metering, capped hosted-AI output, and customer-managed API keys.
 
 ## Credit policy
 
-A base SolveLang credit covers up to:
+One SolveLang credit covers up to:
 
 - 5,000 input tokens
 - 1,000 output tokens
 
-The larger token dimension determines the base charge. Every authenticated API request consumes at least one credit. Hosted OpenAI completions are capped at 1,000 output tokens per call.
+The larger token dimension determines the charge. Every authenticated API request consumes at least one credit. Hosted OpenAI completions are capped at 1,000 output tokens per call.
 
-Processing priority multiplies both queue weight and charged credits:
-
-| Priority | Credit multiplier | Queue weight |
-|---|---:|---:|
-| Standard | 1x | 1 |
-| Express | 2x | 2 |
-| Priority | 5x | 5 |
-| Critical | 10x | 10 |
-
-Priority is best-effort queue ordering, not a guaranteed completion-time SLA. A workload with 50,000 input tokens and 2,000 total output tokens has a 10-credit base charge. Critical processing charges 100 credits.
+Paid Express, Priority, and Critical processing are intentionally disabled. Non-standard priority values fail closed and cannot consume additional credits. Those lanes will launch only after a queue-backed worker uses the selected priority to change real execution order.
 
 ## Subscription plans
 
-| Plan | Monthly credits | Active keys | Monthly price target |
+| Plan | Monthly credits | Active keys | Monthly price |
 |---|---:|---:|---:|
 | Developer | 1,000 | 2 | $49 |
 | Pro | 10,000 | 3 | $199 |
 | Business | 50,000 | 5 | $699 |
 
-Stripe Price IDs remain owner-controlled test configuration and are not encoded into source control.
+The protected test deployment verifies that configured Stripe Prices are active, test-mode, monthly USD Prices for the exact Product and amount advertised above.
 
 ## Security and billing scope
 
@@ -82,21 +73,7 @@ Customer and public routes:
 - `POST /customer/subscriptions/checkout`
 - `POST /stripe/subscriptions/webhook`
 
-Internal routes require the administrative secret:
-
-- `POST /internal/subscriptions/checkout`
-- `POST /internal/subscriptions/provision`
-- `POST /internal/keys`
-- `POST /internal/keys/revoke`
-- `POST /internal/usage/consume`
-
-The internal usage route accepts either a fixed `credits` amount or a server-calculated workload object containing `inputTokens`, `outputTokens`, and `priority`. Browser clients never calculate their own billable credit charge.
-
-## Test deployment
-
-The manual `Deploy API Access Test` workflow supports staged deployment of the foundation, customer accounts, and Stripe test billing. It runs only from `main`, uses the protected `api-access-test` environment, and has no production option.
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for required secrets, variables, AWS role boundaries, staged activation, and rollback.
+Internal routes remain admin-secret protected. The browser never receives the administrative secret, and customer ownership is derived from the authenticated server-side session.
 
 ## Local tests
 
@@ -107,4 +84,8 @@ sam validate --lint --template template.yaml
 sam build --template template.yaml
 ```
 
-Keep test mode enabled until weighted credit exhaustion, priority multipliers, large-input charging, output caps, subscription lifecycle, magic-link replay, source throttling, key rotation, and revocation have been exercised end to end.
+## Test deployment
+
+The manual `Deploy API Access Test` workflow supports staged foundation, customer-account, and Stripe test-billing deployment. It only runs from `main`, uses the protected `api-access-test` environment, validates the exact advertised Price amounts and Products, and has no live or production option.
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for environment configuration and rollback steps.
