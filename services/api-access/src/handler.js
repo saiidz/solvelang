@@ -1,8 +1,13 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
 import { createApiAccessHandler } from "./api-handler.js";
 import { parseApiAccessEnvironment } from "./config.js";
+import { createCustomerAccountService } from "./customer-account.js";
+import { createCustomerAuthService } from "./customer-auth.js";
+import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
+import { createCustomerEmailGateway } from "./customer-email.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
@@ -17,6 +22,20 @@ const service = createApiAccessService({
   pepper: environment.pepper,
   mode: environment.mode,
 });
+const customerAccount = createCustomerAccountService({ store, apiAccessService: service });
+
+let customerAuth;
+if (environment.customerAccountsEnabled) {
+  customerAuth = createCustomerAuthService({
+    store: createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
+    emailGateway: createCustomerEmailGateway(new SESv2Client({}), {
+      sender: environment.customerAuthEmailSender,
+      replyTo: environment.customerAuthEmailReplyTo,
+    }),
+    pepper: environment.customerAuthPepper,
+    siteOrigin: environment.siteOrigin,
+  });
+}
 
 let stripeGateway;
 let subscriptionCheckout;
@@ -43,6 +62,9 @@ const application = createApiAccessHandler({
   enabled: environment.enabled,
   adminSecret: environment.adminSecret,
   siteOrigin: environment.siteOrigin,
+  customerAccountsEnabled: environment.customerAccountsEnabled,
+  customerAuth,
+  customerAccount,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
   subscriptionLifecycle,
