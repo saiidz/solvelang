@@ -1,5 +1,4 @@
 import {
-  DeleteCommand,
   GetCommand,
   PutCommand,
   TransactWriteCommand,
@@ -15,12 +14,13 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
   required(documentClient, tableName);
 
   return {
-    async reserveEmailRequest({ throttleKey, expiresAt }) {
+    async reserveEmailRequest({ throttleKey, now, expiresAt }) {
       try {
         await documentClient.send(new PutCommand({
           TableName: tableName,
           Item: { authKey: `throttle#${throttleKey}`, kind: "throttle", expiresAt },
-          ConditionExpression: "attribute_not_exists(authKey)",
+          ConditionExpression: "attribute_not_exists(authKey) OR expiresAt <= :now",
+          ExpressionAttributeValues: { ":now": now },
         }));
         return "created";
       } catch (error) {
@@ -45,9 +45,7 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
         ConsistentRead: true,
       }));
       const magic = response.Item;
-      if (!magic || magic.kind !== "magic" || magic.expiresAt <= now || magic.secretFingerprint !== presentedFingerprint) {
-        return undefined;
-      }
+      if (!magic || magic.kind !== "magic" || magic.expiresAt <= now) return undefined;
 
       const sessionItem = {
         authKey: `session#${session.sessionId}`,
@@ -94,16 +92,15 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
     },
 
     async revokeSession(sessionId, revokedAt) {
+      const expiresAt = Math.floor(Date.parse(revokedAt) / 1_000);
+      if (!Number.isSafeInteger(expiresAt)) throw new Error("Session revocation timestamp is invalid.");
       try {
         await documentClient.send(new UpdateCommand({
           TableName: tableName,
           Key: { authKey: `session#${sessionId}` },
           UpdateExpression: "SET revokedAt = :revokedAt, expiresAt = :expiresAt",
           ConditionExpression: "attribute_exists(authKey)",
-          ExpressionAttributeValues: {
-            ":revokedAt": revokedAt,
-            ":expiresAt": Math.floor(Date.now() / 1_000),
-          },
+          ExpressionAttributeValues: { ":revokedAt": revokedAt, ":expiresAt": expiresAt },
         }));
       } catch (error) {
         if (error?.name !== "ConditionalCheckFailedException") throw error;
