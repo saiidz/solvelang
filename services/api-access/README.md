@@ -21,7 +21,7 @@ This service is the fail-closed foundation for recurring SolveLang API subscript
 - Signed `customer.subscription.created`, `updated`, and `deleted` webhook processing.
 - Price-to-plan mapping, bounded `past_due` grace periods, duplicate-event storage, and stale-event rejection.
 
-No Stripe products, prices, customers, or subscriptions are created by repository code. Price IDs must already exist in the owner-controlled Stripe test account. No AWS resource is deployed by this repository change.
+No Stripe products, prices, customers, or subscriptions are created by repository code. Price IDs must already exist in the owner-controlled Stripe test account. No AWS resource is deployed automatically by merges.
 
 `ApiAccessEnabled`, `CustomerAccountsEnabled`, and `SubscriptionBillingEnabled` default to `false`. SAM rules prevent customer accounts or subscription billing from being enabled outside `ApiAccessMode=test`.
 
@@ -99,6 +99,12 @@ npm test
 sam validate --lint --template template.yaml
 sam build --template template.yaml
 ```
+
+## Test deployment
+
+The manual `Deploy API Access Test` GitHub Actions workflow supports staged deployment of the foundation, customer accounts, and Stripe test billing. It only runs from `main`, uses the protected `api-access-test` environment, and has no live or production option.
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for required GitHub environment secrets, variables, AWS role boundaries, staged activation, and rollback steps.
 
 ## Deployment safety
 
