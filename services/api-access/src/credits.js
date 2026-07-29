@@ -13,7 +13,9 @@ export function calculateCreditCharge({
   inputTokens = 0,
   outputTokens = 0,
   minimumCredits = 1,
+  priority = "standard",
 } = {}) {
+  if (priority !== "standard") throw new Error("Paid processing priority is not enabled.");
   const safeInputTokens = boundedInteger(inputTokens, "Input token count", 10_000_000);
   const safeOutputTokens = boundedInteger(outputTokens, "Output token count", MAX_OUTPUT_TOKENS_PER_CALL);
   const safeMinimumCredits = boundedInteger(minimumCredits, "Minimum credits", 100_000);
