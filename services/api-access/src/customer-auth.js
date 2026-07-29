@@ -4,6 +4,8 @@ import { ApiAccessError } from "./service.js";
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const EMAIL_THROTTLE_MS = 60 * 1_000;
+const SOURCE_THROTTLE_WINDOW_MS = 60 * 1_000;
+const SOURCE_THROTTLE_LIMIT = 10;
 const SESSION_COOKIE = "sl_api_session";
 
 function secureEqual(left, right) {
@@ -20,6 +22,12 @@ function normalizeEmail(value) {
     throw new ApiAccessError(400, "invalid_email", "Enter a valid email address.");
   }
   return email;
+}
+
+function normalizeSource(value) {
+  if (typeof value !== "string") return "unknown";
+  const source = value.trim();
+  return source && source.length <= 128 && !/[\u0000-\u001f\u007f]/.test(source) ? source : "unknown";
 }
 
 function digest(pepper, purpose, value) {
@@ -56,6 +64,10 @@ function cookieValue(cookieHeader, name) {
   return undefined;
 }
 
+function sessionCookie(token, maxAge) {
+  return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
+}
+
 export function accountIdForEmail(email, pepper) {
   return `acct_${digest(pepper, "account", normalizeEmail(email)).slice(0, 32)}`;
 }
@@ -73,9 +85,18 @@ export function createCustomerAuthService({
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
 
-  async function requestMagicLink(input) {
+  async function requestMagicLink(input, context = {}) {
     const email = normalizeEmail(input?.email);
     const timestamp = now();
+    const source = normalizeSource(context.sourceIp);
+    const sourceThrottle = await store.reserveSourceRequest({
+      sourceKey: digest(pepper, "source-throttle", source),
+      window: Math.floor(timestamp / SOURCE_THROTTLE_WINDOW_MS),
+      limit: SOURCE_THROTTLE_LIMIT,
+      expiresAt: Math.floor((timestamp + 2 * SOURCE_THROTTLE_WINDOW_MS) / 1_000),
+    });
+    if (sourceThrottle === "limited") return { accepted: true };
+
     const accountId = accountIdForEmail(email, pepper);
     const throttleKey = digest(pepper, "email-throttle", email);
     const throttle = await store.reserveEmailRequest({
@@ -122,7 +143,7 @@ export function createCustomerAuthService({
       accountId: result.accountId,
       email: result.email,
       csrfToken: digest(pepper, "csrf", session.token),
-      cookie: `${SESSION_COOKIE}=${encodeURIComponent(session.token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1_000)}`,
+      cookie: sessionCookie(session.token, Math.floor(SESSION_TTL_MS / 1_000)),
     };
   }
 
@@ -159,7 +180,7 @@ export function createCustomerAuthService({
         if (!(error instanceof ApiAccessError)) throw error;
       }
     }
-    return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+    return sessionCookie("", 0);
   }
 
   return { requestMagicLink, verifyMagicLink, authenticate, assertCsrf, logout };
