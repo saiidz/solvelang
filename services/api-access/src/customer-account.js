@@ -15,27 +15,32 @@ function publicKey(record) {
   };
 }
 
-export function createCustomerAccountService({ store, apiAccessService, now = Date.now }) {
+export function createCustomerAccountService({ store, apiAccessService, usageReader, now = Date.now }) {
   if (!store || typeof store.getAccount !== "function" || typeof store.listKeys !== "function") {
     throw new Error("API account store is required.");
   }
   if (!apiAccessService || typeof apiAccessService.issueApiKey !== "function") {
     throw new Error("API access service is required.");
   }
+  if (!usageReader || typeof usageReader.getUsage !== "function") {
+    throw new Error("API usage reader is required.");
+  }
 
   async function getDashboard(session) {
     const account = await store.getAccount(session.accountId);
     const keys = (await store.listKeys(session.accountId)).map(publicKey).sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+    const period = usagePeriod(now());
     if (!account?.plan) {
       return {
         accountId: session.accountId,
         email: session.email,
         subscription: { plan: null, status: "none", currentPeriodEnd: null, graceUntil: null },
-        usage: { period: usagePeriod(now()), used: null, limit: null, remaining: null },
+        usage: { period, used: null, limit: null, remaining: null },
         keys,
       };
     }
     const plan = getApiPlan(account.plan);
+    const used = await usageReader.getUsage(session.accountId, period);
     return {
       accountId: session.accountId,
       email: session.email,
@@ -46,10 +51,10 @@ export function createCustomerAccountService({ store, apiAccessService, now = Da
         graceUntil: account.graceUntil ?? null,
       },
       usage: {
-        period: usagePeriod(now()),
-        used: null,
+        period,
+        used,
         limit: plan.monthlyRequests,
-        remaining: null,
+        remaining: Math.max(0, plan.monthlyRequests - used),
       },
       keys,
     };
