@@ -6,6 +6,19 @@ function clientWith(handler) {
   return { send: handler };
 }
 
+test("source throttling uses a bounded atomic counter", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    return {};
+  }), "auth-table");
+
+  assert.equal(await store.reserveSourceRequest({ sourceKey: "source", window: 42, limit: 10, expiresAt: 120 }), "created");
+  assert.deepEqual(commands[0].Key, { authKey: "source#source#42" });
+  assert.equal(commands[0].ConditionExpression, "attribute_not_exists(#count) OR #count < :limit");
+  assert.equal(commands[0].ExpressionAttributeValues[":limit"], 10);
+});
+
 test("email throttling can replace an expired Dynamo record", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
@@ -18,18 +31,20 @@ test("email throttling can replace an expired Dynamo record", async () => {
   assert.deepEqual(commands[0].ExpressionAttributeValues, { ":now": 100 });
 });
 
-test("active email throttles are classified without hiding Dynamo failures", async () => {
+test("active throttles are classified without hiding Dynamo failures", async () => {
   const limited = createDynamoCustomerAuthStore(clientWith(async () => {
     const error = new Error("conditional");
     error.name = "ConditionalCheckFailedException";
     throw error;
   }), "auth-table");
   assert.equal(await limited.reserveEmailRequest({ throttleKey: "abc", now: 100, expiresAt: 160 }), "limited");
+  assert.equal(await limited.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }), "limited");
 
   const failed = createDynamoCustomerAuthStore(clientWith(async () => {
     throw new Error("Dynamo unavailable");
   }), "auth-table");
   await assert.rejects(() => failed.reserveEmailRequest({ throttleKey: "abc", now: 100, expiresAt: 160 }), /Dynamo unavailable/);
+  await assert.rejects(() => failed.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }), /Dynamo unavailable/);
 });
 
 test("magic-link consumption relies on an atomic fingerprint condition", async () => {
