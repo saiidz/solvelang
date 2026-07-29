@@ -39,11 +39,23 @@ function billing(environment) {
   };
 }
 
+function customerAccounts(environment) {
+  const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
+  return {
+    customerAccountsEnabled: enabled,
+    customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
+    customerAuthPepper: enabled ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
+    customerAuthEmailSender: enabled ? required(environment, "API_CUSTOMER_AUTH_EMAIL_SENDER") : undefined,
+    customerAuthEmailReplyTo: environment.API_CUSTOMER_AUTH_EMAIL_REPLY_TO || undefined,
+  };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   return {
     ...shared(environment),
     ...usage(environment),
     ...billing(environment),
+    ...customerAccounts(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
     siteOrigin: required(environment, "SITE_ORIGIN"),
   };

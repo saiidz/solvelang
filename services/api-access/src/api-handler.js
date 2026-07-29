@@ -18,11 +18,18 @@ function parseJson(event) {
   return text ? JSON.parse(text) : {};
 }
 
+function header(event, name) {
+  return event?.headers?.[name.toLowerCase()] ?? event?.headers?.[name];
+}
+
 export function createApiAccessHandler({
   service,
   enabled = false,
   adminSecret,
   siteOrigin,
+  customerAccountsEnabled = false,
+  customerAuth,
+  customerAccount,
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
   subscriptionLifecycle,
@@ -32,28 +39,41 @@ export function createApiAccessHandler({
   if (!service) throw new Error("API access service is required.");
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
+  if (customerAccountsEnabled && (!customerAuth || !customerAccount)) {
+    throw new Error("Customer account services are required when customer accounts are enabled.");
+  }
   if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionLifecycle || !stripeGateway)) {
     throw new Error("Stripe subscription services are required when billing is enabled.");
   }
 
-  function response(statusCode, body) {
+  function response(statusCode, body, extraHeaders = {}) {
     return {
       statusCode,
       headers: {
         "content-type": "application/json; charset=utf-8",
         "access-control-allow-origin": siteOrigin,
+        "access-control-allow-credentials": "true",
         "access-control-allow-methods": "GET,POST,OPTIONS",
-        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret,stripe-signature",
+        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret,x-solvelang-csrf,stripe-signature",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
+        vary: "Origin",
+        ...extraHeaders,
       },
       body: JSON.stringify(body),
     };
   }
 
   function requireAdmin(event) {
-    const presented = event?.headers?.["x-solvelang-admin-secret"] ?? event?.headers?.["X-SolveLang-Admin-Secret"];
+    const presented = header(event, "x-solvelang-admin-secret");
     if (!secureEqual(presented, adminSecret)) throw new ApiAccessError(403, "admin_denied", "Administrative access was denied.");
+  }
+
+  async function customerSession(event, mutation = false) {
+    if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+    const session = await customerAuth.authenticate(header(event, "cookie"));
+    if (mutation) customerAuth.assertCsrf(session, header(event, "x-solvelang-csrf"));
+    return session;
   }
 
   return async function handle(event) {
@@ -66,13 +86,14 @@ export function createApiAccessHandler({
           status: "ok",
           service: "solvelang-api-access",
           enabled,
+          customerAccountsEnabled,
           subscriptionBillingEnabled,
         });
       }
 
       if (method === "POST" && path.endsWith("/stripe/subscriptions/webhook")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
-        const signature = event?.headers?.["stripe-signature"] ?? event?.headers?.["Stripe-Signature"];
+        const signature = header(event, "stripe-signature");
         if (typeof signature !== "string" || !signature) throw new ApiAccessError(400, "invalid_webhook", "Invalid webhook.");
         let stripeEvent;
         try {
@@ -82,6 +103,26 @@ export function createApiAccessHandler({
         }
         const result = await subscriptionLifecycle.processEvent(stripeEvent);
         return response(200, { received: true, handled: result.handled, duplicate: result.duplicate });
+      }
+
+      if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
+        if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp });
+        return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/verify")) {
+        if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        const verified = await customerAuth.verifyMagicLink(parseJson(event));
+        return response(200, {
+          accountId: verified.accountId,
+          email: verified.email,
+          csrfToken: verified.csrfToken,
+        }, { "set-cookie": verified.cookie });
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/logout")) {
+        const session = await customerSession(event, true);
+        const cookie = await customerAuth.logout(header(event, "cookie"));
+        return response(200, { signedOut: true, accountId: session.accountId }, { "set-cookie": cookie });
       }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
@@ -97,6 +138,32 @@ export function createApiAccessHandler({
           subscriptionStatus: context.subscriptionStatus,
           usageRemaining: context.usageRemaining,
         });
+      }
+
+      if (method === "GET" && path.endsWith("/customer/account")) {
+        const session = await customerSession(event);
+        return response(200, { ...(await customerAccount.getDashboard(session)), csrfToken: session.csrfToken });
+      }
+      if (method === "POST" && path.endsWith("/customer/keys")) {
+        const session = await customerSession(event, true);
+        return response(201, await customerAccount.issueKey(session, parseJson(event)));
+      }
+      if (method === "POST" && path.endsWith("/customer/keys/revoke")) {
+        const session = await customerSession(event, true);
+        return response(200, await customerAccount.revokeKey(session, parseJson(event)));
+      }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/checkout")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        const body = parseJson(event);
+        const account = await service.getSubscriptionAccount(session.accountId);
+        return response(201, await subscriptionCheckout.createCheckout({
+          accountId: session.accountId,
+          email: session.email,
+          plan: body.plan,
+          requestId: body.requestId,
+          customerId: account?.stripeCustomerId,
+        }));
       }
 
       requireAdmin(event);

@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: SolveLang API subscription keys, billing lifecycle, authorization, and hard usage limits
+Description: SolveLang API subscription keys, customer accounts, billing lifecycle, authorization, and hard usage limits
 
 Parameters:
   ApiAccessEnabled:
@@ -11,6 +11,10 @@ Parameters:
     Type: String
     AllowedValues: [test, live]
     Default: test
+  CustomerAccountsEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
   SubscriptionBillingEnabled:
     Type: String
     AllowedValues: ["true", "false"]
@@ -26,6 +30,16 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+  CustomerAuthPepper:
+    Type: String
+    NoEcho: true
+    Default: ""
+  CustomerAuthEmailSender:
+    Type: String
+    Default: ""
+  CustomerAuthEmailReplyTo:
+    Type: String
+    Default: ""
   StripeSecretKey:
     Type: String
     NoEcho: true
@@ -45,11 +59,24 @@ Parameters:
     Default: ""
 
 Rules:
+  CustomerAccountsRemainTestOnly:
+    RuleCondition: !Equals [!Ref CustomerAccountsEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
+        AssertDescription: Customer accounts require API access to be enabled.
+      - Assert: !Equals [!Ref ApiAccessMode, test]
+        AssertDescription: Customer accounts are test-mode only until production review is complete.
+      - Assert: !Not [!Equals [!Ref CustomerAuthPepper, ""]]
+        AssertDescription: Customer accounts require a separate authentication pepper.
+      - Assert: !Not [!Equals [!Ref CustomerAuthEmailSender, ""]]
+        AssertDescription: Customer accounts require a verified SES sender.
   SubscriptionBillingRemainsTestOnly:
     RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
     Assertions:
       - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
         AssertDescription: Subscription billing requires API access to be enabled.
+      - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
+        AssertDescription: Browser subscription billing requires customer accounts to be enabled.
       - Assert: !Equals [!Ref ApiAccessMode, test]
         AssertDescription: Subscription billing is test-mode only until production review is complete.
       - Assert: !Not [!Equals [!Ref StripeSecretKey, ""]]
@@ -147,18 +174,36 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  ApiCustomerAuthTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: authKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: authKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   ApiAccessHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
         AllowOrigins:
           - !Ref SiteOrigin
+        AllowCredentials: true
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders:
           - authorization
           - content-type
           - idempotency-key
           - x-solvelang-admin-secret
+          - x-solvelang-csrf
           - stripe-signature
       Auth:
         Authorizers:
@@ -184,9 +229,13 @@ Resources:
         Variables:
           API_ACCESS_ENABLED: !Ref ApiAccessEnabled
           API_ACCESS_MODE: !Ref ApiAccessMode
+          API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
           API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
+          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
+          API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
@@ -194,6 +243,7 @@ Resources:
           API_USAGE_TABLE: !Ref ApiUsageTable
           API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
           API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
+          API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
           STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
@@ -210,6 +260,13 @@ Resources:
             TableName: !Ref ApiUsageIdempotencyTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiSubscriptionEventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiCustomerAuthTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - ses:SendEmail
+            Resource: '*'
       Events:
         Health:
           Type: HttpApi
@@ -217,6 +274,48 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /health
             Method: GET
+        CustomerMagicLink:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/magic-link
+            Method: POST
+        CustomerVerify:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/verify
+            Method: POST
+        CustomerLogout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/logout
+            Method: POST
+        CustomerAccount:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/account
+            Method: GET
+        CustomerIssueKey:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/keys
+            Method: POST
+        CustomerRevokeKey:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/keys/revoke
+            Method: POST
+        CustomerSubscriptionCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/checkout
+            Method: POST
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
@@ -296,6 +395,8 @@ Outputs:
     Value: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com
   ApiAccessEnabledState:
     Value: !Ref ApiAccessEnabled
+  CustomerAccountsEnabledState:
+    Value: !Ref CustomerAccountsEnabled
   SubscriptionBillingEnabledState:
     Value: !Ref SubscriptionBillingEnabled
   StripeSubscriptionWebhookUrl:
