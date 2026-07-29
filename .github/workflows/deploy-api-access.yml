@@ -1,0 +1,273 @@
+name: Deploy API Access Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Test deployment stage
+        required: true
+        default: foundation
+        type: choice
+        options:
+          - foundation
+          - customer-accounts
+          - subscription-billing
+      confirm_test_only:
+        description: Confirm this is a test-only deployment
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-test-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-test
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      DEPLOYMENT_STAGE: ${{ inputs.stage }}
+      API_ACCESS_MODE: test
+      API_ACCESS_ENABLED: "true"
+      CUSTOMER_ACCOUNTS_ENABLED: ${{ inputs.stage == 'foundation' && 'false' || 'true' }}
+      SUBSCRIPTION_BILLING_ENABLED: ${{ inputs.stage == 'subscription-billing' && 'true' || 'false' }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      CUSTOMER_AUTH_EMAIL_REPLY_TO: ${{ vars.CUSTOMER_AUTH_EMAIL_REPLY_TO }}
+      STRIPE_API_DEVELOPER_PRICE_ID: ${{ vars.STRIPE_API_DEVELOPER_PRICE_ID }}
+      STRIPE_API_PRO_PRICE_ID: ${{ vars.STRIPE_API_PRO_PRICE_ID }}
+      STRIPE_API_BUSINESS_PRICE_ID: ${{ vars.STRIPE_API_BUSINESS_PRICE_ID }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse non-main or unconfirmed deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF}" == "refs/heads/main" ]] || { echo "API access deployments must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_test_only }}" == "true" ]] || { echo "Test-only confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == "test" ]] || { echo "Only test mode is supported." >&2; exit 1; }
+          [[ "$STACK_NAME" == *test* ]] || { echo "The stack name must identify the test environment." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]] || { echo "SITE_ORIGIN must use HTTPS." >&2; exit 1; }
+          test -n "$AWS_REGION"
+          test -n "$STACK_NAME"
+          test -n "$SITE_ORIGIN"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Validate secrets and staged feature gates
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          require_length() {
+            local name="$1"
+            local value="$2"
+            local minimum="$3"
+            if (( ${#value} < minimum )); then
+              echo "$name must contain at least $minimum characters." >&2
+              exit 1
+            fi
+          }
+
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]] || { echo "API key pepper and admin secret must be distinct." >&2; exit 1; }
+
+          case "$DEPLOYMENT_STAGE" in
+            foundation)
+              [[ "$CUSTOMER_ACCOUNTS_ENABLED" == "false" ]]
+              [[ "$SUBSCRIPTION_BILLING_ENABLED" == "false" ]]
+              ;;
+            customer-accounts)
+              [[ "$CUSTOMER_ACCOUNTS_ENABLED" == "true" ]]
+              [[ "$SUBSCRIPTION_BILLING_ENABLED" == "false" ]]
+              ;;
+            subscription-billing)
+              [[ "$CUSTOMER_ACCOUNTS_ENABLED" == "true" ]]
+              [[ "$SUBSCRIPTION_BILLING_ENABLED" == "true" ]]
+              ;;
+            *)
+              echo "Unsupported deployment stage." >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$CUSTOMER_ACCOUNTS_ENABLED" == "true" ]]; then
+            require_length CUSTOMER_AUTH_PEPPER "$CUSTOMER_AUTH_PEPPER" 32
+            test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+            [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]] || { echo "Customer auth pepper must be distinct from the API key pepper." >&2; exit 1; }
+            [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]] || { echo "Customer auth pepper must be distinct from the admin secret." >&2; exit 1; }
+          fi
+
+          if [[ "$SUBSCRIPTION_BILLING_ENABLED" == "true" ]]; then
+            [[ "$STRIPE_SECRET_KEY" == sk_test_* ]] || { echo "Stripe secret must be a test-mode key." >&2; exit 1; }
+            [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]] || { echo "Stripe webhook secret is invalid." >&2; exit 1; }
+            for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
+              [[ "$price_id" == price_* ]] || { echo "Every Stripe plan requires a Price ID." >&2; exit 1; }
+            done
+            [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_PRO_PRICE_ID" ]]
+            [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+            [[ "$STRIPE_API_PRO_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+          fi
+
+      - name: Verify SES sender for customer-account stage
+        if: ${{ inputs.stage != 'foundation' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sesv2 get-email-identity \
+            --email-identity "$CUSTOMER_AUTH_EMAIL_SENDER" \
+            --query 'VerifiedForSendingStatus' \
+            --output text | grep -qx 'True'
+
+      - name: Verify Stripe test prices for billing stage
+        if: ${{ inputs.stage == 'subscription-billing' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_price() {
+            local price_id="$1"
+            local response
+            response="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" "https://api.stripe.com/v1/prices/$price_id")"
+            jq -e '.active == true and .type == "recurring" and .recurring.interval == "month"' <<<"$response" >/dev/null
+          }
+          verify_price "$STRIPE_API_DEVELOPER_PRICE_ID"
+          verify_price "$STRIPE_API_PRO_PRICE_ID"
+          verify_price "$STRIPE_API_BUSINESS_PRICE_ID"
+
+      - name: Run API access tests
+        run: npm test
+
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+
+      - name: Build API access stack
+        run: sam build --template template.yaml
+
+      - name: Prepare dedicated SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          bucket="solvelang-api-access-artifacts-${account_id}-${AWS_REGION}"
+
+          if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+            if [[ "$AWS_REGION" == "us-east-1" ]]; then
+              aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION"
+            else
+              aws s3api create-bucket \
+                --bucket "$bucket" \
+                --region "$AWS_REGION" \
+                --create-bucket-configuration "LocationConstraint=$AWS_REGION"
+            fi
+
+            aws s3api put-public-access-block \
+              --bucket "$bucket" \
+              --public-access-block-configuration \
+                BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+            aws s3api put-bucket-encryption \
+              --bucket "$bucket" \
+              --server-side-encryption-configuration \
+                '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+            aws s3api put-bucket-versioning \
+              --bucket "$bucket" \
+              --versioning-configuration Status=Enabled
+          fi
+
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy staged test stack
+        shell: bash
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              ApiAccessEnabled="$API_ACCESS_ENABLED" \
+              ApiAccessMode="$API_ACCESS_MODE" \
+              CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED" \
+              SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED" \
+              SiteOrigin="$SITE_ORIGIN" \
+              ApiKeyPepper="$API_KEY_PEPPER" \
+              ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET" \
+              CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER" \
+              CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER" \
+              CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO" \
+              StripeSecretKey="$STRIPE_SECRET_KEY" \
+              StripeSubscriptionWebhookSecret="$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" \
+              StripeApiDeveloperPriceId="$STRIPE_API_DEVELOPER_PRICE_ID" \
+              StripeApiProPriceId="$STRIPE_API_PRO_PRICE_ID" \
+              StripeApiBusinessPriceId="$STRIPE_API_BUSINESS_PRICE_ID"
+
+      - name: Verify deployed health and feature flags
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_base="$(aws cloudformation describe-stacks \
+            --stack-name "$STACK_NAME" \
+            --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' \
+            --output text)"
+          test -n "$api_base"
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e \
+            --argjson customer "$CUSTOMER_ACCOUNTS_ENABLED" \
+            --argjson billing "$SUBSCRIPTION_BILLING_ENABLED" \
+            '.status == "ok" and .enabled == true and .customerAccountsEnabled == $customer and .subscriptionBillingEnabled == $billing' \
+            <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Write deployment summary
+        shell: bash
+        env:
+          API_BASE: ${{ steps.verify.outputs.api_base }}
+        run: |
+          {
+            echo "## SolveLang API access test deployment"
+            echo
+            echo "- Stage: \`$DEPLOYMENT_STAGE\`"
+            echo "- Stack: \`$STACK_NAME\`"
+            echo "- Region: \`$AWS_REGION\`"
+            echo "- API base: \`$API_BASE\`"
+            echo "- Customer accounts enabled: \`$CUSTOMER_ACCOUNTS_ENABLED\`"
+            echo "- Subscription billing enabled: \`$SUBSCRIPTION_BILLING_ENABLED\`"
+            echo
+            echo "No production or live-mode deployment path exists in this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
