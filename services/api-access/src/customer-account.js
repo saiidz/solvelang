@@ -53,8 +53,8 @@ export function createCustomerAccountService({ store, apiAccessService, usageRea
       usage: {
         period,
         used,
-        limit: plan.monthlyRequests,
-        remaining: Math.max(0, plan.monthlyRequests - used),
+        limit: plan.monthlyCredits,
+        remaining: Math.max(0, plan.monthlyCredits - used),
       },
       keys,
     };

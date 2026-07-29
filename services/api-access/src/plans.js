@@ -3,19 +3,19 @@ export const API_PLAN_NAMES = Object.freeze(["developer", "pro", "business"]);
 export const API_PLANS = Object.freeze({
   developer: Object.freeze({
     name: "developer",
-    monthlyRequests: 1_000,
+    monthlyCredits: 1_000,
     maxActiveKeys: 2,
     scopes: Object.freeze(["repository:audit"]),
   }),
   pro: Object.freeze({
     name: "pro",
-    monthlyRequests: 10_000,
+    monthlyCredits: 10_000,
     maxActiveKeys: 3,
     scopes: Object.freeze(["repository:audit"]),
   }),
   business: Object.freeze({
     name: "business",
-    monthlyRequests: 50_000,
+    monthlyCredits: 50_000,
     maxActiveKeys: 5,
     scopes: Object.freeze(["repository:audit"]),
   }),

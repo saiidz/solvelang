@@ -20,6 +20,7 @@ export function createApiKeyAuthorizer({ service, requiredScope = "repository:au
       const context = await service.authorize({ authorization, requiredScope });
       const usage = await service.consumeUsage({
         accountId: context.accountId,
+        credits: 1,
         units: 1,
         idempotencyKey: requestIdempotencyKey(event),
       });

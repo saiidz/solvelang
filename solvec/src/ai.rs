@@ -7,6 +7,7 @@ use serde_json::{Value as JsonValue, json};
 const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
 const OPENAI_CHAT_COMPLETIONS_URL: &str = "https://api.openai.com/v1/chat/completions";
 const AI_TIMEOUT_SECONDS: u64 = 30;
+pub const MAX_AI_OUTPUT_TOKENS: u64 = 1_000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AiProvider {
@@ -128,6 +129,24 @@ pub fn build_prompt(instruction: &str, tools: &[String], message: &str) -> AiPro
     }
 }
 
+pub fn openai_request_body(config: &AiConfig, prompt: &AiPrompt) -> JsonValue {
+    json!({
+        "model": config.model,
+        "messages": [
+            {
+                "role": "developer",
+                "content": prompt.developer_message,
+            },
+            {
+                "role": "user",
+                "content": prompt.user_message,
+            }
+        ],
+        "temperature": 0.2,
+        "max_completion_tokens": MAX_AI_OUTPUT_TOKENS,
+    })
+}
+
 fn local_placeholder(
     agent_name: &str,
     instruction: &str,
@@ -165,23 +184,7 @@ fn call_openai(
         .post(OPENAI_CHAT_COMPLETIONS_URL)
         .bearer_auth(api_key)
         .header("content-type", "application/json")
-        .body(
-            json!({
-                "model": config.model,
-                "messages": [
-                    {
-                        "role": "developer",
-                        "content": prompt.developer_message,
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt.user_message,
-                    }
-                ],
-                "temperature": 0.2,
-            })
-            .to_string(),
-        )
+        .body(openai_request_body(config, &prompt).to_string())
         .send()
         .map_err(|error| AiError::new(format!("OpenAI request failed: {}", error)))?;
 
@@ -219,13 +222,15 @@ fn truncate_for_error(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{AiConfig, AiProvider, ask_agent_with_config, build_prompt};
+    use super::{
+        AiConfig, AiProvider, MAX_AI_OUTPUT_TOKENS, ask_agent_with_config, build_prompt,
+        openai_request_body,
+    };
     use std::collections::HashMap;
 
     #[test]
     fn missing_provider_defaults_to_local() {
         let config = AiConfig::from_vars(HashMap::new()).expect("local config");
-
         assert_eq!(config.provider, AiProvider::Local);
     }
 
@@ -244,7 +249,6 @@ mod tests {
             "Help",
         )
         .expect("local response");
-
         assert!(response.contains("[SupportBot AI Agent]"));
         assert!(response.contains("local SolveLang agent prototype"));
         assert!(response.contains("searchDocs"));
@@ -255,7 +259,6 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("SOLVELANG_AI_PROVIDER".to_string(), "openai".to_string());
         let error = AiConfig::from_vars(vars).expect_err("missing key should fail");
-
         assert!(error.to_string().contains("OPENAI_API_KEY is required"));
     }
 
@@ -263,8 +266,7 @@ mod tests {
     fn unknown_provider_is_an_error() {
         let mut vars = HashMap::new();
         vars.insert("SOLVELANG_AI_PROVIDER".to_string(), "mystery".to_string());
-        let error = AiConfig::from_vars(vars).expect_err("unknown provider should fail");
-
+        let error = AiConfig::from_vars(vars).expect_err("unknown provider");
         assert!(error.to_string().contains("unknown AI provider 'mystery'"));
     }
 
@@ -275,7 +277,6 @@ mod tests {
             &["searchDocs".to_string(), "readFile".to_string()],
             "How can SolveLang help?",
         );
-
         assert!(
             prompt
                 .developer_message
@@ -283,5 +284,18 @@ mod tests {
         );
         assert!(prompt.developer_message.contains("searchDocs, readFile"));
         assert!(prompt.user_message.contains("How can SolveLang help?"));
+    }
+
+    #[test]
+    fn hosted_openai_output_is_capped_to_one_credit_band() {
+        let config = AiConfig {
+            provider: AiProvider::OpenAi,
+            model: "gpt-4.1-mini".to_string(),
+            api_key: Some("test".to_string()),
+        };
+        let prompt = build_prompt("Answer clearly.", &[], "Help");
+        let body = openai_request_body(&config, &prompt);
+        assert_eq!(body["max_completion_tokens"], MAX_AI_OUTPUT_TOKENS);
+        assert_eq!(MAX_AI_OUTPUT_TOKENS, 1_000);
     }
 }

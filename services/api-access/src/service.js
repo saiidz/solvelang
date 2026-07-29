@@ -1,3 +1,4 @@
+import { calculateCreditCharge } from "./credits.js";
 import { bearerToken, fingerprintApiKey, generateApiKey, parseApiKey, verifyApiKeyFingerprint } from "./keys.js";
 import { getApiPlan, usagePeriod } from "./plans.js";
 
@@ -88,6 +89,19 @@ function issuedKeyResponse(generated, record) {
       createdAt: record.createdAt,
     },
   };
+}
+
+function creditCharge(input) {
+  try {
+    if (input.workload) return calculateCreditCharge(input.workload);
+    const credits = input.credits ?? input.units ?? 1;
+    if (!Number.isSafeInteger(credits) || credits < 1 || credits > 1_000_000) {
+      throw new Error("Credit amount is invalid.");
+    }
+    return calculateCreditCharge({ minimumCredits: credits });
+  } catch {
+    throw new ApiAccessError(400, "invalid_credit_charge", "Credit usage is invalid.");
+  }
 }
 
 export function createApiAccessService({ store, pepper, mode = "test", now = Date.now, randomBytes }) {
@@ -220,33 +234,31 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     const account = await store.getAccount(accountId);
     assertAccountAccess(account, timestamp);
     const plan = getApiPlan(account.plan);
-    const units = input.units ?? 1;
-    if (!Number.isSafeInteger(units) || units < 1 || units > 1_000) {
-      throw new ApiAccessError(400, "invalid_units", "Usage units are invalid.");
-    }
+    const charge = creditCharge(input);
     const idempotencyKey = cleanId(input.idempotencyKey, "Idempotency key");
     const period = usagePeriod(timestamp);
     const result = await store.consumeUsage({
       accountId,
       period,
-      units,
-      limit: plan.monthlyRequests,
+      units: charge.chargedCredits,
+      limit: plan.monthlyCredits,
       idempotencyKey,
       expiresAt: Math.floor(timestamp / 1_000) + 60 * 60 * 24 * 400,
     });
     if (result.status === "quota_exceeded") {
-      throw new ApiAccessError(429, "monthly_quota_exceeded", "The monthly API request limit has been reached.");
+      throw new ApiAccessError(429, "monthly_credit_quota_exceeded", "The monthly SolveLang credit limit has been reached.");
     }
     if (result.status === "idempotency_conflict") {
-      throw new ApiAccessError(409, "idempotency_conflict", "The idempotency key was already used with different usage units.");
+      throw new ApiAccessError(409, "idempotency_conflict", "The idempotency key was already used with a different credit charge.");
     }
     return {
       accountId,
       plan: account.plan,
       period,
       used: result.used,
-      limit: plan.monthlyRequests,
-      remaining: Math.max(0, plan.monthlyRequests - result.used),
+      limit: plan.monthlyCredits,
+      remaining: Math.max(0, plan.monthlyCredits - result.used),
+      chargedCredits: charge.chargedCredits,
       duplicate: result.status === "duplicate",
     };
   }
