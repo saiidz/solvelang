@@ -20,7 +20,7 @@ export function createApiKeyAuthorizer({ service, requiredScope = "repository:au
       const context = await service.authorize({ authorization, requiredScope });
       const usage = await service.consumeUsage({
         accountId: context.accountId,
-        units: 1,
+        credits: 1,
         idempotencyKey: requestIdempotencyKey(event),
       });
       return {
@@ -32,6 +32,8 @@ export function createApiKeyAuthorizer({ service, requiredScope = "repository:au
           scopes: context.scopes.join(" "),
           subscriptionStatus: context.subscriptionStatus,
           usageRemaining: usage.remaining,
+          creditsRemaining: usage.remaining,
+          creditsCharged: usage.chargedCredits,
         },
       };
     } catch {
