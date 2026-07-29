@@ -8,6 +8,7 @@ import { createCustomerAccountService } from "./customer-account.js";
 import { createCustomerAuthService } from "./customer-auth.js";
 import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
 import { createCustomerEmailGateway } from "./customer-email.js";
+import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
@@ -22,7 +23,11 @@ const service = createApiAccessService({
   pepper: environment.pepper,
   mode: environment.mode,
 });
-const customerAccount = createCustomerAccountService({ store, apiAccessService: service });
+const customerAccount = createCustomerAccountService({
+  store,
+  apiAccessService: service,
+  usageReader: createDynamoCustomerUsageReader(documentClient, environment.usageTable),
+});
 
 let customerAuth;
 if (environment.customerAccountsEnabled) {
