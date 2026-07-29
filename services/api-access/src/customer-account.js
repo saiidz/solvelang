@@ -35,7 +35,7 @@ export function createCustomerAccountService({ store, apiAccessService, usageRea
         accountId: session.accountId,
         email: session.email,
         subscription: { plan: null, status: "none", currentPeriodEnd: null, graceUntil: null },
-        usage: { period, used: null, limit: null, remaining: null },
+        usage: { period, unit: "credits", used: null, limit: null, remaining: null },
         keys,
       };
     }
@@ -52,9 +52,10 @@ export function createCustomerAccountService({ store, apiAccessService, usageRea
       },
       usage: {
         period,
+        unit: "credits",
         used,
-        limit: plan.monthlyRequests,
-        remaining: Math.max(0, plan.monthlyRequests - used),
+        limit: plan.monthlyCredits,
+        remaining: Math.max(0, plan.monthlyCredits - used),
       },
       keys,
     };
