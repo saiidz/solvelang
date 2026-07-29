@@ -107,7 +107,7 @@ export function createApiAccessHandler({
 
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-        await customerAuth.requestMagicLink(parseJson(event));
+        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp });
         return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {
