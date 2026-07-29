@@ -277,7 +277,11 @@ mod tests {
             &["searchDocs".to_string(), "readFile".to_string()],
             "How can SolveLang help?",
         );
-        assert!(prompt.developer_message.contains("Answer clearly using approved tools only."));
+        assert!(
+            prompt
+                .developer_message
+                .contains("Answer clearly using approved tools only.")
+        );
         assert!(prompt.developer_message.contains("searchDocs, readFile"));
         assert!(prompt.user_message.contains("How can SolveLang help?"));
     }
