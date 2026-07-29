@@ -14,6 +14,29 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
   required(documentClient, tableName);
 
   return {
+    async reserveSourceRequest({ sourceKey, window, limit, expiresAt }) {
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { authKey: `source#${sourceKey}#${window}` },
+          UpdateExpression: "SET #count = if_not_exists(#count, :zero) + :one, expiresAt = :expiresAt, kind = :kind",
+          ConditionExpression: "attribute_not_exists(#count) OR #count < :limit",
+          ExpressionAttributeNames: { "#count": "requestCount" },
+          ExpressionAttributeValues: {
+            ":zero": 0,
+            ":one": 1,
+            ":limit": limit,
+            ":expiresAt": expiresAt,
+            ":kind": "source-throttle",
+          },
+        }));
+        return "created";
+      } catch (error) {
+        if (error?.name === "ConditionalCheckFailedException") return "limited";
+        throw error;
+      }
+    },
+
     async reserveEmailRequest({ throttleKey, now, expiresAt }) {
       try {
         await documentClient.send(new PutCommand({
