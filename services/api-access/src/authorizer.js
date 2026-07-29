@@ -32,8 +32,6 @@ export function createApiKeyAuthorizer({ service, requiredScope = "repository:au
           scopes: context.scopes.join(" "),
           subscriptionStatus: context.subscriptionStatus,
           usageRemaining: usage.remaining,
-          creditsRemaining: usage.remaining,
-          creditsCharged: usage.chargedCredits,
         },
       };
     } catch {
