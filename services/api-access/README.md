@@ -11,7 +11,7 @@ One SolveLang credit covers up to:
 
 The larger token dimension determines the charge. Every authenticated API request consumes at least one credit. Hosted OpenAI completions are capped at 1,000 output tokens per call.
 
-Paid Express, Priority, and Critical processing are intentionally disabled. Non-standard priority values fail closed and cannot consume additional credits. Those lanes will launch only after a queue-backed worker uses the selected priority to change real execution order.
+Paid Express, Priority, and Critical processing are intentionally disabled. Non-standard priority values fail closed and cannot consume additional credits. The isolated queue-canary stack now implements real 1/2/5/10 worker lanes, but customers cannot access or pay for them until every activation gate in [PRIORITY_QUEUE.md](./PRIORITY_QUEUE.md) passes.
 
 ## Subscription plans
 
@@ -75,6 +75,8 @@ Customer and public routes:
 
 Internal routes remain admin-secret protected. The browser never receives the administrative secret, and customer ownership is derived from the authenticated server-side session.
 
+The standalone priority canary stack exposes a separate server-only admin API. It is not connected to customer sessions, API keys, Stripe, or the credit ledger.
+
 ## Local tests
 
 ```bash
@@ -82,10 +84,14 @@ npm install --ignore-scripts --no-audit --no-fund
 npm test
 sam validate --lint --template template.yaml
 sam build --template template.yaml
+sam validate --lint --template priority-template.yaml
+sam build --template priority-template.yaml
 ```
 
 ## Test deployment
 
 The manual `Deploy API Access Test` workflow supports staged foundation, customer-account, and Stripe test-billing deployment. It only runs from `main`, uses the protected `api-access-test` environment, validates the exact advertised Price amounts and Products, and has no live or production option.
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for environment configuration and rollback steps.
+The manual `Deploy Priority Queue Test` workflow independently supports disabled foundation and four-lane canary deployment. Canary success requires Standard, Express, Priority, and Critical jobs to complete through their own FIFO lanes and every dispatch/lane failure queue to remain empty.
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for subscription environment configuration and [PRIORITY_QUEUE.md](./PRIORITY_QUEUE.md) for queue architecture, activation gates, and rollback.
