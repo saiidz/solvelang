@@ -18,22 +18,17 @@ function header(event, name) {
   return event?.headers?.[name.toLowerCase()] ?? event?.headers?.[name];
 }
 
-export function createPriorityAdminHandler({ service, enabled = false, adminSecret, siteOrigin, logger = console }) {
+export function createPriorityAdminHandler({ service, enabled = false, adminSecret, logger = console }) {
   if (!service) throw new Error("Priority job service is required.");
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("Priority admin secret is required.");
-  if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
 
   function response(statusCode, body) {
     return {
       statusCode,
       headers: {
         "content-type": "application/json; charset=utf-8",
-        "access-control-allow-origin": siteOrigin,
-        "access-control-allow-methods": "GET,POST,OPTIONS",
-        "access-control-allow-headers": "content-type,x-solvelang-admin-secret",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
-        vary: "Origin",
       },
       body: JSON.stringify(body),
     };
@@ -49,7 +44,6 @@ export function createPriorityAdminHandler({ service, enabled = false, adminSecr
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
-      if (method === "OPTIONS") return response(204, {});
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, { status: "ok", service: "solvelang-priority-queue", enabled });
       }
