@@ -30,5 +30,5 @@ test("priority stack has encrypted FIFO lanes, DLQs, failure capture, and weight
   assert.match(source, /MaximumConcurrency: 2/);
   assert.match(source, /MaximumConcurrency: 5/);
   assert.match(source, /MaximumConcurrency: 10/);
-  assert.doesNotMatch(source, /MaximumConcurrency: 1/);
+  assert.doesNotMatch(source, /^\s+MaximumConcurrency: 1\s*$/m);
 });
