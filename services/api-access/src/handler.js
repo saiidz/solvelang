@@ -10,8 +10,6 @@ import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
 import { createCustomerEmailGateway } from "./customer-email.js";
 import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
-import { createDynamoPriorityJobStore } from "./priority-job-store.js";
-import { createPriorityJobService } from "./priority-jobs.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
@@ -44,14 +42,6 @@ if (environment.customerAccountsEnabled) {
   });
 }
 
-let priorityJobs;
-if (environment.priorityQueueEnabled) {
-  priorityJobs = createPriorityJobService({
-    store: createDynamoPriorityJobStore(documentClient, { jobsTable: environment.priorityJobsTable }),
-    enabled: true,
-  });
-}
-
 let stripeGateway;
 let subscriptionCheckout;
 let subscriptionLifecycle;
@@ -80,8 +70,6 @@ const application = createApiAccessHandler({
   customerAccountsEnabled: environment.customerAccountsEnabled,
   customerAuth,
   customerAccount,
-  priorityQueueEnabled: environment.priorityQueueEnabled,
-  priorityJobs,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
   subscriptionLifecycle,
