@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { PriorityJobError } from "./priority-jobs.js";
 import { ApiAccessError } from "./service.js";
 
 function secureEqual(left, right) {
@@ -30,6 +31,8 @@ export function createApiAccessHandler({
   customerAccountsEnabled = false,
   customerAuth,
   customerAccount,
+  priorityQueueEnabled = false,
+  priorityJobs,
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
   subscriptionLifecycle,
@@ -41,6 +44,9 @@ export function createApiAccessHandler({
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
   if (customerAccountsEnabled && (!customerAuth || !customerAccount)) {
     throw new Error("Customer account services are required when customer accounts are enabled.");
+  }
+  if (priorityQueueEnabled && !priorityJobs) {
+    throw new Error("Priority job service is required when the queue is enabled.");
   }
   if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionLifecycle || !stripeGateway)) {
     throw new Error("Stripe subscription services are required when billing is enabled.");
@@ -87,6 +93,7 @@ export function createApiAccessHandler({
           service: "solvelang-api-access",
           enabled,
           customerAccountsEnabled,
+          priorityQueueEnabled,
           subscriptionBillingEnabled,
         });
       }
@@ -183,9 +190,18 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/internal/usage/consume")) {
         return response(200, await service.consumeUsage(body));
       }
+      if (method === "POST" && path.endsWith("/internal/jobs/canary")) {
+        if (!priorityQueueEnabled) throw new PriorityJobError(503, "priority_queue_disabled", "Priority processing is not enabled.");
+        return response(202, await priorityJobs.submitCanary(body));
+      }
+      const jobMatch = path.match(/\/internal\/jobs\/(job_[a-f0-9]{32})$/);
+      if (method === "GET" && jobMatch) {
+        if (!priorityQueueEnabled) throw new PriorityJobError(503, "priority_queue_disabled", "Priority processing is not enabled.");
+        return response(200, await priorityJobs.getJob(jobMatch[1]));
+      }
       return response(404, { error: "Not found." });
     } catch (error) {
-      if (error instanceof ApiAccessError) {
+      if (error instanceof ApiAccessError || error instanceof PriorityJobError) {
         logger.error({ type: "api_access_error", code: error.code });
         return response(error.statusCode, { error: error.publicMessage, code: error.code });
       }
