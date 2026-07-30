@@ -1,6 +1,6 @@
-function required(environment, name) {
+function required(environment, name, minimum = 1) {
   const value = environment[name];
-  if (typeof value !== "string" || !value) throw new Error(`${name} is required.`);
+  if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`);
   return value;
 }
 
@@ -9,6 +9,15 @@ export function parsePriorityApiEnvironment(environment = process.env) {
   return {
     priorityQueueEnabled,
     priorityJobsTable: priorityQueueEnabled ? required(environment, "API_PRIORITY_JOBS_TABLE") : undefined,
+  };
+}
+
+export function parsePriorityAdminEnvironment(environment = process.env) {
+  return {
+    priorityQueueEnabled: environment.API_PRIORITY_QUEUE_ENABLED === "true",
+    priorityJobsTable: required(environment, "API_PRIORITY_JOBS_TABLE"),
+    adminSecret: required(environment, "API_PRIORITY_ADMIN_SECRET", 32),
+    siteOrigin: required(environment, "SITE_ORIGIN"),
   };
 }
 
