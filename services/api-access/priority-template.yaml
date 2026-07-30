@@ -82,38 +82,50 @@ Resources:
             Path: /internal/jobs/{jobId}
             Method: GET
 
+  PriorityDispatchFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-dispatch-failure
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
   StandardDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-standard-dlq
+      QueueName: !Sub ${AWS::StackName}-standard-dlq.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
   ExpressDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-express-dlq
+      QueueName: !Sub ${AWS::StackName}-express-dlq.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
   PriorityDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-priority-dlq
+      QueueName: !Sub ${AWS::StackName}-priority-dlq.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
   CriticalDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-critical-dlq
+      QueueName: !Sub ${AWS::StackName}-critical-dlq.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 1209600
       SqsManagedSseEnabled: true
 
   StandardQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-standard
+      QueueName: !Sub ${AWS::StackName}-standard.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 345600
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 90
@@ -125,7 +137,8 @@ Resources:
   ExpressQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-express
+      QueueName: !Sub ${AWS::StackName}-express.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 345600
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 90
@@ -137,7 +150,8 @@ Resources:
   PriorityQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-priority
+      QueueName: !Sub ${AWS::StackName}-priority.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 345600
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 90
@@ -149,7 +163,8 @@ Resources:
   CriticalQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ${AWS::StackName}-critical
+      QueueName: !Sub ${AWS::StackName}-critical.fifo
+      FifoQueue: true
       MessageRetentionPeriod: 345600
       ReceiveMessageWaitTimeSeconds: 20
       VisibilityTimeout: 90
@@ -183,6 +198,8 @@ Resources:
             QueueName: !GetAtt PriorityQueue.QueueName
         - SQSSendMessagePolicy:
             QueueName: !GetAtt CriticalQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt PriorityDispatchFailureQueue.QueueName
         - Statement:
             Effect: Allow
             Action:
@@ -201,6 +218,10 @@ Resources:
             MaximumBatchingWindowInSeconds: 1
             BisectBatchOnFunctionError: true
             MaximumRetryAttempts: 3
+            MaximumRecordAgeInSeconds: 3600
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt PriorityDispatchFailureQueue.Arn
             FunctionResponseTypes:
               - ReportBatchItemFailures
             FilterCriteria:
@@ -322,3 +343,13 @@ Outputs:
     Value: !Ref PriorityQueueMode
   PriorityJobsTableName:
     Value: !Ref PriorityJobsTable
+  PriorityDispatchFailureQueueUrl:
+    Value: !Ref PriorityDispatchFailureQueue
+  StandardDeadLetterQueueUrl:
+    Value: !Ref StandardDeadLetterQueue
+  ExpressDeadLetterQueueUrl:
+    Value: !Ref ExpressDeadLetterQueue
+  PriorityDeadLetterQueueUrl:
+    Value: !Ref PriorityDeadLetterQueue
+  CriticalDeadLetterQueueUrl:
+    Value: !Ref CriticalDeadLetterQueue
