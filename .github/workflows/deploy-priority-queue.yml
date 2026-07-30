@@ -35,7 +35,6 @@ jobs:
       PRIORITY_QUEUE_ENABLED: ${{ inputs.stage == 'canary' && 'true' || 'false' }}
       AWS_REGION: ${{ vars.AWS_REGION }}
       STACK_NAME: ${{ vars.PRIORITY_QUEUE_STACK_NAME }}
-      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
       PRIORITY_ADMIN_SECRET: ${{ secrets.API_PRIORITY_ADMIN_SECRET }}
 
     steps:
@@ -47,7 +46,6 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]]
           [[ "${{ inputs.confirm_test_only }}" == "true" ]]
           [[ "$STACK_NAME" == *test* ]]
-          [[ "$SITE_ORIGIN" == https://* ]]
           [[ ${#PRIORITY_ADMIN_SECRET} -ge 32 ]]
           test -n "$AWS_REGION"
       - uses: actions/setup-node@v4
@@ -99,7 +97,6 @@ jobs:
             --parameter-overrides \
               PriorityQueueEnabled="$PRIORITY_QUEUE_ENABLED" \
               PriorityQueueMode="test" \
-              SiteOrigin="$SITE_ORIGIN" \
               PriorityAdminSecret="$PRIORITY_ADMIN_SECRET"
       - name: Verify health and feature state
         id: verify
@@ -154,5 +151,5 @@ jobs:
         env:
           API_BASE: ${{ steps.verify.outputs.api_base }}
         run: |
-          printf '## SolveLang priority queue test deployment\n\n- Stage: `%s`\n- Stack: `%s`\n- Region: `%s`\n- Admin API: `%s`\n- Queue enabled: `%s`\n\nNo customer submission, paid credits, production, or live-mode path is enabled.\n' \
+          printf '## SolveLang priority queue test deployment\n\n- Stage: `%s`\n- Stack: `%s`\n- Region: `%s`\n- Admin API: `%s`\n- Queue enabled: `%s`\n\nNo browser CORS, customer submission, paid credits, production, or live-mode path is enabled.\n' \
             "$DEPLOYMENT_STAGE" "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$PRIORITY_QUEUE_ENABLED" >> "$GITHUB_STEP_SUMMARY"
