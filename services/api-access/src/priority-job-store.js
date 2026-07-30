@@ -13,6 +13,15 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
   if (!documentClient) throw new Error("DynamoDB document client is required.");
   required(jobsTable, "Priority jobs table");
 
+  async function readJob(jobId) {
+    const response = await documentClient.send(new GetCommand({
+      TableName: jobsTable,
+      Key: { jobId },
+      ConsistentRead: true,
+    }));
+    return response.Item;
+  }
+
   return {
     async putJob(job) {
       try {
@@ -28,14 +37,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       }
     },
 
-    async getJob(jobId) {
-      const response = await documentClient.send(new GetCommand({
-        TableName: jobsTable,
-        Key: { jobId },
-        ConsistentRead: true,
-      }));
-      return response.Item;
-    },
+    getJob: readJob,
 
     async markDispatched(jobId, queueMessageId, dispatchedAt) {
       try {
@@ -59,13 +61,13 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       }
     },
 
-    async claimJob(jobId, lane, workerId, startedAt) {
+    async claimJob(jobId, lane, workerId, claimedAt, leaseExpiresAt) {
       try {
         const response = await documentClient.send(new UpdateCommand({
           TableName: jobsTable,
           Key: { jobId },
-          UpdateExpression: "SET #status = :processing, workerId = :workerId, startedAt = if_not_exists(startedAt, :startedAt), attempts = if_not_exists(attempts, :zero) + :one",
-          ConditionExpression: "priority = :lane AND #status IN (:queued, :dispatched)",
+          UpdateExpression: "SET #status = :processing, workerId = :workerId, startedAt = if_not_exists(startedAt, :startedAt), leaseExpiresAt = :leaseExpiresAt, attempts = if_not_exists(attempts, :zero) + :one",
+          ConditionExpression: "priority = :lane AND (#status IN (:queued, :dispatched) OR (#status = :processing AND leaseExpiresAt <= :claimedAt))",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: {
             ":lane": lane,
@@ -73,7 +75,9 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
             ":dispatched": "dispatched",
             ":processing": "processing",
             ":workerId": workerId,
-            ":startedAt": startedAt,
+            ":startedAt": new Date(claimedAt).toISOString(),
+            ":claimedAt": claimedAt,
+            ":leaseExpiresAt": leaseExpiresAt,
             ":zero": 0,
             ":one": 1,
           },
@@ -81,7 +85,13 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
         }));
         return { status: "claimed", job: response.Attributes };
       } catch (error) {
-        if (conditional(error)) return { status: "unavailable" };
+        if (!conditional(error)) throw error;
+        const job = await readJob(jobId);
+        if (!job || job.priority !== lane) return { status: "invalid" };
+        if (job.status === "complete" || job.status === "failed") return { status: "terminal", job };
+        if (job.status === "processing" && Number.isSafeInteger(job.leaseExpiresAt) && job.leaseExpiresAt > claimedAt) {
+          return { status: "busy", job };
+        }
         throw error;
       }
     },
@@ -90,7 +100,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :dispatched, lastErrorCode = :errorCode, lastFailedAt = :failedAt REMOVE workerId",
+        UpdateExpression: "SET #status = :dispatched, lastErrorCode = :errorCode, lastFailedAt = :failedAt REMOVE workerId, leaseExpiresAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
@@ -107,7 +117,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :failed, errorCode = :errorCode, failedAt = :failedAt REMOVE workerId",
+        UpdateExpression: "SET #status = :failed, errorCode = :errorCode, failedAt = :failedAt REMOVE workerId, leaseExpiresAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
@@ -124,7 +134,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :complete, #result = :result, completedAt = :completedAt REMOVE workerId, lastErrorCode, lastFailedAt",
+        UpdateExpression: "SET #status = :complete, #result = :result, completedAt = :completedAt REMOVE workerId, leaseExpiresAt, lastErrorCode, lastFailedAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status", "#result": "result" },
         ExpressionAttributeValues: {
