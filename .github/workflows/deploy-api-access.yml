@@ -157,7 +157,32 @@ jobs:
       - name: Deploy staged test stack
         env:
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        shell: bash
         run: |
+          set -euo pipefail
+          parameter_overrides=(
+            ApiAccessEnabled="$API_ACCESS_ENABLED"
+            ApiAccessMode="$API_ACCESS_MODE"
+            CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED"
+            SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED"
+            SiteOrigin="$SITE_ORIGIN"
+            ApiKeyPepper="$API_KEY_PEPPER"
+            ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+          )
+          append_parameter() {
+            local name="$1"
+            local value="$2"
+            [[ -z "$value" ]] || parameter_overrides+=("${name}=${value}")
+          }
+          append_parameter CustomerAuthPepper "$CUSTOMER_AUTH_PEPPER"
+          append_parameter CustomerAuthEmailSender "$CUSTOMER_AUTH_EMAIL_SENDER"
+          append_parameter CustomerAuthEmailReplyTo "$CUSTOMER_AUTH_EMAIL_REPLY_TO"
+          append_parameter StripeSecretKey "$STRIPE_SECRET_KEY"
+          append_parameter StripeSubscriptionWebhookSecret "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET"
+          append_parameter StripeApiDeveloperPriceId "$STRIPE_API_DEVELOPER_PRICE_ID"
+          append_parameter StripeApiProPriceId "$STRIPE_API_PRO_PRICE_ID"
+          append_parameter StripeApiBusinessPriceId "$STRIPE_API_BUSINESS_PRICE_ID"
+
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \
@@ -165,22 +190,7 @@ jobs:
             --capabilities CAPABILITY_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              ApiAccessEnabled="$API_ACCESS_ENABLED" \
-              ApiAccessMode="$API_ACCESS_MODE" \
-              CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED" \
-              SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED" \
-              SiteOrigin="$SITE_ORIGIN" \
-              ApiKeyPepper="$API_KEY_PEPPER" \
-              ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET" \
-              CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER" \
-              CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER" \
-              CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO" \
-              StripeSecretKey="$STRIPE_SECRET_KEY" \
-              StripeSubscriptionWebhookSecret="$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" \
-              StripeApiDeveloperPriceId="$STRIPE_API_DEVELOPER_PRICE_ID" \
-              StripeApiProPriceId="$STRIPE_API_PRO_PRICE_ID" \
-              StripeApiBusinessPriceId="$STRIPE_API_BUSINESS_PRICE_ID"
+            --parameter-overrides "${parameter_overrides[@]}"
 
       - name: Verify deployed health and feature flags
         id: verify
