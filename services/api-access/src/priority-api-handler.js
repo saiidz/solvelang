@@ -15,7 +15,6 @@ const application = createPriorityAdminHandler({
   service,
   enabled: environment.priorityQueueEnabled,
   adminSecret: environment.adminSecret,
-  siteOrigin: environment.siteOrigin,
 });
 
 export async function handler(event) {
