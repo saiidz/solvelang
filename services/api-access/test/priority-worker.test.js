@@ -8,12 +8,14 @@ function sqsRecord(jobId, priority, messageId = "message-1") {
 
 test("critical workers claim only critical jobs and persist real lane capacity", async () => {
   const completed = [];
+  const claims = [];
+  const fixedNow = Date.UTC(2026, 6, 29, 20, 0, 0);
   const worker = createPriorityWorker({
     laneName: "critical",
     workerId: "critical-worker-1",
-    now: () => Date.UTC(2026, 6, 29, 20, 0, 0),
+    now: () => fixedNow,
     jobStore: {
-      claimJob: async () => ({ status: "claimed", job: { jobType: "queue_canary", sourceFingerprint: "a".repeat(64) } }),
+      claimJob: async (...args) => { claims.push(args); return { status: "claimed", job: { jobType: "queue_canary", sourceFingerprint: "a".repeat(64) } }; },
       completeJob: async (...args) => completed.push(args),
       releaseJob: async () => {},
       failJob: async () => {},
@@ -22,11 +24,13 @@ test("critical workers claim only critical jobs and persist real lane capacity",
   });
   const result = await worker({ Records: [sqsRecord("job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "critical")] });
   assert.deepEqual(result, { batchItemFailures: [] });
+  assert.equal(claims[0][3], fixedNow);
+  assert.equal(claims[0][4], fixedNow + 60_000);
   assert.equal(completed[0][2].capacityWeight, 10);
   assert.equal(completed[0][2].processedBy, "critical-worker-1");
 });
 
-test("wrong-lane messages fail for retry and duplicate deliveries are skipped", async () => {
+test("wrong-lane messages fail, completed duplicates skip, and active leases retry", async () => {
   const wrongLane = createPriorityWorker({
     laneName: "express",
     jobStore: {
@@ -46,7 +50,7 @@ test("wrong-lane messages fail for retry and duplicate deliveries are skipped", 
   const duplicate = createPriorityWorker({
     laneName: "standard",
     jobStore: {
-      claimJob: async () => ({ status: "unavailable" }),
+      claimJob: async () => ({ status: "terminal" }),
       completeJob: async () => { completed = true; },
       releaseJob: async () => {},
       failJob: async () => {},
@@ -55,9 +59,21 @@ test("wrong-lane messages fail for retry and duplicate deliveries are skipped", 
   });
   assert.deepEqual(await duplicate({ Records: [sqsRecord("job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "standard")] }), { batchItemFailures: [] });
   assert.equal(completed, false);
+
+  const busy = createPriorityWorker({
+    laneName: "standard",
+    jobStore: {
+      claimJob: async () => ({ status: "busy" }),
+      completeJob: async () => {},
+      releaseJob: async () => { throw new Error("busy workers must not release another lease"); },
+      failJob: async () => {},
+    },
+    logger: { error() {} },
+  });
+  assert.deepEqual(await busy({ Records: [sqsRecord("job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "standard", "busy")] }), { batchItemFailures: [{ itemIdentifier: "busy" }] });
 });
 
-test("third receive marks the job failed before the message moves to its DLQ", async () => {
+test("third receive marks a claimed job failed before the message moves to its DLQ", async () => {
   const failed = [];
   const worker = createPriorityWorker({
     laneName: "priority",
