@@ -30,6 +30,18 @@ test("deployment stages fail closed before customer accounts or billing", async 
   assert.match(source, /CUSTOMER_AUTH_PEPPER.*API_ACCESS_ADMIN_SECRET/s);
 });
 
+test("optional staged parameters are omitted instead of passed as empty NAME= values", async () => {
+  const source = await workflow();
+  assert.match(source, /parameter_overrides=\(/);
+  assert.match(source, /append_parameter\(\)/);
+  assert.match(source, /\[\[ -z "\$value" \]\] \|\| parameter_overrides\+=/);
+  assert.match(source, /append_parameter CustomerAuthEmailSender/);
+  assert.match(source, /append_parameter StripeSecretKey/);
+  assert.match(source, /--parameter-overrides "\$\{parameter_overrides\[@\]\}"/);
+  assert.doesNotMatch(source, /^\s+CustomerAuthEmailSender="\$CUSTOMER_AUTH_EMAIL_SENDER" \\$/m);
+  assert.doesNotMatch(source, /^\s+StripeSecretKey="\$STRIPE_SECRET_KEY" \\$/m);
+});
+
 test("customer and billing deployment verify external prerequisites", async () => {
   const source = await workflow();
   assert.match(source, /aws sesv2 get-email-identity/);
