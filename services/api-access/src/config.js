@@ -1,3 +1,5 @@
+import { parsePriorityApiEnvironment } from "./priority-config.js";
+
 function required(environment, name, minimum = 1) {
   const value = environment[name];
   if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`);
@@ -56,6 +58,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
     ...usage(environment),
     ...billing(environment),
     ...customerAccounts(environment),
+    ...parsePriorityApiEnvironment(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
     siteOrigin: required(environment, "SITE_ORIGIN"),
   };
