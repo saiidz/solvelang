@@ -7,11 +7,10 @@ function event(method, rawPath, body, headers = {}) {
   return { rawPath, headers, body: body === undefined ? undefined : JSON.stringify(body), requestContext: { http: { method } } };
 }
 
-test("priority admin API is healthy but protects all job routes", async () => {
+test("priority admin API is healthy, browser-isolated, and protects all job routes", async () => {
   const handler = createPriorityAdminHandler({
     enabled: true,
     adminSecret,
-    siteOrigin: "https://www.solve-lang.com",
     service: {
       submitCanary: async (body) => ({ jobId: "job_" + "a".repeat(32), ...body }),
       getJob: async (jobId) => ({ jobId, status: "complete" }),
@@ -20,6 +19,7 @@ test("priority admin API is healthy but protects all job routes", async () => {
   });
   const health = await handler(event("GET", "/health"));
   assert.deepEqual(JSON.parse(health.body), { status: "ok", service: "solvelang-priority-queue", enabled: true });
+  assert.equal(health.headers["access-control-allow-origin"], undefined);
   const denied = await handler(event("POST", "/internal/jobs/canary", {}));
   assert.equal(denied.statusCode, 403);
   const accepted = await handler(event("POST", "/internal/jobs/canary", { requestId: "canary_12345678" }, { "x-solvelang-admin-secret": adminSecret }));
