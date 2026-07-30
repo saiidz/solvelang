@@ -11,9 +11,6 @@ Parameters:
     Type: String
     AllowedValues: [test]
     Default: test
-  SiteOrigin:
-    Type: String
-    Default: https://www.solve-lang.com
   PriorityAdminSecret:
     Type: String
     NoEcho: true
@@ -50,14 +47,6 @@ Resources:
 
   PriorityAdminHttpApi:
     Type: AWS::Serverless::HttpApi
-    Properties:
-      CorsConfiguration:
-        AllowOrigins:
-          - !Ref SiteOrigin
-        AllowMethods: [GET, POST, OPTIONS]
-        AllowHeaders:
-          - content-type
-          - x-solvelang-admin-secret
 
   PriorityAdminFunction:
     Type: AWS::Serverless::Function
@@ -70,7 +59,6 @@ Resources:
           API_PRIORITY_QUEUE_ENABLED: !Ref PriorityQueueEnabled
           API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
           API_PRIORITY_ADMIN_SECRET: !Ref PriorityAdminSecret
-          SITE_ORIGIN: !Ref SiteOrigin
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PriorityJobsTable
