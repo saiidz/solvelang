@@ -1,0 +1,173 @@
+name: Deploy Priority Queue Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Priority queue test stage
+        required: true
+        default: foundation
+        type: choice
+        options: [foundation, canary]
+      confirm_test_only:
+        description: Confirm this is a test-only deployment
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: priority-queue-test-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-test
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      DEPLOYMENT_STAGE: ${{ inputs.stage }}
+      PRIORITY_QUEUE_ENABLED: ${{ inputs.stage == 'canary' && 'true' || 'false' }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.PRIORITY_QUEUE_STACK_NAME }}
+      PRIORITY_ADMIN_SECRET: ${{ secrets.API_PRIORITY_ADMIN_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse non-main or unconfirmed deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "${{ inputs.confirm_test_only }}" == "true" ]]
+          [[ "$STACK_NAME" == *test* ]]
+          [[ ${#PRIORITY_ADMIN_SECRET} -ge 32 ]]
+          test -n "$AWS_REGION"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run queue tests
+        run: npm test
+      - name: Validate and build priority queue stack
+        run: |
+          sam validate --lint --template priority-template.yaml
+          sam build --template priority-template.yaml --build-dir .aws-sam/priority-queue
+      - name: Prepare private SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          bucket="solvelang-priority-artifacts-${account_id}-${AWS_REGION}"
+          if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+            if [[ "$AWS_REGION" == "us-east-1" ]]; then
+              aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION"
+            else
+              aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION" --create-bucket-configuration "LocationConstraint=$AWS_REGION"
+            fi
+            aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+            aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+            aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          fi
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+      - name: Deploy priority queue test stack
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        run: |
+          sam deploy \
+            --template-file .aws-sam/priority-queue/template.yaml \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              PriorityQueueEnabled="$PRIORITY_QUEUE_ENABLED" \
+              PriorityQueueMode="test" \
+              PriorityAdminSecret="$PRIORITY_ADMIN_SECRET"
+      - name: Verify health and feature state
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`PriorityAdminBaseUrl`].OutputValue' --output text)"
+          mode="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`PriorityQueueModeState`].OutputValue' --output text)"
+          test -n "$api_base"
+          [[ "$mode" == "test" ]]
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e --argjson enabled "$PRIORITY_QUEUE_ENABLED" '.status == "ok" and .service == "solvelang-priority-queue" and .enabled == $enabled' <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+      - name: Submit and verify all four queue lanes
+        if: ${{ inputs.stage == 'canary' }}
+        shell: bash
+        env:
+          API_BASE: ${{ steps.verify.outputs.api_base }}
+        run: |
+          set -euo pipefail
+          fingerprint="$(printf '%s' "priority-canary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" | sha256sum | cut -d' ' -f1)"
+          submit() {
+            local lane="$1"
+            curl --fail --silent --show-error \
+              -H "content-type: application/json" \
+              -H "x-solvelang-admin-secret: $PRIORITY_ADMIN_SECRET" \
+              -d "{\"requestId\":\"canary_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}_${lane}\",\"priority\":\"${lane}\",\"sourceFingerprint\":\"${fingerprint}\"}" \
+              "$API_BASE/internal/jobs/canary" | jq -r '.jobId'
+          }
+          wait_for_job() {
+            local job_id="$1" lane="$2" expected_weight="$3"
+            for _ in $(seq 1 60); do
+              response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $PRIORITY_ADMIN_SECRET" "$API_BASE/internal/jobs/$job_id")"
+              status="$(jq -r '.status' <<<"$response")"
+              if [[ "$status" == "complete" ]]; then
+                jq -e --arg lane "$lane" --argjson weight "$expected_weight" '.priority == $lane and .capacityWeight == $weight and .result.priority == $lane and .result.capacityWeight == $weight' <<<"$response" >/dev/null
+                return 0
+              fi
+              [[ "$status" != "failed" ]] || { echo "$response" >&2; return 1; }
+              sleep 2
+            done
+            echo "Timed out waiting for $lane job $job_id" >&2
+            return 1
+          }
+          standard_job="$(submit standard)"
+          express_job="$(submit express)"
+          priority_job="$(submit priority)"
+          critical_job="$(submit critical)"
+          wait_for_job "$standard_job" standard 1
+          wait_for_job "$express_job" express 2
+          wait_for_job "$priority_job" priority 5
+          wait_for_job "$critical_job" critical 10
+      - name: Verify dispatch and lane failure queues are empty
+        if: ${{ inputs.stage == 'canary' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for output_key in \
+            PriorityDispatchFailureQueueUrl \
+            StandardDeadLetterQueueUrl \
+            ExpressDeadLetterQueueUrl \
+            PriorityDeadLetterQueueUrl \
+            CriticalDeadLetterQueueUrl; do
+            queue_url="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey==\`${output_key}\`].OutputValue" --output text)"
+            test -n "$queue_url"
+            attributes="$(aws sqs get-queue-attributes --queue-url "$queue_url" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed --query Attributes --output json)"
+            jq -e '([.ApproximateNumberOfMessages, .ApproximateNumberOfMessagesNotVisible, .ApproximateNumberOfMessagesDelayed] | map(tonumber) | add) == 0' <<<"$attributes" >/dev/null
+          done
+      - name: Write deployment summary
+        env:
+          API_BASE: ${{ steps.verify.outputs.api_base }}
+        run: |
+          printf '## SolveLang priority queue test deployment\n\n- Stage: `%s`\n- Stack: `%s`\n- Region: `%s`\n- Admin API: `%s`\n- Queue enabled: `%s`\n\nNo browser CORS, customer submission, paid credits, production, or live-mode path is enabled.\n' \
+            "$DEPLOYMENT_STAGE" "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$PRIORITY_QUEUE_ENABLED" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,71 @@
+import { getPriorityLane } from "./priority-lanes.js";
+
+const WORKER_LEASE_MS = 60_000;
+
+function parseMessage(record) {
+  const payload = JSON.parse(record?.body ?? "");
+  if (
+    payload?.schemaVersion !== 1
+    || typeof payload.jobId !== "string"
+    || !/^job_[a-f0-9]{32}$/.test(payload.jobId)
+    || typeof payload.priority !== "string"
+  ) {
+    throw new Error("Priority queue message is invalid.");
+  }
+  return payload;
+}
+
+export function createPriorityWorker({ laneName, jobStore, now = Date.now, workerId = "priority-worker", logger = console }) {
+  const lane = getPriorityLane(laneName);
+  if (!jobStore || typeof jobStore.claimJob !== "function" || typeof jobStore.completeJob !== "function" || typeof jobStore.releaseJob !== "function" || typeof jobStore.failJob !== "function") {
+    throw new Error("Priority job store is required.");
+  }
+
+  return async function work(event = {}) {
+    const failures = [];
+    for (const record of event.Records ?? []) {
+      let message;
+      let claimed = false;
+      try {
+        message = parseMessage(record);
+        if (message.priority !== lane.name) throw new Error("Priority queue message was sent to the wrong lane.");
+        const claimedAt = now();
+        const claim = await jobStore.claimJob(message.jobId, lane.name, workerId, claimedAt, claimedAt + WORKER_LEASE_MS);
+        if (claim.status === "terminal") continue;
+        if (claim.status === "busy") {
+          logger.error({ type: "priority_worker_busy", lane: lane.name, messageId: record?.messageId });
+          failures.push({ itemIdentifier: record?.messageId ?? "unknown" });
+          continue;
+        }
+        if (claim.status !== "claimed") throw new Error("Priority job could not be claimed.");
+        claimed = true;
+        const job = claim.job;
+        if (job.jobType !== "queue_canary") throw new Error("Unsupported priority job type.");
+        const completedAt = new Date(now()).toISOString();
+        await jobStore.completeJob(message.jobId, workerId, {
+          schemaVersion: 1,
+          jobType: job.jobType,
+          priority: lane.name,
+          capacityWeight: lane.capacityWeight,
+          sourceFingerprint: job.sourceFingerprint,
+          processedBy: workerId,
+        }, completedAt);
+      } catch {
+        const messageId = record?.messageId ?? "unknown";
+        const receiveCount = Number.parseInt(record?.attributes?.ApproximateReceiveCount ?? "1", 10);
+        if (claimed && message?.jobId) {
+          const failedAt = new Date(now()).toISOString();
+          try {
+            if (receiveCount >= 3) await jobStore.failJob(message.jobId, workerId, "worker_failed", failedAt);
+            else await jobStore.releaseJob(message.jobId, workerId, "worker_retry", failedAt);
+          } catch {
+            // The queue retry and expiring lease remain authoritative when cleanup also fails.
+          }
+        }
+        logger.error({ type: "priority_worker_failed", lane: lane.name, messageId });
+        failures.push({ itemIdentifier: messageId });
+      }
+    }
+    return { batchItemFailures: failures };
+  };
+}
