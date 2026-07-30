@@ -56,12 +56,14 @@ test("internal routes require a constant-time admin secret and return the plaint
   assert.equal(issued.headers["cache-control"], "no-store");
 });
 
-test("customer routes derive ownership from the authenticated session and require CSRF", async () => {
+test("customer routes use HTTP API v2 cookies, derive ownership from the session, and require CSRF", async () => {
   const seen = [];
   const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok" };
+  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const logoutCookie = "sl_api_session=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
   const customerAuth = {
     requestMagicLink: async (body) => seen.push(["magic", body.email]),
-    verifyMagicLink: async () => ({ ...session, cookie: "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=Lax" }),
+    verifyMagicLink: async () => ({ ...session, cookie: sessionCookie }),
     authenticate: async (cookie) => {
       seen.push(["cookie", cookie]);
       return session;
@@ -69,7 +71,10 @@ test("customer routes derive ownership from the authenticated session and requir
     assertCsrf: (_session, presented) => {
       if (presented !== session.csrfToken) throw new ApiAccessError(403, "invalid_csrf", "The request could not be verified.");
     },
-    logout: async () => "sl_api_session=; Path=/; Max-Age=0",
+    logout: async (cookie) => {
+      seen.push(["logout-cookie", cookie]);
+      return logoutCookie;
+    },
   };
   const customerAccount = {
     getDashboard: async (authenticated) => ({ accountId: authenticated.accountId, email: authenticated.email, keys: [] }),
@@ -94,21 +99,39 @@ test("customer routes derive ownership from the authenticated session and requir
   assert.equal(requested.statusCode, 202);
   assert.deepEqual(JSON.parse(requested.body), { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
 
-  const dashboard = await handler(event("GET", "/customer/account", undefined, { cookie: "sl_api_session=sess_test" }));
+  const verified = await handler(event("POST", "/customer/auth/verify", { token: "ml_test" }));
+  assert.equal(verified.statusCode, 200);
+  assert.deepEqual(verified.cookies, [sessionCookie]);
+  assert.equal(verified.headers["set-cookie"], undefined);
+
+  const dashboardEvent = event("GET", "/customer/account");
+  dashboardEvent.cookies = ["sl_api_session=sess_test", "other=value"];
+  const dashboard = await handler(dashboardEvent);
   assert.equal(dashboard.statusCode, 200);
   assert.equal(JSON.parse(dashboard.body).accountId, "acct_session");
   assert.equal(dashboard.headers["access-control-allow-credentials"], "true");
+  assert.deepEqual(seen.find((entry) => entry[0] === "cookie"), ["cookie", "sl_api_session=sess_test; other=value"]);
 
-  const denied = await handler(event("POST", "/customer/keys", { accountId: "acct_attacker", name: "Browser" }, { cookie: "sl_api_session=sess_test" }));
+  const deniedEvent = event("POST", "/customer/keys", { accountId: "acct_attacker", name: "Browser" });
+  deniedEvent.cookies = ["sl_api_session=sess_test"];
+  const denied = await handler(deniedEvent);
   assert.equal(denied.statusCode, 403);
   assert.equal(JSON.parse(denied.body).code, "invalid_csrf");
 
-  const issued = await handler(event("POST", "/customer/keys", { accountId: "acct_attacker", name: "Browser" }, {
-    cookie: "sl_api_session=sess_test",
+  const issuedEvent = event("POST", "/customer/keys", { accountId: "acct_attacker", name: "Browser" }, {
     "x-solvelang-csrf": "csrf_ok",
-  }));
+  });
+  issuedEvent.cookies = ["sl_api_session=sess_test"];
+  const issued = await handler(issuedEvent);
   assert.equal(issued.statusCode, 201);
   assert.deepEqual(seen.find((entry) => entry[0] === "issue"), ["issue", "acct_session", "acct_attacker", "Browser"]);
+
+  const logoutEvent = event("POST", "/customer/auth/logout", undefined, { "x-solvelang-csrf": "csrf_ok" });
+  logoutEvent.cookies = ["sl_api_session=sess_test"];
+  const loggedOut = await handler(logoutEvent);
+  assert.equal(loggedOut.statusCode, 200);
+  assert.deepEqual(loggedOut.cookies, [logoutCookie]);
+  assert.deepEqual(seen.find((entry) => entry[0] === "logout-cookie"), ["logout-cookie", "sl_api_session=sess_test"]);
 });
 
 test("signed Stripe webhooks bypass admin auth but require signature verification", async () => {

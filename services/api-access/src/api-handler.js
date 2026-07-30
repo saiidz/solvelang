@@ -22,6 +22,14 @@ function header(event, name) {
   return event?.headers?.[name.toLowerCase()] ?? event?.headers?.[name];
 }
 
+function cookieHeader(event) {
+  const direct = header(event, "cookie");
+  if (typeof direct === "string" && direct) return direct;
+  if (!Array.isArray(event?.cookies)) return undefined;
+  const cookies = event.cookies.filter((cookie) => typeof cookie === "string" && cookie);
+  return cookies.length > 0 ? cookies.join("; ") : undefined;
+}
+
 export function createApiAccessHandler({
   service,
   enabled = false,
@@ -46,7 +54,7 @@ export function createApiAccessHandler({
     throw new Error("Stripe subscription services are required when billing is enabled.");
   }
 
-  function response(statusCode, body, extraHeaders = {}) {
+  function response(statusCode, body, extraHeaders = {}, cookies = []) {
     return {
       statusCode,
       headers: {
@@ -60,6 +68,7 @@ export function createApiAccessHandler({
         vary: "Origin",
         ...extraHeaders,
       },
+      ...(cookies.length > 0 ? { cookies } : {}),
       body: JSON.stringify(body),
     };
   }
@@ -71,7 +80,7 @@ export function createApiAccessHandler({
 
   async function customerSession(event, mutation = false) {
     if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-    const session = await customerAuth.authenticate(header(event, "cookie"));
+    const session = await customerAuth.authenticate(cookieHeader(event));
     if (mutation) customerAuth.assertCsrf(session, header(event, "x-solvelang-csrf"));
     return session;
   }
@@ -117,12 +126,12 @@ export function createApiAccessHandler({
           accountId: verified.accountId,
           email: verified.email,
           csrfToken: verified.csrfToken,
-        }, { "set-cookie": verified.cookie });
+        }, {}, [verified.cookie]);
       }
       if (method === "POST" && path.endsWith("/customer/auth/logout")) {
         const session = await customerSession(event, true);
-        const cookie = await customerAuth.logout(header(event, "cookie"));
-        return response(200, { signedOut: true, accountId: session.accountId }, { "set-cookie": cookie });
+        const cookie = await customerAuth.logout(cookieHeader(event));
+        return response(200, { signedOut: true, accountId: session.accountId }, {}, [cookie]);
       }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
