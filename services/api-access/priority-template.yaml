@@ -1,0 +1,336 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang test-only priority queue canary stack with isolated weighted worker capacity
+
+Parameters:
+  PriorityQueueEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  PriorityQueueMode:
+    Type: String
+    AllowedValues: [test]
+    Default: test
+  SiteOrigin:
+    Type: String
+    Default: https://www.solve-lang.com
+  PriorityAdminSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+
+Conditions:
+  PriorityQueueIsEnabled: !Equals [!Ref PriorityQueueEnabled, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    CodeUri: .
+    Architectures: [arm64]
+    Tracing: Active
+
+Resources:
+  PriorityJobsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  PriorityAdminHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref SiteOrigin
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders:
+          - content-type
+          - x-solvelang-admin-secret
+
+  PriorityAdminFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/priority-api-handler.handler
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          API_PRIORITY_QUEUE_ENABLED: !Ref PriorityQueueEnabled
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_ADMIN_SECRET: !Ref PriorityAdminSecret
+          SITE_ORIGIN: !Ref SiteOrigin
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PriorityAdminHttpApi
+            Path: /health
+            Method: GET
+        SubmitCanary:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PriorityAdminHttpApi
+            Path: /internal/jobs/canary
+            Method: POST
+        JobStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref PriorityAdminHttpApi
+            Path: /internal/jobs/{jobId}
+            Method: GET
+
+  StandardDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-standard-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  ExpressDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-express-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  PriorityDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-priority-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  CriticalDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-critical-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  StandardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-standard
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt StandardDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  ExpressQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-express
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ExpressDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  PriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-priority
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PriorityDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  CriticalQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-critical
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CriticalDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  PriorityDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityQueueIsEnabled
+    Properties:
+      Handler: src/priority-dispatcher-handler.handler
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_STANDARD_QUEUE_URL: !Ref StandardQueue
+          API_PRIORITY_EXPRESS_QUEUE_URL: !Ref ExpressQueue
+          API_PRIORITY_PRIORITY_QUEUE_URL: !Ref PriorityQueue
+          API_PRIORITY_CRITICAL_QUEUE_URL: !Ref CriticalQueue
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt StandardQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ExpressQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt PriorityQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt CriticalQueue.QueueName
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:ListStreams
+            Resource: !GetAtt PriorityJobsTable.StreamArn
+      Events:
+        JobStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt PriorityJobsTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            BisectBatchOnFunctionError: true
+            MaximumRetryAttempts: 3
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"],"dynamodb":{"NewImage":{"status":{"S":["queued"]}}}}'
+
+  StandardWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityQueueIsEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: standard
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt StandardQueue.QueueName
+      Events:
+        StandardLane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt StandardQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 1
+
+  ExpressWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityQueueIsEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 2
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: express
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ExpressQueue.QueueName
+      Events:
+        ExpressLane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ExpressQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 2
+
+  PriorityWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityQueueIsEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: priority
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt PriorityQueue.QueueName
+      Events:
+        PriorityLane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt PriorityQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  CriticalWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityQueueIsEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 10
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: critical
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt CriticalQueue.QueueName
+      Events:
+        CriticalLane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CriticalQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 10
+
+Outputs:
+  PriorityAdminBaseUrl:
+    Value: !Sub https://${PriorityAdminHttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  PriorityQueueEnabledState:
+    Value: !Ref PriorityQueueEnabled
+  PriorityJobsTableName:
+    Value: !Ref PriorityJobsTable
