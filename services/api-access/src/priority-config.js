@@ -4,20 +4,11 @@ function required(environment, name, minimum = 1) {
   return value;
 }
 
-export function parsePriorityApiEnvironment(environment = process.env) {
-  const priorityQueueEnabled = environment.API_PRIORITY_QUEUE_ENABLED === "true";
-  return {
-    priorityQueueEnabled,
-    priorityJobsTable: priorityQueueEnabled ? required(environment, "API_PRIORITY_JOBS_TABLE") : undefined,
-  };
-}
-
 export function parsePriorityAdminEnvironment(environment = process.env) {
   return {
     priorityQueueEnabled: environment.API_PRIORITY_QUEUE_ENABLED === "true",
     priorityJobsTable: required(environment, "API_PRIORITY_JOBS_TABLE"),
     adminSecret: required(environment, "API_PRIORITY_ADMIN_SECRET", 32),
-    siteOrigin: required(environment, "SITE_ORIGIN"),
   };
 }
 
