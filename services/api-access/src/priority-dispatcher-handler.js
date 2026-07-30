@@ -10,8 +10,13 @@ const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const sqs = new SQSClient({});
 const application = createPriorityDispatcher({
   queueGateway: {
-    async send({ queueUrl, messageBody }) {
-      const response = await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: messageBody }));
+    async send({ queueUrl, messageBody, messageGroupId, messageDeduplicationId }) {
+      const response = await sqs.send(new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: messageBody,
+        MessageGroupId: messageGroupId,
+        MessageDeduplicationId: messageDeduplicationId,
+      }));
       if (!response.MessageId) throw new Error("SQS did not return a message ID.");
       return { messageId: response.MessageId };
     },
