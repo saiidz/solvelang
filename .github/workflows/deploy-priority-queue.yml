@@ -104,7 +104,9 @@ jobs:
         run: |
           set -euo pipefail
           api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`PriorityAdminBaseUrl`].OutputValue' --output text)"
+          mode="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`PriorityQueueModeState`].OutputValue' --output text)"
           test -n "$api_base"
+          [[ "$mode" == "test" ]]
           response="$(curl --fail --silent --show-error "$api_base/health")"
           jq -e --argjson enabled "$PRIORITY_QUEUE_ENABLED" '.status == "ok" and .service == "solvelang-priority-queue" and .enabled == $enabled' <<<"$response" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
@@ -147,6 +149,22 @@ jobs:
           wait_for_job "$express_job" express 2
           wait_for_job "$priority_job" priority 5
           wait_for_job "$critical_job" critical 10
+      - name: Verify dispatch and lane failure queues are empty
+        if: ${{ inputs.stage == 'canary' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for output_key in \
+            PriorityDispatchFailureQueueUrl \
+            StandardDeadLetterQueueUrl \
+            ExpressDeadLetterQueueUrl \
+            PriorityDeadLetterQueueUrl \
+            CriticalDeadLetterQueueUrl; do
+            queue_url="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey==\`${output_key}\`].OutputValue" --output text)"
+            test -n "$queue_url"
+            attributes="$(aws sqs get-queue-attributes --queue-url "$queue_url" --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible ApproximateNumberOfMessagesDelayed --query Attributes --output json)"
+            jq -e '([.ApproximateNumberOfMessages, .ApproximateNumberOfMessagesNotVisible, .ApproximateNumberOfMessagesDelayed] | map(tonumber) | add) == 0' <<<"$attributes" >/dev/null
+          done
       - name: Write deployment summary
         env:
           API_BASE: ${{ steps.verify.outputs.api_base }}
