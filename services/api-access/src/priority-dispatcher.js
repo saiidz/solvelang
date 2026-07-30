@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { getPriorityLane } from "./priority-lanes.js";
 
 function stringAttribute(image, name) {
@@ -13,7 +14,12 @@ function queuedJob(record) {
   const priority = stringAttribute(image, "priority");
   if (!jobId || !priority) throw new Error("Priority job stream record is invalid.");
   const lane = getPriorityLane(priority);
-  return { jobId, priority: lane.name };
+  const hash = Number.parseInt(createHash("sha256").update(jobId).digest("hex").slice(0, 8), 16);
+  return {
+    jobId,
+    priority: lane.name,
+    messageGroupId: `${lane.name}-${hash % lane.capacityWeight}`,
+  };
 }
 
 export function createPriorityDispatcher({ queueGateway, jobStore, queueUrls, now = Date.now, logger = console }) {
@@ -32,6 +38,8 @@ export function createPriorityDispatcher({ queueGateway, jobStore, queueUrls, no
         const result = await queueGateway.send({
           queueUrl: queueUrls[job.priority],
           messageBody: JSON.stringify({ schemaVersion: 1, jobId: job.jobId, priority: job.priority }),
+          messageGroupId: job.messageGroupId,
+          messageDeduplicationId: job.jobId,
         });
         await jobStore.markDispatched(job.jobId, result.messageId, new Date(now()).toISOString());
       } catch {
