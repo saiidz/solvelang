@@ -67,7 +67,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
           TableName: jobsTable,
           Key: { jobId },
           UpdateExpression: "SET #status = :processing, workerId = :workerId, startedAt = if_not_exists(startedAt, :startedAt), leaseExpiresAt = :leaseExpiresAt, attempts = if_not_exists(attempts, :zero) + :one",
-          ConditionExpression: "priority = :lane AND (#status IN (:queued, :dispatched) OR (#status = :processing AND leaseExpiresAt <= :claimedAt))",
+          ConditionExpression: "priority = :lane AND (#status IN (:queued, :dispatched) OR (#status = :processing AND (attribute_not_exists(leaseExpiresAt) OR leaseExpiresAt <= :claimedAt)))",
           ExpressionAttributeNames: { "#status": "status" },
           ExpressionAttributeValues: {
             ":lane": lane,
