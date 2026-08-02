@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createStripeSubscriptionGateway } from "../src/stripe-subscriptions.js";
 
-test("creates subscription Checkout with server-owned metadata and request idempotency", async () => {
+test("creates embedded subscription Checkout with server-owned metadata and request idempotency", async () => {
   const calls = [];
   const stripe = {
     checkout: {
       sessions: {
         create: async (params, options) => {
           calls.push({ params, options });
-          return { id: "cs_test_1", url: "https://checkout.stripe.test/session" };
+          return { id: "cs_test_1", client_secret: "cs_test_1_secret_test" };
         },
       },
     },
@@ -22,18 +22,18 @@ test("creates subscription Checkout with server-owned metadata and request idemp
     email: "dev@example.com",
     plan: "pro",
     priceId: "price_pro123",
-    successUrl: "https://www.solve-lang.com/account/api-keys/",
-    cancelUrl: "https://www.solve-lang.com/api-pricing/",
+    returnUrl: "https://www.solve-lang.com/account/api-keys/",
   });
   assert.equal(result.id, "cs_test_1");
   assert.deepEqual(calls[0], {
     params: {
       mode: "subscription",
+      ui_mode: "embedded",
+      redirect_on_completion: "if_required",
       client_reference_id: "acct_1",
       customer_email: "dev@example.com",
       line_items: [{ price: "price_pro123", quantity: 1 }],
-      success_url: "https://www.solve-lang.com/account/api-keys/",
-      cancel_url: "https://www.solve-lang.com/api-pricing/",
+      return_url: "https://www.solve-lang.com/account/api-keys/",
       metadata: { accountId: "acct_1", plan: "pro", requestId: "request_1" },
       subscription_data: { metadata: { accountId: "acct_1", email: "dev@example.com", plan: "pro" } },
     },
@@ -44,7 +44,7 @@ test("creates subscription Checkout with server-owned metadata and request idemp
 test("uses an existing Stripe customer instead of accepting a second email source", async () => {
   let params;
   const stripe = {
-    checkout: { sessions: { create: async (input) => { params = input; return { id: "cs_test_2", url: "https://checkout.stripe.test/2" }; } } },
+    checkout: { sessions: { create: async (input) => { params = input; return { id: "cs_test_2", client_secret: "cs_test_2_secret_test" }; } } },
     webhooks: { constructEvent() {} },
   };
   const gateway = createStripeSubscriptionGateway(stripe, "whsec_test");
@@ -55,8 +55,7 @@ test("uses an existing Stripe customer instead of accepting a second email sourc
     plan: "developer",
     priceId: "price_dev123",
     customerId: "cus_1",
-    successUrl: "https://www.solve-lang.com/success",
-    cancelUrl: "https://www.solve-lang.com/cancel",
+    returnUrl: "https://www.solve-lang.com/account/api-keys/",
   });
   assert.equal(params.customer, "cus_1");
   assert.equal(params.customer_email, undefined);
