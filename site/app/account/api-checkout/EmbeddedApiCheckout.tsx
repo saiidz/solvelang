@@ -9,6 +9,10 @@ import {
   newRequestId,
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
+import {
+  type ApiPlanKey,
+  resolveApiCheckoutStart,
+} from "@/app/account/core/api-checkout";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
@@ -19,7 +23,6 @@ const PLAN_DETAILS = {
   business: { name: "Business", price: "$699", credits: "50,000 weighted credits", keys: "5 active API keys" },
 } as const;
 
-type PlanKey = keyof typeof PLAN_DETAILS;
 type EmbeddedCheckoutStripe = Stripe & {
   initEmbeddedCheckout(options: {
     clientSecret: string;
@@ -33,15 +36,11 @@ type CheckoutSessionResponse = {
   url?: string;
 };
 
-function planFromQuery(value: string | null): PlanKey | null {
-  return value === "developer" || value === "pro" || value === "business" ? value : null;
-}
-
 export function EmbeddedApiCheckout() {
   const mountRef = useRef<HTMLDivElement>(null);
   const checkoutRef = useRef<StripeEmbeddedCheckout | null>(null);
   const startedRef = useRef(false);
-  const [plan, setPlan] = useState<PlanKey | null>(null);
+  const [plan, setPlan] = useState<ApiPlanKey | null>(null);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,16 +52,24 @@ export function EmbeddedApiCheckout() {
 
     async function startCheckout() {
       try {
-        if (!PUBLISHABLE_KEY) throw new Error("Stripe checkout is not configured.");
         const params = new URLSearchParams(window.location.search);
-        const selectedPlan = planFromQuery(params.get("plan"));
-        if (!selectedPlan) throw new Error("Choose a valid API plan before checkout.");
         const requestId = params.get("request_id") || newRequestId();
-        setPlan(selectedPlan);
-
         const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
-        if (account.subscription.plan) throw new Error("This account already has an API subscription.");
         if (!active) return;
+
+        const decision = resolveApiCheckoutStart(account.subscription.plan, params.get("plan"));
+        if (decision.kind === "existing-subscription") {
+          window.location.replace("/account/api-keys/?checkout=already-subscribed");
+          return;
+        }
+        if (decision.kind === "choose-plan") {
+          window.location.replace("/account/api-keys/?checkout=choose-plan");
+          return;
+        }
+        if (!PUBLISHABLE_KEY) throw new Error("Stripe checkout is not configured.");
+
+        const selectedPlan = decision.plan;
+        setPlan(selectedPlan);
         setEmail(account.email);
 
         const session = await customerApi<CheckoutSessionResponse>(
