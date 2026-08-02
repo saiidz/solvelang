@@ -10,10 +10,11 @@ import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
 import { createCustomerEmailGateway } from "./customer-email.js";
 import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
+import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
-import { createSubscriptionCheckoutService, createSubscriptionLifecycleService } from "./subscriptions.js";
+import { createSubscriptionLifecycleService } from "./subscriptions.js";
 
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -48,7 +49,7 @@ let subscriptionLifecycle;
 if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
-  subscriptionCheckout = createSubscriptionCheckoutService({
+  subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({
     gateway: stripeGateway,
     apiAccessService: service,
     priceIds: environment.priceIds,

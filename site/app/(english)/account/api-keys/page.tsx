@@ -97,14 +97,10 @@ export default function ApiKeysPage() {
     finally { setBusy(false); }
   }
 
-  async function startCheckout(plan: "developer" | "pro" | "business") {
-    if (!dashboard) return; setBusy(true); setError("");
-    try {
-      const result = await customerApi<{ url: string }>(API_BASE, "/customer/subscriptions/checkout", {
-        method: "POST", csrfToken: dashboard.csrfToken, body: JSON.stringify({ plan, requestId: newRequestId() }),
-      });
-      window.location.assign(result.url);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Checkout could not be started."); setBusy(false); }
+  function startCheckout(plan: "developer" | "pro" | "business") {
+    if (!dashboard) return;
+    const query = new URLSearchParams({ plan, request_id: newRequestId() });
+    window.location.assign(`/account/api-checkout/?${query.toString()}`);
   }
 
   async function signOut() {
