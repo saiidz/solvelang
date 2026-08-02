@@ -1,6 +1,6 @@
 "use client";
 
-import { loadStripe, type StripeEmbeddedCheckout } from "@stripe/stripe-js";
+import { loadStripe, type Stripe, type StripeEmbeddedCheckout } from "@stripe/stripe-js";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -20,6 +20,12 @@ const PLAN_DETAILS = {
 } as const;
 
 type PlanKey = keyof typeof PLAN_DETAILS;
+type EmbeddedCheckoutStripe = Stripe & {
+  initEmbeddedCheckout(options: {
+    clientSecret: string;
+    onComplete: () => void;
+  }): Promise<StripeEmbeddedCheckout>;
+};
 
 function planFromQuery(value: string | null): PlanKey | null {
   return value === "developer" || value === "pro" || value === "business" ? value : null;
@@ -66,7 +72,8 @@ export function EmbeddedApiCheckout() {
         if (!stripe) throw new Error("Stripe checkout could not be loaded.");
         if (!active || !mountRef.current) return;
 
-        const checkout = await stripe.initEmbeddedCheckout({
+        const embeddedStripe = stripe as EmbeddedCheckoutStripe;
+        const checkout = await embeddedStripe.initEmbeddedCheckout({
           clientSecret: session.clientSecret,
           onComplete: () => {
             window.location.assign("/account/api-keys/?checkout=success");
