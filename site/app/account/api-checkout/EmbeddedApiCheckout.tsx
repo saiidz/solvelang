@@ -27,6 +27,12 @@ type EmbeddedCheckoutStripe = Stripe & {
   }): Promise<StripeEmbeddedCheckout>;
 };
 
+type CheckoutSessionResponse = {
+  sessionId: string;
+  clientSecret?: string;
+  url?: string;
+};
+
 function planFromQuery(value: string | null): PlanKey | null {
   return value === "developer" || value === "pro" || value === "business" ? value : null;
 }
@@ -59,7 +65,7 @@ export function EmbeddedApiCheckout() {
         if (!active) return;
         setEmail(account.email);
 
-        const session = await customerApi<{ sessionId: string; clientSecret: string }>(
+        const session = await customerApi<CheckoutSessionResponse>(
           API_BASE,
           "/customer/subscriptions/checkout",
           {
@@ -68,6 +74,14 @@ export function EmbeddedApiCheckout() {
             body: JSON.stringify({ plan: selectedPlan, requestId }),
           },
         );
+        if (!session.clientSecret) {
+          if (session.url) {
+            window.location.assign(session.url);
+            return;
+          }
+          throw new Error("Stripe checkout did not return a secure session.");
+        }
+
         const stripe = await loadStripe(PUBLISHABLE_KEY);
         if (!stripe) throw new Error("Stripe checkout could not be loaded.");
         if (!active || !mountRef.current) return;
