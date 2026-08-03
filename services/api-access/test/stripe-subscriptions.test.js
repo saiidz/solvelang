@@ -6,7 +6,7 @@ function stripeClient(overrides = {}) {
   return {
     checkout: { sessions: { create: async () => ({ id: "cs_default", client_secret: "cs_default_secret" }) } },
     subscriptions: {
-      retrieve: async () => ({ id: "sub_1", status: "active", default_payment_method: "pm_1" }),
+      retrieve: async () => ({ id: "sub_1", customer: "cus_1", status: "active", default_payment_method: "pm_1" }),
       update: async (id, params) => ({ id, ...params }),
     },
     customers: {
@@ -14,7 +14,12 @@ function stripeClient(overrides = {}) {
       update: async (id, params) => ({ id, ...params }),
     },
     invoices: { list: async () => ({ data: [] }) },
-    paymentMethods: { retrieve: async (id) => ({ id, card: { brand: "visa", last4: "4242" } }) },
+    invoicePayments: { list: async () => ({ data: [] }) },
+    paymentIntents: { retrieve: async (id) => ({ id, customer: "cus_1", payment_method: "pm_1" }) },
+    paymentMethods: {
+      retrieve: async (id) => ({ id, customer: "cus_1", type: "card", card: { brand: "visa", last4: "4242" } }),
+      list: async () => ({ data: [] }),
+    },
     setupIntents: {
       create: async () => ({ id: "seti_1", client_secret: "seti_1_secret_test" }),
       retrieve: async () => ({ id: "seti_1", status: "succeeded", customer: "cus_1", payment_method: "pm_1" }),
@@ -81,11 +86,25 @@ test("uses an existing Stripe customer instead of accepting a second email sourc
   assert.equal(params.customer_email, undefined);
 });
 
-test("retrieves sanitized management sources and falls back to the customer default card", async () => {
+test("prefers the subscription default card", async () => {
+  const stripe = stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: "pm_subscription" }), update: async () => ({}) },
+    paymentMethods: {
+      retrieve: async (id) => ({ id, customer: "cus_1", type: "card", card: { last4: "1111" } }),
+      list: async () => { throw new Error("should not list attached cards"); },
+    },
+  });
+  const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(state.paymentMethod.id, "pm_subscription");
+  assert.equal(state.paymentMethodSource, "subscription_default");
+});
+
+test("falls back to the customer default card", async () => {
   const calls = [];
   const stripe = stripeClient({
     subscriptions: {
-      retrieve: async (id) => { calls.push(["subscription", id]); return { id, status: "active", default_payment_method: null }; },
+      retrieve: async (id) => { calls.push(["subscription", id]); return { id, customer: "cus_1", status: "active", default_payment_method: null }; },
       update: async () => ({}),
     },
     customers: {
@@ -93,16 +112,118 @@ test("retrieves sanitized management sources and falls back to the customer defa
       update: async () => ({}),
     },
     invoices: { list: async (params) => { calls.push(["invoices", params]); return { data: [{ id: "in_1" }] }; } },
-    paymentMethods: { retrieve: async (id) => { calls.push(["payment", id]); return { id, card: { last4: "4242" } }; } },
+    paymentMethods: {
+      retrieve: async (id) => { calls.push(["payment", id]); return { id, customer: "cus_1", type: "card", card: { last4: "4242" } }; },
+      list: async () => { throw new Error("should not list attached cards"); },
+    },
   });
   const gateway = createStripeSubscriptionGateway(stripe, "whsec_test");
   const state = await gateway.retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
   assert.equal(state.paymentMethod.id, "pm_customer");
+  assert.equal(state.paymentMethodSource, "customer_default");
   assert.equal(state.invoices.data[0].id, "in_1");
   assert.deepEqual(calls, [
     ["subscription", "sub_1"],
     ["invoices", { customer: "cus_1", limit: 12 }],
     ["payment", "pm_customer"],
+  ]);
+});
+
+test("continues securely when a configured subscription default no longer exists", async () => {
+  const stripe = stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: "pm_missing" }), update: async () => ({}) },
+    customers: { retrieve: async () => ({ id: "cus_1", invoice_settings: { default_payment_method: "pm_customer" } }), update: async () => ({}) },
+    paymentMethods: {
+      retrieve: async (id) => {
+        if (id === "pm_missing") throw Object.assign(new Error("missing"), { code: "resource_missing" });
+        return { id, customer: "cus_1", type: "card", card: { last4: "4242" } };
+      },
+      list: async () => ({ data: [] }),
+    },
+  });
+  const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(state.paymentMethod.id, "pm_customer");
+  assert.equal(state.paymentMethodSource, "customer_default");
+});
+
+test("falls back to the latest successfully paid invoice card", async () => {
+  const stripe = stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: null }), update: async () => ({}) },
+    invoices: { list: async () => ({ data: [
+      { id: "in_open", status: "open", amount_paid: 0, created: 20 },
+      { id: "in_paid", status: "paid", amount_paid: 4900, created: 10 },
+    ] }) },
+    invoicePayments: { list: async (params) => {
+      assert.deepEqual(params, { invoice: "in_paid", status: "paid", limit: 10 });
+      return { data: [{ status: "paid", payment: { type: "payment_intent", payment_intent: "pi_paid" } }] };
+    } },
+    paymentIntents: { retrieve: async () => ({ id: "pi_paid", customer: "cus_1", payment_method: "pm_paid" }) },
+    paymentMethods: {
+      retrieve: async () => ({ id: "pm_paid", customer: "cus_1", type: "card", card: { last4: "4242" } }),
+      list: async () => { throw new Error("should not list attached cards"); },
+    },
+  });
+  const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(state.paymentMethod.id, "pm_paid");
+  assert.equal(state.paymentMethodSource, "paid_invoice");
+});
+
+test("uses one attached card but does not choose among multiple attached cards", async () => {
+  const attached = (ids) => stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: null }), update: async () => ({}) },
+    paymentMethods: {
+      retrieve: async () => { throw new Error("should not retrieve a missing default"); },
+      list: async () => ({ data: ids.map((id) => ({ id, customer: "cus_1", type: "card", card: { brand: "visa", last4: id.slice(-4), exp_month: 1, exp_year: 2035 } })) }),
+    },
+  });
+  const one = await createStripeSubscriptionGateway(attached(["pm_1111"]), "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(one.paymentMethod.id, "pm_1111");
+  assert.equal(one.paymentMethodSource, "single_attached");
+
+  const multiple = await createStripeSubscriptionGateway(attached(["pm_1111", "pm_2222"]), "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(multiple.paymentMethod, null);
+  assert.deepEqual(multiple.attachedPaymentMethods.map(({ id }) => id), ["pm_1111", "pm_2222"]);
+});
+
+test("rejects a payment method owned by another customer and handles no card", async () => {
+  const wrongOwner = stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: "pm_other" }), update: async () => ({}) },
+    paymentMethods: {
+      retrieve: async () => ({ id: "pm_other", customer: "cus_other", type: "card", card: { last4: "9999" } }),
+      list: async () => ({ data: [] }),
+    },
+  });
+  const state = await createStripeSubscriptionGateway(wrongOwner, "whsec_test")
+    .retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(state.paymentMethod, null);
+  assert.deepEqual(state.attachedPaymentMethods, []);
+
+  const none = await createStripeSubscriptionGateway(stripeClient({
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: null }), update: async () => ({}) },
+  }), "whsec_test").retrieveSubscriptionManagement({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(none.paymentMethod, null);
+});
+
+test("normalizes the paid checkout card onto the customer and subscription", async () => {
+  const calls = [];
+  const stripe = stripeClient({
+    invoices: { list: async () => ({ data: [{ id: "in_paid", status: "paid", amount_paid: 4900, created: 10 }] }) },
+    invoicePayments: { list: async () => ({ data: [{ status: "paid", payment: { type: "payment_intent", payment_intent: "pi_paid" } }] }) },
+    paymentIntents: { retrieve: async () => ({ id: "pi_paid", customer: "cus_1", payment_method: "pm_paid" }) },
+    paymentMethods: { retrieve: async () => ({ id: "pm_paid", customer: "cus_1", type: "card", card: { last4: "4242" } }), list: async () => ({ data: [] }) },
+    customers: { retrieve: async () => ({ id: "cus_1", invoice_settings: {} }), update: async (...args) => calls.push(["customer", ...args]) },
+    subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1" }), update: async (...args) => calls.push(["subscription", ...args]) },
+  });
+  const result = await createStripeSubscriptionGateway(stripe, "whsec_test")
+    .normalizeSuccessfulSubscriptionPaymentMethod({ customerId: "cus_1", subscriptionId: "sub_1" });
+  assert.equal(result, true);
+  assert.deepEqual(calls, [
+    ["customer", "cus_1", { invoice_settings: { default_payment_method: "pm_paid" } }],
+    ["subscription", "sub_1", { default_payment_method: "pm_paid" }],
   ]);
 });
 

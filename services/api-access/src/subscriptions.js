@@ -126,11 +126,14 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
   };
 }
 
-export function createSubscriptionLifecycleService({ apiAccessService, eventStore, priceIds, gracePeriodMs = 3 * 24 * 60 * 60 * 1_000 }) {
+export function createSubscriptionLifecycleService({ apiAccessService, eventStore, gateway, priceIds, gracePeriodMs = 3 * 24 * 60 * 60 * 1_000 }) {
   if (!apiAccessService || typeof apiAccessService.provisionSubscription !== "function" || typeof apiAccessService.getSubscriptionAccount !== "function") {
     throw new Error("API access service is required.");
   }
   if (!eventStore || typeof eventStore.putEventIfAbsent !== "function") throw new Error("Subscription event store is required.");
+  if (gateway && typeof gateway.normalizeSuccessfulSubscriptionPaymentMethod !== "function") {
+    throw new Error("Stripe subscription gateway is invalid.");
+  }
   if (!Number.isSafeInteger(gracePeriodMs) || gracePeriodMs < 0) throw new Error("Grace period is invalid.");
 
   return {
@@ -175,6 +178,9 @@ export function createSubscriptionLifecycleService({ apiAccessService, eventStor
         subscriptionEventOrder: eventOrder(event.created, rawStatus, plan),
         ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
       });
+      if ((rawStatus === "active" || rawStatus === "trialing") && gateway) {
+        await gateway.normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId });
+      }
       const duplicate = await eventStore.putEventIfAbsent(record) === "duplicate";
       return { handled: true, duplicate, account };
     },

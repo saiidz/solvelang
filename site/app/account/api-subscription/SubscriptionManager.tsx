@@ -43,6 +43,7 @@ type ManagementState = {
     cancelAtPeriodEnd: boolean;
   };
   paymentMethod: PaymentMethodSummary | null;
+  attachedPaymentMethods: PaymentMethodSummary[];
   invoices: InvoiceSummary[];
   csrfToken: string;
 };
@@ -272,7 +273,21 @@ export function SubscriptionManager() {
                     <button disabled={busy} onClick={openPaymentForm} className="rounded-xl border border-cyan-300/30 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Update card</button>
                   </div>
                 ) : (
-                  <button disabled={busy} onClick={openPaymentForm} className="mt-4 rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Add payment method</button>
+                  <div className="mt-4">
+                    {management.attachedPaymentMethods.length > 1 ? (
+                      <div className="mb-4 space-y-2 text-sm text-slate-300">
+                        <p>Multiple cards are saved in Stripe. Choose the card to use through the secure payment form.</p>
+                        {management.attachedPaymentMethods.map((card) => (
+                          <p key={`${card.brand}-${card.last4}-${card.expMonth}-${card.expYear}`} className="capitalize">
+                            {card.brand} •••• {card.last4} · expires {card.expMonth ?? "—"}/{card.expYear ?? "—"}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                    <button disabled={busy} onClick={openPaymentForm} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">
+                      {management.attachedPaymentMethods.length > 1 ? "Choose payment method" : "Add payment method"}
+                    </button>
+                  </div>
                 )}
 
                 {paymentFormOpen ? (

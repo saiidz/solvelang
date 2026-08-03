@@ -3,12 +3,70 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     || !stripe?.subscriptions
     || !stripe?.customers
     || !stripe?.invoices
+    || !stripe?.invoicePayments
+    || !stripe?.paymentIntents
     || !stripe?.paymentMethods
     || !stripe?.setupIntents
     || !stripe?.webhooks) {
     throw new Error("Stripe client is required.");
   }
   if (typeof webhookSecret !== "string" || !webhookSecret) throw new Error("Stripe webhook secret is required.");
+
+  function objectId(value) {
+    return typeof value === "string" ? value : value?.id;
+  }
+
+  function belongsToCustomer(resource, customerId) {
+    return objectId(resource?.customer) === customerId;
+  }
+
+  async function ownedCard(paymentMethodId, customerId) {
+    if (typeof paymentMethodId !== "string") return null;
+    let paymentMethod;
+    try {
+      paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+    } catch (error) {
+      if (error?.code === "resource_missing") return null;
+      throw error;
+    }
+    return paymentMethod?.type === "card" && belongsToCustomer(paymentMethod, customerId)
+      ? paymentMethod
+      : null;
+  }
+
+  async function paidInvoiceCard(invoices, customerId) {
+    const invoice = invoices?.data
+      ?.filter((candidate) => candidate?.status === "paid" && candidate.amount_paid > 0)
+      .sort((left, right) => (right.created ?? 0) - (left.created ?? 0))[0];
+    if (!invoice?.id) return null;
+    const invoicePayments = await stripe.invoicePayments.list({ invoice: invoice.id, status: "paid", limit: 10 });
+    for (const invoicePayment of invoicePayments?.data ?? []) {
+      const paymentIntentId = invoicePayment?.status === "paid"
+        && invoicePayment?.payment?.type === "payment_intent"
+        ? objectId(invoicePayment.payment.payment_intent)
+        : undefined;
+      if (!paymentIntentId) continue;
+      const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (!belongsToCustomer(paymentIntent, customerId)) continue;
+      const paymentMethod = await ownedCard(objectId(paymentIntent.payment_method), customerId);
+      if (paymentMethod) return paymentMethod;
+    }
+    return null;
+  }
+
+  async function managementSources({ customerId, subscriptionId }) {
+    const [subscription, customer, invoices] = await Promise.all([
+      stripe.subscriptions.retrieve(subscriptionId),
+      stripe.customers.retrieve(customerId),
+      stripe.invoices.list({ customer: customerId, limit: 12 }),
+    ]);
+    if (!belongsToCustomer(subscription, customerId)
+      || customer?.deleted
+      || customer?.id !== customerId) {
+      throw new Error("Stripe subscription ownership mismatch.");
+    }
+    return { subscription, customer, invoices };
+  }
 
   return {
     async createCheckoutSession({ accountId, requestId, email, plan, priceId, customerId, returnUrl }) {
@@ -26,22 +84,42 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     },
 
     async retrieveSubscriptionManagement({ customerId, subscriptionId }) {
-      const [subscription, customer, invoices] = await Promise.all([
-        stripe.subscriptions.retrieve(subscriptionId),
-        stripe.customers.retrieve(customerId),
-        stripe.invoices.list({ customer: customerId, limit: 12 }),
-      ]);
-      const subscriptionPaymentMethod = typeof subscription?.default_payment_method === "string"
-        ? subscription.default_payment_method
-        : subscription?.default_payment_method?.id;
-      const customerPaymentMethod = customer && !customer.deleted
-        ? (typeof customer.invoice_settings?.default_payment_method === "string"
-          ? customer.invoice_settings.default_payment_method
-          : customer.invoice_settings?.default_payment_method?.id)
-        : undefined;
-      const paymentMethodId = subscriptionPaymentMethod || customerPaymentMethod;
-      const paymentMethod = paymentMethodId ? await stripe.paymentMethods.retrieve(paymentMethodId) : null;
-      return { subscription, paymentMethod, invoices };
+      const { subscription, customer, invoices } = await managementSources({ customerId, subscriptionId });
+      const candidates = [
+        ["subscription_default", objectId(subscription.default_payment_method)],
+        ["customer_default", objectId(customer.invoice_settings?.default_payment_method)],
+      ];
+      for (const [paymentMethodSource, paymentMethodId] of candidates) {
+        const paymentMethod = await ownedCard(paymentMethodId, customerId);
+        if (paymentMethod) return { subscription, paymentMethod, paymentMethodSource, attachedPaymentMethods: [], invoices };
+      }
+      const invoicePaymentMethod = await paidInvoiceCard(invoices, customerId);
+      if (invoicePaymentMethod) {
+        return { subscription, paymentMethod: invoicePaymentMethod, paymentMethodSource: "paid_invoice", attachedPaymentMethods: [], invoices };
+      }
+      const attached = await stripe.paymentMethods.list({ customer: customerId, type: "card", limit: 10 });
+      const attachedPaymentMethods = (attached?.data ?? [])
+        .filter((paymentMethod) => paymentMethod?.type === "card" && belongsToCustomer(paymentMethod, customerId));
+      return {
+        subscription,
+        paymentMethod: attachedPaymentMethods.length === 1 ? attachedPaymentMethods[0] : null,
+        paymentMethodSource: attachedPaymentMethods.length === 1 ? "single_attached" : null,
+        attachedPaymentMethods,
+        invoices,
+      };
+    },
+
+    async normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId }) {
+      const { invoices } = await managementSources({ customerId, subscriptionId });
+      const paymentMethod = await paidInvoiceCard(invoices, customerId);
+      if (!paymentMethod) return false;
+      await stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: paymentMethod.id },
+      });
+      await stripe.subscriptions.update(subscriptionId, {
+        default_payment_method: paymentMethod.id,
+      });
+      return true;
     },
 
     async createPaymentMethodSetup({ accountId, customerId }) {

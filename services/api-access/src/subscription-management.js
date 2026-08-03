@@ -77,6 +77,9 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     const invoices = Array.isArray(state?.invoices?.data)
       ? state.invoices.data.map(invoiceSummary).filter((invoice) => invoice.id)
       : [];
+    const attachedPaymentMethods = Array.isArray(state?.attachedPaymentMethods)
+      ? state.attachedPaymentMethods.map(cardSummary).filter(Boolean)
+      : [];
     return {
       subscription: {
         plan: account.plan ?? null,
@@ -85,6 +88,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
         cancelAtPeriodEnd: state?.subscription?.cancel_at_period_end === true,
       },
       paymentMethod: cardSummary(state?.paymentMethod),
+      attachedPaymentMethods,
       invoices,
     };
   }
