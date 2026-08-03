@@ -40,6 +40,7 @@ export function createApiAccessHandler({
   customerAccount,
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
+  subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
   logger = console,
@@ -173,6 +174,12 @@ export function createApiAccessHandler({
           requestId: body.requestId,
           customerId: account?.stripeCustomerId,
         }));
+      }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!subscriptionPortal) throw new ApiAccessError(503, "subscription_portal_disabled", "API subscription management is not enabled.");
+        return response(201, await subscriptionPortal.createPortal({ accountId: session.accountId }));
       }
 
       requireAdmin(event);

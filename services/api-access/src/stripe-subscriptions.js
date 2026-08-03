@@ -1,5 +1,7 @@
 export function createStripeSubscriptionGateway(stripe, webhookSecret) {
-  if (!stripe?.checkout?.sessions || !stripe?.webhooks) throw new Error("Stripe client is required.");
+  if (!stripe?.checkout?.sessions || !stripe?.billingPortal?.sessions || !stripe?.webhooks) {
+    throw new Error("Stripe client is required.");
+  }
   if (typeof webhookSecret !== "string" || !webhookSecret) throw new Error("Stripe webhook secret is required.");
 
   return {
@@ -15,6 +17,13 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         metadata: { accountId, plan, requestId },
         subscription_data: { metadata: { accountId, email, plan } },
       }, { idempotencyKey: `api-subscription-checkout-${requestId}` });
+    },
+
+    async createPortalSession({ customerId, returnUrl }) {
+      return stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: returnUrl,
+      });
     },
 
     constructWebhookEvent(rawBody, signature) {

@@ -13,6 +13,7 @@ import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
+import { createSubscriptionPortalService } from "./subscription-portal.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
 import { createSubscriptionLifecycleService } from "./subscriptions.js";
 
@@ -45,6 +46,7 @@ if (environment.customerAccountsEnabled) {
 
 let stripeGateway;
 let subscriptionCheckout;
+let subscriptionPortal;
 let subscriptionLifecycle;
 if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
@@ -53,6 +55,12 @@ if (environment.subscriptionBillingEnabled) {
     gateway: stripeGateway,
     apiAccessService: service,
     priceIds: environment.priceIds,
+    siteOrigin: environment.siteOrigin,
+    enabled: true,
+  });
+  subscriptionPortal = createSubscriptionPortalService({
+    gateway: stripeGateway,
+    apiAccessService: service,
     siteOrigin: environment.siteOrigin,
     enabled: true,
   });
@@ -73,6 +81,7 @@ const application = createApiAccessHandler({
   customerAccount,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
+  subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
 });
