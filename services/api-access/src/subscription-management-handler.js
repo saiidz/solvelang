@@ -42,6 +42,13 @@ export function createSubscriptionManagementHandler({ customerAuth, management, 
     };
   }
 
+  async function managementState(session) {
+    return {
+      ...(await management.getManagement({ accountId: session.accountId })),
+      csrfToken: session.csrfToken,
+    };
+  }
+
   return async function handle(event) {
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
@@ -49,16 +56,12 @@ export function createSubscriptionManagementHandler({ customerAuth, management, 
       if (!enabled) throw new ApiAccessError(503, "subscription_management_disabled", "API subscription management is not enabled.");
       const session = await customerAuth.authenticate(cookieHeader(event));
 
-      if (method === "GET") {
-        return response(200, {
-          ...(await management.getManagement({ accountId: session.accountId })),
-          csrfToken: session.csrfToken,
-        });
-      }
-
+      if (method === "GET") return response(200, await managementState(session));
       if (method !== "POST") return response(405, { error: "Method not allowed.", code: "method_not_allowed" });
+
       customerAuth.assertCsrf(session, header(event, "x-solvelang-csrf"));
       const body = parseJson(event);
+      if (body.action === "get_management") return response(200, await managementState(session));
       if (body.action === "create_payment_setup") {
         return response(201, await management.createPaymentSetup({ accountId: session.accountId }));
       }
