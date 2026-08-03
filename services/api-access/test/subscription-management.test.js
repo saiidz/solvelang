@@ -21,6 +21,7 @@ function gateway(overrides = {}) {
     retrieveSubscriptionManagement: async () => ({
       subscription: { status: "active", cancel_at_period_end: false },
       paymentMethod: { card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2034 } },
+      attachedPaymentMethods: [],
       invoices: {
         data: [{
           id: "in_1",
@@ -56,6 +57,7 @@ test("returns only sanitized subscription, card, and invoice fields", async () =
       cancelAtPeriodEnd: false,
     },
     paymentMethod: { brand: "visa", last4: "4242", expMonth: 12, expYear: 2034 },
+    attachedPaymentMethods: [],
     invoices: [{
       id: "in_1",
       number: "INV-1",
@@ -66,6 +68,32 @@ test("returns only sanitized subscription, card, and invoice fields", async () =
       createdAt: 1_785_000_000_000,
     }],
   });
+});
+
+test("returns only masked attached-card summaries when no default can be selected", async () => {
+  const service = createSubscriptionManagementService({
+    gateway: gateway({
+      retrieveSubscriptionManagement: async () => ({
+        subscription: { status: "active" },
+        paymentMethod: null,
+        attachedPaymentMethods: [
+          { id: "pm_secret_1", customer: "cus_123", card: { brand: "visa", last4: "1111", exp_month: 1, exp_year: 2035, fingerprint: "secret" } },
+          { id: "pm_secret_2", customer: "cus_123", card: { brand: "mastercard", last4: "2222", exp_month: 2, exp_year: 2036 } },
+        ],
+        invoices: { data: [] },
+      }),
+    }),
+    apiAccessService: apiService(),
+    enabled: true,
+  });
+  const state = await service.getManagement({ accountId: account.accountId });
+  assert.equal(state.paymentMethod, null);
+  assert.deepEqual(state.attachedPaymentMethods, [
+    { brand: "visa", last4: "1111", expMonth: 1, expYear: 2035 },
+    { brand: "mastercard", last4: "2222", expMonth: 2, expYear: 2036 },
+  ]);
+  assert.equal(JSON.stringify(state).includes("pm_secret"), false);
+  assert.equal(JSON.stringify(state).includes("fingerprint"), false);
 });
 
 test("creates a card SetupIntent and applies it only after customer ownership and success checks", async () => {

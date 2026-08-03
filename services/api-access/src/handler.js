@@ -69,6 +69,7 @@ if (environment.subscriptionBillingEnabled) {
   subscriptionLifecycle = createSubscriptionLifecycleService({
     apiAccessService: service,
     eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable),
+    gateway: stripeGateway,
     priceIds: environment.priceIds,
   });
   subscriptionManagementApplication = createSubscriptionManagementHandler({

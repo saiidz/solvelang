@@ -127,6 +127,18 @@ test("maps signed subscription item periods into deterministic API account order
   assert.equal(events[0].accountId, "acct_1");
 });
 
+test("normalizes the successful checkout card when an active subscription is provisioned", async () => {
+  const normalized = [];
+  const lifecycle = createSubscriptionLifecycleService({
+    apiAccessService: lifecycleApiService(),
+    eventStore: { putEventIfAbsent: async () => "created" },
+    gateway: { normalizeSuccessfulSubscriptionPaymentMethod: async (input) => { normalized.push(input); return true; } },
+    priceIds,
+  });
+  await lifecycle.processEvent(stripeEvent());
+  assert.deepEqual(normalized, [{ customerId: "cus_1", subscriptionId: "sub_1" }]);
+});
+
 test("uses the Stripe event timestamp for a bounded past-due grace period", async () => {
   let account;
   const lifecycle = createSubscriptionLifecycleService({
