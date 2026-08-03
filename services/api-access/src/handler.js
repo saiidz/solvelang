@@ -100,8 +100,7 @@ const application = createApiAccessHandler({
 
 export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
-  if (path.endsWith("/customer/subscriptions/manage")) {
-    if (!subscriptionManagementApplication) return application(event);
+  if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) {
     return subscriptionManagementApplication(event);
   }
   return application(event);
