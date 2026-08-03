@@ -131,7 +131,7 @@ test("fails closed without a managed subscription or when disabled", async () =>
     (error) => error instanceof ApiAccessError && error.code === "subscription_management_disabled",
   );
 
-  const missing = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(undefined), enabled: true });
+  const missing = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(null), enabled: true });
   await assert.rejects(
     () => missing.getManagement({ accountId: account.accountId }),
     (error) => error instanceof ApiAccessError && error.code === "subscription_missing",
