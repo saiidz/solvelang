@@ -13,6 +13,8 @@ import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
+import { createSubscriptionManagementHandler } from "./subscription-management-handler.js";
+import { createSubscriptionManagementService } from "./subscription-management.js";
 import { createSubscriptionPortalService } from "./subscription-portal.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
 import { createSubscriptionLifecycleService } from "./subscriptions.js";
@@ -48,6 +50,7 @@ let stripeGateway;
 let subscriptionCheckout;
 let subscriptionPortal;
 let subscriptionLifecycle;
+let subscriptionManagementApplication;
 if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
@@ -59,7 +62,6 @@ if (environment.subscriptionBillingEnabled) {
     enabled: true,
   });
   subscriptionPortal = createSubscriptionPortalService({
-    gateway: stripeGateway,
     apiAccessService: service,
     siteOrigin: environment.siteOrigin,
     enabled: true,
@@ -68,6 +70,16 @@ if (environment.subscriptionBillingEnabled) {
     apiAccessService: service,
     eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable),
     priceIds: environment.priceIds,
+  });
+  subscriptionManagementApplication = createSubscriptionManagementHandler({
+    customerAuth,
+    management: createSubscriptionManagementService({
+      gateway: stripeGateway,
+      apiAccessService: service,
+      enabled: true,
+    }),
+    siteOrigin: environment.siteOrigin,
+    enabled: true,
   });
 }
 
@@ -87,5 +99,10 @@ const application = createApiAccessHandler({
 });
 
 export async function handler(event) {
+  const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
+  if (path.endsWith("/customer/subscriptions/manage")) {
+    if (!subscriptionManagementApplication) return application(event);
+    return subscriptionManagementApplication(event);
+  }
   return application(event);
 }
