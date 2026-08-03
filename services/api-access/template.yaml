@@ -316,6 +316,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/checkout
             Method: POST
+        CustomerSubscriptionPortal:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/portal
+            Method: POST
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
