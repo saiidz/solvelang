@@ -134,7 +134,7 @@ export function SubscriptionManager() {
   }, [completePaymentSetup, loadManagement]);
 
   async function openPaymentForm() {
-    if (!management || !PUBLISHABLE_KEY || !mountRef.current) {
+    if (!management || !PUBLISHABLE_KEY) {
       setError("Payment method updates are not configured.");
       return;
     }
@@ -144,6 +144,7 @@ export function SubscriptionManager() {
     destroyPaymentForm();
     setPaymentFormOpen(true);
     try {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
       const setup = await postAction<{ clientSecret: string }>(management.csrfToken, {
         action: "create_payment_setup",
       });
