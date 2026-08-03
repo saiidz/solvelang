@@ -51,7 +51,7 @@ export function createApiAccessHandler({
   if (customerAccountsEnabled && (!customerAuth || !customerAccount)) {
     throw new Error("Customer account services are required when customer accounts are enabled.");
   }
-  if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionPortal || !subscriptionLifecycle || !stripeGateway)) {
+  if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionLifecycle || !stripeGateway)) {
     throw new Error("Stripe subscription services are required when billing is enabled.");
   }
 
@@ -178,6 +178,7 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!subscriptionPortal) throw new ApiAccessError(503, "subscription_portal_disabled", "API subscription management is not enabled.");
         return response(201, await subscriptionPortal.createPortal({ accountId: session.accountId }));
       }
 
