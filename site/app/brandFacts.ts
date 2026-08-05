@@ -1,0 +1,16 @@
+export const brandFacts = {
+  schemaVersion: 1,
+  lastVerified: '2026-08-04',
+  publicName: 'SolveLang',
+  alternateNames: ['Solve Lang'],
+  canonicalDomain: 'https://www.solve-lang.com',
+  entityType: 'SoftwareApplication',
+  shortDefinition: 'SolveLang is an early-beta readable scripting language for AI-assisted business workflows.',
+  fullDescription: 'SolveLang is an early-beta readable scripting language and local-first workflow workspace for founders, operators, and technical founders. The Rust CLI is the canonical runtime; the browser preview supports a smaller safe subset, and Studio analysis is deterministic rather than AI analysis.',
+  audiences: ['Founders', 'Operators', 'Technical founders'],
+  useCases: ['Support-ticket triage', 'Intake routing', 'Lead qualification', 'Internal operations reporting'],
+  limitations: ['SolveLang is not a production language runtime.', 'The browser preview does not support the full Rust CLI runtime.', 'Workflow Intelligence Studio analysis is deterministic static analysis, not AI analysis.', 'Hosted production integrations and a managed automation platform are not currently offered.'],
+  contactEmail: 'hello@solve-lang.com',
+  repository: 'https://github.com/saiidz/solvelang',
+  prohibitedClaims: ['Production-ready runtime', 'Full Rust CLI in the browser preview', 'AI analysis for deterministic Studio checks', 'Hosted API capability not supported by deployed documentation'],
+} as const
