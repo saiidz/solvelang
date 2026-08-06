@@ -1,0 +1,58 @@
+name: Bug report
+description: Report reproducible behavior that differs from documented SolveLang behavior.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve SolveLang. Please do not include API keys, tokens, credentials, or private customer data.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Rust CLI / language runtime
+        - Browser preview
+        - Workflow Intelligence Studio
+        - Website / documentation
+        - Experimental API / account infrastructure
+        - CI / repository tooling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest safe script, command, or steps that reproduce the issue. Redact secrets.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit SHA or version
+      description: The exact revision you tested, if known.
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Paste sanitized diagnostics or logs. Do not include credentials or private data.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed API keys, tokens, credentials, and private data.
+          required: true
+        - label: I checked the current README/demo-status maturity labels before reporting a planned capability as a bug.
+          required: true
