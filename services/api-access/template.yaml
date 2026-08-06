@@ -395,6 +395,21 @@ Resources:
             TableName: !Ref ApiUsageTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiUsageIdempotencyTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:TransactWriteItems
+            Resource:
+              - !GetAtt ApiUsageTable.Arn
+              - !GetAtt ApiUsageIdempotencyTable.Arn
+
+  ApiKeyAuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiKeyAuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiAccessHttpApi}/authorizers/*
 
 Outputs:
   ApiAccessBaseUrl:
