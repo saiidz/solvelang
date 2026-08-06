@@ -1,39 +1,85 @@
 # SolveLang
 
-SolveLang is a readable scripting language for AI-assisted business workflows.
+> **A readable, explainable workflow language designed for AI-assisted business processes.**
 
-The current implementation is an early Rust interpreter/prototype in `solvec/`. It includes a lexer, parser, AST runtime, diagnostics, imports, JSON helpers, HTTP helpers, file I/O, environment access, arrays, objects, functions, loops, and AI-agent syntax with local fallback plus optional OpenAI-backed responses.
+SolveLang is an early-stage language and tooling project for describing business workflows in a form that humans can read, engineers can review, and organizations can audit.
 
-SolveLang is not a production language runtime yet. It is an early beta meant to make the language shape testable, readable, and easy to evolve.
+It is not another Zapier, no-code builder, or managed automation platform. Its purpose is to make workflow intent explicit: deterministic rules, AI-assisted decisions, tool access, approvals, expected outputs, and failure behavior.
 
-## Who SolveLang Is For Right Now
+## Why SolveLang exists
 
-SolveLang is currently for founders, operators, and technical founders who want readable workflow scripts for business automation. The clearest early workflows are support ticket triage, intake routing, lead qualification, and simple internal ops reporting.
+Business processes often live in one of three places:
 
-Agencies and consultants are a later go-to-market path once the first founder/operator use cases are tighter.
+- visual automation canvases that are fast to build but difficult to review and maintain,
+- application code that is powerful but hides process intent behind implementation detail,
+- prompts and agent configurations that can be hard to audit, test, or govern.
 
-The hosted `/run` page is a browser-safe preview for simple scripts. It does not call a server and supports a smaller syntax subset than the Rust CLI runtime. Full Rust runtime hosting, production integrations, and a managed automation platform are later work.
+SolveLang explores a middle layer: a readable, source-controlled workflow definition that can be validated, explained, tested, and eventually adapted to different execution environments.
 
-## Workflow Intelligence Studio
+The long-term goal is not to replace every workflow engine. SolveLang may be most valuable as a specification, analysis, and explanation layer that works alongside established platforms.
 
-The static `/studio/` application is a local-first workspace for modeling business workflows, inspecting the graph, running 25 deterministic analysis rules, simulating scenarios, reviewing traces and quality analytics, comparing local versions, and exporting Workflow X-Ray evidence.
+## Current maturity
 
-No workflow data or product analytics leave the browser. Studio analysis is deterministic, not AI analysis. Generated `.solve` files are preliminary drafts because the Studio workflow model is broader than the executable language. Use the Rust CLI as the canonical validator and runtime:
+SolveLang is an **early beta and engineering prototype**.
 
-```bash
-cd solvec
-cargo run -- validate ../path/to/generated-draft.solve
-```
+The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, examples, deterministic browser tooling, and test-mode API infrastructure. It does **not** yet provide a stable language specification, production managed execution, enterprise orchestration, or a general integration marketplace.
 
-See [the Studio product specification](docs/product/workflow-intelligence-studio-v1.md), [analysis rules](docs/product/workflow-analysis-rules.md), [analytics formulas](docs/product/workflow-analytics.md), and [privacy model](docs/product/studio-privacy.md).
+Public claims should use these labels:
 
-## Quick Start
+### Working today
+
+- Rust lexer, parser, AST, and interpreter prototype
+- CLI commands for running, validating, tokenizing, and inspecting ASTs
+- variables, reassignment, conditions, loops, functions, arrays, objects, imports, and JSON helpers
+- source-located parser and runtime diagnostics
+- deterministic local execution
+- hardened execution modes that deny network, file, environment, and agent capabilities
+- a local-first Workflow Intelligence Studio with deterministic analysis
+- a smaller browser-safe `/run` preview
+- repository examples, tests, schemas, documentation, and launch-readiness controls
+
+### Experimental
+
+- HTTP GET and POST helpers
+- file read/write helpers
+- environment-variable access
+- `agent`, `instruction`, `tool`, and `ask` syntax
+- local AI fallback behavior
+- optional OpenAI-backed responses
+- Studio-to-`.solve` draft generation
+- test-mode API keys, subscription billing, usage metering, and priority queue foundations
+
+Experimental means implemented but unstable, narrow, provider-dependent, or not suitable for production promises.
+
+### Planned
+
+- stable language specification
+- broader type checking
+- package and module system beyond file imports
+- additional AI providers
+- production integrations
+- runtime adapters for established orchestration platforms
+- full hosted Rust runtime
+- managed workflow execution
+- production packaging and releases
+- enterprise governance, durability, and observability
+
+Planned capabilities are direction, not working product features.
+
+## Quick start
+
+### Requirements
+
+- Git
+- Rust and Cargo
+
+### Install and run
 
 ```bash
 git clone https://github.com/saiidz/solvelang.git
 cd solvelang/solvec
 cargo run -- validate ../examples/support_triage.solve
-cargo run -- run ../examples/hello.solve
+cargo run -- run ../examples/support_triage.solve
 ```
 
 Inspect tokens or the parsed AST:
@@ -50,92 +96,88 @@ cargo build --release
 ./target/release/solvec run ../examples/hello.solve
 ```
 
-## CLI Commands
+## Example workflow
 
-- `solvec run <file.solve>` runs a SolveLang file with the AST runtime.
-- `solvec validate <file.solve>` checks syntax without running the script.
-- `solvec tokens <file.solve>` prints lexer tokens.
-- `solvec ast <file.solve>` prints the parsed AST.
-- `solvec help`, `solvec --help`, or `solvec -h` prints command help.
+```solve
+// Support ticket triage for a founder-led team.
+let ticket = {
+    customer: "Acme Labs",
+    topic: "billing",
+    priority: "urgent",
+    plan: "pro"
+}
 
-Backward-compatible flags are still available:
+print("Support triage")
+print("Customer: " .. ticket.customer)
+
+if ticket.priority == "urgent" {
+    print("Action: escalate to founder today")
+} else {
+    print("Action: add to normal support queue")
+}
+
+if ticket.topic == "billing" {
+    print("Owner: finance operations")
+} else {
+    print("Owner: support operations")
+}
+```
+
+This example is intentionally deterministic. It demonstrates readable business rules without pretending that every decision requires AI.
+
+Run it with:
+
+```bash
+cd solvec
+cargo run -- run ../examples/support_triage.solve
+```
+
+## CLI commands
+
+```text
+solvec run <file.solve>       Run a SolveLang workflow
+solvec validate <file.solve>  Parse and validate without executing
+solvec tokens <file.solve>    Print lexer tokens
+solvec ast <file.solve>       Print the parsed AST
+solvec help                   Show CLI help
+```
+
+Backward-compatible token and AST flags are still supported:
 
 ```bash
 solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
 
-The AST runtime is the canonical runtime. The public `solvec legacy` command and `--legacy` flag have been removed.
+## Runtime safety
 
-## Runtime Diagnostics
+By default, `solvec run` executes trusted local scripts with the current runtime capabilities.
 
-Runtime errors include the source line, column, source snippet, caret, and a hint when SolveLang can provide one. For example, an invalid array lookup reports the exact index expression instead of returning `null` silently.
-
-```text
-SolveLang Runtime Error on line 2, column 13 in workflow.solve
-  2 | print(items[8])
-    |             ^
-Array index 8 is out of bounds for an array of length 2.
-Hint: Use an index between 0 and 1.
-```
-
-Arithmetic operators (`+`, `-`, `*`, `/`) and ordered comparisons (`>`, `>=`, `<`, `<=`) require number operands. `==` and `!=` retain value equality behavior, while `..` remains text joining.
-
-Arrays require a non-negative numeric index within bounds. Objects require a text bracket key; missing object properties and keys still return `null` for compatibility. Property access on a non-object and index access on a non-array/non-object are runtime errors. User-defined function calls must provide exactly the declared number of arguments.
-
-## Validate Before Running
-
-Use `validate` to check that a script can be lexed and parsed before running it:
+Use hardened execution when a workflow must be restricted to pure in-memory evaluation:
 
 ```bash
-cd solvec
-cargo run -- validate ../examples/support_triage.solve
-```
-
-Validation does not execute the script. It does not run AI agents, HTTP calls, file writes, or other runtime side effects.
-
-## Runtime Safety
-
-By default, `solvec run` executes trusted local scripts with the full current runtime. That includes HTTP helpers, file helpers, environment reads, and AI-agent provider configuration.
-
-Use a hardened mode when a script must be limited to pure in-memory evaluation. Any of `--safe`, `--dry-run`, `--no-network`, or `--json` enables the strict policy:
-
-```bash
-cd solvec
 cargo run -- run --safe ../examples/hello.solve
 ```
 
-Hardened execution denies before evaluation, including in unreachable branches and function bodies:
+Any of these options enables the strict policy:
 
-- network access through `http_get`, `http_post`, and all `ask`/agent use
-- file reads through `read_file`
-- file writes through `write_file`
-- environment-variable access through `env` and AI provider configuration
-- agent tools, unknown functions, and known shell/process/plugin/mutation-style actions
+- `--safe`
+- `--dry-run`
+- `--no-network`
+- `--json`
 
-A successful non-JSON hardened run prints `NON-PRODUCTION ADVISORY ONLY` as its first stdout line. JSON mode is always hardened and carries the same label in its single machine-readable envelope; `dry_run` remains `false` when `--json` is used without `--dry-run`.
+Hardened execution denies sensitive capabilities before evaluation, including in unreachable branches and function bodies:
 
-Capability-enabling `--allow-*` flags are rejected when any hardened flag is active. They remain available only for explicitly trusted, unhardened local runs. `--allow-root` can still constrain file builtins in such an unhardened run:
+- network access
+- file reads and writes
+- environment access
+- AI providers and agent use
+- agent tools
+- unknown or mutation-style functions
 
-```bash
-cargo run -- run --allow-root /tmp/solvelang-inputs ./trusted-workflow.solve
-```
+A successful hardened run is labeled `NON-PRODUCTION ADVISORY ONLY`.
 
-Allowed filesystem roots restrict file builtins to specific directories. Paths containing `..` are rejected when filesystem roots are enforced, and paths outside allowed roots fail with a SolveLang Runtime Error.
-
-HTTP helpers use explicit limits:
-
-- connection timeout: 5 seconds
-- request timeout: 15 seconds
-- maximum response body: 1 MB
-
-These can be adjusted for a run:
-
-```bash
-cargo run -- run --http-connect-timeout-ms 5000 --http-timeout-ms 15000 --http-max-body-bytes 1048576 ./workflow.solve
-```
-
-For a deterministic local advisory run, provide strict JSON input and request one JSON output envelope:
+For deterministic machine-readable execution:
 
 ```bash
 cargo run -- run \
@@ -144,340 +186,259 @@ cargo run -- run \
   ../examples/upcomingsounds/cli-contract.solve
 ```
 
-`--input` accepts one explicit regular JSON file up to 1 MiB and injects it as read-only `input`. JSON numbers must fit a signed 32-bit integer; decimals and larger integers fail closed. JSON mode itself activates hardened execution, buffers typed `print(...)` values, emits one byte-deterministic document, and labels it `NON-PRODUCTION ADVISORY ONLY`. Failures emit one sanitized JSON error document without source, input, query-string, or full-path content.
+See [`docs/runtime-safety.md`](docs/runtime-safety.md) for the complete policy.
 
-For more detail, see [docs/runtime-safety.md](docs/runtime-safety.md).
+## Architecture overview
 
-## Features
+SolveLang is organized around several related layers.
 
-For exact syntax supported today, see [docs/language-reference.md](docs/language-reference.md).
+### 1. Canonical language runtime
 
-For the current workflow-audit motion, see:
+`solvec/` contains the Rust implementation:
 
-- [docs/outreach.md](docs/outreach.md)
-- [docs/outreach-tracker.md](docs/outreach-tracker.md)
-- [docs/first-sale-checklist.md](docs/first-sale-checklist.md)
-- [docs/first-audit-playbook.md](docs/first-audit-playbook.md)
-- [docs/offer.md](docs/offer.md)
-- [docs/sales-script.md](docs/sales-script.md)
+- lexer
+- parser
+- AST
+- interpreter
+- CLI
+- runtime policy and diagnostics
+- AI-provider boundary
 
-Live resources:
+The Rust CLI is the canonical validator and runtime.
 
+### 2. Workflow Intelligence Studio
+
+`site/app/studio/` contains a local-first browser workspace for:
+
+- workflow modeling
+- graph inspection
+- deterministic analysis rules
+- scenario simulation
+- traces and quality indicators
+- local version comparison
+- evidence export
+
+Studio analysis is deterministic, not AI analysis. Studio’s broader workflow model can generate preliminary `.solve` drafts, but those drafts must be validated with the Rust CLI.
+
+### 3. Website and browser previews
+
+`site/` contains the public website, documentation experiences, demos, account screens, and a limited browser-safe workflow preview.
+
+The browser preview supports a smaller subset than the Rust runtime and should not be presented as equivalent to full hosted execution.
+
+### 4. API-access prototype
+
+`services/api-access/` contains test-mode serverless infrastructure for API keys, customer accounts, subscription lifecycle, quotas, and authorization.
+
+This infrastructure is experimental and test-only. It is not a production managed API product.
+
+### 5. Schemas, examples, and operations
+
+- `examples/` — executable and illustrative workflows
+- `schemas/` — machine-readable contracts and examples
+- `docs/` — language, product, safety, launch, strategy, and service documentation
+- `ops/` — launch and operational controls
+- `packages/` and `plugins/` — supporting packages and extension experiments
+- `.github/` — CI, deployment workflows, and repository automation
+
+## Repository structure
+
+```text
+solvelang/
+├── solvec/              Rust lexer, parser, AST, interpreter, and CLI
+├── site/                Website, Studio, demos, and browser previews
+├── services/            Test-mode API and supporting services
+├── examples/            SolveLang workflows and demo assets
+├── docs/                Product, language, safety, strategy, and operations docs
+├── schemas/             JSON schemas and example payloads
+├── packages/            Shared packages
+├── plugins/             Extension experiments
+├── ops/                 Operational and launch tooling
+├── fixtures/            Test fixtures
+└── .github/             CI and workflow automation
+```
+
+## Documentation
+
+Start here:
+
+- [Language reference](docs/language-reference.md)
+- [Runtime safety](docs/runtime-safety.md)
+- [Competitive analysis](docs/competitive-analysis.md)
+- [Product strategy](docs/strategy.md)
+- [Studio specification](docs/product/workflow-intelligence-studio-v1.md)
+- [Workflow analysis rules](docs/product/workflow-analysis-rules.md)
+- [Studio privacy model](docs/product/studio-privacy.md)
+- [Launch readiness](docs/launch-readiness.md)
+
+Live project resources:
+
+- [Website](https://www.solve-lang.com/)
 - [Resources](https://www.solve-lang.com/resources/)
-- [Support Triage Demo](https://www.solve-lang.com/demo/support-triage/)
-- [Workflow X-Ray Audit Intake](https://www.solve-lang.com/audit/)
-- [llms.txt](https://www.solve-lang.com/llms.txt)
-- [sitemap.xml](https://www.solve-lang.com/sitemap.xml)
-
-Launch operators can run the fail-closed [Production Launch Control](docs/launch-readiness.md) to generate JSON and Markdown readiness evidence without exposing secrets or changing AWS, Stripe, npm, or deployment state.
-
-### What Works Now
-
-- Variables with `let`
-- Variable reassignment with `name = value`
-- `print(...)`
-- Integer math: `+`, `-`, `*`, `/`
-- Comparisons: `==`, `!=`, `>`, `>=`, `<`, `<=`
-- Boolean operators: `and`, `or`, `not`
-- `if` / `else`
-- `while` loops
-- Functions with `return`
-- Arrays and indexing
-- Objects/maps, property access, and string-key indexing
-- String joining with `..`
-- Imports with `import "relative/path.solve"`
-- Source-located runtime errors for unknown variables/functions, invalid operands, invalid indexing/property access, wrong function arity, divide by zero, and invalid built-in argument types
-- Parser and diagnostic messages with line/column output
-
-### Prototype/Experimental
-
-- HTTP GET and POST helpers
-- File read/write helpers
-- Environment variable reads
-- JSON parse/stringify conversion between SolveLang values and JSON
-- `agent`, `instruction`, `tool`, and `ask` syntax with local fallback and optional OpenAI provider mode
-
-AI agent support defaults to local placeholder mode. Set `SOLVELANG_AI_PROVIDER=openai` and `OPENAI_API_KEY` to generate real model responses.
-
-### What Comes Later
-
-- Additional AI providers and tool execution for agents
-- More complete type checking and runtime type errors
-- Packages/modules beyond simple file imports
-- Richer standard library
-- Better HTTP configuration and request options
-- Full Rust runtime hosting
-- Production integrations and managed workflow execution
-- Stable language specification
-- Release packaging
-
-## Built-ins
-
-### `json_parse(text)`
-
-Parses a JSON string into SolveLang values.
-
-```solve
-let data = json_parse("{\"name\":\"SolveLang\"}")
-print(data.name)
-```
-
-### `json_stringify(value)`
-
-Converts a SolveLang value into JSON text.
-
-```solve
-print(json_stringify({ ok: true, count: 2 }))
-```
-
-### `http_get(url)`
-
-Sends an HTTP GET request. Returns an object with:
-
-- `status`
-- `url`
-- `body`
-- `headers`
-
-```solve
-let response = http_get("https://httpbin.org/get")
-print(response.status)
-print(response.body)
-```
-
-### `http_post(url, body)`
-
-Sends an HTTP POST request with `content-type: application/json`. The body must be text. Returns the same response shape as `http_get`.
-
-```solve
-let response = http_post("https://httpbin.org/post", "{\"hello\":\"world\"}")
-print(response.status)
-```
-
-### `read_file(path)`
-
-Reads a text file and returns its contents.
-
-```solve
-print(read_file("/tmp/solvelang-example.txt"))
-```
-
-### `write_file(path, body)`
-
-Writes text to a file and returns `true` on success.
-
-```solve
-write_file("/tmp/solvelang-example.txt", "hello")
-```
-
-### `env(name)`
-
-Reads an environment variable by name. Missing variables return an empty string.
-
-```solve
-print(env("HOME"))
-```
-
-## Safety Notes
-
-- `read_file` and `write_file` use paths available to the running process. Be careful with absolute paths and avoid running untrusted scripts.
-- `write_file` can overwrite files.
-- `env` can expose secrets such as tokens, API keys, or deployment credentials.
-- `http_get` and `http_post` make network requests from your machine and may send data to external services.
-- OpenAI-backed agent calls send the agent instruction, approved tool names, and user message to OpenAI.
-- Use `solvec run --json --safe --dry-run --no-network` for deterministic advisory-only evaluation with runtime capabilities denied.
-- Never print, hardcode, or commit `OPENAI_API_KEY`.
-- External AI calls may cost money.
-- HTTP examples may require internet access. Automated tests avoid external internet.
-
-## AI Agent Support
-
-SolveLang supports:
-
-```solve
-agent SupportBot {
-  instruction "Answer clearly using approved tools only."
-  tool searchDocs
-}
-
-ask SupportBot("How can SolveLang help with automation?")
-```
-
-### Local Mode
-
-Local mode is the default. If `SOLVELANG_AI_PROVIDER` is missing, empty, or set to `local`, `ask` prints a deterministic placeholder response. This mode does not require internet access or API keys.
-
-```bash
-cd solvec
-cargo run -- run ../examples/agent.solve
-```
-
-You can force local mode explicitly:
-
-```bash
-export SOLVELANG_AI_PROVIDER=local
-cargo run -- run ../examples/agent.solve
-```
-
-### OpenAI Mode
-
-OpenAI mode calls the OpenAI Chat Completions API using the declared agent instruction as the developer message and the `ask` text as the user message. Tool names are included as approved tool context. SolveLang does not execute external tools for the model yet.
-
-Required environment variables:
-
-- `SOLVELANG_AI_PROVIDER=openai`
-- `OPENAI_API_KEY`
-
-Optional environment variable:
-
-- `SOLVELANG_AI_MODEL`, defaulting to `gpt-4.1-mini`
-
-Example:
-
-```bash
-cd solvec
-export SOLVELANG_AI_PROVIDER=openai
-export OPENAI_API_KEY="..."
-export SOLVELANG_AI_MODEL="gpt-4.1-mini"
-cargo run -- run ../examples/agent.solve
-```
-
-Safety notes:
-
-- Do not put real API keys in `.solve` files.
-- Do not commit API keys.
-- External AI calls may cost money.
-- Provider, network, HTTP, API, and malformed-response failures return structured SolveLang runtime errors.
-
-## Examples
-
-Examples live in `examples/`:
-
-- `hello.solve`
-- `variables.solve`
-- `math.solve`
-- `conditionals.solve`
-- `booleans.solve`
-- `functions.solve`
-- `loops.solve`
-- `arrays.solve`
-- `objects.solve`
-- `imports.solve`
-- `json.solve`
-- `http.solve`
-- `files.solve`
-- `agent.solve`
-- `support_triage.solve`
-- `lead_qualification.solve`
-- `intake_to_task.solve`
-- `ops_report.solve`
-
-Run one with:
-
-```bash
-cd solvec
-cargo run -- run ../examples/loops.solve
-```
-
-### Try Examples
-
-These operator workflow examples are runnable with the Rust CLI runtime:
-
-```bash
-cd solvec
-cargo run -- run ../examples/support_triage.solve
-cargo run -- run ../examples/lead_qualification.solve
-cargo run -- run ../examples/intake_to_task.solve
-cargo run -- run ../examples/ops_report.solve
-```
-
-`support_triage.solve` classifies an urgent support ticket, chooses an owner, and decides whether same-day founder escalation is needed.
-
-Expected output:
-
-```text
-Support triage
-Customer: Acme Labs
-Topic: billing
-Action: escalate to founder today
-Owner: finance operations
-```
-
-`lead_qualification.solve` turns an inbound demo request into a simple qualification decision based on intent and budget.
-
-Expected output:
-
-```text
-Lead qualification
-Company: Northstar Studio
-Intent: high
-Fit: qualified account
-Next step: founder follow-up
-```
-
-`intake_to_task.solve` routes a customer or internal intake form into an operations task and sets a lightweight due-date expectation.
-
-Expected output:
-
-```text
-Intake routing
-Source: customer form
-Request: implementation
-Create task in operations queue
-Due: this week
-```
-
-`ops_report.solve` summarizes weekly operations signals and flags blocked work that needs review.
-
-Expected output:
-
-```text
-Weekly ops report
-Week: 2026-07-03
-Open tickets:
-14
-Qualified leads:
-5
-Attention: blocked work needs review
-3
-```
-
-These examples use Rust CLI runtime features such as objects, property access, numeric comparisons, `else` branches, and string joining. The browser preview at `/run` is intentionally smaller: it supports `let`, `print`, simple text/number values, and basic `if` blocks using `==`.
-
-Inspect tokens or AST:
-
-```bash
-cargo run -- tokens ../examples/loops.solve
-cargo run -- ast ../examples/loops.solve
-```
-
-## MCP Direction
-
-SolveLang's MCP direction is to make `.solve` scripts easier for AI assistants to inspect, explain, validate, and draft without turning the early runtime into unsafe remote execution.
-
-The current MCP server lives at `site/mcp/solvelang-mcp.mjs`. It exposes:
-
-- `solvelang_status` to explain current MCP capabilities.
-- `solvelang_examples` to return a small preview-compatible example.
-- `solvelang_run_preview` to run a safe subset of SolveLang syntax in-process.
-
-This MCP preview runner is intentionally limited. It supports simple variables, `print(...)`, string/number/boolean values, and basic `if` blocks using `==` or `!=`. It is not the full Rust runtime.
-
-The roadmap is for AI assistants to:
-
-- Inspect `.solve` scripts and summarize their workflow intent.
-- Explain workflow steps in plain English for founders and operators.
-- Validate scripts against the currently supported syntax.
-- Generate first drafts of workflow scripts from business-process descriptions.
-- Safely run local examples later, with explicit boundaries and no risky script execution by default.
+- [Support triage demo](https://www.solve-lang.com/demo/support-triage/)
+- [Workflow X-Ray audit intake](https://www.solve-lang.com/audit/)
 
 ## Development
 
-From `solvec/`:
+### Rust runtime
 
 ```bash
-cargo fmt --check
-cargo clippy -- -D warnings
+cd solvec
 cargo test
-cargo build --release
+cargo run -- validate ../examples/support_triage.solve
 ```
+
+### Website
+
+```bash
+cd site
+npm install
+npm run lint
+npm run test:studio
+npm run build
+```
+
+### API-access prototype
+
+```bash
+cd services/api-access
+npm install --ignore-scripts --no-audit --no-fund
+npm test
+sam validate --lint --template template.yaml
+sam build --template template.yaml
+```
+
+Do not deploy test infrastructure from an unreviewed branch.
+
+## Contributing
+
+SolveLang is evolving quickly, so small reviewable changes are preferred.
+
+Before opening a pull request:
+
+1. explain the problem being solved,
+2. identify the affected layer,
+3. keep working, experimental, and planned capabilities separate,
+4. add or update tests for behavior changes,
+5. update documentation when user-visible behavior changes,
+6. avoid unrelated refactors in the same PR,
+7. include exact validation commands and results.
+
+Good contributions improve readability, diagnostics, safety, examples, documentation, and test coverage without expanding claims beyond the implementation.
+
+## Limitations
+
+SolveLang is not currently:
+
+- a stable production language runtime
+- a replacement for Zapier, Make, or n8n
+- a durable execution engine comparable to Temporal
+- a data orchestration platform comparable to Airflow
+- a BPMN suite comparable to Camunda
+- a production multi-agent platform
+- a hosted integration marketplace
+- an enterprise compliance product
+
+Additional limitations include:
+
+- integer-focused numeric behavior
+- incomplete type checking
+- narrow standard library
+- basic module support through relative imports
+- experimental provider and side-effect features
+- limited browser runtime compatibility
+- no published production reliability or performance benchmarks
+
+## FAQ
+
+### Is SolveLang a no-code automation platform?
+
+No. SolveLang is a language and tooling project focused on readable, version-controlled workflow definitions.
+
+### Does SolveLang execute workflows today?
+
+Yes, the Rust CLI executes the currently supported language locally. A limited browser preview also exists. Full managed hosted execution is planned, not available today.
+
+### Does SolveLang use AI?
+
+The language includes experimental AI-agent syntax, local fallback behavior, and optional OpenAI-backed responses. Deterministic workflow logic does not require AI.
+
+### Is Workflow Intelligence Studio AI-powered?
+
+Its current analysis is deterministic and local-first. It should not be described as AI analysis.
+
+### Can SolveLang replace my current automation platform?
+
+That is not the current goal. A realistic early use is to document, review, and explain workflows that may ultimately run in another platform or custom system.
+
+### Is the API subscription system production-ready?
+
+No. The repository includes test-mode API-access and billing infrastructure for engineering validation.
+
+### Why build a language instead of another visual builder?
+
+Source text is diffable, reviewable, testable, portable, and easier to discuss in code review. The project is exploring whether those properties can make AI-assisted business workflows more understandable and maintainable.
+
+## For recruiters and hiring managers
+
+SolveLang demonstrates work across several senior technical dimensions.
+
+### Language engineering
+
+- lexer, parser, AST, and interpreter design
+- runtime semantics and diagnostics
+- source locations and error reporting
+- imports, built-ins, and execution policy
+
+### Systems and platform engineering
+
+- Rust runtime implementation
+- TypeScript and Next.js product surfaces
+- AWS SAM serverless infrastructure
+- DynamoDB transactions and consistency
+- IAM least privilege
+- API authentication, quotas, and billing lifecycle
+- fail-closed configuration and deployment gates
+
+### AI engineering
+
+- explicit separation of deterministic and model-driven behavior
+- provider boundaries and experimental agent syntax
+- safety restrictions for network, files, environment, and tools
+- usage and cost-aware API design
+- explainability and audit-oriented workflow modeling
+
+### Product and developer experience
+
+- local-first workflow analysis tooling
+- CLI design and diagnostics
+- documentation architecture
+- examples and demo design
+- maturity labeling and honest product boundaries
+
+### Technical product and consulting
+
+- competitive analysis
+- roadmap prioritization
+- service-first commercialization strategy
+- workflow discovery and implementation methodology
+- translation of business-process needs into technical architecture
+
+The repository is best evaluated as a combined language-runtime, developer-tooling, AI-workflow, cloud-platform, and product-strategy project—not as a claim that a finished SaaS already exists.
+
+## Roadmap
+
+The strategic roadmap is maintained in [`docs/strategy.md`](docs/strategy.md). The repository-level engineering roadmap remains in [`ROADMAP.md`](ROADMAP.md).
+
+Near-term priorities are:
+
+1. make the project easier to understand and demonstrate,
+2. standardize truthful examples and maturity labels,
+3. strengthen developer onboarding and documentation,
+4. package recruiter and consulting materials,
+5. improve engineering quality based on verified friction,
+6. validate demand before committing to managed SaaS infrastructure.
+
+## License
+
+SolveLang is licensed under the terms in [`LICENSE`](LICENSE).
