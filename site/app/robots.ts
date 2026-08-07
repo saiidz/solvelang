@@ -1,11 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const privatePaths = [
-  "/account/",
-  "/api/",
-  "/checkout/",
-  "/success/",
-];
+const privatePaths = ["/account", "/api", "/checkout", "/success"];
 
 const searchCrawlers = [
   "Googlebot",
