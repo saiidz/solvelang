@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a focused improvement that fits SolveLang's positioning and maturity model.
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        SolveLang is intentionally not trying to become another universal automation marketplace. Strong proposals explain the workflow problem, the user, and why the change improves readability, auditability, maintainability, safety, or composability.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the workflow or developer problem without prescribing the implementation first.
+    validations:
+      required: true
+  - type: textarea
+    id: user
+    attributes:
+      label: Who needs this?
+      description: Name the user type and current workaround.
+    validations:
+      required: true
+  - type: dropdown
+    id: maturity
+    attributes:
+      label: Proposed maturity
+      options:
+        - Working-today improvement
+        - Experimental capability
+        - Planned / research item
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Suggested approach
+      description: Optional implementation idea, including alternatives or existing platforms that may already solve it.
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and compatibility impact
+      description: Note new side effects, secrets, AI behavior, browser/runtime parity, Studio/export impact, or backwards-compatibility concerns.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope checks
+      options:
+        - label: This request does not rely on fabricated customer demand or benchmarks.
+          required: true
+        - label: I considered whether an existing platform/integration should be used instead of adding the capability to SolveLang itself.
+          required: true
