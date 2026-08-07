@@ -57,10 +57,12 @@ test("robots policy allows search crawlers without exposing private paths", () =
   assert.match(robots, /https:\/\/www\.solve-lang\.com\/sitemap\.xml/);
 });
 
-test("sitemap route registry includes high-value public proof and excludes private utilities", () => {
+test("sitemap route registry includes high-value public proof and excludes private or test-mode utilities", () => {
   assert.match(routes, /segment: "status"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "demo\/support-triage"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "run"[^\n]+sitemap: true/);
+  assert.match(routes, /segment: "studio"[^\n]+sitemap: true/);
+  assert.match(routes, /segment: "api-pricing"[^\n]+sitemap: false/);
   assert.match(routes, /segment: "checkout"[^\n]+sitemap: false/);
   assert.match(routes, /segment: "success"[^\n]+sitemap: false/);
   assert.doesNotMatch(routes, /segment: "account"[^\n]+sitemap: true/);
