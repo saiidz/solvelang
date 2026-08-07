@@ -12,7 +12,7 @@ export const publicRoutes = [
   { segment: "withdraw", classification: "localizable-public", sitemap: false },
   { segment: "resources", classification: "localizable-public", sitemap: true },
   { segment: "pricing", classification: "localizable-public", sitemap: true },
-  { segment: "api-pricing", classification: "english-only-technical", sitemap: true },
+  { segment: "api-pricing", classification: "english-only-technical", sitemap: false },
   { segment: "n8n-workflow-validator", classification: "localizable-public", sitemap: true },
   { segment: "n8n-workflow-tester", classification: "localizable-public", sitemap: true },
   { segment: "n8n-error-checker", classification: "localizable-public", sitemap: true },
@@ -25,7 +25,7 @@ export const publicRoutes = [
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },
-  { segment: "studio", classification: "english-only-technical", sitemap: false },
+  { segment: "studio", classification: "english-only-technical", sitemap: true },
   { segment: "audit", classification: "noindex-utility", sitemap: false },
   { segment: "landing", classification: "disabled", sitemap: false },
 ] as const;
