@@ -12,6 +12,7 @@ const brandFacts = read("app/brandFacts.ts");
 const robots = read("app/robots.ts");
 const routes = read("app/i18n/routes.ts");
 const llms = read("public/llms.txt");
+const landing = read("app/(english)/landing/page.tsx");
 const prompts = JSON.parse(read("data/ai-search-prompts.json"));
 
 test("verified brand facts preserve SolveLang maturity boundaries", () => {
@@ -73,4 +74,22 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /https:\/\/www\.solve-lang\.com\/account\//);
   assert.doesNotMatch(llms, /https:\/\/www\.solve-lang\.com\/checkout\//);
   assert.doesNotMatch(llms, /api[_-]?key/i);
+});
+
+test("homepage restores product storytelling without weakening maturity boundaries", () => {
+  assert.match(landing, /See the system before you automate it\./);
+  assert.match(landing, /Map the real workflow/);
+  assert.match(landing, /Make every branch reviewable/);
+  assert.match(landing, /Automate with control/);
+  assert.match(landing, /Open Workflow Intelligence Studio/);
+  assert.match(landing, /Workflow X-Ray/);
+  assert.match(landing, /FAQPage/);
+  assert.match(landing, /Rust CLI is the canonical runtime/);
+  assert.match(landing, /Studio analysis is deterministic/);
+  assert.match(landing, /browser preview supports a smaller safe subset/i);
+  assert.match(landing, /Managed production execution is planned, not available today/);
+  assert.match(landing, /\/terms\//);
+  assert.match(landing, /\/refund-policy\//);
+  assert.match(landing, /\/withdraw\//);
+  assert.match(landing, /anpc-sal-pictogram\.png/);
 });
