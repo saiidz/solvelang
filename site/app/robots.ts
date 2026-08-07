@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+export const dynamic = "force-static";
+
 const privatePaths = ["/account", "/api", "/checkout", "/success"];
 
 const searchCrawlers = [
