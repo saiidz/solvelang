@@ -1,50 +1,60 @@
 # SolveLang
 
-SolveLang is a workflow analysis and automation language for business operations.
+SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.
 
-SolveLang helps founders, operators, and technical teams turn messy support, client intake, lead routing, approvals, and internal operations into readable workflow blueprints. It makes triggers, business rules, hidden decisions, missing branches, ownership, exceptions, human review points, and safe next actions visible before software runs the workflow.
+SolveLang is an early-beta open-source language and tooling project. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis, and the browser preview supports a smaller browser-only subset.
 
-SolveLang is not a language-learning service, homework solver, translation provider, chatbot directory, or general-purpose AI agent framework.
+SolveLang is not another Zapier-style connector marketplace, a no-code automation builder, a production durable workflow engine, a language-learning service, or a general-purpose autonomous AI workforce platform.
 
-Agent frameworks and integration platforms can execute model-driven actions or connect applications. SolveLang focuses on the operational layer that should be understood first: why a workflow takes one path instead of another, who owns each handoff, when a person must review the result, and what happens when information is missing or a step fails.
-
-## Key Pages
+## Canonical resources
 
 - Website: https://www.solve-lang.com/
-- Workflow Intelligence Studio: https://www.solve-lang.com/studio/
-- About SolveLang: https://www.solve-lang.com/about/
-- Workflow X-Ray Audit Intake: https://www.solve-lang.com/audit/
-- Support Triage Demo: https://www.solve-lang.com/demo/support-triage/
-- Browser Preview: https://www.solve-lang.com/run/
-- Pricing: https://www.solve-lang.com/pricing/
+- About and maturity: https://www.solve-lang.com/about/
 - Resources: https://www.solve-lang.com/resources/
-- GitHub: https://github.com/saiidz/solvelang
+- Browser preview: https://www.solve-lang.com/run/
+- Workflow status: https://www.solve-lang.com/status/
+- Support-triage demo: https://www.solve-lang.com/demo/support-triage/
+- n8n workflow preflight: https://www.solve-lang.com/check/
+- Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
+- Public support: https://www.solve-lang.com/support/
+- Source repository: https://github.com/saiidz/solvelang
+- License: https://github.com/saiidz/solvelang/blob/main/LICENSE
 
-## Available Today
+## Working today
 
-- Open-source Rust CLI
-- Local-first Workflow Intelligence Studio
-- Deterministic workflow analysis and scenario simulation
-- Local traces, analytics, versions, and evidence exports
-- Readable SolveLang workflow scripts
-- Safe local execution mode
-- Source-located validation diagnostics
-- Browser-safe preview
-- Workflow examples and documentation
-- Guided Workflow X-Ray service
+- Rust lexer, parser, AST runtime, interpreter, and CLI
+- `run`, `validate`, `tokens`, `ast`, and help commands
+- readable workflow scripts with documented language features
+- source-located diagnostics
+- hardened execution modes for local evaluation
+- local-first deterministic Workflow Intelligence Studio analysis
+- a smaller browser-safe preview
+- deterministic n8n workflow preflight tools
+- public examples and documentation
 
-## Current Boundaries
+## Experimental or test-mode
 
-- The browser preview is a safe static preview and does not call a server.
-- The Workflow Intelligence Studio runs locally and does not send workflow data or analytics externally.
-- Studio analysis is deterministic static analysis, not AI analysis.
-- Studio-generated SolveLang scripts are drafts; the Rust CLI remains canonical for validation and execution.
-- The Rust CLI runtime exists for local validation and execution.
-- Full managed automation hosting and production integrations are still evolving.
-- SolveLang should not be described as a language-learning tool, general AI solver, or fully hosted enterprise automation platform.
+- HTTP, file, and environment helpers
+- AI-agent/provider syntax and optional provider-backed responses
+- Studio-to-`.solve` draft generation
+- API keys, customer accounts, quotas, subscriptions, and billing infrastructure used for test-mode engineering validation
 
-## Main Call To Action
+Experimental or test-mode capabilities must not be described as production-ready merely because code or billing screens exist.
 
-Send one messy workflow for a Workflow X-Ray. SolveLang maps the trigger, decisions, missing branches, ownership, human review points, readable workflow draft, automation path, and setup recommendation.
+## Planned
+
+- stable language specification
+- broader provider support
+- production integrations and runtime adapters
+- full managed workflow execution
+- enterprise durability, governance, and observability
+
+## Important boundaries
+
+- The browser preview does not run the full Rust CLI runtime.
+- Workflow Intelligence Studio analysis is deterministic rather than AI analysis.
+- AI-generated or model-dependent output is not automatically correct and should not silently become consequential business action.
+- No production uptime, SLA, adoption, revenue, or performance benchmark is claimed.
+- Private account, checkout, API-secret, payment, and uploaded-workflow information is not part of the public search surface.
 
 Contact: hello@solve-lang.com

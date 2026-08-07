@@ -20,12 +20,13 @@ export const publicRoutes = [
   { segment: "n8n-workflow-documentation-generator", classification: "localizable-public", sitemap: true },
   { segment: "run", classification: "english-only-technical", sitemap: true },
   { segment: "repository-audit", classification: "english-only-technical", sitemap: true },
-  { segment: "check", classification: "checkout-sensitive", sitemap: true },
+  { segment: "check", classification: "english-only-technical", sitemap: true },
+  { segment: "status", classification: "english-only-technical", sitemap: true },
+  { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },
   { segment: "studio", classification: "english-only-technical", sitemap: false },
   { segment: "audit", classification: "noindex-utility", sitemap: false },
-  { segment: "demo/support-triage", classification: "noindex-utility", sitemap: false },
   { segment: "landing", classification: "disabled", sitemap: false },
 ] as const;
 export type PublicRouteSegment = (typeof publicRoutes)[number]["segment"];
@@ -37,7 +38,6 @@ const unsafeQueryKeys = new Set([
 
 export function normalisePublicRoute(route: readonly string[] | undefined): PublicRouteSegment | undefined {
   if (!route || route.length === 0) return "";
-  if (route.length !== 1) return undefined;
   const segment = route.join("/");
   return publicRoutes.some((candidate) => candidate.segment === segment) ? segment as PublicRouteSegment : undefined;
 }

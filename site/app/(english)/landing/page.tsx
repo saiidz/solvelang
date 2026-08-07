@@ -217,12 +217,34 @@ if ticket.topic == "billing" {
       </main>
 
       <footer className="border-t border-white/10 py-10">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 text-sm text-slate-400 sm:px-8 md:flex-row md:items-center md:justify-between">
-          <p>SolveLang · Early beta · Readable workflow language for AI-assisted business processes.</p>
-          <div className="flex flex-wrap gap-5">
-            <Link href="/resources/" className="hover:text-white">Docs</Link>
-            <Link href="/status/" className="hover:text-white">Status</Link>
-            <a href="https://github.com/saiidz/solvelang" target="_blank" rel="noreferrer" className="hover:text-white">GitHub</a>
+        <div className="mx-auto max-w-7xl px-5 text-sm text-slate-400 sm:px-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <p>SolveLang · Early beta · Readable workflow language for AI-assisted business processes.</p>
+            <div className="flex flex-wrap gap-5">
+              <Link href="/resources/" className="hover:text-white">Docs</Link>
+              <Link href="/status/" className="hover:text-white">Status</Link>
+              <Link href="/terms/" className="hover:text-white">Terms</Link>
+              <Link href="/refund-policy/" className="hover:text-white">Refund policy</Link>
+              <Link href="/withdraw/" className="hover:text-white">Withdrawal</Link>
+              <a href="https://github.com/saiidz/solvelang" target="_blank" rel="noreferrer" className="hover:text-white">GitHub</a>
+            </div>
+          </div>
+          <div className="mt-6 border-t border-white/10 pt-6">
+            <a
+              href="https://reclamatiisal.anpc.ro"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-3 hover:text-white"
+            >
+              <Image
+                src="/anpc-sal-pictogram.png"
+                alt="ANPC alternative dispute resolution"
+                width={168}
+                height={54}
+                className="h-auto w-[140px] rounded bg-white p-1"
+              />
+              <span>Alternative dispute resolution information</span>
+            </a>
           </div>
         </div>
       </footer>
