@@ -189,7 +189,7 @@ if ticket.topic == "billing" {
 
         <section className="border-b border-slate-200 bg-white">
           <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-7 sm:px-8 lg:flex-row lg:items-center lg:justify-between">
-            <p className="text-sm font-semibold text-slate-500">Designed around the operations teams repeat every day</p>
+            <p className="text-sm font-semibold text-slate-500">Designed for the workflows teams repeat every day.</p>
             <div className="flex flex-wrap gap-2 text-sm font-medium text-slate-700">
               {["Support", "Client intake", "Lead routing", "Approvals", "Internal reporting"].map((item) => (
                 <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-3.5 py-2">{item}</span>
@@ -219,7 +219,7 @@ if ticket.topic == "billing" {
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <div className="max-w-3xl">
               <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-300">Operational use cases</p>
-              <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Show the business rule and the maturity boundary together.</h2>
+              <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">Real workflows, with clear implementation boundaries.</h2>
               <p className="mt-6 text-lg leading-8 text-slate-300">Every example states what SolveLang can model today and where external implementation or experimental AI behavior begins.</p>
             </div>
             <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -273,7 +273,7 @@ if ticket.topic == "billing" {
         <section id="architecture" className="border-y border-slate-200 bg-slate-100 py-24 text-slate-950">
           <div className="mx-auto max-w-7xl px-5 sm:px-8">
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-blue-600">Architecture</p>
-            <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">A language layer first, with derived experiences around it.</h2>
+            <h2 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">One readable workflow layer, multiple ways to explore and run it.</h2>
             <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
               {[
                 ["1. Language", "Lexer, parser, AST, validation, diagnostics, and runtime semantics in Rust."],
