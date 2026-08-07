@@ -3,9 +3,12 @@ import LandingPage from "./landing/page";
 import { alternatesForRoute } from "../i18n/seo";
 
 export const metadata: Metadata = {
-  title: { absolute: "SolveLang — See the System Before You Automate It" },
+  title: {
+    absolute:
+      "SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes",
+  },
   description:
-    "SolveLang is a workflow analysis and automation language for support, intake, lead routing, approvals, and internal operations. Map decisions, exceptions, ownership, and human review before software runs the workflow.",
+    "SolveLang is an early-beta, open-source workflow language for making deterministic rules, AI-assisted decisions, approvals, tools, and failure paths readable and reviewable before managed automation.",
   alternates: alternatesForRoute(""),
 };
 
