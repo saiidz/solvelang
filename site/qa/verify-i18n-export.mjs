@@ -7,7 +7,7 @@ const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const outRoot = path.join(siteRoot, "out");
 const english = await readFile(path.join(outRoot, "index.html"), "utf8");
 assert.match(english, /^<!DOCTYPE html><html lang="en" dir="ltr"/);
-assert.match(english, /<title>SolveLang — See the System Before You Automate It<\/title>/);
+assert.match(english, /<title>SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes<\/title>/);
 assert.doesNotMatch(english, /SolveLang \| SolveLang/);
 const support = await readFile(path.join(outRoot, "support", "index.html"), "utf8");
 assert.match(support, /<title>Workflow Preflight Support \| SolveLang<\/title>/);
