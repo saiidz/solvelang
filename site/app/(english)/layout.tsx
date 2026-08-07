@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { brandFacts } from "../brandFacts";
 import { JsonLd } from "../components/JsonLd";
 import { LanguageSuggestion } from "../components/LanguageSuggestion";
 import "../globals.css";
@@ -14,32 +15,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "SolveLang — See the System Before You Automate It";
-const description =
-  "SolveLang is a workflow analysis and automation language for support, intake, lead routing, approvals, and internal operations. Map decisions, exceptions, ownership, and human review before software runs the workflow.";
+const title = "SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes";
+const description = brandFacts.shortDefinition;
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.solve-lang.com"),
-  applicationName: "SolveLang",
+  metadataBase: new URL(brandFacts.canonicalDomain),
+  applicationName: brandFacts.publicName,
   title: {
     default: title,
     template: "%s | SolveLang",
   },
   description,
   keywords: [
+    "workflow language",
+    "workflow as code",
+    "AI-assisted workflows",
+    "business process automation",
+    "human in the loop workflow",
     "workflow analysis",
-    "workflow automation",
-    "business process mapping",
-    "human in the loop automation",
-    "support triage",
-    "lead routing",
-    "operations automation",
+    "workflow preflight",
   ],
   openGraph: {
-    siteName: "SolveLang",
+    siteName: brandFacts.publicName,
     title,
     description,
-    url: "https://www.solve-lang.com/",
+    url: `${brandFacts.canonicalDomain}/`,
     type: "website",
   },
   twitter: {
@@ -49,54 +49,60 @@ export const metadata: Metadata = {
   },
 };
 
+const organizationId = `${brandFacts.canonicalDomain}/#organization`;
+const websiteId = `${brandFacts.canonicalDomain}/#website`;
+const softwareId = `${brandFacts.canonicalDomain}/#software`;
+const sourceId = `${brandFacts.canonicalDomain}/#source-code`;
+
 const siteJsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "Organization",
-      "@id": "https://www.solve-lang.com/#organization",
-      name: "SolveLang",
-      alternateName: "Solve Lang",
-      url: "https://www.solve-lang.com/",
-      logo: "https://www.solve-lang.com/solvelang-mark.svg",
-      email: "hello@solve-lang.com",
-      slogan: "See the system before you automate it.",
-      description,
-      sameAs: ["https://github.com/saiidz/solvelang"],
+      "@id": organizationId,
+      name: brandFacts.publicName,
+      alternateName: brandFacts.alternateNames,
+      url: `${brandFacts.canonicalDomain}/`,
+      logo: `${brandFacts.canonicalDomain}/solvelang-mark.svg`,
+      email: brandFacts.contactInformation.email,
+      description: brandFacts.shortDefinition,
+      sameAs: brandFacts.officialSocialProfiles,
     },
     {
       "@type": "WebSite",
-      "@id": "https://www.solve-lang.com/#website",
-      name: "SolveLang",
-      alternateName: "Solve Lang",
-      url: "https://www.solve-lang.com/",
-      description,
-      publisher: {
-        "@id": "https://www.solve-lang.com/#organization",
-      },
+      "@id": websiteId,
+      name: brandFacts.publicName,
+      alternateName: brandFacts.alternateNames,
+      url: `${brandFacts.canonicalDomain}/`,
+      description: brandFacts.shortDefinition,
+      publisher: { "@id": organizationId },
     },
     {
       "@type": "SoftwareApplication",
-      "@id": "https://www.solve-lang.com/#software",
-      name: "SolveLang",
-      url: "https://www.solve-lang.com/",
-      image: "https://www.solve-lang.com/solvelang-logo.svg",
-      email: "hello@solve-lang.com",
+      "@id": softwareId,
+      name: brandFacts.publicName,
+      url: `${brandFacts.canonicalDomain}/`,
+      image: `${brandFacts.canonicalDomain}/solvelang-logo.svg`,
       applicationCategory: "BusinessApplication",
-      applicationSubCategory: "Workflow analysis and automation",
-      operatingSystem: "Web, macOS, Linux",
-      description,
-      featureList: [
-        "Workflow analysis",
-        "Readable workflow scripts",
-        "Workflow X-Ray audits",
-        "Human review checkpoints",
-        "Browser-safe preview",
-        "Local Rust runtime",
-      ],
-      publisher: {
-        "@id": "https://www.solve-lang.com/#organization",
-      },
+      applicationSubCategory: "Workflow language and analysis tooling",
+      description: brandFacts.fullDescription,
+      featureList: brandFacts.features,
+      isAccessibleForFree: true,
+      publisher: { "@id": organizationId },
+      sameAs: [brandFacts.officialSocialProfiles[0]],
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": sourceId,
+      name: "SolveLang source code",
+      codeRepository: brandFacts.officialSocialProfiles[0],
+      programmingLanguage: ["Rust", "TypeScript", "JavaScript"],
+      runtimePlatform: "Rust CLI and web tooling",
+      description:
+        "Open-source source code for the early-beta SolveLang language runtime, CLI, browser tooling, documentation, and experimental test-mode API infrastructure.",
+      license: "https://github.com/saiidz/solvelang/blob/main/LICENSE",
+      targetProduct: { "@id": softwareId },
+      publisher: { "@id": organizationId },
     },
   ],
 };
