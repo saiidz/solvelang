@@ -150,6 +150,20 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       });
     },
 
+    async changeSubscriptionPlan({ subscriptionId, priceId, plan }) {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const items = subscription?.items?.data ?? [];
+      if (items.length !== 1 || typeof items[0]?.id !== "string") {
+        throw new Error("Stripe subscription must contain exactly one managed plan item.");
+      }
+      return stripe.subscriptions.update(subscriptionId, {
+        items: [{ id: items[0].id, price: priceId, quantity: 1 }],
+        metadata: { ...(subscription.metadata ?? {}), plan },
+        cancel_at_period_end: false,
+        proration_behavior: "create_prorations",
+      });
+    },
+
     constructWebhookEvent(rawBody, signature) {
       return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     },
