@@ -25,16 +25,19 @@ function requiredAccount(account) {
   };
 }
 
-function paymentMethodSummary(paymentMethod) {
+function paymentMethodSummary(paymentMethod, defaultPaymentMethodId) {
   if (!paymentMethod || typeof paymentMethod !== "object") return null;
+  const id = typeof paymentMethod.id === "string" ? paymentMethod.id : null;
   if (paymentMethod.type === "link") {
     return {
+      id,
       type: "link",
       label: "Link",
       brand: null,
       last4: null,
       expMonth: null,
       expYear: null,
+      isDefault: Boolean(id && id === defaultPaymentMethodId),
     };
   }
   const card = paymentMethod.card;
@@ -46,12 +49,14 @@ function paymentMethodSummary(paymentMethod) {
   if (!last4) return null;
   const displayBrand = brand.charAt(0).toUpperCase() + brand.slice(1);
   return {
+    id,
     type: "card",
     label: `${displayBrand} •••• ${last4}`,
     brand,
     last4,
     expMonth,
     expYear,
+    isDefault: Boolean(id && id === defaultPaymentMethodId),
   };
 }
 
@@ -73,6 +78,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     "createPaymentMethodSetup",
     "retrievePaymentMethodSetup",
     "setDefaultPaymentMethod",
+    "detachPaymentMethod",
     "setCancelAtPeriodEnd",
     "changeSubscriptionPlan",
   ];
@@ -91,6 +97,14 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     return requiredAccount(await apiAccessService.getSubscriptionAccount(accountId));
   }
 
+  async function requireManageableAccount(accountId) {
+    const account = await accountFor(accountId);
+    if (!MANAGEABLE_STATUSES.has(account.subscriptionStatus)) {
+      throw new ApiAccessError(409, "subscription_not_manageable", "The subscription cannot be changed in its current state.");
+    }
+    return account;
+  }
+
   async function getManagement({ accountId }) {
     const account = await accountFor(accountId);
     const state = await gateway.retrieveSubscriptionManagement({
@@ -100,8 +114,13 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     const invoices = Array.isArray(state?.invoices?.data)
       ? state.invoices.data.map(invoiceSummary).filter((invoice) => invoice.id)
       : [];
+    const defaultPaymentMethodId = typeof state?.defaultPaymentMethodId === "string"
+      ? state.defaultPaymentMethodId
+      : null;
     const attachedPaymentMethods = Array.isArray(state?.attachedPaymentMethods)
-      ? state.attachedPaymentMethods.map(paymentMethodSummary).filter(Boolean)
+      ? state.attachedPaymentMethods
+        .map((method) => paymentMethodSummary(method, defaultPaymentMethodId))
+        .filter(Boolean)
       : [];
     return {
       subscription: {
@@ -110,17 +129,14 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
         currentPeriodEnd: account.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: state?.subscription?.cancel_at_period_end === true,
       },
-      paymentMethod: paymentMethodSummary(state?.paymentMethod),
+      paymentMethod: paymentMethodSummary(state?.paymentMethod, defaultPaymentMethodId),
       attachedPaymentMethods,
       invoices,
     };
   }
 
   async function createPaymentSetup({ accountId }) {
-    const account = await accountFor(accountId);
-    if (!MANAGEABLE_STATUSES.has(account.subscriptionStatus)) {
-      throw new ApiAccessError(409, "subscription_not_manageable", "The subscription cannot accept a new payment method in its current state.");
-    }
+    const account = await requireManageableAccount(accountId);
     const setupIntent = await gateway.createPaymentMethodSetup({
       accountId,
       customerId: account.stripeCustomerId,
@@ -132,7 +148,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
   }
 
   async function completePaymentSetup({ accountId, setupIntentId }) {
-    const account = await accountFor(accountId);
+    const account = await requireManageableAccount(accountId);
     const cleanSetupIntentId = cleanId(setupIntentId, "SetupIntent ID", "seti");
     const setupIntent = await gateway.retrievePaymentMethodSetup({ setupIntentId: cleanSetupIntentId });
     const setupCustomerId = typeof setupIntent?.customer === "string" ? setupIntent.customer : setupIntent?.customer?.id;
@@ -144,19 +160,48 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
       || typeof paymentMethodId !== "string") {
       throw new ApiAccessError(409, "payment_setup_incomplete", "The payment method setup has not completed successfully.");
     }
-    await gateway.setDefaultPaymentMethod({
+    const result = await gateway.setDefaultPaymentMethod({
       customerId: account.stripeCustomerId,
       subscriptionId: account.stripeSubscriptionId,
       paymentMethodId: cleanId(paymentMethodId, "Payment method ID", "pm"),
     });
+    if (result?.applied !== true) {
+      throw new ApiAccessError(409, "payment_method_not_owned", "That payment method is not available for this account.");
+    }
     return getManagement({ accountId });
   }
 
-  async function setCancellation({ accountId, cancelAtPeriodEnd }) {
-    const account = await accountFor(accountId);
-    if (!MANAGEABLE_STATUSES.has(account.subscriptionStatus)) {
-      throw new ApiAccessError(409, "subscription_not_manageable", "The subscription cannot be changed in its current state.");
+  async function setPaymentMethodDefault({ accountId, paymentMethodId }) {
+    const account = await requireManageableAccount(accountId);
+    const cleanPaymentMethodId = cleanId(paymentMethodId, "Payment method ID", "pm");
+    const result = await gateway.setDefaultPaymentMethod({
+      customerId: account.stripeCustomerId,
+      subscriptionId: account.stripeSubscriptionId,
+      paymentMethodId: cleanPaymentMethodId,
+    });
+    if (result?.applied !== true) {
+      throw new ApiAccessError(404, "payment_method_not_found", "That saved card is not available for this account.");
     }
+    return getManagement({ accountId });
+  }
+
+  async function removePaymentMethod({ accountId, paymentMethodId }) {
+    const account = await requireManageableAccount(accountId);
+    const cleanPaymentMethodId = cleanId(paymentMethodId, "Payment method ID", "pm");
+    const result = await gateway.detachPaymentMethod({
+      customerId: account.stripeCustomerId,
+      subscriptionId: account.stripeSubscriptionId,
+      paymentMethodId: cleanPaymentMethodId,
+    });
+    if (result?.detached === true) return getManagement({ accountId });
+    if (result?.reason === "default") {
+      throw new ApiAccessError(409, "payment_method_is_default", "Choose another default payment method before removing this card.");
+    }
+    throw new ApiAccessError(404, "payment_method_not_found", "That saved card is not available for this account.");
+  }
+
+  async function setCancellation({ accountId, cancelAtPeriodEnd }) {
+    const account = await requireManageableAccount(accountId);
     if (typeof cancelAtPeriodEnd !== "boolean") {
       throw new ApiAccessError(400, "invalid_subscription_management", "Cancellation choice is invalid.");
     }
@@ -168,10 +213,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
   }
 
   async function changePlan({ accountId, plan }) {
-    const account = await accountFor(accountId);
-    if (!MANAGEABLE_STATUSES.has(account.subscriptionStatus)) {
-      throw new ApiAccessError(409, "subscription_not_manageable", "The subscription cannot be changed in its current state.");
-    }
+    const account = await requireManageableAccount(accountId);
     if (typeof plan !== "string" || !PLAN_NAMES.has(plan)) {
       throw new ApiAccessError(400, "invalid_subscription_plan", "Subscription plan is invalid.");
     }
@@ -210,5 +252,13 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     };
   }
 
-  return { getManagement, createPaymentSetup, completePaymentSetup, setCancellation, changePlan };
+  return {
+    getManagement,
+    createPaymentSetup,
+    completePaymentSetup,
+    setPaymentMethodDefault,
+    removePaymentMethod,
+    setCancellation,
+    changePlan,
+  };
 }

@@ -26,7 +26,8 @@ function gateway(overrides = {}) {
   return {
     retrieveSubscriptionManagement: async () => ({
       subscription: { status: "active", cancel_at_period_end: false },
-      paymentMethod: { card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2034 } },
+      paymentMethod: { id: "pm_123", type: "card", card: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2034 } },
+      defaultPaymentMethodId: "pm_123",
       attachedPaymentMethods: [],
       invoices: {
         data: [{
@@ -47,7 +48,8 @@ function gateway(overrides = {}) {
       customer: "cus_123",
       payment_method: "pm_123",
     }),
-    setDefaultPaymentMethod: async () => ({}),
+    setDefaultPaymentMethod: async () => ({ applied: true }),
+    detachPaymentMethod: async () => ({ detached: true }),
     setCancelAtPeriodEnd: async () => ({}),
     changeSubscriptionPlan: async () => ({ applied: true, pending: false }),
     ...overrides,
@@ -64,12 +66,14 @@ test("returns only sanitized subscription, card, and invoice fields", async () =
       cancelAtPeriodEnd: false,
     },
     paymentMethod: {
+      id: "pm_123",
       type: "card",
       label: "Visa •••• 4242",
       brand: "visa",
       last4: "4242",
       expMonth: 12,
       expYear: 2034,
+      isDefault: true,
     },
     attachedPaymentMethods: [],
     invoices: [{
@@ -84,15 +88,16 @@ test("returns only sanitized subscription, card, and invoice fields", async () =
   });
 });
 
-test("returns only masked attached-card summaries when no default can be selected", async () => {
+test("returns masked saved cards with Stripe references and never leaks fingerprints", async () => {
   const service = createSubscriptionManagementService({
     gateway: gateway({
       retrieveSubscriptionManagement: async () => ({
         subscription: { status: "active" },
         paymentMethod: null,
+        defaultPaymentMethodId: "pm_secret_2",
         attachedPaymentMethods: [
-          { id: "pm_secret_1", customer: "cus_123", card: { brand: "visa", last4: "1111", exp_month: 1, exp_year: 2035, fingerprint: "secret" } },
-          { id: "pm_secret_2", customer: "cus_123", card: { brand: "mastercard", last4: "2222", exp_month: 2, exp_year: 2036 } },
+          { id: "pm_secret_1", customer: "cus_123", type: "card", card: { brand: "visa", last4: "1111", exp_month: 1, exp_year: 2035, fingerprint: "secret" } },
+          { id: "pm_secret_2", customer: "cus_123", type: "card", card: { brand: "mastercard", last4: "2222", exp_month: 2, exp_year: 2036 } },
         ],
         invoices: { data: [] },
       }),
@@ -104,10 +109,9 @@ test("returns only masked attached-card summaries when no default can be selecte
   const state = await service.getManagement({ accountId: account.accountId });
   assert.equal(state.paymentMethod, null);
   assert.deepEqual(state.attachedPaymentMethods, [
-    { type: "card", label: "Visa •••• 1111", brand: "visa", last4: "1111", expMonth: 1, expYear: 2035 },
-    { type: "card", label: "Mastercard •••• 2222", brand: "mastercard", last4: "2222", expMonth: 2, expYear: 2036 },
+    { id: "pm_secret_1", type: "card", label: "Visa •••• 1111", brand: "visa", last4: "1111", expMonth: 1, expYear: 2035, isDefault: false },
+    { id: "pm_secret_2", type: "card", label: "Mastercard •••• 2222", brand: "mastercard", last4: "2222", expMonth: 2, expYear: 2036, isDefault: true },
   ]);
-  assert.equal(JSON.stringify(state).includes("pm_secret"), false);
   assert.equal(JSON.stringify(state).includes("fingerprint"), false);
 });
 
@@ -116,7 +120,7 @@ test("creates a card SetupIntent and applies it only after customer ownership an
   const service = createSubscriptionManagementService({
     gateway: gateway({
       createPaymentMethodSetup: async (input) => { calls.push(["create", input]); return { id: "seti_123", client_secret: "seti_123_secret_test" }; },
-      setDefaultPaymentMethod: async (input) => { calls.push(["default", input]); },
+      setDefaultPaymentMethod: async (input) => { calls.push(["default", input]); return { applied: true }; },
     }),
     apiAccessService: apiService(),
     priceIds,
@@ -152,6 +156,46 @@ test("rejects a SetupIntent owned by another Stripe customer", async () => {
     () => service.completePaymentSetup({ accountId: account.accountId, setupIntentId: "seti_123" }),
     (error) => error instanceof ApiAccessError && error.code === "payment_setup_incomplete",
   );
+});
+
+test("sets an existing saved card as default using only server-owned customer and subscription IDs", async () => {
+  const calls = [];
+  const service = createSubscriptionManagementService({
+    gateway: gateway({
+      setDefaultPaymentMethod: async (input) => { calls.push(input); return { applied: true }; },
+    }),
+    apiAccessService: apiService(),
+    priceIds,
+    enabled: true,
+  });
+  await service.setPaymentMethodDefault({ accountId: account.accountId, paymentMethodId: "pm_saved123" });
+  assert.deepEqual(calls, [{ customerId: "cus_123", subscriptionId: "sub_123", paymentMethodId: "pm_saved123" }]);
+});
+
+test("removes a non-default saved card but refuses to remove the billing default", async () => {
+  const calls = [];
+  const service = createSubscriptionManagementService({
+    gateway: gateway({
+      detachPaymentMethod: async (input) => {
+        calls.push(input);
+        return input.paymentMethodId === "pm_default123"
+          ? { detached: false, reason: "default" }
+          : { detached: true };
+      },
+    }),
+    apiAccessService: apiService(),
+    priceIds,
+    enabled: true,
+  });
+  await service.removePaymentMethod({ accountId: account.accountId, paymentMethodId: "pm_old123" });
+  await assert.rejects(
+    () => service.removePaymentMethod({ accountId: account.accountId, paymentMethodId: "pm_default123" }),
+    (error) => error instanceof ApiAccessError && error.code === "payment_method_is_default",
+  );
+  assert.deepEqual(calls, [
+    { customerId: "cus_123", subscriptionId: "sub_123", paymentMethodId: "pm_old123" },
+    { customerId: "cus_123", subscriptionId: "sub_123", paymentMethodId: "pm_default123" },
+  ]);
 });
 
 test("schedules and reverses cancellation only from the server-owned subscription", async () => {

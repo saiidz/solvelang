@@ -19,6 +19,7 @@ function stripeClient(overrides = {}) {
     paymentMethods: {
       retrieve: async (id) => ({ id, customer: "cus_1", type: "card", card: { brand: "visa", last4: "4242" } }),
       list: async () => ({ data: [] }),
+      detach: async (id) => ({ id, customer: null }),
     },
     setupIntents: {
       create: async () => ({ id: "seti_1", client_secret: "seti_1_secret_test" }),
@@ -91,7 +92,8 @@ test("prefers the subscription default card", async () => {
     subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1", default_payment_method: "pm_subscription" }), update: async () => ({}) },
     paymentMethods: {
       retrieve: async (id) => ({ id, customer: "cus_1", type: "card", card: { last4: "1111" } }),
-      list: async () => { throw new Error("should not list attached cards"); },
+      list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
   });
   const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
@@ -114,7 +116,8 @@ test("falls back to the customer default card", async () => {
     invoices: { list: async (params) => { calls.push(["invoices", params]); return { data: [{ id: "in_1" }] }; } },
     paymentMethods: {
       retrieve: async (id) => { calls.push(["payment", id]); return { id, customer: "cus_1", type: "card", card: { last4: "4242" } }; },
-      list: async () => { throw new Error("should not list attached cards"); },
+      list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
   });
   const gateway = createStripeSubscriptionGateway(stripe, "whsec_test");
@@ -139,6 +142,7 @@ test("continues securely when a configured subscription default no longer exists
         return { id, customer: "cus_1", type: "card", card: { last4: "4242" } };
       },
       list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
   });
   const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
@@ -161,7 +165,8 @@ test("falls back to the latest successfully paid invoice card", async () => {
     paymentIntents: { retrieve: async () => ({ id: "pi_paid", customer: "cus_1", payment_method: "pm_paid" }) },
     paymentMethods: {
       retrieve: async () => ({ id: "pm_paid", customer: "cus_1", type: "card", card: { last4: "4242" } }),
-      list: async () => { throw new Error("should not list attached cards"); },
+      list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
   });
   const state = await createStripeSubscriptionGateway(stripe, "whsec_test")
@@ -176,6 +181,7 @@ test("uses one attached card but does not choose among multiple attached cards",
     paymentMethods: {
       retrieve: async () => { throw new Error("should not retrieve a missing default"); },
       list: async () => ({ data: ids.map((id) => ({ id, customer: "cus_1", type: "card", card: { brand: "visa", last4: id.slice(-4), exp_month: 1, exp_year: 2035 } })) }),
+      detach: async () => ({}),
     },
   });
   const one = await createStripeSubscriptionGateway(attached(["pm_1111"]), "whsec_test")
@@ -195,6 +201,7 @@ test("rejects a payment method owned by another customer and handles no card", a
     paymentMethods: {
       retrieve: async () => ({ id: "pm_other", customer: "cus_other", type: "card", card: { last4: "9999" } }),
       list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
   });
   const state = await createStripeSubscriptionGateway(wrongOwner, "whsec_test")
@@ -214,7 +221,7 @@ test("normalizes the paid checkout card onto the customer and subscription", asy
     invoices: { list: async () => ({ data: [{ id: "in_paid", status: "paid", amount_paid: 4900, created: 10 }] }) },
     invoicePayments: { list: async () => ({ data: [{ status: "paid", payment: { type: "payment_intent", payment_intent: "pi_paid" } }] }) },
     paymentIntents: { retrieve: async () => ({ id: "pi_paid", customer: "cus_1", payment_method: "pm_paid" }) },
-    paymentMethods: { retrieve: async () => ({ id: "pm_paid", customer: "cus_1", type: "card", card: { last4: "4242" } }), list: async () => ({ data: [] }) },
+    paymentMethods: { retrieve: async () => ({ id: "pm_paid", customer: "cus_1", type: "card", card: { last4: "4242" } }), list: async () => ({ data: [] }), detach: async () => ({}) },
     customers: { retrieve: async () => ({ id: "cus_1", invoice_settings: {} }), update: async (...args) => calls.push(["customer", ...args]) },
     subscriptions: { retrieve: async () => ({ id: "sub_1", customer: "cus_1" }), update: async (...args) => calls.push(["subscription", ...args]) },
   });

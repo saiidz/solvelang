@@ -26,12 +26,14 @@ const PLANS = [
 type PlanKey = (typeof PLANS)[number]["key"];
 
 type PaymentMethodSummary = {
+  id: string | null;
   type: "card" | "link";
   label: string;
   brand: string | null;
   last4: string | null;
   expMonth: number | null;
   expYear: number | null;
+  isDefault: boolean;
 };
 
 type InvoiceSummary = {
@@ -115,7 +117,7 @@ export function SubscriptionManager() {
       setupIntentId,
     });
     setManagement(updated);
-    setNotice("Payment method updated.");
+    setNotice("Card added and set as the billing default.");
     window.history.replaceState({}, "", "/account/api-subscription/");
   }, [postAction]);
 
@@ -211,6 +213,45 @@ export function SubscriptionManager() {
     setBusy(false);
   }
 
+  async function setDefaultPaymentMethod(paymentMethodId: string) {
+    if (!management) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await postAction<ManagementState>(management.csrfToken, {
+        action: "set_default_payment_method",
+        paymentMethodId,
+      });
+      setManagement(updated);
+      setNotice("Billing default updated.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Default payment method could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removePaymentMethod(paymentMethodId: string, label: string) {
+    if (!management) return;
+    if (!window.confirm(`Remove ${label}? This card will no longer be available for future billing.`)) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await postAction<ManagementState>(management.csrfToken, {
+        action: "remove_payment_method",
+        paymentMethodId,
+      });
+      setManagement(updated);
+      setNotice("Saved card removed.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Saved card could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function changePlan(plan: PlanKey) {
     if (!management || management.subscription.plan === plan) return;
     const target = PLANS.find((candidate) => candidate.key === plan);
@@ -266,7 +307,7 @@ export function SubscriptionManager() {
         <header className="mt-7 border-b border-white/10 pb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
           <h1 className="mt-3 text-4xl font-bold">Manage subscription</h1>
-          <p className="mt-3 text-slate-400">Change plans, update billing, review invoices, or schedule cancellation without leaving SolveLang.</p>
+          <p className="mt-3 text-slate-400">Change plans, manage payment methods, review invoices, or schedule cancellation without leaving SolveLang.</p>
         </header>
 
         {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-emerald-200">{notice}</p> : null}
@@ -314,45 +355,74 @@ export function SubscriptionManager() {
               </section>
 
               <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
-                <p className="text-sm text-slate-400">Payment method</p>
-                {management.paymentMethod ? (
-                  <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xl font-bold">{management.paymentMethod.label}</p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm text-slate-400">Payment methods</p>
+                    <h2 className="mt-2 text-2xl font-bold">Billing cards</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-400">Add cards, choose which saved card Stripe uses by default, or remove cards you no longer want saved.</p>
+                  </div>
+                  <button disabled={busy} onClick={openPaymentForm} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Add card</button>
+                </div>
+
+                <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Current billing method</p>
+                  {management.paymentMethod ? (
+                    <div className="mt-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xl font-bold">{management.paymentMethod.label}</p>
+                        <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">Default</span>
+                      </div>
                       {management.paymentMethod.type === "card" ? (
                         <p className="mt-1 text-sm text-slate-400">Expires {management.paymentMethod.expMonth ?? "—"}/{management.paymentMethod.expYear ?? "—"}</p>
                       ) : (
                         <p className="mt-1 text-sm text-slate-400">Saved with Stripe Link</p>
                       )}
                     </div>
-                    <button disabled={busy} onClick={openPaymentForm} className="rounded-xl border border-cyan-300/30 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Update payment method</button>
+                  ) : (
+                    <p className="mt-3 text-sm text-amber-200">No billing default is currently visible. Add a card to create a managed default.</p>
+                  )}
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-bold">Saved cards</h3>
+                    <span className="text-sm text-slate-500">{management.attachedPaymentMethods.length} saved</span>
                   </div>
-                ) : (
-                  <div className="mt-4">
-                    {management.attachedPaymentMethods.length > 1 ? (
-                      <div className="mb-4 space-y-2 text-sm text-slate-300">
-                        <p>Multiple cards are saved in Stripe. Choose the card to use through the secure payment form.</p>
-                        {management.attachedPaymentMethods.map((method) => (
-                          <p key={`${method.type}-${method.label}-${method.expMonth}-${method.expYear}`}>
-                            {method.label}{method.type === "card" ? ` · expires ${method.expMonth ?? "—"}/${method.expYear ?? "—"}` : ""}
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                    <button disabled={busy} onClick={openPaymentForm} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">
-                      {management.attachedPaymentMethods.length > 1 ? "Choose payment method" : "Add payment method"}
-                    </button>
+                  <div className="mt-3 space-y-3">
+                    {management.attachedPaymentMethods.length === 0 ? (
+                      <p className="rounded-xl border border-dashed border-white/15 p-5 text-sm text-slate-400">No additional saved cards. Add a card to manage future billing directly from SolveLang.</p>
+                    ) : management.attachedPaymentMethods.map((method) => (
+                      <article key={method.id ?? `${method.label}-${method.expMonth}-${method.expYear}`} className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-bold">{method.label}</p>
+                              {method.isDefault ? <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">Default</span> : null}
+                            </div>
+                            <p className="mt-1 text-sm text-slate-400">Expires {method.expMonth ?? "—"}/{method.expYear ?? "—"}</p>
+                          </div>
+                          {method.id ? (
+                            <div className="flex flex-wrap gap-2">
+                              {!method.isDefault ? (
+                                <button disabled={busy} onClick={() => setDefaultPaymentMethod(method.id!)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Set default</button>
+                              ) : null}
+                              <button disabled={busy || method.isDefault} title={method.isDefault ? "Choose another default card before removing this card." : undefined} onClick={() => removePaymentMethod(method.id!, method.label)} className="rounded-lg border border-red-300/30 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:cursor-not-allowed disabled:opacity-40">Remove</button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                )}
+                </div>
 
                 {paymentFormOpen ? (
                   <div className="mt-6 rounded-2xl bg-white p-5 text-slate-950">
                     <div ref={mountRef} className="min-h-[180px]" aria-label="Secure Stripe payment method form" />
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <button type="button" disabled={busy || !paymentReady} onClick={submitPaymentMethod} className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-50">Save payment method</button>
+                      <button type="button" disabled={busy || !paymentReady} onClick={submitPaymentMethod} className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-50">Save card</button>
                       <button type="button" disabled={busy} onClick={destroyPaymentForm} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
                     </div>
-                    <p className="mt-4 text-xs text-slate-500">Payment fields are securely provided by Stripe. SolveLang never receives your full payment credentials.</p>
+                    <p className="mt-4 text-xs text-slate-500">Card fields are securely provided by Stripe. SolveLang never receives or stores your full card number.</p>
                   </div>
                 ) : null}
               </section>
