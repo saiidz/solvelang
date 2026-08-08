@@ -20,7 +20,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     return objectId(resource?.customer) === customerId;
   }
 
-  async function cardById(paymentMethodId) {
+  async function supportedPaymentMethodById(paymentMethodId) {
     if (typeof paymentMethodId !== "string") return null;
     let paymentMethod;
     try {
@@ -29,15 +29,15 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       if (error?.code === "resource_missing") return null;
       throw error;
     }
-    return paymentMethod?.type === "card" ? paymentMethod : null;
+    return paymentMethod?.type === "card" || paymentMethod?.type === "link" ? paymentMethod : null;
   }
 
-  async function ownedCard(paymentMethodId, customerId) {
-    const paymentMethod = await cardById(paymentMethodId);
+  async function ownedPaymentMethod(paymentMethodId, customerId) {
+    const paymentMethod = await supportedPaymentMethodById(paymentMethodId);
     return paymentMethod && belongsToCustomer(paymentMethod, customerId) ? paymentMethod : null;
   }
 
-  async function paidInvoiceCard(invoices, customerId) {
+  async function paidInvoicePaymentMethod(invoices, customerId) {
     const invoice = invoices?.data
       ?.filter((candidate) => candidate?.status === "paid" && candidate.amount_paid > 0)
       .sort((left, right) => (right.created ?? 0) - (left.created ?? 0))[0];
@@ -51,7 +51,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       if (!paymentIntentId) continue;
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       if (!belongsToCustomer(paymentIntent, customerId)) continue;
-      const paymentMethod = await cardById(objectId(paymentIntent.payment_method));
+      const paymentMethod = await supportedPaymentMethodById(objectId(paymentIntent.payment_method));
       if (paymentMethod) return paymentMethod;
     }
     return null;
@@ -93,10 +93,10 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         ["customer_default", objectId(customer.invoice_settings?.default_payment_method)],
       ];
       for (const [paymentMethodSource, paymentMethodId] of candidates) {
-        const paymentMethod = await ownedCard(paymentMethodId, customerId);
+        const paymentMethod = await ownedPaymentMethod(paymentMethodId, customerId);
         if (paymentMethod) return { subscription, paymentMethod, paymentMethodSource, attachedPaymentMethods: [], invoices };
       }
-      const invoicePaymentMethod = await paidInvoiceCard(invoices, customerId);
+      const invoicePaymentMethod = await paidInvoicePaymentMethod(invoices, customerId);
       if (invoicePaymentMethod) {
         return { subscription, paymentMethod: invoicePaymentMethod, paymentMethodSource: "paid_invoice", attachedPaymentMethods: [], invoices };
       }
@@ -114,7 +114,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
 
     async normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId }) {
       const { invoices } = await managementSources({ customerId, subscriptionId });
-      const paymentMethod = await paidInvoiceCard(invoices, customerId);
+      const paymentMethod = await paidInvoicePaymentMethod(invoices, customerId);
       if (!paymentMethod) return false;
       await stripe.customers.update(customerId, {
         invoice_settings: { default_payment_method: paymentMethod.id },
