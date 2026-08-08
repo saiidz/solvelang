@@ -20,7 +20,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     return objectId(resource?.customer) === customerId;
   }
 
-  async function ownedCard(paymentMethodId, customerId) {
+  async function cardById(paymentMethodId) {
     if (typeof paymentMethodId !== "string") return null;
     let paymentMethod;
     try {
@@ -29,9 +29,12 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       if (error?.code === "resource_missing") return null;
       throw error;
     }
-    return paymentMethod?.type === "card" && belongsToCustomer(paymentMethod, customerId)
-      ? paymentMethod
-      : null;
+    return paymentMethod?.type === "card" ? paymentMethod : null;
+  }
+
+  async function ownedCard(paymentMethodId, customerId) {
+    const paymentMethod = await cardById(paymentMethodId);
+    return paymentMethod && belongsToCustomer(paymentMethod, customerId) ? paymentMethod : null;
   }
 
   async function paidInvoiceCard(invoices, customerId) {
@@ -48,7 +51,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       if (!paymentIntentId) continue;
       const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
       if (!belongsToCustomer(paymentIntent, customerId)) continue;
-      const paymentMethod = await ownedCard(objectId(paymentIntent.payment_method), customerId);
+      const paymentMethod = await cardById(objectId(paymentIntent.payment_method));
       if (paymentMethod) return paymentMethod;
     }
     return null;
