@@ -77,6 +77,7 @@ if (environment.subscriptionBillingEnabled) {
     management: createSubscriptionManagementService({
       gateway: stripeGateway,
       apiAccessService: service,
+      priceIds: environment.priceIds,
       enabled: true,
     }),
     siteOrigin: environment.siteOrigin,
