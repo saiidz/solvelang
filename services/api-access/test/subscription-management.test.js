@@ -63,7 +63,14 @@ test("returns only sanitized subscription, card, and invoice fields", async () =
       currentPeriodEnd: account.currentPeriodEnd,
       cancelAtPeriodEnd: false,
     },
-    paymentMethod: { brand: "visa", last4: "4242", expMonth: 12, expYear: 2034 },
+    paymentMethod: {
+      type: "card",
+      label: "Visa •••• 4242",
+      brand: "visa",
+      last4: "4242",
+      expMonth: 12,
+      expYear: 2034,
+    },
     attachedPaymentMethods: [],
     invoices: [{
       id: "in_1",
@@ -97,8 +104,8 @@ test("returns only masked attached-card summaries when no default can be selecte
   const state = await service.getManagement({ accountId: account.accountId });
   assert.equal(state.paymentMethod, null);
   assert.deepEqual(state.attachedPaymentMethods, [
-    { brand: "visa", last4: "1111", expMonth: 1, expYear: 2035 },
-    { brand: "mastercard", last4: "2222", expMonth: 2, expYear: 2036 },
+    { type: "card", label: "Visa •••• 1111", brand: "visa", last4: "1111", expMonth: 1, expYear: 2035 },
+    { type: "card", label: "Mastercard •••• 2222", brand: "mastercard", last4: "2222", expMonth: 2, expYear: 2036 },
   ]);
   assert.equal(JSON.stringify(state).includes("pm_secret"), false);
   assert.equal(JSON.stringify(state).includes("fingerprint"), false);
