@@ -12,6 +12,12 @@ const account = {
   stripeSubscriptionId: "sub_123",
 };
 
+const priceIds = {
+  developer: "price_dev123",
+  pro: "price_pro123",
+  business: "price_business123",
+};
+
 function apiService(value = account) {
   return { getSubscriptionAccount: async () => value };
 }
@@ -43,12 +49,13 @@ function gateway(overrides = {}) {
     }),
     setDefaultPaymentMethod: async () => ({}),
     setCancelAtPeriodEnd: async () => ({}),
+    changeSubscriptionPlan: async () => ({}),
     ...overrides,
   };
 }
 
 test("returns only sanitized subscription, card, and invoice fields", async () => {
-  const service = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(), enabled: true });
+  const service = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(), priceIds, enabled: true });
   assert.deepEqual(await service.getManagement({ accountId: account.accountId }), {
     subscription: {
       plan: "developer",
@@ -84,6 +91,7 @@ test("returns only masked attached-card summaries when no default can be selecte
       }),
     }),
     apiAccessService: apiService(),
+    priceIds,
     enabled: true,
   });
   const state = await service.getManagement({ accountId: account.accountId });
@@ -104,6 +112,7 @@ test("creates a card SetupIntent and applies it only after customer ownership an
       setDefaultPaymentMethod: async (input) => { calls.push(["default", input]); },
     }),
     apiAccessService: apiService(),
+    priceIds,
     enabled: true,
   });
   assert.deepEqual(await service.createPaymentSetup({ accountId: account.accountId }), {
@@ -129,6 +138,7 @@ test("rejects a SetupIntent owned by another Stripe customer", async () => {
       setDefaultPaymentMethod: async () => { throw new Error("should not run"); },
     }),
     apiAccessService: apiService(),
+    priceIds,
     enabled: true,
   });
   await assert.rejects(
@@ -142,6 +152,7 @@ test("schedules and reverses cancellation only from the server-owned subscriptio
   const service = createSubscriptionManagementService({
     gateway: gateway({ setCancelAtPeriodEnd: async (input) => { calls.push(input); } }),
     apiAccessService: apiService(),
+    priceIds,
     enabled: true,
   });
   await service.setCancellation({ accountId: account.accountId, cancelAtPeriodEnd: true });
@@ -152,14 +163,55 @@ test("schedules and reverses cancellation only from the server-owned subscriptio
   ]);
 });
 
+test("changes to a configured plan using only the server-owned subscription and price", async () => {
+  const calls = [];
+  const service = createSubscriptionManagementService({
+    gateway: gateway({
+      changeSubscriptionPlan: async (input) => { calls.push(input); },
+      retrieveSubscriptionManagement: async () => ({
+        subscription: { status: "active", cancel_at_period_end: false },
+        paymentMethod: null,
+        attachedPaymentMethods: [],
+        invoices: { data: [] },
+      }),
+    }),
+    apiAccessService: apiService(),
+    priceIds,
+    enabled: true,
+  });
+  const state = await service.changePlan({ accountId: account.accountId, plan: "pro" });
+  assert.deepEqual(calls, [{ subscriptionId: "sub_123", priceId: "price_pro123", plan: "pro" }]);
+  assert.equal(state.subscription.plan, "pro");
+  assert.equal(state.subscription.cancelAtPeriodEnd, false);
+});
+
+test("rejects unknown or unchanged subscription plans before Stripe is called", async () => {
+  let called = false;
+  const service = createSubscriptionManagementService({
+    gateway: gateway({ changeSubscriptionPlan: async () => { called = true; } }),
+    apiAccessService: apiService(),
+    priceIds,
+    enabled: true,
+  });
+  await assert.rejects(
+    () => service.changePlan({ accountId: account.accountId, plan: "enterprise" }),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_subscription_plan",
+  );
+  await assert.rejects(
+    () => service.changePlan({ accountId: account.accountId, plan: "developer" }),
+    (error) => error instanceof ApiAccessError && error.code === "subscription_plan_unchanged",
+  );
+  assert.equal(called, false);
+});
+
 test("fails closed without a managed subscription or when disabled", async () => {
-  const disabled = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(), enabled: false });
+  const disabled = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(), priceIds, enabled: false });
   await assert.rejects(
     () => disabled.getManagement({ accountId: account.accountId }),
     (error) => error instanceof ApiAccessError && error.code === "subscription_management_disabled",
   );
 
-  const missing = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(null), enabled: true });
+  const missing = createSubscriptionManagementService({ gateway: gateway(), apiAccessService: apiService(null), priceIds, enabled: true });
   await assert.rejects(
     () => missing.getManagement({ accountId: account.accountId }),
     (error) => error instanceof ApiAccessError && error.code === "subscription_missing",

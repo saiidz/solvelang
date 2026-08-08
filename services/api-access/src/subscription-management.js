@@ -1,6 +1,7 @@
 import { ApiAccessError } from "./service.js";
 
 const MANAGEABLE_STATUSES = new Set(["trialing", "active", "past_due", "unpaid"]);
+const PLAN_NAMES = new Set(["developer", "pro", "business"]);
 
 function cleanId(value, label, prefix) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_management", `${label} is invalid.`);
@@ -45,13 +46,14 @@ function invoiceSummary(invoice) {
   };
 }
 
-export function createSubscriptionManagementService({ gateway, apiAccessService, enabled = false }) {
+export function createSubscriptionManagementService({ gateway, apiAccessService, priceIds = {}, enabled = false }) {
   const requiredGatewayMethods = [
     "retrieveSubscriptionManagement",
     "createPaymentMethodSetup",
     "retrievePaymentMethodSetup",
     "setDefaultPaymentMethod",
     "setCancelAtPeriodEnd",
+    "changeSubscriptionPlan",
   ];
   if (!gateway || requiredGatewayMethods.some((method) => typeof gateway[method] !== "function")) {
     throw new Error("Stripe subscription management gateway is required.");
@@ -144,5 +146,36 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     return getManagement({ accountId });
   }
 
-  return { getManagement, createPaymentSetup, completePaymentSetup, setCancellation };
+  async function changePlan({ accountId, plan }) {
+    const account = await accountFor(accountId);
+    if (!MANAGEABLE_STATUSES.has(account.subscriptionStatus)) {
+      throw new ApiAccessError(409, "subscription_not_manageable", "The subscription cannot be changed in its current state.");
+    }
+    if (typeof plan !== "string" || !PLAN_NAMES.has(plan)) {
+      throw new ApiAccessError(400, "invalid_subscription_plan", "Subscription plan is invalid.");
+    }
+    if (plan === account.plan) {
+      throw new ApiAccessError(409, "subscription_plan_unchanged", "This subscription is already on that plan.");
+    }
+    const priceId = priceIds[plan];
+    if (typeof priceId !== "string" || !/^price_[A-Za-z0-9]+$/.test(priceId)) {
+      throw new ApiAccessError(503, "subscription_plan_unavailable", "That subscription plan is not available.");
+    }
+    await gateway.changeSubscriptionPlan({
+      subscriptionId: account.stripeSubscriptionId,
+      priceId,
+      plan,
+    });
+    const state = await getManagement({ accountId });
+    return {
+      ...state,
+      subscription: {
+        ...state.subscription,
+        plan,
+        cancelAtPeriodEnd: false,
+      },
+    };
+  }
+
+  return { getManagement, createPaymentSetup, completePaymentSetup, setCancellation, changePlan };
 }

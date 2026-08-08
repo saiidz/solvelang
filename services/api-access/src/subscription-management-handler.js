@@ -71,6 +71,12 @@ export function createSubscriptionManagementHandler({ customerAuth, management, 
           setupIntentId: body.setupIntentId,
         }));
       }
+      if (body.action === "change_plan") {
+        return response(200, await management.changePlan({
+          accountId: session.accountId,
+          plan: body.plan,
+        }));
+      }
       if (body.action === "cancel_at_period_end") {
         return response(200, await management.setCancellation({ accountId: session.accountId, cancelAtPeriodEnd: true }));
       }
