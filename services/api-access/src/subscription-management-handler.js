@@ -71,6 +71,18 @@ export function createSubscriptionManagementHandler({ customerAuth, management, 
           setupIntentId: body.setupIntentId,
         }));
       }
+      if (body.action === "set_default_payment_method") {
+        return response(200, await management.setPaymentMethodDefault({
+          accountId: session.accountId,
+          paymentMethodId: body.paymentMethodId,
+        }));
+      }
+      if (body.action === "remove_payment_method") {
+        return response(200, await management.removePaymentMethod({
+          accountId: session.accountId,
+          paymentMethodId: body.paymentMethodId,
+        }));
+      }
       if (body.action === "change_plan") {
         return response(200, await management.changePlan({
           accountId: session.accountId,
