@@ -17,6 +17,13 @@ import {
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
 const MANAGEMENT_PATH = "/customer/subscriptions/portal";
+const PLANS = [
+  { key: "developer", name: "Developer", price: "$49/month", credits: "1,000 credits", keys: "2 keys" },
+  { key: "pro", name: "Pro", price: "$199/month", credits: "10,000 credits", keys: "3 keys" },
+  { key: "business", name: "Business", price: "$699/month", credits: "50,000 credits", keys: "5 keys" },
+] as const;
+
+type PlanKey = (typeof PLANS)[number]["key"];
 
 type PaymentMethodSummary = {
   brand: string;
@@ -202,6 +209,28 @@ export function SubscriptionManager() {
     setBusy(false);
   }
 
+  async function changePlan(plan: PlanKey) {
+    if (!management || management.subscription.plan === plan) return;
+    const target = PLANS.find((candidate) => candidate.key === plan);
+    const question = `Switch to ${target?.name ?? plan} now? Stripe will calculate any prorated amount for the current billing period. A scheduled cancellation will be removed.`;
+    if (!window.confirm(question)) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const updated = await postAction<ManagementState>(management.csrfToken, {
+        action: "change_plan",
+        plan,
+      });
+      setManagement(updated);
+      setNotice(`Plan changed to ${target?.name ?? plan}.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Subscription plan could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function changeCancellation(cancelAtPeriodEnd: boolean) {
     if (!management) return;
     const question = cancelAtPeriodEnd
@@ -235,7 +264,7 @@ export function SubscriptionManager() {
         <header className="mt-7 border-b border-white/10 pb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
           <h1 className="mt-3 text-4xl font-bold">Manage subscription</h1>
-          <p className="mt-3 text-slate-400">Update billing, review invoices, or schedule cancellation without leaving SolveLang.</p>
+          <p className="mt-3 text-slate-400">Change plans, update billing, review invoices, or schedule cancellation without leaving SolveLang.</p>
         </header>
 
         {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-emerald-200">{notice}</p> : null}
@@ -259,6 +288,26 @@ export function SubscriptionManager() {
                   ) : (
                     <button disabled={busy} onClick={() => changeCancellation(true)} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Cancel at period end</button>
                   )}
+                </div>
+
+                <div className="mt-7 border-t border-white/10 pt-6">
+                  <h3 className="text-lg font-bold">Change plan</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">Plan changes apply immediately in the sandbox. Stripe calculates prorations for the remaining billing period, and changing plans resumes renewal if cancellation was scheduled.</p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {PLANS.map((plan) => {
+                      const current = management.subscription.plan === plan.key;
+                      return (
+                        <div key={plan.key} className={current ? "rounded-2xl border border-cyan-300/40 bg-cyan-300/10 p-4" : "rounded-2xl border border-white/10 bg-black/15 p-4"}>
+                          <p className="font-bold">{plan.name}</p>
+                          <p className="mt-1 text-sm text-cyan-100">{plan.price}</p>
+                          <p className="mt-2 text-xs text-slate-400">{plan.credits} · {plan.keys}</p>
+                          <button type="button" disabled={busy || current} onClick={() => changePlan(plan.key)} className="mt-4 w-full rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/5 disabled:cursor-default disabled:opacity-45">
+                            {current ? "Current" : `Switch to ${plan.name}`}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </section>
 
