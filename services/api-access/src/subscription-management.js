@@ -25,14 +25,34 @@ function requiredAccount(account) {
   };
 }
 
-function cardSummary(paymentMethod) {
-  const card = paymentMethod?.card;
-  if (!card || typeof card !== "object") return null;
+function paymentMethodSummary(paymentMethod) {
+  if (!paymentMethod || typeof paymentMethod !== "object") return null;
+  if (paymentMethod.type === "link") {
+    return {
+      type: "link",
+      label: "Link",
+      brand: null,
+      last4: null,
+      expMonth: null,
+      expYear: null,
+    };
+  }
+  const card = paymentMethod.card;
+  if (paymentMethod.type !== "card" || !card || typeof card !== "object") return null;
   const brand = typeof card.brand === "string" ? card.brand : "card";
   const last4 = typeof card.last4 === "string" && /^\d{4}$/.test(card.last4) ? card.last4 : null;
   const expMonth = Number.isSafeInteger(card.exp_month) ? card.exp_month : null;
   const expYear = Number.isSafeInteger(card.exp_year) ? card.exp_year : null;
-  return last4 ? { brand, last4, expMonth, expYear } : null;
+  if (!last4) return null;
+  const displayBrand = brand.charAt(0).toUpperCase() + brand.slice(1);
+  return {
+    type: "card",
+    label: `${displayBrand} •••• ${last4}`,
+    brand,
+    last4,
+    expMonth,
+    expYear,
+  };
 }
 
 function invoiceSummary(invoice) {
@@ -81,7 +101,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
       ? state.invoices.data.map(invoiceSummary).filter((invoice) => invoice.id)
       : [];
     const attachedPaymentMethods = Array.isArray(state?.attachedPaymentMethods)
-      ? state.attachedPaymentMethods.map(cardSummary).filter(Boolean)
+      ? state.attachedPaymentMethods.map(paymentMethodSummary).filter(Boolean)
       : [];
     return {
       subscription: {
@@ -90,7 +110,7 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
         currentPeriodEnd: account.currentPeriodEnd ?? null,
         cancelAtPeriodEnd: state?.subscription?.cancel_at_period_end === true,
       },
-      paymentMethod: cardSummary(state?.paymentMethod),
+      paymentMethod: paymentMethodSummary(state?.paymentMethod),
       attachedPaymentMethods,
       invoices,
     };
