@@ -73,7 +73,6 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
 
   async function getManagement({ accountId }) {
     const account = await accountFor(accountId);
-    const keys = [];
     const state = await gateway.retrieveSubscriptionManagement({
       customerId: account.stripeCustomerId,
       subscriptionId: account.stripeSubscriptionId,
@@ -89,13 +88,11 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
         plan: account.plan ?? null,
         status: typeof state?.subscription?.status === "string" ? state.subscription.status : account.subscriptionStatus,
         currentPeriodEnd: account.currentPeriodEnd ?? null,
-        graceUntil: account.graceUntil ?? null,
         cancelAtPeriodEnd: state?.subscription?.cancel_at_period_end === true,
       },
       paymentMethod: cardSummary(state?.paymentMethod),
       attachedPaymentMethods,
       invoices,
-      keys,
     };
   }
 
