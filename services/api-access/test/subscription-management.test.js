@@ -49,7 +49,7 @@ function gateway(overrides = {}) {
     }),
     setDefaultPaymentMethod: async () => ({}),
     setCancelAtPeriodEnd: async () => ({}),
-    changeSubscriptionPlan: async () => ({}),
+    changeSubscriptionPlan: async () => ({ applied: true, pending: false }),
     ...overrides,
   };
 }
@@ -163,11 +163,11 @@ test("schedules and reverses cancellation only from the server-owned subscriptio
   ]);
 });
 
-test("changes to a configured plan using only the server-owned subscription and price", async () => {
+test("marks a higher-tier plan change as an upgrade and only exposes it after Stripe applies it", async () => {
   const calls = [];
   const service = createSubscriptionManagementService({
     gateway: gateway({
-      changeSubscriptionPlan: async (input) => { calls.push(input); },
+      changeSubscriptionPlan: async (input) => { calls.push(input); return { applied: true, pending: false }; },
       retrieveSubscriptionManagement: async () => ({
         subscription: { status: "active", cancel_at_period_end: false },
         paymentMethod: null,
@@ -180,15 +180,43 @@ test("changes to a configured plan using only the server-owned subscription and 
     enabled: true,
   });
   const state = await service.changePlan({ accountId: account.accountId, plan: "pro" });
-  assert.deepEqual(calls, [{ subscriptionId: "sub_123", priceId: "price_pro123", plan: "pro" }]);
+  assert.deepEqual(calls, [{ subscriptionId: "sub_123", priceId: "price_pro123", plan: "pro", upgrade: true }]);
   assert.equal(state.subscription.plan, "pro");
   assert.equal(state.subscription.cancelAtPeriodEnd, false);
+});
+
+test("failed or action-required upgrade payment preserves the current entitlement", async () => {
+  const service = createSubscriptionManagementService({
+    gateway: gateway({ changeSubscriptionPlan: async () => ({ applied: false, pending: true }) }),
+    apiAccessService: apiService(),
+    priceIds,
+    enabled: true,
+  });
+  await assert.rejects(
+    () => service.changePlan({ accountId: account.accountId, plan: "business" }),
+    (error) => error instanceof ApiAccessError
+      && error.statusCode === 402
+      && error.code === "subscription_upgrade_payment_required",
+  );
+});
+
+test("marks a lower-tier plan change as a downgrade", async () => {
+  const calls = [];
+  const businessAccount = { ...account, plan: "business" };
+  const service = createSubscriptionManagementService({
+    gateway: gateway({ changeSubscriptionPlan: async (input) => { calls.push(input); return { applied: true, pending: false }; } }),
+    apiAccessService: apiService(businessAccount),
+    priceIds,
+    enabled: true,
+  });
+  await service.changePlan({ accountId: account.accountId, plan: "developer" });
+  assert.deepEqual(calls, [{ subscriptionId: "sub_123", priceId: "price_dev123", plan: "developer", upgrade: false }]);
 });
 
 test("rejects unknown or unchanged subscription plans before Stripe is called", async () => {
   let called = false;
   const service = createSubscriptionManagementService({
-    gateway: gateway({ changeSubscriptionPlan: async () => { called = true; } }),
+    gateway: gateway({ changeSubscriptionPlan: async () => { called = true; return { applied: true }; } }),
     apiAccessService: apiService(),
     priceIds,
     enabled: true,
