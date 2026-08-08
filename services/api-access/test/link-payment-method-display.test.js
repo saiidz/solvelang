@@ -17,12 +17,14 @@ function serviceGateway(paymentMethod) {
     retrieveSubscriptionManagement: async () => ({
       subscription: { status: "active", cancel_at_period_end: false },
       paymentMethod,
+      defaultPaymentMethodId: paymentMethod?.id ?? null,
       attachedPaymentMethods: [],
       invoices: { data: [] },
     }),
     createPaymentMethodSetup: async () => ({}),
     retrievePaymentMethodSetup: async () => ({}),
-    setDefaultPaymentMethod: async () => ({}),
+    setDefaultPaymentMethod: async () => ({ applied: true }),
+    detachPaymentMethod: async () => ({ detached: true }),
     setCancelAtPeriodEnd: async () => ({}),
     changeSubscriptionPlan: async () => ({ applied: true }),
   };
@@ -55,6 +57,7 @@ function stripeClient({ paymentIntentCustomer = "cus_1" } = {}) {
     paymentMethods: {
       retrieve: async () => ({ id: "pm_link", customer: null, type: "link", link: { email: "buyer@example.com" } }),
       list: async () => ({ data: [] }),
+      detach: async () => ({}),
     },
     setupIntents: { create: async () => ({}), retrieve: async () => ({}) },
     webhooks: { constructEvent: () => ({}) },
@@ -84,12 +87,14 @@ test("management API returns a safe Link summary without exposing Link account d
   });
   const state = await service.getManagement({ accountId: account.accountId });
   assert.deepEqual(state.paymentMethod, {
+    id: "pm_link",
     type: "link",
     label: "Link",
     brand: null,
     last4: null,
     expMonth: null,
     expYear: null,
+    isDefault: true,
   });
   assert.equal(JSON.stringify(state).includes("buyer@example.com"), false);
 });
@@ -103,11 +108,13 @@ test("management API keeps masked card summaries", async () => {
   });
   const state = await service.getManagement({ accountId: account.accountId });
   assert.deepEqual(state.paymentMethod, {
+    id: "pm_card",
     type: "card",
     label: "Visa •••• 4242",
     brand: "visa",
     last4: "4242",
     expMonth: 12,
     expYear: 2034,
+    isDefault: true,
   });
 });
