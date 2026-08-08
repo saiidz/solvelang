@@ -2,6 +2,7 @@ import { ApiAccessError } from "./service.js";
 
 const MANAGEABLE_STATUSES = new Set(["trialing", "active", "past_due", "unpaid"]);
 const PLAN_NAMES = new Set(["developer", "pro", "business"]);
+const PLAN_RANK = Object.freeze({ developer: 1, pro: 2, business: 3 });
 
 function cleanId(value, label, prefix) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_management", `${label} is invalid.`);
@@ -154,6 +155,9 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     if (typeof plan !== "string" || !PLAN_NAMES.has(plan)) {
       throw new ApiAccessError(400, "invalid_subscription_plan", "Subscription plan is invalid.");
     }
+    if (!PLAN_NAMES.has(account.plan)) {
+      throw new ApiAccessError(409, "subscription_plan_unknown", "The current subscription plan cannot be changed.");
+    }
     if (plan === account.plan) {
       throw new ApiAccessError(409, "subscription_plan_unchanged", "This subscription is already on that plan.");
     }
@@ -161,11 +165,20 @@ export function createSubscriptionManagementService({ gateway, apiAccessService,
     if (typeof priceId !== "string" || !/^price_[A-Za-z0-9]+$/.test(priceId)) {
       throw new ApiAccessError(503, "subscription_plan_unavailable", "That subscription plan is not available.");
     }
-    await gateway.changeSubscriptionPlan({
+    const upgrade = PLAN_RANK[plan] > PLAN_RANK[account.plan];
+    const result = await gateway.changeSubscriptionPlan({
       subscriptionId: account.stripeSubscriptionId,
       priceId,
       plan,
+      upgrade,
     });
+    if (result?.applied !== true) {
+      throw new ApiAccessError(
+        402,
+        "subscription_upgrade_payment_required",
+        "The upgrade payment could not be completed. Your current plan remains active. Update your payment method and try again.",
+      );
+    }
     const state = await getManagement({ accountId });
     return {
       ...state,
