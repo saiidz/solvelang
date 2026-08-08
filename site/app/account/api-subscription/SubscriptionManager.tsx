@@ -26,8 +26,10 @@ const PLANS = [
 type PlanKey = (typeof PLANS)[number]["key"];
 
 type PaymentMethodSummary = {
-  brand: string;
-  last4: string;
+  type: "card" | "link";
+  label: string;
+  brand: string | null;
+  last4: string | null;
   expMonth: number | null;
   expYear: number | null;
 };
@@ -316,19 +318,23 @@ export function SubscriptionManager() {
                 {management.paymentMethod ? (
                   <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="text-xl font-bold capitalize">{management.paymentMethod.brand} •••• {management.paymentMethod.last4}</p>
-                      <p className="mt-1 text-sm text-slate-400">Expires {management.paymentMethod.expMonth ?? "—"}/{management.paymentMethod.expYear ?? "—"}</p>
+                      <p className="text-xl font-bold">{management.paymentMethod.label}</p>
+                      {management.paymentMethod.type === "card" ? (
+                        <p className="mt-1 text-sm text-slate-400">Expires {management.paymentMethod.expMonth ?? "—"}/{management.paymentMethod.expYear ?? "—"}</p>
+                      ) : (
+                        <p className="mt-1 text-sm text-slate-400">Saved with Stripe Link</p>
+                      )}
                     </div>
-                    <button disabled={busy} onClick={openPaymentForm} className="rounded-xl border border-cyan-300/30 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Update card</button>
+                    <button disabled={busy} onClick={openPaymentForm} className="rounded-xl border border-cyan-300/30 px-4 py-2 font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Update payment method</button>
                   </div>
                 ) : (
                   <div className="mt-4">
                     {management.attachedPaymentMethods.length > 1 ? (
                       <div className="mb-4 space-y-2 text-sm text-slate-300">
                         <p>Multiple cards are saved in Stripe. Choose the card to use through the secure payment form.</p>
-                        {management.attachedPaymentMethods.map((card) => (
-                          <p key={`${card.brand}-${card.last4}-${card.expMonth}-${card.expYear}`} className="capitalize">
-                            {card.brand} •••• {card.last4} · expires {card.expMonth ?? "—"}/{card.expYear ?? "—"}
+                        {management.attachedPaymentMethods.map((method) => (
+                          <p key={`${method.type}-${method.label}-${method.expMonth}-${method.expYear}`}>
+                            {method.label}{method.type === "card" ? ` · expires ${method.expMonth ?? "—"}/${method.expYear ?? "—"}` : ""}
                           </p>
                         ))}
                       </div>
@@ -346,7 +352,7 @@ export function SubscriptionManager() {
                       <button type="button" disabled={busy || !paymentReady} onClick={submitPaymentMethod} className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-50">Save payment method</button>
                       <button type="button" disabled={busy} onClick={destroyPaymentForm} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
                     </div>
-                    <p className="mt-4 text-xs text-slate-500">Card fields are securely provided by Stripe. SolveLang never receives your full card number.</p>
+                    <p className="mt-4 text-xs text-slate-500">Payment fields are securely provided by Stripe. SolveLang never receives your full payment credentials.</p>
                   </div>
                 ) : null}
               </section>
