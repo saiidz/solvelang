@@ -38,7 +38,7 @@ function paymentMethodSummary(paymentMethod) {
     };
   }
   const card = paymentMethod.card;
-  if (paymentMethod.type !== "card" || !card || typeof card !== "object") return null;
+  if (!card || typeof card !== "object") return null;
   const brand = typeof card.brand === "string" ? card.brand : "card";
   const last4 = typeof card.last4 === "string" && /^\d{4}$/.test(card.last4) ? card.last4 : null;
   const expMonth = Number.isSafeInteger(card.exp_month) ? card.exp_month : null;
