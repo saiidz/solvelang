@@ -31,7 +31,7 @@ export default function ApiKeysPage() {
   const [screen, setScreen] = useState<Screen>("loading");
   const [dashboard, setDashboard] = useState<CustomerDashboard | null>(null);
   const [email, setEmail] = useState("");
-  const [keyName, setKeyName] = useState("Production integration");
+  const [keyName, setKeyName] = useState("API integration");
   const [issued, setIssued] = useState<IssuedApiKey | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -166,11 +166,11 @@ export default function ApiKeysPage() {
             {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Manage subscription</button> : null}
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6"><p className="text-sm text-slate-400">Credits used</p><p className="mt-2 text-2xl font-bold">{dashboard.usage.used ?? 0} / {dashboard.usage.limit ?? "—"}</p><p className="mt-1 text-sm text-slate-300">Remaining {dashboard.usage.remaining ?? "—"} · Period {dashboard.usage.period}</p></div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6"><p className="text-sm text-slate-400">Active API keys</p><p className="mt-2 text-2xl font-bold">{activeKeys.length}</p><p className="mt-1 text-sm text-slate-300">Renews {readableDate(dashboard.subscription.currentPeriodEnd)}</p></div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6"><p className="text-sm text-slate-400">Active API keys</p><p className="mt-2 text-2xl font-bold">{activeKeys.length}</p><p className="mt-1 text-sm text-slate-300">Current period ends {readableDate(dashboard.subscription.currentPeriodEnd)}</p></div>
         </section>
 
         <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">
-          One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing consume 2×, 5×, and 10× credits respectively.
+          One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.
         </section>
 
         {!dashboard.subscription.plan ? <section className="mt-8 rounded-3xl border border-cyan-300/30 bg-cyan-300/5 p-6"><h2 className="text-2xl font-bold">Choose an API plan</h2><div className="mt-5 grid gap-4 md:grid-cols-3">{plans.map((plan) => <div key={plan.key} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5"><h3 className="text-xl font-bold">{plan.name}</h3><p className="mt-2 font-semibold text-cyan-200">{plan.price}</p><p className="mt-3 text-sm text-slate-300">{plan.credits}</p><p className="mt-1 text-sm text-slate-300">{plan.keys}</p><button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Start checkout</button></div>)}</div></section> : null}
