@@ -20,7 +20,7 @@ const plans = [
     name: "Pro",
     key: "pro",
     price: "$199",
-    description: "For production applications that need dependable monthly capacity.",
+    description: "For larger test workloads and teams evaluating dependable monthly API capacity.",
     credits: "10,000",
     keys: "3",
     highlighted: true,
@@ -29,7 +29,7 @@ const plans = [
     name: "Business",
     key: "business",
     price: "$699",
-    description: "For teams running higher-volume audits across multiple services.",
+    description: "For teams evaluating higher-volume audits across multiple services.",
     credits: "50,000",
     keys: "5",
     highlighted: false,
@@ -82,7 +82,7 @@ export default function ApiPricingPage() {
 
         <section className="mt-10 rounded-3xl border border-white/10 bg-white/5 p-8">
           <h2 className="text-2xl font-bold">Credit controls</h2>
-          <p className="mt-3 max-w-4xl text-slate-300">Every authenticated request consumes at least one credit. Workloads are charged from the larger of their input-token or output-token bands. Recurring billing remains disabled until the exact USD test Prices, SES sender, signed webhook, and protected AWS deployment pass launch review.</p>
+          <p className="mt-3 max-w-4xl text-slate-300">Every authenticated request consumes at least one credit. Workloads are charged from the larger of their input-token or output-token bands. Recurring billing, account management, and API-key controls are currently available only in the protected SolveLang test environment while production operating controls are still being validated.</p>
         </section>
       </div>
     </main>
