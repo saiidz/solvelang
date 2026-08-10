@@ -1,0 +1,154 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormationSolveLangProductionStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateChangeSet",
+        "cloudformation:CreateStack",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeStacks",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStackResources",
+        "cloudformation:UpdateStack",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production/*"
+    },
+    {
+      "Sid": "CloudFormationCreateStackBootstrap",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SolveLangProductionArtifactBucket",
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketPublicAccessBlock",
+        "s3:GetBucketVersioning",
+        "s3:ListBucket",
+        "s3:PutBucketEncryption",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketVersioning"
+      ],
+      "Resource": "arn:aws:s3:::solvelang-api-access-production-artifacts-*"
+    },
+    {
+      "Sid": "SolveLangProductionArtifactObjects",
+      "Effect": "Allow",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::solvelang-api-access-production-artifacts-*/*"
+    },
+    {
+      "Sid": "SolveLangProductionLambda",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:AddPermission",
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:ListTags",
+        "lambda:RemovePermission",
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration"
+      ],
+      "Resource": "arn:aws:lambda:*:*:function:solvelang-api-access-production-*"
+    },
+    {
+      "Sid": "SolveLangProductionDynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:UpdateContinuousBackups",
+        "dynamodb:UpdateTable",
+        "dynamodb:UpdateTimeToLive"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/solvelang-api-access-production-*"
+    },
+    {
+      "Sid": "SolveLangProductionIamRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:PassRole",
+        "iam:PutRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/solvelang-api-access-production-*"
+    },
+    {
+      "Sid": "ApiGatewayV2ForSolveLangProduction",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:DELETE",
+        "apigateway:GET",
+        "apigateway:PATCH",
+        "apigateway:POST",
+        "apigateway:PUT"
+      ],
+      "Resource": "arn:aws:apigateway:*::/*"
+    },
+    {
+      "Sid": "SolveLangProductionLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:ListTagsForResource",
+        "logs:PutRetentionPolicy",
+        "logs:TagResource",
+        "logs:UntagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SolveLangProductionCloudWatchAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
