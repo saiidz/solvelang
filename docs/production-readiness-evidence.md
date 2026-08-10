@@ -18,26 +18,27 @@ Prepared from protected test release commit `4f280ad7f80d9f37fcd50dd13c6a1ab410d
 
 ## Intentionally not performed
 
-- no production GitHub Environment values were created by code;
-- no live Stripe Products or Prices were created;
-- no live webhook was registered;
-- no production AWS stack was deployed;
-- no production database/table was created;
-- no live payment or charge was attempted;
-- no current test-only live-mode interlock was removed.
+- no production deployment workflow exists yet;
+- no production webhook has been registered yet because no production API endpoint exists;
+- no production AWS stack has been deployed;
+- no production database/table has been created;
+- no live payment or charge has been attempted;
+- no current test-only live-mode interlock has been removed.
+
+The owner may configure the protected `api-access-production` environment and live Stripe Products/Prices before the validation-only preflight. Those configuration steps do not deploy infrastructure or create a charge.
 
 ## Remaining owner/external blockers
 
-The production preflight is expected to remain unrunnable until the owner configures the protected `api-access-production` environment and approved live external resources.
+The validation-only preflight requires isolated production environment values, a production AWS preflight role, a verified SES sender, an approved live Stripe secret, and the three approved live recurring Price IDs.
 
 Production deployment remains blocked until:
 
-1. production environment/secrets are created and isolated;
-2. approved live Stripe Products/Prices/webhook exist;
-3. production monitoring/PITR controls are implemented in the eventual production deployment change;
-4. appropriate Terms/Privacy/refund/cancellation/support materials are approved and published;
-5. production preflight passes;
-6. owner explicitly approves a separate production deployment PR;
-7. owner separately approves any real-charge canary.
+1. the production-readiness preflight passes without deployment or charges;
+2. monitoring/PITR/rollback controls are implemented for the eventual production deployment;
+3. appropriate Terms/Privacy/refund/cancellation/support materials are approved and published;
+4. owner explicitly approves a separate production deployment PR;
+5. the production foundation is deployed and its API/webhook endpoint exists;
+6. the production Stripe subscription webhook is registered and its independent signing secret is saved/validated;
+7. owner separately approves any real-charge billing canary.
 
-This is deliberate: readiness code may be merged safely without creating a path that can accidentally deploy or charge.
+This sequencing is deliberate: validate the production configuration first, create the webhook only after a real production endpoint exists, and keep billing disabled until webhook verification is complete.
