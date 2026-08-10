@@ -1,0 +1,126 @@
+name: Deploy API Access Production Foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_foundation:
+        description: Confirm this deploys only the inert production foundation with API access, customer accounts, and billing disabled
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-foundation-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "false"
+      CUSTOMER_ACCOUNTS_ENABLED: "false"
+      SUBSCRIPTION_BILLING_ENABLED: "false"
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      OPERATIONS_ALARM_TOPIC_ARN: ${{ vars.OPERATIONS_ALARM_TOPIC_ARN }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce inert production-foundation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production foundation deployments must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_foundation }}" == "true" ]] || { echo "Explicit production-foundation confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == false ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == false ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == false ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          [[ "$OPERATIONS_ALARM_TOPIC_ARN" == arn:aws:sns:${AWS_REGION}:*:* ]] || { echo "OPERATIONS_ALARM_TOPIC_ARN must be an SNS topic in the production region." >&2; exit 1; }
+          test -n "$AWS_REGION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Validate production deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_length() { (( ${#2} >= $3 )) || { echo "$1 must contain at least $3 characters." >&2; exit 1; }; }
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API access tests
+        run: npm test
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+      - name: Build API access stack
+        run: sam build --template template.yaml
+
+      - name: Deploy inert production foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              ApiAccessEnabled="$API_ACCESS_ENABLED" \
+              ApiAccessMode="$API_ACCESS_MODE" \
+              CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED" \
+              SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED" \
+              SiteOrigin="$SITE_ORIGIN" \
+              ApiKeyPepper="$API_KEY_PEPPER" \
+              ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+
+      - name: Verify inert health state
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
+          test -n "$api_base"
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == false and .customerAccountsEnabled == false and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Apply and verify production operations baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
+
+      - name: Write deployment summary
+        env:
+          API_BASE: ${{ steps.verify.outputs.api_base }}
+        run: |
+          printf '## SolveLang production foundation deployment\n\n- Mode: `live` infrastructure foundation\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- API access enabled: **false**\n- Customer accounts enabled: **false**\n- Subscription billing enabled: **false**\n- DynamoDB PITR: verified\n- Lambda log retention: 90 days verified\n- CloudWatch alarms: verified and routed to configured SNS topic\n- Stripe secret injected: **no**\n- Webhook configured: **no**\n- Charges performed: **no**\n\nThis foundation is intentionally inert. Enabling customer accounts or billing requires a separate reviewed change and explicit owner approval.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$API_BASE" >> "$GITHUB_STEP_SUMMARY"
