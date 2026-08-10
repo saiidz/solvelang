@@ -20,12 +20,13 @@ test("production preflight is manual, protected, main-only, and validation-only"
   assert.doesNotMatch(source, /stripe\.com\/v1\/(payment_intents|charges|checkout\/sessions)/);
 });
 
-test("production preflight rejects test resources and requires isolated live billing configuration", async () => {
+test("production preflight rejects test resources and accepts only live Stripe credentials", async () => {
   const source = await workflow();
   assert.match(source, /STACK_NAME.*prod/);
   assert.match(source, /STACK_NAME.*test/s);
-  assert.match(source, /STRIPE_SECRET_KEY.*sk_live_/s);
+  assert.match(source, /STRIPE_SECRET_KEY.*sk_live_.*rk_live_/s);
   assert.match(source, /STRIPE_SECRET_KEY.*sk_test_/s);
+  assert.match(source, /STRIPE_SECRET_KEY.*rk_test_/s);
   assert.match(source, /\.livemode == true/);
   assert.match(source, /\.type == "recurring"/);
   assert.match(source, /\.currency == "usd"/);

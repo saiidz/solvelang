@@ -6,7 +6,7 @@ Prepared from protected test release commit `4f280ad7f80d9f37fcd50dd13c6a1ab410d
 
 - separate production GitHub Environment contract: `api-access-production`;
 - production stack naming boundary (`prod`/`production`, never `test`);
-- production-only `sk_live_*` requirement and explicit `sk_test_*` rejection;
+- production-only Stripe credential requirement: `sk_live_*` or least-privilege `rk_live_*`, with explicit `sk_test_*` and `rk_test_*` rejection;
 - distinct pepper/admin-secret checks;
 - live Stripe Price validation for exact monthly amounts without creating a charge;
 - production SES sender validation;
@@ -29,7 +29,7 @@ The owner may configure the protected `api-access-production` environment and li
 
 ## Remaining owner/external blockers
 
-The validation-only preflight requires isolated production environment values, a production AWS preflight role, a verified SES sender, an approved live Stripe secret, and the three approved live recurring Price IDs.
+The validation-only preflight requires isolated production environment values, a production AWS preflight role, a verified SES sender, an approved live Stripe credential (`sk_live_*` or least-privilege `rk_live_*`), and the three approved live recurring Price IDs.
 
 Production deployment remains blocked until:
 
