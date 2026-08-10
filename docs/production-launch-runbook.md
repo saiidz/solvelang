@@ -17,6 +17,7 @@ Stop immediately if any prerequisite is missing:
 - Production peppers/admin secret are independent from test.
 - SES production sender is verified.
 - Approved live Stripe Products/Prices exist and are independently configured.
+- Stripe credential is live-only: either `sk_live_*` or a least-privilege `rk_live_*` key with permission to read the required live Price objects. Test keys are rejected.
 
 A production webhook is **not** required for Phase 1 because no production API endpoint exists yet.
 
@@ -28,7 +29,7 @@ Expected result:
 
 - production environment values resolve;
 - stack naming boundary passes;
-- `sk_live_*` is required and `sk_test_*` is rejected;
+- `sk_live_*` or `rk_live_*` is accepted; `sk_test_*` and `rk_test_*` are rejected;
 - live recurring Stripe prices validate at $49 / $199 / $699 monthly;
 - SES sender is verified;
 - API tests pass;
@@ -56,7 +57,7 @@ That PR must:
 - require `main`;
 - require an explicit production confirmation input;
 - require GitHub Environment approval;
-- reject `sk_test_*` and require `sk_live_*`;
+- reject all Stripe test credentials and accept only an approved live `sk_live_*` or least-privilege `rk_live_*` credential;
 - reject stack names containing `test`;
 - deploy only the production stack;
 - verify health and exact enabled feature flags after deployment;
