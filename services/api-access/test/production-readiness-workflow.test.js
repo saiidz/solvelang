@@ -30,7 +30,8 @@ test("production preflight rejects test resources and requires isolated live bil
   assert.match(source, /\.type == "recurring"/);
   assert.match(source, /\.currency == "usd"/);
   assert.match(source, /\.recurring\.interval == "month"/);
-  assert.match(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET.*whsec_/s);
+  assert.doesNotMatch(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
+  assert.match(source, /Webhook secret: \*\*not required until a production endpoint exists\*\*/);
 });
 
 test("production preflight validates but does not weaken the current live-mode deployment block", async () => {
