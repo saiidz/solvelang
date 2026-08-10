@@ -4,7 +4,7 @@ Status: **drafted for future use; not authorization to launch**.
 
 This runbook begins only after the protected test release is healthy and the production-readiness checklist is complete.
 
-## Phase 0 — prerequisites
+## Phase 0 — prerequisites for validation-only preflight
 
 Stop immediately if any prerequisite is missing:
 
@@ -16,10 +16,9 @@ Stop immediately if any prerequisite is missing:
 - Production stack name contains `prod` or `production` and does not contain `test`.
 - Production peppers/admin secret are independent from test.
 - SES production sender is verified.
-- Live Stripe Products/Prices and production webhook are approved and independently configured.
-- Monitoring, alarms, backup/PITR, rollback, and incident contacts are ready.
-- Customer Terms, Privacy, refund/cancellation policy, billing disclosure, and support path are approved and published.
-- Owner has explicitly authorized moving from readiness to production deployment.
+- Approved live Stripe Products/Prices exist and are independently configured.
+
+A production webhook is **not** required for Phase 1 because no production API endpoint exists yet.
 
 ## Phase 1 — validation only
 
@@ -43,6 +42,12 @@ Any failure is a **NO-GO**.
 ## Phase 2 — production deployment change review
 
 Only after Phase 1 is green, prepare a separate pull request that introduces the production deployment path.
+
+Before that deployment PR can enable customer accounts or billing, the following additional prerequisites must be complete:
+
+- production monitoring, alarms, backup/PITR, rollback, and incident contacts are ready;
+- customer Terms, Privacy, refund/cancellation policy, billing disclosure, and support path are approved and published;
+- owner explicitly authorizes moving from readiness to production deployment.
 
 That PR must:
 
@@ -73,6 +78,8 @@ Verify:
 - alarms are connected;
 - rollback is proven;
 - no customer-facing billing path is active.
+
+After the production API base URL exists, register the production Stripe subscription webhook against that endpoint and save its independent signing secret in `api-access-production`. Do not enable billing until the webhook endpoint and signing-secret validation are complete.
 
 Failure => rollback and **NO-GO**.
 
