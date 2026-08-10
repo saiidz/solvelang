@@ -82,13 +82,42 @@ jobs:
       - name: Build API access stack
         run: sam build --template template.yaml
 
+      - name: Prepare dedicated production SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${AWS_REGION}"
+          if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
+            if [[ "$AWS_REGION" == us-east-1 ]]; then
+              aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION"
+            else
+              aws s3api create-bucket \
+                --bucket "$bucket" \
+                --region "$AWS_REGION" \
+                --create-bucket-configuration "LocationConstraint=$AWS_REGION"
+            fi
+          fi
+          aws s3api put-public-access-block \
+            --bucket "$bucket" \
+            --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption \
+            --bucket "$bucket" \
+            --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
       - name: Deploy inert production foundation
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         shell: bash
         run: |
           set -euo pipefail
           sam deploy \
             --stack-name "$STACK_NAME" \
-            --resolve-s3 \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME" \
             --capabilities CAPABILITY_IAM \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
@@ -121,6 +150,7 @@ jobs:
       - name: Write deployment summary
         env:
           API_BASE: ${{ steps.verify.outputs.api_base }}
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
         run: |
-          printf '## SolveLang production foundation deployment\n\n- Mode: `live` infrastructure foundation\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- API access enabled: **false**\n- Customer accounts enabled: **false**\n- Subscription billing enabled: **false**\n- DynamoDB PITR: verified\n- Lambda log retention: 90 days verified\n- CloudWatch alarms: verified and routed to configured SNS topic\n- Stripe secret injected: **no**\n- Webhook configured: **no**\n- Charges performed: **no**\n\nThis foundation is intentionally inert. Enabling customer accounts or billing requires a separate reviewed change and explicit owner approval.\n' \
-            "$STACK_NAME" "$AWS_REGION" "$API_BASE" >> "$GITHUB_STEP_SUMMARY"
+          printf '## SolveLang production foundation deployment\n\n- Mode: `live` infrastructure foundation\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- SAM artifact bucket: `%s`\n- API access enabled: **false**\n- Customer accounts enabled: **false**\n- Subscription billing enabled: **false**\n- DynamoDB PITR: verified\n- Lambda log retention: 90 days verified\n- CloudWatch alarms: verified and routed to configured SNS topic\n- Stripe secret injected: **no**\n- Webhook configured: **no**\n- Charges performed: **no**\n\nThis foundation is intentionally inert. Enabling customer accounts or billing requires a separate reviewed change and explicit owner approval.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$SAM_ARTIFACT_BUCKET" >> "$GITHUB_STEP_SUMMARY"
