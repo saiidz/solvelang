@@ -1,0 +1,127 @@
+name: Production Readiness Preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_no_deploy:
+        description: Confirm this workflow validates only and must not deploy or charge
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-readiness
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      STRIPE_API_DEVELOPER_PRICE_ID: ${{ vars.STRIPE_API_DEVELOPER_PRICE_ID }}
+      STRIPE_API_PRO_PRICE_ID: ${{ vars.STRIPE_API_PRO_PRICE_ID }}
+      STRIPE_API_BUSINESS_PRICE_ID: ${{ vars.STRIPE_API_BUSINESS_PRICE_ID }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce validation-only production boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production preflight must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_no_deploy }}" == "true" ]] || { echo "Validation-only confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == "live" ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          test -n "$AWS_REGION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Validate isolated production secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_length() { (( ${#2} >= $3 )) || { echo "$1 must contain at least $3 characters." >&2; exit 1; }; }
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          require_length CUSTOMER_AUTH_PEPPER "$CUSTOMER_AUTH_PEPPER" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$STRIPE_SECRET_KEY" == sk_live_* ]] || { echo "Production requires an sk_live_* Stripe key." >&2; exit 1; }
+          [[ "$STRIPE_SECRET_KEY" != sk_test_* ]]
+          [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]]
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+          for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
+            [[ "$price_id" == price_* ]]
+          done
+          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_PRO_PRICE_ID" ]]
+          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+          [[ "$STRIPE_API_PRO_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+
+      - name: Verify production SES sender
+        run: aws sesv2 get-email-identity --email-identity "$CUSTOMER_AUTH_EMAIL_SENDER" --query 'VerifiedForSendingStatus' --output text | grep -qx True
+
+      - name: Verify live Stripe prices without charging
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_price() {
+            local price_id="$1" expected_amount="$2"
+            local response
+            response="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" "https://api.stripe.com/v1/prices/$price_id")"
+            jq -e \
+              --argjson amount "$expected_amount" \
+              '.active == true and .livemode == true and .type == "recurring" and .currency == "usd" and .unit_amount == $amount and .recurring.interval == "month" and .recurring.interval_count == 1' \
+              <<<"$response" >/dev/null
+          }
+          verify_price "$STRIPE_API_DEVELOPER_PRICE_ID" 4900
+          verify_price "$STRIPE_API_PRO_PRICE_ID" 19900
+          verify_price "$STRIPE_API_BUSINESS_PRICE_ID" 69900
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API access tests
+        run: npm test
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+      - name: Build API access stack locally
+        run: sam build --template template.yaml
+
+      - name: Prove current template still blocks live deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Customer accounts are test-mode only until production review is complete' template.yaml
+          grep -q 'Subscription billing is test-mode only until production review is complete' template.yaml
+
+      - name: Write validation-only summary
+        run: |
+          printf '## SolveLang production readiness preflight\n\n- Mode: `live` configuration validation only\n- Stack name candidate: `%s`\n- Region: `%s`\n- Site origin: `%s`\n- Live Stripe price metadata: validated\n- SES sender: validated\n- API tests: passed\n- SAM validate/build: passed\n- Deployment performed: **no**\n- Charges performed: **no**\n\nThe production SAM deployment path remains intentionally blocked pending explicit owner approval and final go/no-go review.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$SITE_ORIGIN" >> "$GITHUB_STEP_SUMMARY"
