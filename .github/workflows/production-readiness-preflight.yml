@@ -37,7 +37,6 @@ jobs:
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-      STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
 
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +75,6 @@ jobs:
           [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
           [[ "$STRIPE_SECRET_KEY" == sk_live_* ]] || { echo "Production requires an sk_live_* Stripe key." >&2; exit 1; }
           [[ "$STRIPE_SECRET_KEY" != sk_test_* ]]
-          [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]]
           test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
           for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
             [[ "$price_id" == price_* ]]
@@ -123,5 +121,5 @@ jobs:
 
       - name: Write validation-only summary
         run: |
-          printf '## SolveLang production readiness preflight\n\n- Mode: `live` configuration validation only\n- Stack name candidate: `%s`\n- Region: `%s`\n- Site origin: `%s`\n- Live Stripe price metadata: validated\n- SES sender: validated\n- API tests: passed\n- SAM validate/build: passed\n- Deployment performed: **no**\n- Charges performed: **no**\n\nThe production SAM deployment path remains intentionally blocked pending explicit owner approval and final go/no-go review.\n' \
+          printf '## SolveLang production readiness preflight\n\n- Mode: `live` configuration validation only\n- Stack name candidate: `%s`\n- Region: `%s`\n- Site origin: `%s`\n- Live Stripe price metadata: validated\n- SES sender: validated\n- Webhook secret: **not required until a production endpoint exists**\n- API tests: passed\n- SAM validate/build: passed\n- Deployment performed: **no**\n- Charges performed: **no**\n\nThe production SAM deployment path remains intentionally blocked pending explicit owner approval and final go/no-go review.\n' \
             "$STACK_NAME" "$AWS_REGION" "$SITE_ORIGIN" >> "$GITHUB_STEP_SUMMARY"
