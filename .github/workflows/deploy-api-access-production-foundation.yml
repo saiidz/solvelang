@@ -88,7 +88,7 @@ jobs:
         run: |
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
-          bucket="solvelang-api-access-production-artifacts-${account_id}-${AWS_REGION}"
+          bucket="solvelang-api-access-production-artifacts-${account_id}"
           if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
             if [[ "$AWS_REGION" == us-east-1 ]]; then
               aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION"
