@@ -88,7 +88,10 @@ jobs:
         run: |
           set -euo pipefail
           account_id="$(aws sts get-caller-identity --query Account --output text)"
-          bucket="solvelang-api-access-production-artifacts-${account_id}"
+          region_slug="${AWS_REGION//-/}"
+          [[ "$region_slug" =~ ^[a-z0-9]+$ ]] || { echo "AWS region produced an invalid S3 bucket suffix." >&2; exit 1; }
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_slug}"
+          (( ${#bucket} <= 63 )) || { echo "Production artifact bucket name exceeds the S3 63-character limit." >&2; exit 1; }
           if ! aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
             if [[ "$AWS_REGION" == us-east-1 ]]; then
               aws s3api create-bucket --bucket "$bucket" --region "$AWS_REGION"
