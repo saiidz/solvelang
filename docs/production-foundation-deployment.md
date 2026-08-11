@@ -54,7 +54,7 @@ The workflow:
 3. requires explicit `confirm_production_foundation=true` input;
 4. assumes only `AWS_DEPLOY_ROLE_ARN`;
 5. validates tests and the SAM template before deployment;
-6. creates/uses a dedicated private, encrypted, versioned SAM artifact bucket named `solvelang-api-access-production-artifacts-<account>-<region>`;
+6. creates/uses a dedicated private, encrypted, versioned SAM artifact bucket named `solvelang-api-access-production-artifacts-<account>-<region-hash>`, where `<region-hash>` is the first 8 lowercase hexadecimal characters of `SHA-256(AWS_REGION)`;
 7. deploys only `solvelang-api-access-production` with all runtime features disabled;
 8. verifies `/health` reports API access, customer accounts, and subscription billing as disabled;
 9. enables DynamoDB point-in-time recovery on every table;
@@ -62,6 +62,14 @@ The workflow:
 11. creates Lambda error, throttle, and duration alarms for the API handler and authorizer;
 12. routes those alarms to the configured SNS topic;
 13. verifies the operational controls before declaring success.
+
+For operational verification, derive the region discriminator with the same command used by the workflow:
+
+```bash
+printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8
+```
+
+For example, the production artifact bucket is always account-specific and region-specific even though the region discriminator is intentionally bounded to 8 characters so the final S3 bucket name remains within the 63-character limit.
 
 ## Production tables protected with PITR
 
