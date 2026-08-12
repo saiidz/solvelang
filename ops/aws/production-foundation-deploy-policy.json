@@ -118,7 +118,8 @@
       ],
       "Resource": [
         "arn:aws:iam::*:role/solvelang-api-access-production-*",
-        "arn:aws:iam::*:role/solvelang-api-access-producti-*"
+        "arn:aws:iam::*:role/solvelang-api-access-producti-*",
+        "arn:aws:iam::*:role/solvelang-api-access-prod-*"
       ]
     },
     {
