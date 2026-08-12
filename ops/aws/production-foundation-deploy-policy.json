@@ -116,7 +116,10 @@
         "iam:TagRole",
         "iam:UntagRole"
       ],
-      "Resource": "arn:aws:iam::*:role/solvelang-api-access-production-*"
+      "Resource": [
+        "arn:aws:iam::*:role/solvelang-api-access-production-*",
+        "arn:aws:iam::*:role/solvelang-api-access-producti-*"
+      ]
     },
     {
       "Sid": "ApiGatewayV2ForSolveLangProduction",
