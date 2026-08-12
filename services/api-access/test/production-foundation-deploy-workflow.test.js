@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const workflowUrl = new URL("../../../.github/workflows/deploy-api-access-production-foundation.yml", import.meta.url);
+const deployPolicyUrl = new URL("../../../ops/aws/production-foundation-deploy-policy.json", import.meta.url);
 const opsScriptUrl = new URL("../scripts/configure-production-foundation.sh", import.meta.url);
 
 async function workflow() {
@@ -11,6 +12,10 @@ async function workflow() {
 
 async function opsScript() {
   return await readFile(opsScriptUrl, "utf8");
+}
+
+async function deployPolicy() {
+  return JSON.parse(await readFile(deployPolicyUrl, "utf8"));
 }
 
 test("production foundation deployment is manual, protected, main-only, and inert", async () => {
@@ -48,6 +53,15 @@ test("production foundation deploy verifies disabled health state and operations
   assert.match(source, /\.subscriptionBillingEnabled == false/);
   assert.match(source, /configure-production-foundation\.sh/);
   assert.match(source, /OPERATIONS_ALARM_TOPIC_ARN/);
+});
+
+test("production foundation deploy can tag only API Gateway v2 API resources", async () => {
+  const policy = await deployPolicy();
+  const statement = policy.Statement.find(({ Sid }) => Sid === "ApiGatewayV2TagsForSolveLangProduction");
+
+  assert.ok(statement);
+  assert.deepEqual(statement.Action, ["apigateway:TagResource", "apigateway:UntagResource"]);
+  assert.equal(statement.Resource, "arn:aws:apigateway:*::/apis/*");
 });
 
 test("operations baseline enables PITR, retention, and alarm routing", async () => {
