@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: api-access-production-customer-accounts-deployment
+  group: api-access-stack-deployment
   cancel-in-progress: false
 
 jobs:
@@ -94,13 +94,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          status="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text)"
+          stack_description="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack_description")"
           [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
-          api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack_description")"
           test -n "$api_base"
+          initial_api_access_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          initial_customer_accounts_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          initial_subscription_billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          [[ "$initial_api_access_enabled" == true || "$initial_api_access_enabled" == false ]]
+          [[ "$initial_customer_accounts_enabled" == true || "$initial_customer_accounts_enabled" == false ]]
+          [[ "$initial_api_access_enabled" == "$initial_customer_accounts_enabled" ]] || { echo "Production API access and customer-account flags must begin in the same state." >&2; exit 1; }
+          [[ "$initial_subscription_billing_enabled" == false ]] || { echo "Production subscription billing must remain disabled." >&2; exit 1; }
           response="$(curl --fail --silent --show-error "$api_base/health")"
-          jq -e '.status == "ok" and .subscriptionBillingEnabled == false and (((.enabled == false) and (.customerAccountsEnabled == false)) or ((.enabled == true) and (.customerAccountsEnabled == true)))' <<<"$response" >/dev/null
-          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+          jq -e \
+            --argjson api_access "$initial_api_access_enabled" \
+            --argjson customer_accounts "$initial_customer_accounts_enabled" \
+            '.status == "ok" and .enabled == $api_access and .customerAccountsEnabled == $customer_accounts and .subscriptionBillingEnabled == false' \
+            <<<"$response" >/dev/null
+          {
+            echo "api_base=$api_base"
+            echo "initial_api_access_enabled=$initial_api_access_enabled"
+            echo "initial_customer_accounts_enabled=$initial_customer_accounts_enabled"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify deployed customer frontend targets exact production API
         env:
@@ -233,30 +249,15 @@ jobs:
       - name: Re-apply production operations baseline
         run: bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
 
-      - name: Roll back customer-account enablement if post-deploy verification fails
+      - name: Roll back to the exact pre-deploy feature state if post-deploy verification fails
         if: ${{ failure() && steps.deploy.outcome == 'success' }}
         env:
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+          INITIAL_API_ACCESS_ENABLED: ${{ steps.stack.outputs.initial_api_access_enabled }}
+          INITIAL_CUSTOMER_ACCOUNTS_ENABLED: ${{ steps.stack.outputs.initial_customer_accounts_enabled }}
         shell: bash
-        run: |
-          set -euo pipefail
-          sam deploy \
-            --stack-name "$STACK_NAME" \
-            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
-            --s3-prefix "$STACK_NAME-rollback" \
-            --capabilities CAPABILITY_IAM \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              ApiAccessEnabled="false" \
-              ApiAccessMode="live" \
-              CustomerAccountsEnabled="false" \
-              SubscriptionBillingEnabled="false" \
-              SiteOrigin="$SITE_ORIGIN" \
-              ApiKeyPepper="$API_KEY_PEPPER" \
-              ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
-          response="$(curl --fail --silent --show-error "${{ steps.stack.outputs.api_base }}/health")"
-          jq -e '.status == "ok" and .enabled == false and .customerAccountsEnabled == false and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+        run: bash scripts/rollback-production-customer-accounts.sh
 
       - name: Write deployment summary
         if: ${{ success() }}
