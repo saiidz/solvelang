@@ -140,7 +140,7 @@
       "Resource": [
         "arn:aws:apigateway:*::/apis",
         "arn:aws:apigateway:*::/apis/*",
-        "arn:aws:apigateway:*::/tags/*"
+        "arn:aws:apigateway:*::/tags/arn%3Aaws%3Aapigateway%3A*%3A%3A%2Fv2%2Fapis%2F*"
       ]
     },
     {
