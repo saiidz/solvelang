@@ -1,0 +1,267 @@
+name: Deploy API Access Production Customer Accounts
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_customer_accounts:
+        description: Confirm enabling live API access and customer accounts only
+        required: true
+        default: false
+        type: boolean
+      confirm_billing_remains_disabled:
+        description: Confirm subscription billing, Stripe, webhooks, and charges must remain disabled
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-customer-accounts-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "true"
+      CUSTOMER_ACCOUNTS_ENABLED: "true"
+      SUBSCRIPTION_BILLING_ENABLED: "false"
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      CUSTOMER_AUTH_EMAIL_REPLY_TO: ${{ vars.CUSTOMER_AUTH_EMAIL_REPLY_TO }}
+      OPERATIONS_ALARM_TOPIC_ARN: ${{ vars.OPERATIONS_ALARM_TOPIC_ARN }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce production customer-account boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production customer-account deployment must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_customer_accounts }}" == "true" ]] || { echo "Explicit production customer-account confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_billing_remains_disabled }}" == "true" ]] || { echo "Explicit billing-disabled confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == true ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == true ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == false ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          [[ "$OPERATIONS_ALARM_TOPIC_ARN" == arn:aws:sns:${AWS_REGION}:*:* ]] || { echo "OPERATIONS_ALARM_TOPIC_ARN must be an SNS topic in the production region." >&2; exit 1; }
+          test -n "$AWS_REGION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Assume production preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Validate independent production auth secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_length() { (( ${#2} >= $3 )) || { echo "$1 must contain at least $3 characters." >&2; exit 1; }; }
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          require_length CUSTOMER_AUTH_PEPPER "$CUSTOMER_AUTH_PEPPER" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+
+      - name: Verify production stack is safe to enable
+        id: stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text)"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
+          api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
+          test -n "$api_base"
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .subscriptionBillingEnabled == false and (((.enabled == false) and (.customerAccountsEnabled == false)) or ((.enabled == true) and (.customerAccountsEnabled == true)))' <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployed customer frontend targets exact production API
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          page_url="$SITE_ORIGIN/account/api-keys/"
+          page="$(curl --fail --silent --show-error --location "$page_url")"
+          test -n "$page"
+          mapfile -t scripts < <(
+            grep -oE '<script[^>]+src="[^"]+"' <<<"$page" \
+              | sed -E 's/.*src="([^"]+)".*/\1/' \
+              | sort -u
+          )
+          (( ${#scripts[@]} > 0 )) || { echo "No frontend script assets were found on the production customer page." >&2; exit 1; }
+          found=false
+          for src in "${scripts[@]}"; do
+            if [[ "$src" == https://* ]]; then
+              asset_url="$src"
+            elif [[ "$src" == /* ]]; then
+              asset_url="$SITE_ORIGIN$src"
+            else
+              asset_url="$SITE_ORIGIN/$src"
+            fi
+            asset="$(curl --fail --silent --show-error --location "$asset_url")"
+            if grep -Fq -- "\"$API_BASE\"" <<<"$asset" || grep -Fq -- "'$API_BASE'" <<<"$asset"; then
+              found=true
+              break
+            fi
+          done
+          [[ "$found" == true ]] || { echo "Production customer frontend is not compiled against the exact production API base." >&2; exit 1; }
+
+      - name: Verify SES sender and production sending access
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sesv2 get-email-identity \
+            --email-identity "$CUSTOMER_AUTH_EMAIL_SENDER" \
+            --query 'VerifiedForSendingStatus' \
+            --output text | grep -qx True
+          aws sesv2 get-account \
+            --query 'ProductionAccessEnabled' \
+            --output text | grep -qx True
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run API access tests
+        run: npm test
+
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+
+      - name: Build API access stack
+        run: sam build --template template.yaml
+
+      - name: Confirm billing remains live-blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'CustomerAccountsRequirements' template.yaml
+          grep -q 'SubscriptionBillingRemainsTestOnly' template.yaml
+          grep -q 'Subscription billing is test-mode only until production review is complete.' template.yaml
+          ! grep -q 'Customer accounts are test-mode only until production review is complete.' template.yaml
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare dedicated production SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]] || { echo "AWS_REGION contains invalid characters." >&2; exit 1; }
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 )) || { echo "Production artifact bucket name exceeds the S3 limit." >&2; exit 1; }
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy production customer accounts with billing disabled
+        id: deploy
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameter_overrides=(
+            ApiAccessEnabled="$API_ACCESS_ENABLED"
+            ApiAccessMode="$API_ACCESS_MODE"
+            CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED"
+            SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED"
+            SiteOrigin="$SITE_ORIGIN"
+            ApiKeyPepper="$API_KEY_PEPPER"
+            ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+            CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER"
+            CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER"
+          )
+          [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameter_overrides+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameter_overrides[@]}"
+
+      - name: Verify customer-account health and billing boundary
+        id: verify
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(curl --fail --silent --show-error "$API_BASE/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+          webhook_status="$(curl --silent --output /tmp/solvelang-webhook-disabled.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
+          [[ "$webhook_status" == 503 ]]
+          jq -e '.code == "subscription_billing_disabled"' /tmp/solvelang-webhook-disabled.json >/dev/null
+
+      - name: Re-apply production operations baseline
+        run: bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
+
+      - name: Roll back customer-account enablement if post-deploy verification fails
+        if: ${{ failure() && steps.deploy.outcome == 'success' }}
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME-rollback" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              ApiAccessEnabled="false" \
+              ApiAccessMode="live" \
+              CustomerAccountsEnabled="false" \
+              SubscriptionBillingEnabled="false" \
+              SiteOrigin="$SITE_ORIGIN" \
+              ApiKeyPepper="$API_KEY_PEPPER" \
+              ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+          response="$(curl --fail --silent --show-error "${{ steps.stack.outputs.api_base }}/health")"
+          jq -e '.status == "ok" and .enabled == false and .customerAccountsEnabled == false and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+        run: |
+          printf '## SolveLang production customer-account enablement\n\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- API access enabled: **true**\n- Customer accounts enabled: **true**\n- Subscription billing enabled: **false**\n- SES sender configured: `%s`\n- Billing webhook disabled response: verified\n- Stripe credentials injected: **no**\n- Charges performed: **no**\n- Operations baseline: re-verified\n\nNo canary email is sent by this deployment workflow. Run the owner-controlled browser canary from the production customer page after deployment.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$CUSTOMER_AUTH_EMAIL_SENDER" >> "$GITHUB_STEP_SUMMARY"
