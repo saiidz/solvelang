@@ -59,13 +59,11 @@ Parameters:
     Default: ""
 
 Rules:
-  CustomerAccountsRemainTestOnly:
+  CustomerAccountsRequirements:
     RuleCondition: !Equals [!Ref CustomerAccountsEnabled, "true"]
     Assertions:
       - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
         AssertDescription: Customer accounts require API access to be enabled.
-      - Assert: !Equals [!Ref ApiAccessMode, test]
-        AssertDescription: Customer accounts are test-mode only until production review is complete.
       - Assert: !Not [!Equals [!Ref CustomerAuthPepper, ""]]
         AssertDescription: Customer accounts require a separate authentication pepper.
       - Assert: !Not [!Equals [!Ref CustomerAuthEmailSender, ""]]

@@ -101,14 +101,12 @@ jobs:
           page_url="$SITE_ORIGIN/account/api-keys/"
           page="$(curl --fail --silent --show-error --location "$page_url")"
           test -n "$page"
-
           mapfile -t scripts < <(
             grep -oE '<script[^>]+src="[^"]+"' <<<"$page" \
               | sed -E 's/.*src="([^"]+)".*/\1/' \
               | sort -u
           )
           (( ${#scripts[@]} > 0 )) || { echo "No frontend script assets were found on the production customer page." >&2; exit 1; }
-
           found=false
           for src in "${scripts[@]}"; do
             if [[ "$src" == https://* ]]; then
@@ -154,16 +152,21 @@ jobs:
       - name: Build API access stack
         run: sam build --template template.yaml
 
-      - name: Confirm live customer accounts are still template-gated
+      - name: Confirm live customer requirements and billing interlock
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'CustomerAccountsRemainTestOnly' template.yaml
-          grep -q 'Customer accounts are test-mode only until production review is complete.' template.yaml
+          grep -q 'CustomerAccountsRequirements' template.yaml
+          grep -q 'Customer accounts require API access to be enabled.' template.yaml
+          grep -q 'Customer accounts require a separate authentication pepper.' template.yaml
+          grep -q 'Customer accounts require a verified SES sender.' template.yaml
+          grep -q 'SubscriptionBillingRemainsTestOnly' template.yaml
+          grep -q 'Subscription billing is test-mode only until production review is complete.' template.yaml
+          ! grep -q 'Customer accounts are test-mode only until production review is complete.' template.yaml
 
       - name: Write readiness summary
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
         run: |
-          printf '## SolveLang production customer-account preflight\n\n- Production stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- Current API access enabled: **false**\n- Current customer accounts enabled: **false**\n- Current subscription billing enabled: **false**\n- Customer-auth pepper: validated and independent\n- SES sender: verified\n- SES production sending access: verified\n- Customer sign-in page: reachable and compiled with the exact production API base\n- Tests/SAM validation/build: passed\n- Live customer accounts template gate: still present\n- Deployment performed: **no**\n- Email sent: **no**\n- Stripe/webhook used: **no**\n- Charges performed: **no**\n\nPassing this workflow is readiness evidence only. A separate reviewed change and explicit owner approval are required before enabling API access or customer accounts.\n' \
+          printf '## SolveLang production customer-account preflight\n\n- Production stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- Current API access enabled: **false**\n- Current customer accounts enabled: **false**\n- Current subscription billing enabled: **false**\n- Customer-auth pepper: validated and independent\n- SES sender: verified\n- SES production sending access: verified\n- Customer sign-in page: reachable and compiled with the exact production API base\n- Tests/SAM validation/build: passed\n- Live customer-account requirements: validated\n- Live subscription billing interlock: still present\n- Deployment performed: **no**\n- Email sent: **no**\n- Stripe/webhook used: **no**\n- Charges performed: **no**\n\nPassing this workflow is readiness evidence only. The separate protected customer-account deployment workflow still requires explicit owner confirmation before enabling API access or customer accounts.\n' \
             "$STACK_NAME" "$AWS_REGION" "$API_BASE" >> "$GITHUB_STEP_SUMMARY"
