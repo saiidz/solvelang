@@ -32,6 +32,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "CloudFormationServerlessTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:*:aws:transform/Serverless-2016-10-31"
+    },
+    {
       "Sid": "SolveLangProductionArtifactBucket",
       "Effect": "Allow",
       "Action": [
