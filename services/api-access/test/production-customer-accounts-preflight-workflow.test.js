@@ -36,14 +36,16 @@ test("production customer-account preflight validates auth independence, inert h
   assert.match(source, /ProductionAccessEnabled/);
 });
 
-test("production customer-account preflight proves deployed frontend targets CloudFormation production API", async () => {
+test("production customer-account preflight requires an exact compiled CloudFormation production API string", async () => {
   const source = await workflow();
-  assert.match(source, /Verify deployed customer frontend targets production API/);
+  assert.match(source, /Verify deployed customer frontend targets exact production API/);
   assert.match(source, /SITE_ORIGIN.*account\/api-keys\//);
   assert.match(source, /steps\.stack\.outputs\.api_base/);
-  assert.match(source, /grep -Fq -- "\$API_BASE"/);
-  assert.match(source, /NEXT_PUBLIC_API_ACCESS_BASE_URL/);
-  assert.match(source, /does not contain the production API base from CloudFormation/);
+  assert.match(source, /grep -Fq -- "\\"\$API_BASE\\""/);
+  assert.match(source, /grep -Fq -- "'\$API_BASE'"/);
+  assert.doesNotMatch(source, /grep -Fq -- "\$API_BASE" <<<"\$asset"/);
+  assert.match(source, /NEXT_PUBLIC_API_ACCESS_BASE_URL exactly/);
+  assert.match(source, /exact production API base string from CloudFormation/);
 });
 
 test("production customer-account preflight preserves the live template gate", async () => {
