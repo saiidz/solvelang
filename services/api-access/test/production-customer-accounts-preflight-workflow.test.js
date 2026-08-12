@@ -48,10 +48,15 @@ test("production customer-account preflight requires an exact compiled CloudForm
   assert.match(source, /exact production API base string from CloudFormation/);
 });
 
-test("production customer-account preflight preserves the live template gate", async () => {
+test("production customer-account preflight validates live account requirements while preserving billing interlock", async () => {
   const source = await workflow();
-  assert.match(source, /CustomerAccountsRemainTestOnly/);
-  assert.match(source, /Customer accounts are test-mode only until production review is complete\./);
+  assert.match(source, /CustomerAccountsRequirements/);
+  assert.match(source, /Customer accounts require API access to be enabled\./);
+  assert.match(source, /Customer accounts require a separate authentication pepper\./);
+  assert.match(source, /Customer accounts require a verified SES sender\./);
+  assert.match(source, /SubscriptionBillingRemainsTestOnly/);
+  assert.match(source, /Subscription billing is test-mode only until production review is complete\./);
+  assert.doesNotMatch(source, /grep -q 'CustomerAccountsRemainTestOnly'/);
   assert.match(source, /Deployment performed: \*\*no\*\*/);
   assert.match(source, /Email sent: \*\*no\*\*/);
   assert.match(source, /Charges performed: \*\*no\*\*/);
