@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   PRODUCTION_WORKFLOW_PATHS,
-  findEarlierActiveProductionRunIds,
+  findEarlierActiveProductionRunAttempts,
   waitForProductionDeploymentTurn,
 } from "../scripts/wait-for-production-deployment-turn.mjs";
 
@@ -16,6 +16,16 @@ const productionWorkflowNames = [
 
 async function workflow(name) {
   return await readFile(new URL(name, workflowsDirectory), "utf8");
+}
+
+function productionRun({ id, attempt = 1, startedAt, status = "in_progress", path = PRODUCTION_WORKFLOW_PATHS[0] }) {
+  return {
+    id,
+    run_attempt: attempt,
+    run_started_at: startedAt,
+    status,
+    path,
+  };
 }
 
 test("test deployment is isolated while both production deployments use the repository queue", async () => {
@@ -55,29 +65,92 @@ test("test deployment is isolated while both production deployments use the repo
 
 test("three rapid production requests retain FIFO predecessors without dropping the middle request", () => {
   const runs = [
-    { id: 7001, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] },
-    { id: 7002, status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] },
-    { id: 7003, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] },
-    { id: 7000, status: "in_progress", path: ".github/workflows/deploy-api-access.yml" },
+    productionRun({ id: 7001, startedAt: "2026-08-12T22:00:01Z" }),
+    productionRun({ id: 7002, startedAt: "2026-08-12T22:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+    productionRun({ id: 7003, startedAt: "2026-08-12T22:00:03Z" }),
+    productionRun({ id: 7000, startedAt: "2026-08-12T22:00:00Z", path: ".github/workflows/deploy-api-access.yml" }),
   ];
 
-  assert.deepEqual(findEarlierActiveProductionRunIds(runs, 7001), []);
-  assert.deepEqual(findEarlierActiveProductionRunIds(runs, 7002), [7001]);
-  assert.deepEqual(findEarlierActiveProductionRunIds(runs, 7003), [7001, 7002]);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7001, 1), []);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7002, 1), [
+    { runId: 7001, runAttempt: 1, runStartedAt: "2026-08-12T22:00:01Z" },
+  ]);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7003, 1), [
+    { runId: 7001, runAttempt: 1, runStartedAt: "2026-08-12T22:00:01Z" },
+    { runId: 7002, runAttempt: 1, runStartedAt: "2026-08-12T22:00:02Z" },
+  ]);
+});
+
+test("an old run ID rerun waits for a newer run that started first", () => {
+  const runs = [
+    productionRun({ id: 7101, attempt: 2, startedAt: "2026-08-12T22:10:02Z" }),
+    productionRun({ id: 7102, startedAt: "2026-08-12T22:10:01Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+  ];
+
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7101, 2), [
+    { runId: 7102, runAttempt: 1, runStartedAt: "2026-08-12T22:10:01Z" },
+  ]);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7102, 1), []);
+});
+
+test("a fresh deployment waits for an earlier rerun attempt", () => {
+  const runs = [
+    productionRun({ id: 7201, attempt: 2, startedAt: "2026-08-12T22:20:01Z" }),
+    productionRun({ id: 7203, startedAt: "2026-08-12T22:20:02Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+  ];
+
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7203, 1), [
+    { runId: 7201, runAttempt: 2, runStartedAt: "2026-08-12T22:20:01Z" },
+  ]);
+});
+
+test("equal start timestamps use deterministic attempt-aware ordering without cycles", () => {
+  const startedAt = "2026-08-12T22:30:00Z";
+  const runs = [
+    productionRun({ id: 7301, attempt: 2, startedAt }),
+    productionRun({ id: 7302, startedAt, path: PRODUCTION_WORKFLOW_PATHS[1] }),
+    productionRun({ id: 7303, startedAt }),
+  ];
+
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7302, 1), []);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7303, 1), [
+    { runId: 7302, runAttempt: 1, runStartedAt: startedAt },
+  ]);
+  assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7301, 2), [
+    { runId: 7302, runAttempt: 1, runStartedAt: startedAt },
+    { runId: 7303, runAttempt: 1, runStartedAt: startedAt },
+  ]);
+});
+
+test("invalid or missing attempt metadata fails closed", () => {
+  const valid = productionRun({ id: 7401, startedAt: "2026-08-12T22:40:01Z" });
+
+  assert.throws(
+    () => findEarlierActiveProductionRunAttempts([{ ...valid, run_attempt: undefined }], 7401, 1),
+    /Workflow run attempt must be a positive safe integer/,
+  );
+  assert.throws(
+    () => findEarlierActiveProductionRunAttempts([{ ...valid, run_started_at: "not-a-timestamp" }], 7401, 1),
+    /Workflow run start time must be a valid timestamp/,
+  );
+  assert.throws(
+    () => findEarlierActiveProductionRunAttempts([valid], 7401, 2),
+    /Current production deployment attempt was not present/,
+  );
 });
 
 test("a later production run keeps waiting after the first run finishes until the middle run finishes", async () => {
   const snapshots = [
     [
-      { id: 8001, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] },
-      { id: 8002, status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] },
-      { id: 8003, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] },
+      productionRun({ id: 8001, startedAt: "2026-08-12T23:00:01Z" }),
+      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" }),
     ],
     [
-      { id: 8002, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[1] },
-      { id: 8003, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] },
+      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" }),
     ],
-    [{ id: 8003, status: "in_progress", path: PRODUCTION_WORKFLOW_PATHS[0] }],
+    [productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" })],
   ];
   let snapshotIndex = 0;
   const waits = [];
@@ -98,6 +171,7 @@ test("a later production run keeps waiting after the first run finishes until th
     repository: "saiidz/solvelang",
     token: "test-token",
     currentRunId: 8003,
+    currentRunAttempt: 1,
     pollMilliseconds: 0,
     fetchImpl,
     sleep: async () => {
@@ -108,8 +182,8 @@ test("a later production run keeps waiting after the first run finishes until th
   });
 
   assert.deepEqual(waits, [0, 1]);
-  assert.match(messages[0], /8001, 8002/);
-  assert.match(messages[1], /8002/);
-  assert.doesNotMatch(messages[1], /8001/);
-  assert.match(messages.at(-1), /run 8003 has the production deployment turn/);
+  assert.match(messages[0], /8001 attempt 1, 8002 attempt 1/);
+  assert.match(messages[1], /8002 attempt 1/);
+  assert.doesNotMatch(messages[1], /8001 attempt 1/);
+  assert.match(messages.at(-1), /run 8003 attempt 1 has the production deployment turn/);
 });

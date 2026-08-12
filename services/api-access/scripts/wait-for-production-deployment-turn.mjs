@@ -7,29 +7,75 @@ export const PRODUCTION_WORKFLOW_PATHS = Object.freeze([
 
 const ACTIVE_RUN_STATUSES = Object.freeze(["requested", "pending", "waiting", "queued", "in_progress"]);
 
-function numericRunId(value, label) {
-  const runId = Number(value);
-  if (!Number.isSafeInteger(runId) || runId <= 0) throw new Error(`${label} must be a positive safe integer.`);
-  return runId;
+function positiveSafeInteger(value, label) {
+  const integer = Number(value);
+  if (!Number.isSafeInteger(integer) || integer <= 0) throw new Error(`${label} must be a positive safe integer.`);
+  return integer;
 }
 
-export function findEarlierActiveProductionRunIds(runs, currentRunId) {
-  const current = numericRunId(currentRunId, "Current run ID");
+function runStart(value, label) {
+  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} must be a valid timestamp.`);
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) throw new Error(`${label} must be a valid timestamp.`);
+  return { value, milliseconds };
+}
+
+function deploymentAttempt(run) {
+  const runId = positiveSafeInteger(run.id, "Workflow run ID");
+  const runAttempt = positiveSafeInteger(run.run_attempt, "Workflow run attempt");
+  const started = runStart(run.run_started_at, "Workflow run start time");
+  return {
+    runId,
+    runAttempt,
+    runStartedAt: started.value,
+    runStartedAtMilliseconds: started.milliseconds,
+  };
+}
+
+function compareDeploymentAttempts(left, right) {
+  return left.runStartedAtMilliseconds - right.runStartedAtMilliseconds
+    || left.runAttempt - right.runAttempt
+    || left.runId - right.runId;
+}
+
+export function findEarlierActiveProductionRunAttempts(runs, currentRunId, currentRunAttempt) {
+  const currentId = positiveSafeInteger(currentRunId, "Current run ID");
+  const currentAttemptNumber = positiveSafeInteger(currentRunAttempt, "Current run attempt");
   const productionWorkflows = new Set(PRODUCTION_WORKFLOW_PATHS);
   const activeStatuses = new Set(ACTIVE_RUN_STATUSES);
-  const earlierRunIds = new Set();
+  const attemptsByIdentity = new Map();
 
   for (const run of runs) {
-    const runId = numericRunId(run.id, "Workflow run ID");
-    if (runId < current && productionWorkflows.has(run.path) && activeStatuses.has(run.status)) {
-      earlierRunIds.add(runId);
+    if (!productionWorkflows.has(run.path) || !activeStatuses.has(run.status)) continue;
+    const attempt = deploymentAttempt(run);
+    const identity = `${attempt.runId}:${attempt.runAttempt}`;
+    const existing = attemptsByIdentity.get(identity);
+    if (existing && (
+      existing.runStartedAt !== attempt.runStartedAt
+      || existing.runStartedAtMilliseconds !== attempt.runStartedAtMilliseconds
+    )) {
+      throw new Error(`Workflow run ${attempt.runId} attempt ${attempt.runAttempt} returned conflicting start times.`);
     }
+    attemptsByIdentity.set(identity, attempt);
   }
 
-  return [...earlierRunIds].sort((left, right) => left - right);
+  const current = attemptsByIdentity.get(`${currentId}:${currentAttemptNumber}`);
+  if (!current) throw new Error("Current production deployment attempt was not present in the active Actions metadata.");
+
+  return [...attemptsByIdentity.values()]
+    .filter((attempt) => compareDeploymentAttempts(attempt, current) < 0)
+    .sort(compareDeploymentAttempts)
+    .map(({ runId, runAttempt, runStartedAt }) => ({ runId, runAttempt, runStartedAt }));
 }
 
-async function fetchEarlierActiveProductionRunIds({ apiUrl, repository, token, currentRunId, fetchImpl }) {
+async function fetchEarlierActiveProductionRunAttempts({
+  apiUrl,
+  repository,
+  token,
+  currentRunId,
+  currentRunAttempt,
+  fetchImpl,
+}) {
   const runs = [];
 
   for (const status of ACTIVE_RUN_STATUSES) {
@@ -51,12 +97,15 @@ async function fetchEarlierActiveProductionRunIds({ apiUrl, repository, token, c
 
       const payload = await response.json();
       if (!Array.isArray(payload.workflow_runs)) throw new Error("GitHub Actions queue query returned an invalid response.");
+      if (payload.workflow_runs.some((run) => run.status !== status)) {
+        throw new Error(`GitHub Actions queue query for ${status} returned mismatched status metadata.`);
+      }
       runs.push(...payload.workflow_runs);
       if (payload.workflow_runs.length < 100) break;
     }
   }
 
-  return findEarlierActiveProductionRunIds(runs, currentRunId);
+  return findEarlierActiveProductionRunAttempts(runs, currentRunId, currentRunAttempt);
 }
 
 export async function waitForProductionDeploymentTurn({
@@ -64,30 +113,36 @@ export async function waitForProductionDeploymentTurn({
   repository,
   token,
   currentRunId,
+  currentRunAttempt,
   pollMilliseconds = 60_000,
   fetchImpl = globalThis.fetch,
   sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
   log = console.log,
 }) {
-  numericRunId(currentRunId, "Current run ID");
+  const runId = positiveSafeInteger(currentRunId, "Current run ID");
+  const runAttempt = positiveSafeInteger(currentRunAttempt, "Current run attempt");
   if (!apiUrl || !repository || !token) throw new Error("GitHub API URL, repository, and token are required.");
   if (!Number.isFinite(pollMilliseconds) || pollMilliseconds < 0) throw new Error("Poll interval must be non-negative.");
 
   for (;;) {
-    const earlierRunIds = await fetchEarlierActiveProductionRunIds({
+    const earlierAttempts = await fetchEarlierActiveProductionRunAttempts({
       apiUrl,
       repository,
       token,
-      currentRunId,
+      currentRunId: runId,
+      currentRunAttempt: runAttempt,
       fetchImpl,
     });
 
-    if (earlierRunIds.length === 0) {
-      log(`Production deployment run ${currentRunId} has the production deployment turn.`);
+    if (earlierAttempts.length === 0) {
+      log(`Production deployment run ${runId} attempt ${runAttempt} has the production deployment turn.`);
       return;
     }
 
-    log(`Production deployment run ${currentRunId} is waiting for earlier run IDs: ${earlierRunIds.join(", ")}.`);
+    const descriptions = earlierAttempts.map(({ runId: earlierRunId, runAttempt: earlierRunAttempt }) => (
+      `${earlierRunId} attempt ${earlierRunAttempt}`
+    ));
+    log(`Production deployment run ${runId} attempt ${runAttempt} is waiting for earlier attempts: ${descriptions.join(", ")}.`);
     await sleep(pollMilliseconds);
   }
 }
@@ -109,6 +164,7 @@ async function main() {
     repository: requiredEnvironment("GITHUB_REPOSITORY"),
     token: requiredEnvironment("GITHUB_TOKEN"),
     currentRunId: requiredEnvironment("GITHUB_RUN_ID"),
+    currentRunAttempt: requiredEnvironment("GITHUB_RUN_ATTEMPT"),
     pollMilliseconds: pollSeconds * 1_000,
   });
 }
