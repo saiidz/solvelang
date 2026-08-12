@@ -35,6 +35,8 @@ Its trust policy must allow `sts:AssumeRoleWithWebIdentity` only for:
 
 The deploy role should have only the AWS permissions required to manage the SolveLang production API stack, dedicated artifact bucket, PITR, Lambda log retention, and CloudWatch alarms. It must not have permissions to manage unrelated stacks or resources when resource-level scoping is supported.
 
+The repository contract for that role is `ops/aws/production-foundation-deploy-policy.json`. Its API Gateway permissions cover only the HTTP API collection and generated resources beneath `/apis`; they include explicit tag and untag authorization for the SAM-generated API and `$default` stage. Updating this repository policy does not update the live role: applying it remains a separate, explicitly authorized operator action.
+
 ## Alarm routing prerequisite
 
 Before the first production foundation deployment, create an owner-controlled SNS topic in the same AWS region and subscribe at least one actively monitored notification target.

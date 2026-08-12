@@ -133,9 +133,14 @@
         "apigateway:GET",
         "apigateway:PATCH",
         "apigateway:POST",
-        "apigateway:PUT"
+        "apigateway:PUT",
+        "apigateway:TagResource",
+        "apigateway:UntagResource"
       ],
-      "Resource": "arn:aws:apigateway:*::/*"
+      "Resource": [
+        "arn:aws:apigateway:*::/apis",
+        "arn:aws:apigateway:*::/apis/*"
+      ]
     },
     {
       "Sid": "SolveLangProductionLogs",
