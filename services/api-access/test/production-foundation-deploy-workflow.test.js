@@ -55,7 +55,7 @@ test("production foundation deploy verifies disabled health state and operations
   assert.match(source, /OPERATIONS_ALARM_TOPIC_ARN/);
 });
 
-test("production deploy policy can manage API Gateway v2 APIs and their tagging endpoint", async () => {
+test("production deploy policy scopes API Gateway tagging to HTTP API resources", async () => {
   const policy = await deployPolicy();
   const statement = policy.Statement.find(({ Sid }) => Sid === "ApiGatewayV2ForSolveLangProduction");
 
@@ -63,10 +63,11 @@ test("production deploy policy can manage API Gateway v2 APIs and their tagging 
   assert.deepEqual(statement.Resource, [
     "arn:aws:apigateway:*::/apis",
     "arn:aws:apigateway:*::/apis/*",
-    "arn:aws:apigateway:*::/tags/*",
+    "arn:aws:apigateway:*::/tags/arn%3Aaws%3Aapigateway%3A*%3A%3A%2Fv2%2Fapis%2F*",
   ]);
   assert.ok(statement.Action.includes("apigateway:TagResource"));
   assert.ok(statement.Action.includes("apigateway:UntagResource"));
+  assert.ok(!statement.Resource.includes("arn:aws:apigateway:*::/tags/*"));
   assert.ok(!statement.Action.includes("apigateway:*"));
 });
 
