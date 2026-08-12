@@ -19,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: api-access-production-customer-accounts-deployment
+  group: api-access-production-stack-deployment
   cancel-in-progress: false
 
 jobs:
@@ -89,7 +89,7 @@ jobs:
           [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
           test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
 
-      - name: Verify production stack is safe to enable
+      - name: Verify production stack is safe for first-time enablement
         id: stack
         shell: bash
         run: |
@@ -99,7 +99,10 @@ jobs:
           api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
           test -n "$api_base"
           response="$(curl --fail --silent --show-error "$api_base/health")"
-          jq -e '.status == "ok" and .subscriptionBillingEnabled == false and (((.enabled == false) and (.customerAccountsEnabled == false)) or ((.enabled == true) and (.customerAccountsEnabled == true)))' <<<"$response" >/dev/null
+          jq -e '.status == "ok" and .enabled == false and .customerAccountsEnabled == false and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null || {
+            echo "Customer-account enablement is first-run only; the stack must begin fully disabled." >&2
+            exit 1
+          }
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
 
       - name: Verify deployed customer frontend targets exact production API
@@ -233,7 +236,7 @@ jobs:
       - name: Re-apply production operations baseline
         run: bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
 
-      - name: Roll back customer-account enablement if post-deploy verification fails
+      - name: Roll back first-time customer-account enablement if post-deploy verification fails
         if: ${{ failure() && steps.deploy.outcome == 'success' }}
         env:
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
