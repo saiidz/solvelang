@@ -15,12 +15,9 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   id-token: write
   contents: read
-
-concurrency:
-  group: api-access-stack-deployment
-  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -67,6 +64,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
 
       - name: Assume production preflight role
         uses: aws-actions/configure-aws-credentials@v4

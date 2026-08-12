@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import test from "node:test";
 
 const workflowUrl = new URL("../../../.github/workflows/deploy-api-access-production-foundation.yml", import.meta.url);
 const deployPolicyUrl = new URL("../../../ops/aws/production-foundation-deploy-policy.json", import.meta.url);
 const opsScriptUrl = new URL("../scripts/configure-production-foundation.sh", import.meta.url);
+const foundationGuardUrl = new URL("../scripts/verify-production-foundation-is-inert.sh", import.meta.url);
+const execFileAsync = promisify(execFile);
 
 async function workflow() {
   return await readFile(workflowUrl, "utf8");
@@ -53,6 +60,46 @@ test("production foundation deploy verifies disabled health state and operations
   assert.match(source, /\.subscriptionBillingEnabled == false/);
   assert.match(source, /configure-production-foundation\.sh/);
   assert.match(source, /OPERATIONS_ALARM_TOPIC_ARN/);
+  assert.match(source, /verify-production-foundation-is-inert\.sh/);
+});
+
+test("production foundation refuses to overwrite an enabled true/true stack", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "solvelang-production-foundation-guard-"));
+  const binDirectory = join(directory, "bin");
+
+  try {
+    await mkdir(binDirectory);
+    const awsPath = join(binDirectory, "aws");
+    await writeFile(awsPath, '#!/usr/bin/env bash\nprintf "%s\\n" "$STACK_DESCRIPTION"\n');
+    await chmod(awsPath, 0o755);
+
+    const stackDescription = JSON.stringify({
+      Stacks: [
+        {
+          StackStatus: "UPDATE_COMPLETE",
+          Parameters: [
+            { ParameterKey: "ApiAccessEnabled", ParameterValue: "true" },
+            { ParameterKey: "CustomerAccountsEnabled", ParameterValue: "true" },
+            { ParameterKey: "SubscriptionBillingEnabled", ParameterValue: "false" },
+          ],
+        },
+      ],
+    });
+
+    await assert.rejects(
+      execFileAsync("bash", [fileURLToPath(foundationGuardUrl)], {
+        env: {
+          ...process.env,
+          PATH: `${binDirectory}:${process.env.PATH}`,
+          STACK_NAME: "solvelang-api-access-production",
+          STACK_DESCRIPTION: stackDescription,
+        },
+      }),
+      (error) => error.code === 1 && /refuses to overwrite feature state true\/true/.test(error.stderr),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("production deploy policy scopes API Gateway tagging to HTTP API resources", async () => {

@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: api-access-stack-deployment
+  group: api-access-test-deployment
   cancel-in-progress: false
 
 jobs:
