@@ -78,7 +78,10 @@
         "lambda:UpdateFunctionCode",
         "lambda:UpdateFunctionConfiguration"
       ],
-      "Resource": "arn:aws:lambda:*:*:function:solvelang-api-access-production-*"
+      "Resource": [
+        "arn:aws:lambda:*:*:function:solvelang-api-access-production-*",
+        "arn:aws:lambda:*:*:function:solvelang-api-access-prod-*"
+      ]
     },
     {
       "Sid": "SolveLangProductionDynamoDB",
