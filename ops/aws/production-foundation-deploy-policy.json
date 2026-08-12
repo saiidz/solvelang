@@ -40,7 +40,7 @@
         "s3:GetBucketPublicAccessBlock",
         "s3:GetBucketVersioning",
         "s3:ListBucket",
-        "s3:PutBucketEncryption",
+        "s3:PutEncryptionConfiguration",
         "s3:PutBucketPublicAccessBlock",
         "s3:PutBucketVersioning"
       ],
