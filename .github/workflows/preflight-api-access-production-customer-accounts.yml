@@ -1,0 +1,134 @@
+name: Preflight API Access Production Customer Accounts
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_customer_accounts_preflight:
+        description: Confirm this is validation-only and will not enable API access, customer accounts, billing, Stripe, webhooks, or charges
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-customer-accounts-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "false"
+      CUSTOMER_ACCOUNTS_ENABLED: "false"
+      SUBSCRIPTION_BILLING_ENABLED: "false"
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce validation-only production boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production customer-account preflight must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_customer_accounts_preflight }}" == "true" ]] || { echo "Explicit customer-account preflight confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == false ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == false ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == false ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          test -n "$AWS_REGION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Validate independent production auth secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_length() { (( ${#2} >= $3 )) || { echo "$1 must contain at least $3 characters." >&2; exit 1; }; }
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          require_length CUSTOMER_AUTH_PEPPER "$CUSTOMER_AUTH_PEPPER" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+
+      - name: Verify current production stack remains inert
+        id: stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].StackStatus' --output text)"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not in a stable complete state: $status" >&2; exit 1; }
+          api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
+          test -n "$api_base"
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == false and .customerAccountsEnabled == false and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production customer sign-in page exists
+        run: curl --fail --silent --show-error --location "$SITE_ORIGIN/account/api-keys/" >/dev/null
+
+      - name: Verify SES sender and production sending access
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sesv2 get-email-identity \
+            --email-identity "$CUSTOMER_AUTH_EMAIL_SENDER" \
+            --query 'VerifiedForSendingStatus' \
+            --output text | grep -qx True
+          aws sesv2 get-account \
+            --query 'ProductionAccessEnabled' \
+            --output text | grep -qx True
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run API access tests
+        run: npm test
+
+      - name: Validate SAM template
+        run: sam validate --lint --template template.yaml
+
+      - name: Build API access stack
+        run: sam build --template template.yaml
+
+      - name: Confirm live customer accounts are still template-gated
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'CustomerAccountsRemainTestOnly' template.yaml
+          grep -q 'Customer accounts are test-mode only until production review is complete.' template.yaml
+
+      - name: Write readiness summary
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+        run: |
+          printf '## SolveLang production customer-account preflight\n\n- Production stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- Current API access enabled: **false**\n- Current customer accounts enabled: **false**\n- Current subscription billing enabled: **false**\n- Customer-auth pepper: validated and independent\n- SES sender: verified\n- SES production sending access: verified\n- Customer sign-in page: reachable\n- Tests/SAM validation/build: passed\n- Live customer accounts template gate: still present\n- Deployment performed: **no**\n- Email sent: **no**\n- Stripe/webhook used: **no**\n- Charges performed: **no**\n\nPassing this workflow is readiness evidence only. A separate reviewed change and explicit owner approval are required before enabling API access or customer accounts.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$API_BASE" >> "$GITHUB_STEP_SUMMARY"
