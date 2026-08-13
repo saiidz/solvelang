@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parsePriorityWorkerEnvironment } from "../src/priority-config.js";
+import { createPriorityWorker } from "../src/priority-worker.js";
 
 function environment(logStream) {
   return {
@@ -24,4 +25,36 @@ test("Lambda execution environments use distinct stable lease owner identities",
 test("non-Lambda execution keeps the deterministic function fallback", () => {
   const parsed = parsePriorityWorkerEnvironment(environment(undefined));
   assert.equal(parsed.workerId, "priority-worker-function");
+});
+
+test("Lambda request id is appended to every lease mutation owner", async () => {
+  const owners = [];
+  const worker = createPriorityWorker({
+    laneName: "priority",
+    workerId: "priority-worker-function:stream-a",
+    jobStore: {
+      claimJob: async (_jobId, _lane, owner) => {
+        owners.push(owner);
+        return { status: "claimed", job: { jobType: "queue_canary", sourceFingerprint: "a".repeat(64) } };
+      },
+      completeJob: async (_jobId, owner) => { owners.push(owner); },
+      releaseJob: async () => {},
+      failJob: async () => {},
+    },
+    logger: { error() {} },
+  });
+
+  const result = await worker({
+    Records: [{
+      messageId: "message-1",
+      attributes: { ApproximateReceiveCount: "1" },
+      body: JSON.stringify({ schemaVersion: 1, jobId: `job_${"b".repeat(32)}`, priority: "priority" }),
+    }],
+  }, { awsRequestId: "request-12345678" });
+
+  assert.deepEqual(result, { batchItemFailures: [] });
+  assert.deepEqual(owners, [
+    "priority-worker-function:stream-a:request-12345678",
+    "priority-worker-function:stream-a:request-12345678",
+  ]);
 });
