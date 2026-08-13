@@ -79,13 +79,13 @@ The runtime environment receives:
 API_CUSTOMER_TOTP_ENABLED=false
 ```
 
-unless a future deployment explicitly enables the feature and provides a full KMS key ARN in:
+unless a future deployment explicitly enables the feature and supplies a full KMS key ARN in:
 
 ```text
-API_CUSTOMER_TOTP_KMS_KEY_ID
+API_CUSTOMER_TOTP_KMS_KEY_ARN
 ```
 
-Despite the historical `KEY_ID` name, the runtime validates that this value is a full KMS key ARN so the IAM `Resource` scope is unambiguous.
+The CloudFormation parameter is likewise named `CustomerTotpKmsKeyArn` and is constrained to an ARN-shaped value. While the feature is disabled it uses an inert syntactically valid placeholder ARN solely so CloudFormation/IAM linting can prove the `Resource` shape. The `CustomerTotpRequirements` rule rejects that placeholder whenever `CustomerTotpEnabled=true`, so real enablement requires an explicit dedicated KMS key ARN.
 
 Therefore merging this PR cannot by itself activate authenticator 2FA.
 
@@ -192,7 +192,7 @@ The check and update happen in the same DynamoDB transaction that creates the se
 
 This prevents the same rotating code/time-step from being replayed for a second authenticated session or security operation.
 
-Because of this strict replay rule, a customer who has just used a TOTP code to sign in may need to wait for the next 30-second code before performing another sensitive operation such as disabling 2FA or regenerating backup codes.
+Because of this strict replay rule, a customer who has just used a TOTP code to sign in may need to use the next 30-second code before performing another sensitive operation such as disabling 2FA or regenerating backup codes.
 
 ## Sensitive security changes
 
@@ -306,7 +306,7 @@ After this implementation PR is reviewed and merged, production enablement must 
 3. verify production deploy role can pass the KMS ARN without gaining unrelated KMS rights;
 4. extend a production TOTP preflight to validate KMS access and current account/billing state without enabling TOTP;
 5. separately approve production TOTP deployment;
-6. deploy with `CustomerTotpEnabled=true` and the exact KMS key ARN while keeping subscription billing false;
+6. deploy with `CustomerTotpEnabled=true` and the exact `CustomerTotpKmsKeyArn` while keeping subscription billing false;
 7. verify health and all existing password/magic-link behavior before enrolling any account;
 8. separately approve one owner TOTP enrollment canary;
 9. owner enables authenticator, saves backup codes, signs out;
