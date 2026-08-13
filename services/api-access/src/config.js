@@ -43,6 +43,10 @@ function customerAccounts(environment) {
   const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
   const totpEnabled = environment.API_CUSTOMER_TOTP_ENABLED === "true";
   if (totpEnabled && !enabled) throw new Error("Authenticator 2FA requires customer accounts to be enabled.");
+  const customerTotpKmsKeyArn = totpEnabled ? required(environment, "API_CUSTOMER_TOTP_KMS_KEY_ARN") : undefined;
+  if (customerTotpKmsKeyArn && !/^arn:[^:]+:kms:[^:]+:\d{12}:key\/.+/.test(customerTotpKmsKeyArn)) {
+    throw new Error("API_CUSTOMER_TOTP_KMS_KEY_ARN must be a full KMS key ARN.");
+  }
   return {
     customerAccountsEnabled: enabled,
     customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
@@ -50,7 +54,7 @@ function customerAccounts(environment) {
     customerAuthEmailSender: enabled ? required(environment, "API_CUSTOMER_AUTH_EMAIL_SENDER") : undefined,
     customerAuthEmailReplyTo: environment.API_CUSTOMER_AUTH_EMAIL_REPLY_TO || undefined,
     customerTotpEnabled: totpEnabled,
-    customerTotpKmsKeyId: totpEnabled ? required(environment, "API_CUSTOMER_TOTP_KMS_KEY_ID") : undefined,
+    customerTotpKmsKeyArn,
   };
 }
 
