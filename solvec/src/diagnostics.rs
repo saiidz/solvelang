@@ -22,10 +22,21 @@ impl Diagnostic {
     }
 
     pub fn format(&self, source_line: &str) -> String {
+        self.format_at(self.line, None, source_line)
+    }
+
+    pub fn format_at(&self, line: usize, filename: Option<&str>, source_line: &str) -> String {
         let pointer_padding = " ".repeat(self.column.saturating_sub(1));
+        let location = match filename {
+            Some(filename) => format!(
+                "SolveLang Error on line {}, column {} in {}:",
+                line, self.column, filename
+            ),
+            None => format!("SolveLang Error on line {}, column {}:", line, self.column),
+        };
         format!(
-            "SolveLang Error on line {}, column {}:\n{}\n{}\n{}^\nHint: {}",
-            self.line, self.column, self.message, source_line, pointer_padding, self.hint
+            "{}\n{}\n{}\n{}^\nHint: {}",
+            location, self.message, source_line, pointer_padding, self.hint
         )
     }
 }
@@ -111,5 +122,15 @@ mod tests {
         assert!(formatted.contains("print()"));
         assert!(formatted.lines().any(|line| line.trim() == "^"));
         assert!(formatted.contains("Hint: Add a value here."));
+    }
+
+    #[test]
+    fn formats_mapped_diagnostics_with_original_filename_and_line() {
+        let diagnostic = Diagnostic::new(9, 7, "Expected expression.", "Add a value here.");
+        let formatted = diagnostic.format_at(3, Some("lib/math.solve"), "print()");
+
+        assert!(formatted.contains("SolveLang Error on line 3, column 7 in lib/math.solve"));
+        assert!(!formatted.contains("line 9"));
+        assert!(formatted.contains("print()"));
     }
 }
