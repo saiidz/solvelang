@@ -102,7 +102,10 @@ jobs:
             --tags Project=SolveLang Purpose=customer-totp Environment=production \
             --no-fail-on-empty-changeset
 
-      - name: Verify KMS key identity, rotation, tags, policy, and alias
+      - name: Enable KMS stack termination protection
+        run: aws cloudformation update-termination-protection --stack-name "$KMS_STACK_NAME" --enable-termination-protection >/dev/null
+
+      - name: Verify KMS key identity, rotation, tags, policy, alias, and stack protection
         id: kms
         shell: bash
         run: |
@@ -110,6 +113,7 @@ jobs:
           stack="$(aws cloudformation describe-stacks --stack-name "$KMS_STACK_NAME" --output json)"
           status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
           [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          jq -e '.Stacks[0].EnableTerminationProtection == true' <<<"$stack" >/dev/null
           key_arn="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsKeyArn") | .OutputValue] | first // empty' <<<"$stack")"
           key_id="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsKeyId") | .OutputValue] | first // empty' <<<"$stack")"
           alias_name="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsAlias") | .OutputValue] | first // empty' <<<"$stack")"
@@ -137,5 +141,5 @@ jobs:
         env:
           KEY_ARN: ${{ steps.kms.outputs.key_arn }}
         run: |
-          printf '## SolveLang production authenticator KMS\n\n- Validated commit: `%s`\n- KMS stack: `%s`\n- Region: `%s`\n- Key ARN: `%s`\n- Key type: customer-managed symmetric ENCRYPT_DECRYPT\n- Automatic rotation: **enabled**\n- Deletion/update replacement protection: **Retain** in IaC\n- Stable alias: `%s`\n- Customer authenticator 2FA enabled by this workflow: **no**\n- API stack changed: **no**\n- Email sent: **no**\n- Billing/Stripe/webhook used: **no**\n- Charges performed: **no**\n\nThis workflow creates or idempotently updates only the dedicated production TOTP KMS stack. Enabling authenticator 2FA requires a separate preflight and deployment approval.\n' \
+          printf '## SolveLang production authenticator KMS\n\n- Validated commit: `%s`\n- KMS stack: `%s`\n- Region: `%s`\n- Key ARN: `%s`\n- Key type: customer-managed symmetric ENCRYPT_DECRYPT\n- Automatic rotation: **enabled**\n- Deletion/update replacement protection: **Retain** in IaC\n- CloudFormation termination protection: **enabled**\n- Stable alias: `%s`\n- Customer authenticator 2FA enabled by this workflow: **no**\n- API stack changed: **no**\n- Email sent: **no**\n- Billing/Stripe/webhook used: **no**\n- Charges performed: **no**\n\nThis workflow creates or idempotently updates only the dedicated production TOTP KMS stack. Enabling authenticator 2FA requires a separate preflight and deployment approval.\n' \
             "$GITHUB_SHA" "$KMS_STACK_NAME" "$AWS_REGION" "$KEY_ARN" "$KMS_ALIAS" >> "$GITHUB_STEP_SUMMARY"
