@@ -169,8 +169,10 @@ export async function scanRepositorySecrets(
     }
 
     for (const definition of patterns) {
-      definition.expression.lastIndex = 0;
-      for (let match = definition.expression.exec(file.text); match; match = definition.expression.exec(file.text)) {
+      // RegExp.lastIndex is mutable for global expressions. Clone per file so an
+      // awaited fingerprint operation cannot let a concurrent scan corrupt it.
+      const expression = new RegExp(definition.expression.source, definition.expression.flags);
+      for (let match = expression.exec(file.text); match; match = expression.exec(file.text)) {
         const raw = definition.capture ? match[definition.capture] : match[0];
         if (!raw || likelyPlaceholder(raw)) continue;
         const line = lineNumberAt(file.text, match.index);
