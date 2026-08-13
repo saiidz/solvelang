@@ -83,6 +83,11 @@ function normalizeSource(value) {
   return source && source.length <= 128 && !/[\u0000-\u001f\u007f]/.test(source) ? source : "unknown";
 }
 
+function authVersionOf(value) {
+  if (value === undefined) return 1;
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+}
+
 function digest(pepper, purpose, value) {
   return createHmac("sha256", pepper).update(`${purpose}:${value}`).digest("hex");
 }
@@ -148,13 +153,17 @@ export function createCustomerAuthService({
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
 
-  function createSession(timestamp) {
+  function createSession(timestamp, authVersion = 1) {
+    if (!Number.isSafeInteger(authVersion) || authVersion < 1) {
+      throw new Error("Customer authentication version is invalid.");
+    }
     const session = createOpaqueToken("sess", randomBytes);
     return {
       token: session.token,
       record: {
         sessionId: session.id,
         secretFingerprint: digest(pepper, "session", session.token),
+        authVersion,
         createdAt: new Date(timestamp).toISOString(),
         expiresAt: Math.floor((timestamp + SESSION_TTL_MS) / 1_000),
       },
@@ -191,12 +200,17 @@ export function createCustomerAuthService({
     });
     if (throttle === "limited") return { accepted: true };
 
+    const account = await store.getAccount(accountId);
+    const authVersion = authVersionOf(account?.authVersion);
+    if (!authVersion) throw new Error("Customer authentication version is invalid.");
+
     const generated = createOpaqueToken("ml", randomBytes);
     await store.putMagicLink({
       tokenId: generated.id,
       secretFingerprint: digest(pepper, "magic-link", generated.token),
       accountId,
       email,
+      authVersion,
       createdAt: new Date(timestamp).toISOString(),
       expiresAt: Math.floor((timestamp + MAGIC_LINK_TTL_MS) / 1_000),
     });
@@ -261,8 +275,10 @@ export function createCustomerAuthService({
     const fakeSalt = Buffer.from(digest(pepper, "password-dummy-salt", "constant").slice(0, 32), "hex").toString("base64url");
     const salt = account?.passwordScheme === PASSWORD_SCHEME && account?.passwordSalt ? account.passwordSalt : fakeSalt;
     const derived = await derivePassword(password ?? "invalid-password-value", salt);
+    const version = authVersionOf(account?.authVersion);
     const matches = Boolean(
       password
+      && version
       && account?.passwordScheme === PASSWORD_SCHEME
       && account?.passwordHash
       && secureEqual(derived, account.passwordHash),
@@ -271,7 +287,7 @@ export function createCustomerAuthService({
       throw new ApiAccessError(401, "invalid_credentials", "Email/username or password is incorrect.");
     }
 
-    const session = createSession(timestamp);
+    const session = createSession(timestamp, version);
     await store.putSession({ session: session.record, accountId: account.accountId, email: account.email });
     return sessionResult(session, account.accountId, account.email);
   }
@@ -290,7 +306,7 @@ export function createCustomerAuthService({
   }
 
   async function setCredentials(session, input) {
-    if (!session?.accountId || !session?.email) {
+    if (!session?.sessionId || !session?.accountId || !session?.email) {
       throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
     }
     const username = normalizeUsername(input?.username);
@@ -302,6 +318,7 @@ export function createCustomerAuthService({
     const passwordHash = await derivePassword(password, salt);
     const result = await store.setCredentials({
       accountId: session.accountId,
+      sessionId: session.sessionId,
       username,
       passwordSalt: salt,
       passwordHash,
@@ -312,7 +329,7 @@ export function createCustomerAuthService({
       throw new ApiAccessError(409, "username_locked", "Your username cannot be changed from this screen.");
     }
     if (result !== "updated") {
-      throw new ApiAccessError(409, "username_unavailable", "That username is unavailable.");
+      throw new ApiAccessError(409, "username_unavailable", "That username is unavailable or account security changed. Sign in again and try again.");
     }
     return { username, passwordConfigured: true };
   }
@@ -326,10 +343,32 @@ export function createCustomerAuthService({
     if (!record || record.expiresAt <= timestamp || !secureEqual(presented, record.secretFingerprint)) {
       throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
     }
+
+    let account = await store.getAccount(record.accountId);
+    if (!account) {
+      account = await store.ensureAccount({
+        accountId: record.accountId,
+        email: record.email,
+        createdAt: record.createdAt ?? new Date(now()).toISOString(),
+      });
+    }
+    const sessionAuthVersion = authVersionOf(record.authVersion);
+    const accountAuthVersion = authVersionOf(account?.authVersion);
+    if (
+      !account
+      || account.email !== record.email
+      || !sessionAuthVersion
+      || !accountAuthVersion
+      || sessionAuthVersion !== accountAuthVersion
+    ) {
+      throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+    }
+
     return {
       sessionId: parsed.id,
       accountId: record.accountId,
       email: record.email,
+      authVersion: accountAuthVersion,
       csrfToken: digest(pepper, "csrf", parsed.token),
     };
   }
