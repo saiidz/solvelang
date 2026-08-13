@@ -125,3 +125,53 @@ test("enabling TOTP atomically consumes pending setup, bumps authVersion, and up
   assert.equal(transaction[2].Update.Key.authKey, "session#session_1");
   assert.equal(transaction[2].Update.ExpressionAttributeValues[":nextAuthVersion"], 8);
 });
+
+test("partial authenticator state fails closed before account use or magic-link session creation", async () => {
+  const partialAccount = {
+    authKey: "account#acct_1",
+    kind: "account",
+    accountId: "acct_1",
+    email: "owner@example.com",
+    authVersion: 2,
+    totpEnabledAt: "2026-08-13T05:00:00.000Z",
+  };
+
+  const readStore = createDynamoCustomerAuthStore(clientWith(async () => ({ Item: partialAccount })), "auth-table");
+  await assert.rejects(
+    () => readStore.getAccount("acct_1"),
+    /Customer authenticator state is invalid/,
+  );
+
+  const commands = [];
+  const magicStore = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (commands.length === 1) {
+      return {
+        Item: {
+          authKey: "magic#token",
+          kind: "magic",
+          tokenId: "token",
+          accountId: "acct_1",
+          email: "owner@example.com",
+          authVersion: 2,
+          secretFingerprint: "magic-fingerprint",
+          expiresAt: 200,
+        },
+      };
+    }
+    if (commands.length === 2) return { Item: partialAccount };
+    throw new Error("A partial authenticator record must fail before a write transaction.");
+  }), "auth-table");
+
+  await assert.rejects(
+    () => magicStore.consumeMagicLinkForAuth({
+      tokenId: "token",
+      presentedFingerprint: "magic-fingerprint",
+      now: 100,
+      session: { sessionId: "session", secretFingerprint: "session-fingerprint", expiresAt: 300 },
+      mfaChallenge: { challengeId: "challenge", secretFingerprint: "challenge-fingerprint", expiresAt: 200 },
+    }),
+    /Customer authenticator state is invalid/,
+  );
+  assert.equal(commands.length, 2);
+});
