@@ -18,6 +18,12 @@
       ]
     },
     {
+      "Sid": "ValidateCandidateTemplates",
+      "Effect": "Allow",
+      "Action": "cloudformation:ValidateTemplate",
+      "Resource": "*"
+    },
+    {
       "Sid": "ReadSolveLangProductionTotpKey",
       "Effect": "Allow",
       "Action": [
@@ -40,9 +46,7 @@
       "Effect": "Allow",
       "Action": [
         "ses:GetAccount",
-        "ses:GetEmailIdentity",
-        "sesv2:GetAccount",
-        "sesv2:GetEmailIdentity"
+        "ses:GetEmailIdentity"
       ],
       "Resource": "*"
     }
