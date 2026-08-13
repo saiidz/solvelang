@@ -62,24 +62,19 @@ export function publicAccountAccess(account) {
 }
 
 export function createAccountAccessService({ store, now = Date.now }) {
-  if (!store || typeof store.getAccount !== "function" || typeof store.transitionAccess !== "function") {
-    throw new Error("Account access store is required.");
-  }
+  if (!store || typeof store.getAccount !== "function") throw new Error("Account access reader is required.");
 
   async function getAccount(accountId) {
     return store.getAccount(cleanAccountId(accountId));
   }
 
   async function isActive(accountId) {
-    const account = await getAccount(accountId);
-    return accountIsActive(account);
+    return accountIsActive(await getAccount(accountId));
   }
 
   async function assertActive(accountId) {
     const account = await getAccount(accountId);
-    if (!accountIsActive(account)) {
-      throw new ApiAccessError(403, "account_access_restricted", "Account access is unavailable.");
-    }
+    if (!accountIsActive(account)) throw new ApiAccessError(403, "account_access_restricted", "Account access is unavailable.");
     return account;
   }
 
@@ -90,6 +85,7 @@ export function createAccountAccessService({ store, now = Date.now }) {
   }
 
   async function transition(input, actor = "api-access-admin") {
+    if (typeof store.transitionAccess !== "function") throw new Error("Account access mutation is not configured.");
     const accountId = cleanAccountId(input?.accountId);
     const targetState = cleanState(input?.state);
     const reason = cleanText(input?.reason, "Reason", 512);
