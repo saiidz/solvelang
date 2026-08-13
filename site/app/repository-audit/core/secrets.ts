@@ -105,7 +105,25 @@ function credentialFilename(path: string): boolean {
   return /(?:credentials?|secrets?)\.(?:json|ya?ml|txt)$/i.test(name);
 }
 
-export function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: string): RedactedSecretWarning[] {
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSha256Hex(keyText: string, value: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("Web Crypto HMAC support is required for secret scanning.");
+  const encoder = new TextEncoder();
+  const key = await globalThis.crypto.subtle.importKey(
+    "raw",
+    encoder.encode(keyText),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await globalThis.crypto.subtle.sign("HMAC", key, encoder.encode(value));
+  return bytesToHex(new Uint8Array(signature));
+}
+
+export async function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: string): Promise<RedactedSecretWarning[]> {
   if (typeof fingerprintKey !== "string" || fingerprintKey.length < 16) throw new Error("Ephemeral secret fingerprint key is required.");
   const warnings: RedactedSecretWarning[] = [];
 
@@ -115,7 +133,6 @@ export function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: 
     const exposure = exposureFor(path, file.generated);
 
     if (credentialFilename(path)) {
-      const identity = `${fingerprintKey}:credential-file:${path}:1`;
       warnings.push({
         warningId: `sec_${fnv64(`credential-file:${path}:1`)}`,
         path,
@@ -124,7 +141,7 @@ export function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: 
         patternClass: "credential-file",
         exposure,
         redacted: true,
-        fingerprint: `hmac-sha256:${fnv64(identity).repeat(4)}`,
+        fingerprint: `hmac-sha256:${await hmacSha256Hex(fingerprintKey, `credential-file:${path}`)}`,
         remediation: "Review the credential file immediately; remove live credentials from tracked content and rotate any exposed values.",
       });
     }
@@ -135,7 +152,6 @@ export function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: 
       while ((match = pattern.regex.exec(text)) !== null) {
         const line = lineNumberAt(text, match.index);
         const stableIdentity = `${pattern.className}:${path}:${line}`;
-        const ephemeralIdentity = `${fingerprintKey}:${stableIdentity}:${match[0].length}`;
         warnings.push({
           warningId: `sec_${fnv64(stableIdentity)}`,
           path,
@@ -144,7 +160,7 @@ export function scanRepositorySecrets(files: SecretScanInput[], fingerprintKey: 
           patternClass: pattern.className,
           exposure,
           redacted: true,
-          fingerprint: `hmac-sha256:${fnv64(ephemeralIdentity).repeat(4)}`,
+          fingerprint: `hmac-sha256:${await hmacSha256Hex(fingerprintKey, match[0])}`,
           remediation: pattern.remediation,
         });
         if (match[0].length === 0) pattern.regex.lastIndex += 1;
