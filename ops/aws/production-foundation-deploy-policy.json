@@ -26,6 +26,12 @@
       ]
     },
     {
+      "Sid": "ProtectProductionTotpKmsStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:UpdateTerminationProtection",
+      "Resource": "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*"
+    },
+    {
       "Sid": "CloudFormationCreateStackBootstrap",
       "Effect": "Allow",
       "Action": [
