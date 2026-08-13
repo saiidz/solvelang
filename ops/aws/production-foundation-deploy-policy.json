@@ -156,7 +156,6 @@
         "kms:CreateAlias",
         "kms:DeleteAlias",
         "kms:DescribeKey",
-        "kms:DisableKeyRotation",
         "kms:EnableKeyRotation",
         "kms:GetKeyPolicy",
         "kms:GetKeyRotationStatus",
