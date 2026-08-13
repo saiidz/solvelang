@@ -79,6 +79,9 @@ export function publicAccountAccess(account) {
 
 export function createAccountAccessService({ store, now = Date.now }) {
   if (!store || typeof store.getAccount !== "function") throw new Error("Account access reader is required.");
+  const readRequest = typeof store.getRequest === "function"
+    ? (requestFingerprint) => store.getRequest(requestFingerprint)
+    : async () => undefined;
 
   async function getAccount(accountId) {
     return store.getAccount(cleanAccountId(accountId));
@@ -111,7 +114,7 @@ export function createAccountAccessService({ store, now = Date.now }) {
   }
 
   async function transition(input, actor = "api-access-admin") {
-    if (typeof store.transitionAccess !== "function" || typeof store.getRequest !== "function") {
+    if (typeof store.transitionAccess !== "function") {
       throw new Error("Account access mutation is not configured.");
     }
     const accountId = cleanAccountId(input?.accountId);
@@ -121,7 +124,7 @@ export function createAccountAccessService({ store, now = Date.now }) {
     const requestFingerprint = fingerprintRequest(requestId);
     const requestShape = { accountId, requestId, targetState, reason };
 
-    const existingRequest = await store.getRequest(requestFingerprint);
+    const existingRequest = await readRequest(requestFingerprint);
     if (existingRequest) {
       if (!requestMatches(existingRequest, requestShape)) {
         throw new ApiAccessError(409, "idempotency_conflict", "Request ID was already used for a different account access change.");
@@ -154,7 +157,7 @@ export function createAccountAccessService({ store, now = Date.now }) {
       requestFingerprint,
     });
     if (outcome !== "updated") {
-      const racedRequest = await store.getRequest(requestFingerprint);
+      const racedRequest = await readRequest(requestFingerprint);
       if (racedRequest) {
         if (!requestMatches(racedRequest, requestShape)) {
           throw new ApiAccessError(409, "idempotency_conflict", "Request ID was already used for a different account access change.");
