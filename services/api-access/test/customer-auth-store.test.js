@@ -59,7 +59,7 @@ test("active throttles are classified without hiding Dynamo failures", async () 
   );
 });
 
-test("magic-link consumption relies on an atomic fingerprint condition", async () => {
+test("magic-link consumption checks account auth version before the atomic fingerprint condition", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
@@ -70,7 +70,19 @@ test("magic-link consumption relies on an atomic fingerprint condition", async (
           authKey: "magic#token",
           accountId: "acct_1",
           email: "dev@example.com",
+          authVersion: 2,
           expiresAt: 200,
+        },
+      };
+    }
+    if (commands.length === 2) {
+      return {
+        Item: {
+          authKey: "account#acct_1",
+          kind: "account",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          authVersion: 2,
         },
       };
     }
@@ -83,15 +95,49 @@ test("magic-link consumption relies on an atomic fingerprint condition", async (
     tokenId: "token",
     presentedFingerprint: "wrong-fingerprint",
     now: 100,
-    session: { sessionId: "session", secretFingerprint: "session-fingerprint", expiresAt: 300 },
+    session: { sessionId: "session", secretFingerprint: "session-fingerprint", authVersion: 1, expiresAt: 300 },
   });
   assert.equal(result, undefined);
-  const deletion = commands[1].TransactItems[0].Delete;
+  const deletion = commands[2].TransactItems[0].Delete;
   assert.match(deletion.ConditionExpression, /secretFingerprint = :fingerprint/);
   assert.equal(deletion.ExpressionAttributeValues[":fingerprint"], "wrong-fingerprint");
+  assert.equal(commands[2].TransactItems[1].Put.Item.authVersion, 2);
 });
 
-test("verified accounts are materialized without overwriting an existing identity", async () => {
+test("a magic link issued before an auth-version change is rejected", async () => {
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    if (command.input.Key?.authKey === "magic#token") {
+      return {
+        Item: {
+          kind: "magic",
+          authKey: "magic#token",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          authVersion: 2,
+          expiresAt: 200,
+        },
+      };
+    }
+    return {
+      Item: {
+        authKey: "account#acct_1",
+        kind: "account",
+        accountId: "acct_1",
+        email: "dev@example.com",
+        authVersion: 3,
+      },
+    };
+  }), "auth-table");
+
+  assert.equal(await store.consumeMagicLinkAndCreateSession({
+    tokenId: "token",
+    presentedFingerprint: "fingerprint",
+    now: 100,
+    session: { sessionId: "session", secretFingerprint: "session-fingerprint", expiresAt: 300 },
+  }), undefined);
+});
+
+test("verified accounts start at auth version one without overwriting an existing identity", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
@@ -102,6 +148,7 @@ test("verified accounts are materialized without overwriting an existing identit
         kind: "account",
         accountId: "acct_1",
         email: "dev@example.com",
+        authVersion: 1,
       },
     };
   }), "auth-table");
@@ -112,11 +159,12 @@ test("verified accounts are materialized without overwriting an existing identit
     createdAt: "2026-08-12T22:00:00.000Z",
   });
   assert.equal(commands[0].Item.kind, "account");
+  assert.equal(commands[0].Item.authVersion, 1);
   assert.equal(commands[0].ConditionExpression, "attribute_not_exists(authKey)");
   assert.equal(account.email, "dev@example.com");
 });
 
-test("initial credential setup claims the username and account update atomically", async () => {
+test("initial credential setup atomically claims username, bumps auth version, and refreshes only the current session", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
@@ -127,6 +175,7 @@ test("initial credential setup claims the username and account update atomically
           kind: "account",
           accountId: "acct_1",
           email: "dev@example.com",
+          authVersion: 1,
         },
       };
     }
@@ -135,6 +184,7 @@ test("initial credential setup claims the username and account update atomically
 
   const result = await store.setCredentials({
     accountId: "acct_1",
+    sessionId: "session_1",
     username: "devuser",
     passwordSalt: "salt",
     passwordHash: "hash",
@@ -143,6 +193,7 @@ test("initial credential setup claims the username and account update atomically
   });
   assert.equal(result, "updated");
   const transaction = commands[1].TransactItems;
+  assert.equal(transaction.length, 3);
   assert.deepEqual(transaction[0].Put.Item, {
     authKey: "username#devuser",
     kind: "username",
@@ -152,9 +203,13 @@ test("initial credential setup claims the username and account update atomically
   });
   assert.equal(transaction[0].Put.ConditionExpression, "attribute_not_exists(authKey)");
   assert.match(transaction[1].Update.ConditionExpression, /attribute_not_exists\(username\)/);
+  assert.equal(transaction[1].Update.ExpressionAttributeValues[":nextAuthVersion"], 2);
+  assert.equal(transaction[2].Update.Key.authKey, "session#session_1");
+  assert.equal(transaction[2].Update.ExpressionAttributeValues[":nextAuthVersion"], 2);
+  assert.match(transaction[2].Update.ConditionExpression, /accountId = :accountId/);
 });
 
-test("password replacement for the same username updates only the account record", async () => {
+test("password replacement increments the account version and current session together", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
@@ -166,6 +221,7 @@ test("password replacement for the same username updates only the account record
           accountId: "acct_1",
           email: "dev@example.com",
           username: "devuser",
+          authVersion: 4,
         },
       };
     }
@@ -174,18 +230,25 @@ test("password replacement for the same username updates only the account record
 
   assert.equal(await store.setCredentials({
     accountId: "acct_1",
+    sessionId: "session_1",
     username: "devuser",
     passwordSalt: "new-salt",
     passwordHash: "new-hash",
     passwordScheme: "scrypt-v1",
     passwordUpdatedAt: "2026-08-12T22:05:00.000Z",
   }), "updated");
-  assert.equal(commands[1].Key.authKey, "account#acct_1");
-  assert.match(commands[1].UpdateExpression, /passwordHash/);
-  assert.equal(commands[1].ExpressionAttributeValues[":username"], "devuser");
+  const transaction = commands[1].TransactItems;
+  assert.equal(transaction.length, 2);
+  assert.equal(transaction[0].Update.Key.authKey, "account#acct_1");
+  assert.match(transaction[0].Update.UpdateExpression, /passwordHash/);
+  assert.equal(transaction[0].Update.ExpressionAttributeValues[":username"], "devuser");
+  assert.equal(transaction[0].Update.ExpressionAttributeValues[":currentAuthVersion"], 4);
+  assert.equal(transaction[0].Update.ExpressionAttributeValues[":nextAuthVersion"], 5);
+  assert.equal(transaction[1].Update.Key.authKey, "session#session_1");
+  assert.equal(transaction[1].Update.ExpressionAttributeValues[":nextAuthVersion"], 5);
 });
 
-test("password sessions use a conditional write and preserve account ownership", async () => {
+test("password sessions use a conditional write and preserve account ownership and auth version", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
@@ -196,6 +259,7 @@ test("password sessions use a conditional write and preserve account ownership",
     session: {
       sessionId: "session",
       secretFingerprint: "fingerprint",
+      authVersion: 3,
       createdAt: "2026-08-12T22:00:00.000Z",
       expiresAt: 999,
     },
@@ -204,6 +268,7 @@ test("password sessions use a conditional write and preserve account ownership",
   });
   assert.equal(commands[0].Item.authKey, "session#session");
   assert.equal(commands[0].Item.accountId, "acct_1");
+  assert.equal(commands[0].Item.authVersion, 3);
   assert.equal(commands[0].ConditionExpression, "attribute_not_exists(authKey)");
 });
 
