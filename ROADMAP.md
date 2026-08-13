@@ -1,318 +1,359 @@
 # SolveLang Roadmap
 
-SolveLang is an early language prototype written in Rust. The project has a working lexer, parser, AST, and one canonical AST runtime. The former line-based runtime files and public legacy CLI entry points have been removed.
+SolveLang is an early language and workflow-analysis prototype written primarily in Rust, with a production customer-account/API foundation that is further along than the general managed-execution product.
+
+This roadmap distinguishes four states deliberately:
+
+- **working locally / in code**;
+- **experimental or test-only**;
+- **production deployed but gated/limited**;
+- **planned**.
+
+A merged feature is not automatically production-enabled, and production account infrastructure is not evidence that general hosted SolveLang workflow execution exists.
 
 ## Current Baseline
 
-Completed and working today:
+### Language/runtime working today
 
 - CLI runner for `.solve` files
-- Lexer foundation
-- Parser foundation
-- AST definitions
-- Typed runtime value foundation
-- Variables
-- Print statements
-- Integer math: `+`, `-`, `*`, `/`
-- String joining with `..`
-- Booleans
-- Comparisons
+- lexer, parser, AST, and canonical AST runtime
+- typed runtime values
+- variables and reassignment
+- print and return statements
+- integer math: `+`, `-`, `*`, `/`
+- string joining with `..`
+- booleans and comparisons
 - `if / else`
 - `while`
-- Functions with parameters and return values
-- Arrays and index access
-- Agent prototype syntax: `agent`, `tool`, `instruction`, `ask`
-- Local-first Workflow Intelligence Studio for canonical workflow modeling, deterministic analysis, scenario simulation, traces, analytics, versions, and exports
-- Browser-local n8n Workflow Preflight for deterministic workflow checks and evidence reports
+- functions with parameters and return values
+- arrays and index access
+- objects, property access, and JSON helpers
+- relative `.solve` imports, including recursive imports
+- parser/runtime source locations and structured diagnostics
+- hardened local execution modes that deny network, file, environment, AI, agent, and tool capabilities
+- agent prototype syntax: `agent`, `tool`, `instruction`, `ask`
+- local-first Workflow Intelligence Studio for deterministic workflow analysis, scenario simulation, traces, analytics, versions, and exports
+- browser-local Workflow Preflight for deterministic workflow checks and evidence reports
+
+### Production account/API foundation
+
+Verified production state on 2026-08-13:
+
+- API access: **enabled**
+- customer accounts: **enabled**
+- username/email + password sign-in: **enabled and owner-canary verified**
+- normal password sign-in sends email: **no**
+- magic-link first-sign-in/recovery: **available**
+- optional authenticator-app TOTP implementation: **merged in code**
+- authenticator-app TOTP production feature: **disabled / not rolled out yet**
+- dedicated production TOTP KMS key: **not created yet**
+- subscription billing: **disabled**
+- paid priority selection: **disabled**
+- real charge authorization: **none**
+
+The current factual production record is `docs/current-production-status-2026-08-13.md` once this documentation PR is merged.
 
 ## Product Direction
 
-SolveLang should grow into a safe analysis and automation platform with three distinct product surfaces:
+SolveLang should grow into a safe language, analysis, and automation platform with three distinct audit/product surfaces:
 
 1. **Workflow Preflight** — analyze exported workflow files before production.
-2. **Repository Audit** — analyze an entire Git repository and produce safe, prioritized cleanup and architecture recommendations.
-3. **Server Audit** — inspect a live server through read-only access and produce an operational, security, and cleanup report.
+2. **Repository Audit** — analyze a repository and produce safe, prioritized architecture and cleanup recommendations.
+3. **Server Audit** — inspect a server through read-only access and produce operational/security findings.
 
-These surfaces must remain separate because their risk, permissions, inputs, and execution models are different.
+These surfaces must remain separate because their permissions, blast radius, evidence, and execution models differ.
+
+## Immediate Engineering Order
+
+The current buildout sequence is:
+
+1. complete the optional authenticator-app production rollout and owner canary;
+2. add centralized account suspension/termination enforcement;
+3. finish remaining account/security hardening and truth documentation;
+4. finish production billing preparation before any separately approved billing activation or real charge;
+5. finish and validate queue-backed paid-priority execution before exposing paid priority choices;
+6. build Repository Audit in read-only-first stages;
+7. build Server Audit in read-only-first stages;
+8. complete final production IAM/rollback/operations hardening;
+9. continue language/runtime correctness and developer-experience work in parallel where independent;
+10. run final launch-readiness canaries and maintain an exact live-state record.
+
+Production mutations remain separately gated even when implementation code and workflows already exist.
+
+## Account And Security Hardening
+
+### Completed
+
+- password authentication with username or email
+- unique immutable username claims
+- scrypt password derivation with random salt
+- generic credential failures and dummy password derivation
+- login/source/email throttles
+- opaque server-side sessions
+- secure session-cookie attributes
+- CSRF protection for authenticated mutations
+- logout/session revocation
+- `authVersion` invalidation for password/security changes
+- short-lived, single-use, version-bound magic links
+- API-key fingerprint storage and collision handling
+- plan key limits and atomic counters
+- usage idempotency and quota transactions
+- attempt-aware production deployment serialization
+- state-preserving production rollback
+
+### Authenticator TOTP: implemented, production rollout incomplete
+
+Merged implementation includes:
+
+- RFC 6238-compatible six-digit TOTP
+- 30-second steps with a bounded clock window
+- unique random enrollment secret
+- KMS secret protection with account-bound encryption context
+- staged first-factor authentication with no full session before MFA succeeds
+- magic-link recovery that does not bypass MFA
+- ten one-time backup codes stored only as keyed fingerprints
+- atomic backup-code consumption
+- TOTP time-step replay prevention
+- five-minute MFA challenges with bounded attempts
+- `authVersion` invalidation for authenticator security changes
+- fail-closed malformed/partial TOTP account state
+
+Merged rollout preparation includes:
+
+- dedicated retained/rotating KMS stack definition
+- protected KMS bootstrap workflow
+- validation-only production TOTP preflight
+- protected TOTP production deployment workflow
+- exact KMS ARN preservation during ordinary redeploy and rollback
+- production deployment serialization with the other production mutation workflows
+- billing forced off throughout authenticator rollout
+
+Still required before TOTP is live:
+
+- finish/review the live IAM role update path;
+- create/prove the dedicated KMS stack;
+- run the validation-only TOTP production preflight;
+- deploy TOTP support with billing still disabled;
+- perform the owner enrollment/login/backup-code/recovery canary.
+
+### Account suspension/termination
+
+Planned centralized states:
+
+- `active`
+- `suspended`
+- `terminated`
+
+The authoritative state should live on the customer-auth account record and be enforced centrally across sessions, password/magic-link authentication, TOTP/MFA, API-key authorization, key issuance, checkout, and future customer-owned queued work. Termination should be irreversible without an explicit future migration policy; security-state changes should invalidate older authentication artifacts through `authVersion`.
+
+This enforcement is **not merged or live yet**.
 
 ## Workflow Intelligence Studio
 
-Studio v1 is a static, browser-local product surface. It provides pre-automation workflow analysis, policy visibility, scenario simulation, and human-review design without replacing the Rust runtime. The Studio model intentionally supports operational concepts that are not all executable SolveLang syntax.
+Studio v1 is a static, browser-local product surface. It provides workflow modeling, deterministic analysis, policy visibility, scenario simulation, and human-review design without replacing the Rust runtime.
 
 Future Studio work may add opt-in hosted collaboration, larger graph performance, richer condition expressions, and server-side Rust validation. Those capabilities require explicit privacy, authentication, and runtime design and are not implied by v1.
 
 ## Repository Audit
 
-Repository Audit is the next major product expansion after the current payment and entitlement flow is stable.
+Repository Audit remains a planned product surface. The v0 report contract and schema exist, but the scanner engine is **not implemented yet**.
 
-### Initial scope
+### Repository Audit v0: deterministic read-only inventory
 
-The first release should accept a GitHub repository or uploaded archive and operate in read-only mode. It should produce:
-
-- repository inventory and architecture map
-- language, framework, package-manager, and deployment detection
-- duplicate, abandoned, generated, copied, backup, and unusually large file detection
-- dead-code and unused-dependency candidates
-- broken import, route, configuration, and build-reference candidates
-- exposed-secret and unsafe-public-file warnings without displaying secret values
-- test, documentation, ownership, and release-readiness gaps
-- inconsistent naming and folder-organization findings
-- prioritized actions labeled `keep`, `review`, `move`, `merge`, `rewrite`, or `delete candidate`
-- confidence, evidence, impact, and rollback notes for every destructive recommendation
-
-### Safety model
-
-Repository Audit must default to **Analyze only**.
-
-It must not delete, rename, move, rewrite, or merge files during an initial scan. A finding is not authorization to modify a repository.
-
-The product should expose three explicit levels:
-
-1. **Analyze only** — findings and suggestions; no repository changes.
-2. **Prepare cleanup** — create a proposed patch or dedicated branch and run validation without touching the default branch.
-3. **Execute approved changes** — apply only selected actions after explicit approval, then run tests, builds, and policy gates before opening a pull request.
-
-All write-enabled repository work must:
-
-- use a dedicated branch
-- preserve the default branch
-- show a complete diff
-- record every action in an audit ledger
-- run available tests and builds
-- stop on validation failure
-- include rollback instructions
-- require human review before merge
-
-### Repository Audit delivery phases
-
-#### Repository Audit v0: deterministic inventory
+Target scope:
 
 - repository tree and file classification
-- package and framework detection
-- duplicate and backup-file candidates
-- size, age, and generated-file analysis
-- secret-pattern redaction and public-exposure warnings
-- machine-readable JSON report and human-readable HTML report
+- language, framework, package-manager, and deployment detection
+- exact duplicate and backup-copy candidates
+- size and generated/vendor analysis
+- secret-pattern redaction and unsafe-public-file warnings without exposing values
+- deterministic finding IDs and ordering
+- machine-readable JSON and self-contained HTML reports
+- bounded file/size/time limits
+- no repository mutation
+- no repository code execution
+- no package-manager/build/hook execution during the initial scan
 
-#### Repository Audit v1: code and dependency intelligence
+### Repository Audit v1: code and dependency intelligence
 
-- import and reference graph
+After v0 accuracy is proven:
+
+- import/reference graph
 - dead-code candidates
-- unused and conflicting dependencies
-- route and configuration consistency checks
-- test and documentation coverage map
+- unused/conflicting dependencies
+- route/configuration consistency checks
+- test/documentation coverage map
 - architecture and maintainability scoring
 
-#### Repository Audit v2: approval-based cleanup branches
+### Repository Audit v2: approval-based cleanup
+
+Only after read-only behavior is proven:
 
 - selectable remediation plan
 - dedicated cleanup branch
-- safe file moves and deletions
+- safe file moves/deletions
 - dependency cleanup
-- formatting and generated documentation
+- generated documentation/formatting
 - test/build verification
+- complete diff and audit ledger
 - pull request creation with rollback plan
+- explicit human review before merge
 
 ## Server Audit
 
-Server Audit should follow Repository Audit because live infrastructure has a larger blast radius and requires stronger permission controls.
+Server Audit should follow Repository Audit because live infrastructure has a larger blast radius.
 
-### Initial scope
+### Server Audit v0: read-only posture report
 
-The first server release should support a read-only SSH account and collect only approved metadata. It may inspect:
-
-- operating system and package inventory
-- users, groups, ownership, and permissions
-- services, ports, processes, and scheduled jobs
-- disk usage, oversized logs, caches, and backups
-- web roots, domains, SSL configuration, and public files
-- Laravel, PHP, Node, web-server, and cPanel or CloudLinux configuration indicators
-- abandoned document roots and duplicate application installs
-- unsupported versions and unsafe defaults
-- exposed `.env`, backup, archive, log, or configuration files
-- broken cron jobs and recurring operational errors
-
-It must not read or display credential values, private keys, database contents, customer content, or unrelated personal files.
-
-### Server safety model
-
-Server Audit v0 must be strictly read-only.
-
-It must never:
-
-- restart or stop services
-- modify firewall or DNS settings
-- edit configuration files
-- rotate secrets
-- change ownership or permissions
-- install or remove packages
-- delete files or logs
-- execute database writes
-
-Later remediation support may be added only as approval-based runbooks with backups, preflight checks, change windows, command allowlists, and rollback commands.
-
-### Server Audit delivery phases
-
-#### Server Audit v0: read-only posture report
+Target scope:
 
 - constrained SSH collector
 - explicit command allowlist
+- OS/package/service/port/process/scheduled-job inventory
+- disk/log/cache/backup posture
+- web roots/domains/SSL/public-file checks
+- ownership and permission findings
+- common Laravel/PHP/Node/web-server/cPanel/CloudLinux indicators
+- unsupported-version and unsafe-default warnings
 - redacted evidence bundle
 - severity-ranked findings
-- storage, permissions, services, SSL, version, and public-exposure checks
 - no mutation capability
 
-#### Server Audit v1: remediation planning
+It must not display credential values, private keys, database contents, customer content, or unrelated personal files.
+
+### Server Audit v1: remediation planning
 
 - proposed commands without execution
 - backup requirements
-- dependency and outage risks
+- dependency/outage risks
 - ordered change plan
 - rollback plan for every action
 
-#### Server Audit v2: approved execution
+### Server Audit v2: approved execution
 
 - individually approved actions only
 - dry-run support where available
 - backup verification
-- health checks before and after changes
+- before/after health checks
 - immutable execution ledger
 - automatic stop and rollback guidance on failure
 
 ## Shared Audit Principles
 
-Repository Audit and Server Audit must share these product rules:
+Repository Audit and Server Audit must share these rules:
 
-- deterministic checks first; AI explanations second
-- evidence-backed findings rather than unsupported claims
+- deterministic checks first; AI explanation second
+- evidence-backed findings
 - secret redaction by default
 - least-privilege access
 - clear separation between observation, recommendation, and execution
 - no destructive action based only on model confidence
 - explicit human approval for writes
-- immutable audit history
-- reproducible reports
+- reproducible reports and immutable audit history
 - bounded scans with file, size, time, and command limits
 - fail closed when permissions, evidence, or validation are incomplete
 
-## Phase 1: Core Interpreter
+## Language Runtime
+
+### Phase 1: Core interpreter
 
 Status: mostly complete.
 
 Completed:
 
-- CLI execution now defaults to `source -> diagnostics -> lexer -> parser -> AST -> AST runtime`
-- `AstRuntime` evaluates parsed `Stmt` and `Expr` nodes directly
-- Runtime values flow through the typed `Value` enum in the AST path
-- Math, string joins, arrays, indexing, comparisons, function calls, and control flow run through the AST engine
-- Parser-driven runtime support exists for:
-   - `let`
-   - `print`
-   - `return`
-   - functions
-   - `if / else`
-   - `while`
-   - arrays
-   - agent prototype blocks
-- Runtime-relevant AST nodes retain source locations from lexer tokens
-- Runtime errors render source line, column, caret, and hints where available
-- Invalid numeric arithmetic and ordered comparisons return structured errors instead of coercing values to zero
-- Invalid array/object/property access returns structured errors instead of silently returning `null`
-- User-defined function calls validate argument counts
-- Parser recovery synchronizes at statement boundaries to limit cascading diagnostics
-- Deterministic golden tests cover the shipped examples without external internet
+- `source -> diagnostics -> lexer -> parser -> AST -> AST runtime`
+- typed values through the AST runtime
+- math, joins, arrays, objects, indexing, comparisons, function calls, and control flow
+- parser-driven `let`, assignment, `print`, `return`, functions, `if / else`, `while`, arrays/objects, and agent prototype blocks
+- source-located AST nodes
+- structured runtime errors with source line, column, caret, filename, and hints where available
+- checked numeric arithmetic
+- structured invalid access/type failures
+- function argument-count validation
+- parser recovery at statement boundaries
+- deterministic golden tests without external internet
 
-Remaining limitation:
+Known diagnostics limitation:
 
-- Imported files are flattened before parsing, so a diagnostic in imported content currently reports the combined source line and top-level filename rather than the original imported filename.
+- imports are currently flattened before parsing, so syntax/runtime locations in imported content are based on the combined source; runtime errors may display the top-level filename rather than the original imported filename.
 
-## Phase 2: Tighten Language Semantics
+The intended fix is to carry a line-origin/source-provenance map alongside the flattened source and use it consistently for parser diagnostics and runtime error context without changing language grammar.
 
-The first correctness and diagnostics milestone is complete. Future semantic work should build on the source-located AST runtime without changing the documented compatibility behavior for missing object properties (`null`) unless a deliberate language-version change is made.
+### Phase 2: language semantics
 
-## Phase 3: Expand The Language
+Continue tightening semantic correctness on the source-located AST runtime. Preserve documented compatibility behavior for missing object properties (`null`) unless a deliberate language-version change is made.
 
-Once the core is stable:
+### Phase 3: language expansion
 
+Already present in some form:
+
+- imports
+- objects/records
+- file read/write helpers
+- JSON parsing/encoding
+
+Still planned or incomplete:
+
+- stable standard-library/module design
 - `for` loops
-- imports across files
-- objects / records
-- standard library modules
-- file read / write APIs
-- JSON parsing and encoding
+- stronger type checking
+- package/module system beyond relative imports
+- broader provider/runtime abstractions
 
-Recommended order:
+### Phase 4: tooling and DX
 
-1. imports
-2. standard library layout
-3. file I/O
-4. JSON
-5. records / objects
-6. `for` loops
-
-That order keeps SolveLang useful for scripting before growing surface area.
-
-## Phase 4: Tooling And DX
-
-Tooling should follow the stabilized interpreter, not lead it.
-
-- `cargo test` coverage for lexer, parser, evaluator, and runtime
-- golden tests for example programs
-- `solvec validate file.solve`
-- `solvec run file.solve`
+- expand lexer/parser/runtime coverage
+- keep deterministic golden tests
 - formatter
 - linter
-- better CLI help and error output
+- richer CLI diagnostics
 - VS Code syntax highlighting
+- stable language specification/versioning
 
-## Phase 5: Platform Features
+### Phase 5: platform/runtime adapters
 
-These make sense only after the language core is predictable:
+Only after language semantics are predictable:
 
-- HTTP server support
-- routing and request handling
-- HTML templates
-- form parsing
-- database support
-- package manager
+- managed hosted Rust runtime
+- durable execution model
+- runtime adapters to established orchestration systems
+- production integrations
+- package/integration ecosystem
+- enterprise governance and observability
 
-## Phase 6: AI-Native Runtime
+## Priority Processing
 
-The current agent syntax is only a local prototype. A real AI-native runtime needs:
+Queue-backed priority foundations exist, including FIFO lanes, leases/retries, DLQs, weighted worker lanes, and duplicate-safe canary behavior.
 
-- provider abstraction
-- tool schema and permission model
-- prompt and instruction handling
-- structured input/output types
-- network and secret management
-- deterministic local testing for agent workflows
+Customer paid priority remains **disabled** until the queue-backed worker is enabled and validated for real customer-owned work, including authoritative account/entitlement checks and operational canaries.
 
-## Revised Short-Term Execution Plan
+## Billing
 
-The next concrete implementation order should be:
+Significant subscription/checkout/webhook/management code exists, but production self-service billing remains **disabled**.
 
-1. Complete deployed browser verification of the on-site Stripe payment, webhook, entitlement recovery, downloads, and full-refund revocation.
-2. Preserve a passing online launch-control evidence bundle for the deployed test commit.
-3. Define the Repository Audit report schema, evidence model, redaction rules, and scan limits.
-4. Build Repository Audit v0 as a read-only deterministic inventory and recommendation engine.
-5. Add GitHub App or archive ingestion with least-privilege repository access.
-6. Add Repository Audit v1 import, dependency, route, configuration, test, and documentation analysis.
-7. Add approval-based cleanup branches only after read-only accuracy and rollback tests are proven.
-8. Design Server Audit v0 around a read-only SSH collector and explicit command allowlist.
-9. Pilot Server Audit on a controlled non-production host before any production use.
-10. Continue language-runtime improvements without allowing audit-product work to bypass compiler correctness and test requirements.
+Before activation:
+
+- finish account/security prerequisites;
+- fix/prove Stripe webhook replay handling so external side effects are safe under duplicate delivery;
+- verify live Stripe configuration and webhook identity/idempotency;
+- verify checkout ownership and subscription lifecycle behavior;
+- verify upgrade/downgrade/cancellation/payment-method flows;
+- pass production preflight;
+- keep paid-priority unavailable unless queue-backed execution is proven;
+- perform any real-charge canary only after separate explicit approval.
+
+Authenticator/security rollout authorization never implies billing authorization.
 
 ## Long-Term Direction
 
 SolveLang should become a simple, readable, safe, and AI-native language and analysis platform for:
 
-- automation
-- APIs
-- web apps
-- data workflows
+- automation specifications
+- APIs and data workflows
 - tool-using agents
 - workflow preflight
-- repository architecture and cleanup audits
-- server posture and operational audits
+- repository architecture/cleanup audits
+- server posture/operational audits
+- eventually, managed workflow execution where the runtime and operational guarantees are proven
 
-Payment code, CI, and the test-stack deployment are green. The immediate launch priority is deployed browser end-to-end proof and commit-bound launch evidence, followed by a read-only Repository Audit before any live-server remediation capability.
+The immediate priority is security/account completion and production truthfulness, followed by billing/priority readiness and read-only audit products, while language/runtime correctness continues in parallel.
