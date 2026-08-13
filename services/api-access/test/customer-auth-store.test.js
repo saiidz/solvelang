@@ -13,7 +13,10 @@ test("source throttling uses a bounded atomic counter", async () => {
     return {};
   }), "auth-table");
 
-  assert.equal(await store.reserveSourceRequest({ sourceKey: "source", window: 42, limit: 10, expiresAt: 120 }), "created");
+  assert.equal(
+    await store.reserveSourceRequest({ sourceKey: "source", window: 42, limit: 10, expiresAt: 120 }),
+    "created",
+  );
   assert.deepEqual(commands[0].Key, { authKey: "source#source#42" });
   assert.equal(commands[0].ConditionExpression, "attribute_not_exists(#count) OR #count < :limit");
   assert.equal(commands[0].ExpressionAttributeValues[":limit"], 10);
@@ -38,13 +41,22 @@ test("active throttles are classified without hiding Dynamo failures", async () 
     throw error;
   }), "auth-table");
   assert.equal(await limited.reserveEmailRequest({ throttleKey: "abc", now: 100, expiresAt: 160 }), "limited");
-  assert.equal(await limited.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }), "limited");
+  assert.equal(
+    await limited.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }),
+    "limited",
+  );
 
   const failed = createDynamoCustomerAuthStore(clientWith(async () => {
     throw new Error("Dynamo unavailable");
   }), "auth-table");
-  await assert.rejects(() => failed.reserveEmailRequest({ throttleKey: "abc", now: 100, expiresAt: 160 }), /Dynamo unavailable/);
-  await assert.rejects(() => failed.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }), /Dynamo unavailable/);
+  await assert.rejects(
+    () => failed.reserveEmailRequest({ throttleKey: "abc", now: 100, expiresAt: 160 }),
+    /Dynamo unavailable/,
+  );
+  await assert.rejects(
+    () => failed.reserveSourceRequest({ sourceKey: "source", window: 1, limit: 10, expiresAt: 160 }),
+    /Dynamo unavailable/,
+  );
 });
 
 test("magic-link consumption relies on an atomic fingerprint condition", async () => {
@@ -52,7 +64,15 @@ test("magic-link consumption relies on an atomic fingerprint condition", async (
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
     commands.push(command.input);
     if (commands.length === 1) {
-      return { Item: { kind: "magic", authKey: "magic#token", accountId: "acct_1", email: "dev@example.com", expiresAt: 200 } };
+      return {
+        Item: {
+          kind: "magic",
+          authKey: "magic#token",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          expiresAt: 200,
+        },
+      };
     }
     const error = new Error("transaction canceled");
     error.name = "TransactionCanceledException";
@@ -71,6 +91,122 @@ test("magic-link consumption relies on an atomic fingerprint condition", async (
   assert.equal(deletion.ExpressionAttributeValues[":fingerprint"], "wrong-fingerprint");
 });
 
+test("verified accounts are materialized without overwriting an existing identity", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (commands.length === 1) return {};
+    return {
+      Item: {
+        authKey: "account#acct_1",
+        kind: "account",
+        accountId: "acct_1",
+        email: "dev@example.com",
+      },
+    };
+  }), "auth-table");
+
+  const account = await store.ensureAccount({
+    accountId: "acct_1",
+    email: "dev@example.com",
+    createdAt: "2026-08-12T22:00:00.000Z",
+  });
+  assert.equal(commands[0].Item.kind, "account");
+  assert.equal(commands[0].ConditionExpression, "attribute_not_exists(authKey)");
+  assert.equal(account.email, "dev@example.com");
+});
+
+test("initial credential setup claims the username and account update atomically", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (commands.length === 1) {
+      return {
+        Item: {
+          authKey: "account#acct_1",
+          kind: "account",
+          accountId: "acct_1",
+          email: "dev@example.com",
+        },
+      };
+    }
+    return {};
+  }), "auth-table");
+
+  const result = await store.setCredentials({
+    accountId: "acct_1",
+    username: "devuser",
+    passwordSalt: "salt",
+    passwordHash: "hash",
+    passwordScheme: "scrypt-v1",
+    passwordUpdatedAt: "2026-08-12T22:00:00.000Z",
+  });
+  assert.equal(result, "updated");
+  const transaction = commands[1].TransactItems;
+  assert.deepEqual(transaction[0].Put.Item, {
+    authKey: "username#devuser",
+    kind: "username",
+    username: "devuser",
+    accountId: "acct_1",
+    createdAt: "2026-08-12T22:00:00.000Z",
+  });
+  assert.equal(transaction[0].Put.ConditionExpression, "attribute_not_exists(authKey)");
+  assert.match(transaction[1].Update.ConditionExpression, /attribute_not_exists\(username\)/);
+});
+
+test("password replacement for the same username updates only the account record", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (commands.length === 1) {
+      return {
+        Item: {
+          authKey: "account#acct_1",
+          kind: "account",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          username: "devuser",
+        },
+      };
+    }
+    return {};
+  }), "auth-table");
+
+  assert.equal(await store.setCredentials({
+    accountId: "acct_1",
+    username: "devuser",
+    passwordSalt: "new-salt",
+    passwordHash: "new-hash",
+    passwordScheme: "scrypt-v1",
+    passwordUpdatedAt: "2026-08-12T22:05:00.000Z",
+  }), "updated");
+  assert.equal(commands[1].Key.authKey, "account#acct_1");
+  assert.match(commands[1].UpdateExpression, /passwordHash/);
+  assert.equal(commands[1].ExpressionAttributeValues[":username"], "devuser");
+});
+
+test("password sessions use a conditional write and preserve account ownership", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    return {};
+  }), "auth-table");
+
+  await store.putSession({
+    session: {
+      sessionId: "session",
+      secretFingerprint: "fingerprint",
+      createdAt: "2026-08-12T22:00:00.000Z",
+      expiresAt: 999,
+    },
+    accountId: "acct_1",
+    email: "dev@example.com",
+  });
+  assert.equal(commands[0].Item.authKey, "session#session");
+  assert.equal(commands[0].Item.accountId, "acct_1");
+  assert.equal(commands[0].ConditionExpression, "attribute_not_exists(authKey)");
+});
+
 test("session revocation uses the supplied clock value", async () => {
   const commands = [];
   const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
@@ -78,5 +214,8 @@ test("session revocation uses the supplied clock value", async () => {
     return {};
   }), "auth-table");
   await store.revokeSession("session", "2026-07-29T20:00:00.000Z");
-  assert.equal(commands[0].ExpressionAttributeValues[":expiresAt"], Date.parse("2026-07-29T20:00:00.000Z") / 1_000);
+  assert.equal(
+    commands[0].ExpressionAttributeValues[":expiresAt"],
+    Date.parse("2026-07-29T20:00:00.000Z") / 1_000,
+  );
 });

@@ -13,6 +13,15 @@ function required(documentClient, tableName) {
 export function createDynamoCustomerAuthStore(documentClient, tableName) {
   required(documentClient, tableName);
 
+  async function account(accountId) {
+    const response = await documentClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { authKey: `account#${accountId}` },
+      ConsistentRead: true,
+    }));
+    return response.Item?.kind === "account" ? response.Item : undefined;
+  }
+
   return {
     async reserveSourceRequest({ sourceKey, window, limit, expiresAt }) {
       try {
@@ -102,6 +111,126 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
         throw error;
       }
       return { accountId: magic.accountId, email: magic.email };
+    },
+
+    async ensureAccount({ accountId, email, createdAt }) {
+      try {
+        await documentClient.send(new PutCommand({
+          TableName: tableName,
+          Item: {
+            authKey: `account#${accountId}`,
+            kind: "account",
+            accountId,
+            email,
+            createdAt,
+            updatedAt: createdAt,
+          },
+          ConditionExpression: "attribute_not_exists(authKey)",
+        }));
+      } catch (error) {
+        if (error?.name !== "ConditionalCheckFailedException") throw error;
+        const existing = await account(accountId);
+        if (!existing || existing.email !== email) throw new Error("Customer account identity conflict.");
+      }
+      return account(accountId);
+    },
+
+    async getAccount(accountId) {
+      return account(accountId);
+    },
+
+    async getUsername(username) {
+      const response = await documentClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { authKey: `username#${username}` },
+        ConsistentRead: true,
+      }));
+      return response.Item?.kind === "username" ? response.Item : undefined;
+    },
+
+    async setCredentials({
+      accountId,
+      username,
+      passwordSalt,
+      passwordHash,
+      passwordScheme,
+      passwordUpdatedAt,
+    }) {
+      const existing = await account(accountId);
+      if (!existing) return "missing";
+      if (existing.username && existing.username !== username) return "username_locked";
+
+      if (existing.username === username) {
+        await documentClient.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { authKey: `account#${accountId}` },
+          UpdateExpression: "SET passwordSalt = :passwordSalt, passwordHash = :passwordHash, passwordScheme = :passwordScheme, passwordUpdatedAt = :passwordUpdatedAt, updatedAt = :passwordUpdatedAt",
+          ConditionExpression: "kind = :accountKind AND username = :username",
+          ExpressionAttributeValues: {
+            ":passwordSalt": passwordSalt,
+            ":passwordHash": passwordHash,
+            ":passwordScheme": passwordScheme,
+            ":passwordUpdatedAt": passwordUpdatedAt,
+            ":accountKind": "account",
+            ":username": username,
+          },
+        }));
+        return "updated";
+      }
+
+      try {
+        await documentClient.send(new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: tableName,
+                Item: {
+                  authKey: `username#${username}`,
+                  kind: "username",
+                  username,
+                  accountId,
+                  createdAt: passwordUpdatedAt,
+                },
+                ConditionExpression: "attribute_not_exists(authKey)",
+              },
+            },
+            {
+              Update: {
+                TableName: tableName,
+                Key: { authKey: `account#${accountId}` },
+                UpdateExpression: "SET username = :username, passwordSalt = :passwordSalt, passwordHash = :passwordHash, passwordScheme = :passwordScheme, passwordUpdatedAt = :passwordUpdatedAt, updatedAt = :passwordUpdatedAt",
+                ConditionExpression: "kind = :accountKind AND attribute_not_exists(username)",
+                ExpressionAttributeValues: {
+                  ":username": username,
+                  ":passwordSalt": passwordSalt,
+                  ":passwordHash": passwordHash,
+                  ":passwordScheme": passwordScheme,
+                  ":passwordUpdatedAt": passwordUpdatedAt,
+                  ":accountKind": "account",
+                },
+              },
+            },
+          ],
+        }));
+        return "updated";
+      } catch (error) {
+        if (error?.name === "TransactionCanceledException") return "conflict";
+        throw error;
+      }
+    },
+
+    async putSession({ session, accountId, email }) {
+      await documentClient.send(new PutCommand({
+        TableName: tableName,
+        Item: {
+          authKey: `session#${session.sessionId}`,
+          kind: "session",
+          ...session,
+          accountId,
+          email,
+        },
+        ConditionExpression: "attribute_not_exists(authKey)",
+      }));
     },
 
     async getSession(sessionId) {
