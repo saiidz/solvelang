@@ -9,13 +9,23 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
   if (!documentClient) throw new Error("DynamoDB document client is required.");
   if (typeof tableName !== "string" || !tableName) throw new Error("Customer auth table is required.");
 
-  async function getAccount(accountId) {
+  async function getRecord(authKey) {
     const response = await documentClient.send(new GetCommand({
       TableName: tableName,
-      Key: { authKey: `account#${accountId}` },
+      Key: { authKey },
       ConsistentRead: true,
     }));
-    return response.Item?.kind === "account" ? response.Item : undefined;
+    return response.Item;
+  }
+
+  async function getAccount(accountId) {
+    const record = await getRecord(`account#${accountId}`);
+    return record?.kind === "account" ? record : undefined;
+  }
+
+  async function getRequest(requestFingerprint) {
+    const record = await getRecord(`access-request#${requestFingerprint}`);
+    return record?.kind === "access-request" ? record : undefined;
   }
 
   async function transitionAccess({
@@ -53,8 +63,10 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
                 requestId,
                 previousState,
                 targetState,
+                reason,
                 changedAt,
                 changedBy,
+                resultingAuthVersion: nextAuthVersion,
               },
               ConditionExpression: "attribute_not_exists(authKey)",
             },
@@ -90,6 +102,7 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
                 changedAt,
                 changedBy,
                 requestId,
+                resultingAuthVersion: nextAuthVersion,
               },
               ConditionExpression: "attribute_not_exists(authKey)",
             },
@@ -103,5 +116,5 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
     }
   }
 
-  return { getAccount, transitionAccess };
+  return { getRecord, getAccount, getRequest, transitionAccess };
 }
