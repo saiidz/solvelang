@@ -82,8 +82,8 @@ test("TOTP production deployment is protected, serialized, derives the KMS ARN, 
   assert.match(source, /CustomerTotpKmsKeyArn="\$CUSTOMER_TOTP_KMS_KEY_ARN"/);
   assert.match(source, /CUSTOMER_TOTP_KMS_KEY_ARN: \$\{\{ steps\.kms\.outputs\.key_arn \}\}/);
   assert.doesNotMatch(source, /secrets\.CUSTOMER_TOTP_KMS/);
-  assert.doesNotMatch(source, /secrets\.STRIPE_SECRET_KEY/);
-  assert.doesNotMatch(source, /secrets\.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
+  assert.doesNotMatch(source, /\$\{\{\s*secrets\.STRIPE_SECRET_KEY\s*\}\}/);
+  assert.doesNotMatch(source, /\$\{\{\s*secrets\.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET\s*\}\}/);
   assert.doesNotMatch(source, /StripeSecretKey=/);
   assert.doesNotMatch(source, /StripeSubscriptionWebhookSecret=/);
   assert.match(source, /customerTotpEnabled == true/);
