@@ -16,6 +16,25 @@ function authVersionOf(value) {
   return value;
 }
 
+function accountTotpState(account) {
+  const enabledAt = account?.totpEnabledAt;
+  const secretCiphertext = account?.totpSecretCiphertext;
+  const enabledAtPresent = enabledAt !== undefined;
+  const secretPresent = secretCiphertext !== undefined;
+  if (!enabledAtPresent && !secretPresent) return "disabled";
+  if (
+    typeof enabledAt === "string"
+    && enabledAt.length > 0
+    && typeof secretCiphertext === "string"
+    && secretCiphertext.length > 0
+  ) return "enabled";
+  return "invalid";
+}
+
+function assertValidAccountTotpState(account) {
+  if (accountTotpState(account) === "invalid") throw new Error("Customer authenticator state is invalid.");
+}
+
 export function createDynamoCustomerAuthStore(documentClient, tableName) {
   required(documentClient, tableName);
 
@@ -25,7 +44,9 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
       Key: { authKey: `account#${accountId}` },
       ConsistentRead: true,
     }));
-    return response.Item?.kind === "account" ? response.Item : undefined;
+    const item = response.Item?.kind === "account" ? response.Item : undefined;
+    if (item) assertValidAccountTotpState(item);
+    return item;
   }
 
   function sessionVersionUpdate({ sessionId, accountId, currentAuthVersion, nextAuthVersion }) {
@@ -163,7 +184,7 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
       const state = await magicState(tokenId, now);
       if (!state) return undefined;
       const { magic, existingAccount, currentAuthVersion } = state;
-      const mfaRequired = Boolean(existingAccount?.totpEnabledAt && existingAccount?.totpSecretCiphertext);
+      const mfaRequired = accountTotpState(existingAccount) === "enabled";
       const item = mfaRequired
         ? {
             authKey: `mfa#${mfaChallenge.challengeId}`,
