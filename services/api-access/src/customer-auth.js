@@ -156,8 +156,27 @@ function passwordConfigured(account) {
   );
 }
 
+function accountTotpState(account) {
+  const enabledAt = account?.totpEnabledAt;
+  const secretCiphertext = account?.totpSecretCiphertext;
+  const enabledAtPresent = enabledAt !== undefined;
+  const secretPresent = secretCiphertext !== undefined;
+  if (!enabledAtPresent && !secretPresent) return "disabled";
+  if (
+    typeof enabledAt === "string"
+    && enabledAt.length > 0
+    && typeof secretCiphertext === "string"
+    && secretCiphertext.length > 0
+  ) return "enabled";
+  return "invalid";
+}
+
 function accountTotpEnabled(account) {
-  return Boolean(account?.totpEnabledAt && account?.totpSecretCiphertext);
+  const state = accountTotpState(account);
+  if (state === "invalid") {
+    throw new ApiAccessError(503, "authenticator_state_invalid", "Authenticator verification is temporarily unavailable.");
+  }
+  return state === "enabled";
 }
 
 export function accountIdForEmail(email, pepper) {
