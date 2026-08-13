@@ -105,7 +105,7 @@ test("TOTP deployment captures exact starting TOTP/KMS state and rolls back tran
   assert.match(source, /already enabled with a different KMS key; refusing key migration/);
 });
 
-test("dedicated KMS deployment mutates only the retained TOTP KMS stack and does not enable the API feature", async () => {
+test("dedicated KMS deployment mutates only the retained and termination-protected TOTP KMS stack", async () => {
   const source = await text(kmsDeployUrl);
   assert.match(source, /name: Deploy API Access Production TOTP KMS/);
   assert.match(source, /confirm_production_totp_kms/);
@@ -115,10 +115,13 @@ test("dedicated KMS deployment mutates only the retained TOTP KMS stack and does
   assert.match(source, /role-to-assume: \$\{\{ secrets\.AWS_DEPLOY_ROLE_ARN \}\}/);
   assert.match(source, /cloudformation deploy/);
   assert.match(source, /--stack-name "\$KMS_STACK_NAME"/);
+  assert.match(source, /update-termination-protection/);
+  assert.match(source, /EnableTerminationProtection == true/);
   assert.match(source, /\[\[ "\$totp" == false \]\]/);
   assert.doesNotMatch(source, /sam deploy/);
   assert.doesNotMatch(source, /CustomerTotpEnabled=true/);
   assert.doesNotMatch(source, /STRIPE_SECRET_KEY/);
+  assert.match(source, /CloudFormation termination protection: \*\*enabled\*\*/);
   assert.match(source, /Customer authenticator 2FA enabled by this workflow: \*\*no\*\*/);
   assert.match(source, /API stack changed: \*\*no\*\*/);
   assert.match(source, /Email sent: \*\*no\*\*/);
@@ -141,7 +144,7 @@ test("TOTP KMS template is symmetric, rotating, retained, single-region, and tag
   assert.doesNotMatch(source, /AWS::KMS::ReplicaKey/);
 });
 
-test("preflight IAM contract is read-only for KMS and the deploy policy cannot schedule or directly delete the retained TOTP key", async () => {
+test("preflight IAM contract is read-only and deploy KMS powers are bounded away from cryptographic use or deletion", async () => {
   const preflight = JSON.parse(await text(preflightPolicyUrl));
   const preflightActions = preflight.Statement.flatMap((statement) => Array.isArray(statement.Action) ? statement.Action : [statement.Action]);
   for (const action of preflightActions) {
@@ -157,9 +160,12 @@ test("preflight IAM contract is read-only for KMS and the deploy policy cannot s
   assert.ok(deployActions.includes("kms:CreateKey"));
   assert.ok(deployActions.includes("kms:EnableKeyRotation"));
   assert.ok(deployActions.includes("kms:CreateAlias"));
+  assert.ok(deployActions.includes("cloudformation:UpdateTerminationProtection"));
   assert.ok(!deployActions.includes("kms:ScheduleKeyDeletion"));
   assert.ok(!deployActions.includes("kms:DisableKey"));
   assert.ok(!deployActions.includes("kms:PutKeyPolicy"));
   assert.ok(!deployActions.includes("kms:Decrypt"));
   assert.ok(!deployActions.includes("kms:Encrypt"));
+  const protection = deploy.Statement.find(({ Sid }) => Sid === "ProtectProductionTotpKmsStack");
+  assert.equal(protection.Resource, "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*");
 });
