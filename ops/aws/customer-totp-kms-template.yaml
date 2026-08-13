@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Dedicated retained AWS KMS key for SolveLang production customer TOTP secrets
+
+Parameters:
+  CustomerTotpAliasName:
+    Type: String
+    Default: alias/solvelang-customer-totp-production
+    AllowedPattern: '^alias/solvelang-customer-totp-production$'
+
+Resources:
+  CustomerTotpKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: SolveLang production customer authenticator TOTP secret encryption
+      Enabled: true
+      EnableKeyRotation: true
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      MultiRegion: false
+      PendingWindowInDays: 30
+      Tags:
+        - Key: Project
+          Value: SolveLang
+        - Key: Purpose
+          Value: customer-totp
+        - Key: Environment
+          Value: production
+
+  CustomerTotpAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Ref CustomerTotpAliasName
+      TargetKeyId: !Ref CustomerTotpKey
+
+Outputs:
+  CustomerTotpKmsKeyArn:
+    Description: Full ARN of the dedicated production customer TOTP KMS key
+    Value: !GetAtt CustomerTotpKey.Arn
+  CustomerTotpKmsKeyId:
+    Description: ID of the dedicated production customer TOTP KMS key
+    Value: !Ref CustomerTotpKey
+  CustomerTotpKmsAlias:
+    Description: Stable alias for the production customer TOTP KMS key
+    Value: !Ref CustomerTotpAliasName

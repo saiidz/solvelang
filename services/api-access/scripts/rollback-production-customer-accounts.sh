@@ -1,18 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for value in "$INITIAL_API_ACCESS_ENABLED" "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED"; do
+DISABLED_TOTP_KMS_ARN="arn:aws:kms:us-east-1:000000000000:key/disabled"
+
+for value in "$INITIAL_API_ACCESS_ENABLED" "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" "$INITIAL_CUSTOMER_TOTP_ENABLED"; do
   [[ "$value" == true || "$value" == false ]] || { echo "Rollback feature state must be true or false." >&2; exit 1; }
 done
 [[ "$INITIAL_API_ACCESS_ENABLED" == "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" ]] || {
   echo "Rollback requires the original API access and customer-account flags to match." >&2
   exit 1
 }
+[[ "$INITIAL_CUSTOMER_TOTP_ENABLED" == false || "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" == true ]] || {
+  echo "Rollback cannot enable authenticator 2FA while customer accounts are disabled." >&2
+  exit 1
+}
+
+INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN="${INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN:-$DISABLED_TOTP_KMS_ARN}"
+[[ "$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN" =~ ^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$ ]] || {
+  echo "Rollback authenticator KMS key ARN is malformed." >&2
+  exit 1
+}
+if [[ "$INITIAL_CUSTOMER_TOTP_ENABLED" == true && "$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN" == "$DISABLED_TOTP_KMS_ARN" ]]; then
+  echo "Rollback authenticator 2FA requires the original production KMS key ARN." >&2
+  exit 1
+fi
 
 parameter_overrides=(
   ApiAccessEnabled="$INITIAL_API_ACCESS_ENABLED"
   ApiAccessMode="live"
   CustomerAccountsEnabled="$INITIAL_CUSTOMER_ACCOUNTS_ENABLED"
+  CustomerTotpEnabled="$INITIAL_CUSTOMER_TOTP_ENABLED"
+  CustomerTotpKmsKeyArn="$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN"
   SubscriptionBillingEnabled="false"
   SiteOrigin="$SITE_ORIGIN"
   ApiKeyPepper="$API_KEY_PEPPER"
@@ -35,5 +53,6 @@ response="$(curl --fail --silent --show-error "$API_BASE/health")"
 jq -e \
   --argjson api_access "$INITIAL_API_ACCESS_ENABLED" \
   --argjson customer_accounts "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" \
-  '.status == "ok" and .enabled == $api_access and .customerAccountsEnabled == $customer_accounts and .subscriptionBillingEnabled == false' \
+  --argjson customer_totp "$INITIAL_CUSTOMER_TOTP_ENABLED" \
+  '.status == "ok" and .enabled == $api_access and .customerAccountsEnabled == $customer_accounts and .customerTotpEnabled == $customer_totp and .subscriptionBillingEnabled == false' \
   <<<"$response" >/dev/null

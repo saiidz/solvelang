@@ -36,6 +36,7 @@ export function createApiAccessHandler({
   adminSecret,
   siteOrigin,
   customerAccountsEnabled = false,
+  customerTotpEnabled = false,
   customerAuth,
   customerAccount,
   subscriptionBillingEnabled = false,
@@ -48,6 +49,9 @@ export function createApiAccessHandler({
   if (!service) throw new Error("API access service is required.");
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
+  if (customerTotpEnabled && !customerAccountsEnabled) {
+    throw new Error("Authenticator 2FA cannot be enabled when customer accounts are disabled.");
+  }
   if (customerAccountsEnabled && (!customerAuth || !customerAccount)) {
     throw new Error("Customer account services are required when customer accounts are enabled.");
   }
@@ -113,6 +117,7 @@ export function createApiAccessHandler({
           service: "solvelang-api-access",
           enabled,
           customerAccountsEnabled,
+          customerTotpEnabled,
           subscriptionBillingEnabled,
         });
       }

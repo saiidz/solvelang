@@ -37,6 +37,7 @@ test("health remains available while all subscription mutations fail closed", as
     service: "solvelang-api-access",
     enabled: false,
     customerAccountsEnabled: false,
+    customerTotpEnabled: false,
     subscriptionBillingEnabled: false,
   });
 
@@ -48,6 +49,20 @@ test("health remains available while all subscription mutations fail closed", as
   const webhook = await handler(event("POST", "/stripe/subscriptions/webhook", {}, { "stripe-signature": "test" }));
   assert.equal(webhook.statusCode, 503);
   assert.equal(JSON.parse(webhook.body).code, "subscription_billing_disabled");
+});
+
+test("handler refuses an impossible authenticator-without-customer-accounts state", () => {
+  assert.throws(
+    () => createApiAccessHandler({
+      service,
+      enabled: true,
+      adminSecret,
+      siteOrigin: "https://www.solve-lang.com",
+      customerAccountsEnabled: false,
+      customerTotpEnabled: true,
+    }),
+    /Authenticator 2FA cannot be enabled when customer accounts are disabled/,
+  );
 });
 
 test("internal routes require a constant-time admin secret and return the plaintext key only on issuance", async () => {

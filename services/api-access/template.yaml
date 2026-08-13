@@ -293,6 +293,15 @@ Resources:
                 - kms:Encrypt
                 - kms:Decrypt
               Resource: !Ref CustomerTotpKmsKeyArn
+              Condition:
+                StringEquals:
+                  kms:EncryptionContext:purpose: solvelang-customer-totp
+                StringLike:
+                  kms:EncryptionContext:accountId: acct_*
+                ForAllValues:StringEquals:
+                  kms:EncryptionContextKeys:
+                    - purpose
+                    - accountId
           - !Ref AWS::NoValue
       Events:
         Health:

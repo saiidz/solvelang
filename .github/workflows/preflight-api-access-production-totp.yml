@@ -1,0 +1,218 @@
+name: Preflight API Access Production TOTP
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_totp_preflight:
+        description: Confirm validation-only authenticator readiness; do not deploy, send email, enable billing, use Stripe/webhooks, or perform charges
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-totp-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "true"
+      CUSTOMER_ACCOUNTS_ENABLED: "true"
+      SUBSCRIPTION_BILLING_ENABLED: "false"
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      KMS_STACK_NAME: solvelang-api-access-production-totp-kms
+      KMS_ALIAS: alias/solvelang-customer-totp-production
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce validation-only production authenticator boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production authenticator preflight must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_totp_preflight }}" == "true" ]] || { echo "Explicit authenticator preflight confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == true ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == true ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == false ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]]
+          [[ "$STACK_NAME" != *test* ]]
+          [[ "$KMS_STACK_NAME" == "solvelang-api-access-production-totp-kms" ]]
+          [[ "$KMS_ALIAS" == "alias/solvelang-customer-totp-production" ]]
+          [[ "$SITE_ORIGIN" == https://* ]]
+          test -n "$AWS_REGION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Validate independent production auth secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_length() { (( ${#2} >= $3 )) || { echo "$1 must contain at least $3 characters." >&2; exit 1; }; }
+          require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
+          require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
+          require_length CUSTOMER_AUTH_PEPPER "$CUSTOMER_AUTH_PEPPER" 32
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+
+      - name: Verify current production API remains live with billing disabled
+        id: api
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production API stack is not stable: $status" >&2; exit 1; }
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          api_access="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          totp="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$api_access" == true ]]
+          [[ "$accounts" == true ]]
+          [[ "$totp" == false ]] || { echo "Production authenticator 2FA is already enabled; first-enable preflight is not applicable." >&2; exit 1; }
+          [[ "$billing" == false ]]
+          test -n "$api_base"
+          response="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false and ((has("customerTotpEnabled") | not) or .customerTotpEnabled == false)' <<<"$response" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Verify dedicated production TOTP KMS stack and key
+        id: kms
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$KMS_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production TOTP KMS stack is not stable: $status" >&2; exit 1; }
+          key_arn="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsKeyArn") | .OutputValue] | first // empty' <<<"$stack")"
+          alias_name="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsAlias") | .OutputValue] | first // empty' <<<"$stack")"
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$key_arn" == "arn:aws:kms:${AWS_REGION}:${account_id}:key/"* ]] || { echo "TOTP KMS key is outside the production account or region." >&2; exit 1; }
+          [[ "$alias_name" == "$KMS_ALIAS" ]]
+          metadata="$(aws kms describe-key --key-id "$key_arn" --output json)"
+          jq -e '.KeyMetadata.Enabled == true and .KeyMetadata.KeyState == "Enabled" and .KeyMetadata.KeyManager == "CUSTOMER" and .KeyMetadata.KeySpec == "SYMMETRIC_DEFAULT" and .KeyMetadata.KeyUsage == "ENCRYPT_DECRYPT" and .KeyMetadata.Origin == "AWS_KMS" and .KeyMetadata.MultiRegion == false' <<<"$metadata" >/dev/null
+          aws kms get-key-rotation-status --key-id "$key_arn" --query KeyRotationEnabled --output text | grep -qx True
+          tags="$(aws kms list-resource-tags --key-id "$key_arn" --output json)"
+          jq -e '[.Tags[] | {(.TagKey): .TagValue}] | add | .Project == "SolveLang" and .Purpose == "customer-totp" and .Environment == "production"' <<<"$tags" >/dev/null
+          alias_key_arn="$(aws kms describe-key --key-id "$KMS_ALIAS" --query 'KeyMetadata.Arn' --output text)"
+          [[ "$alias_key_arn" == "$key_arn" ]]
+          policy="$(aws kms get-key-policy --key-id "$key_arn" --policy-name default --query Policy --output text)"
+          jq -e --arg root "arn:aws:iam::${account_id}:root" '[.Statement[] | select(.Effect == "Allow" and .Principal.AWS == $root and (.Action == "kms:*" or (.Action | type == "array" and index("kms:*") != null)))] | length >= 1' <<<"$policy" >/dev/null
+          echo "key_arn=$key_arn" >> "$GITHUB_OUTPUT"
+
+      - name: Verify deployed customer frontend is ready for authenticator flow
+        env:
+          API_BASE: ${{ steps.api.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(curl --fail --silent --show-error --location "$SITE_ORIGIN/account/api-keys/")"
+          test -n "$page"
+          mapfile -t scripts < <(grep -oE '<script[^>]+src="[^"]+"' <<<"$page" | sed -E 's/.*src="([^"]+)".*/\1/' | sort -u)
+          (( ${#scripts[@]} > 0 )) || { echo "No production customer-page script assets found." >&2; exit 1; }
+          combined=""
+          found_api=false
+          for src in "${scripts[@]}"; do
+            if [[ "$src" == https://* ]]; then asset_url="$src"; elif [[ "$src" == /* ]]; then asset_url="$SITE_ORIGIN$src"; else asset_url="$SITE_ORIGIN/$src"; fi
+            asset="$(curl --fail --silent --show-error --location "$asset_url")"
+            combined+=$'\n'"$asset"
+            if grep -Fq -- "$API_BASE" <<<"$asset"; then found_api=true; fi
+          done
+          [[ "$found_api" == true ]] || { echo "Production customer frontend does not target the exact production API base." >&2; exit 1; }
+          for marker in '/customer/auth/totp/verify' '/customer/auth/totp/setup' '/customer/auth/totp/confirm' '/customer/auth/totp/backup-codes' '/customer/auth/totp/disable'; do
+            grep -Fq -- "$marker" <<<"$combined" || { echo "Production customer frontend is missing authenticator marker: $marker" >&2; exit 1; }
+          done
+          grep -Fq -- 'Authenticator app' <<<"$combined" || { echo "Production customer frontend is missing the authenticator UI." >&2; exit 1; }
+
+      - name: Verify SES sender and production sending access
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sesv2 get-email-identity --email-identity "$CUSTOMER_AUTH_EMAIL_SENDER" --query 'VerifiedForSendingStatus' --output text | grep -qx True
+          aws sesv2 get-account --query 'ProductionAccessEnabled' --output text | grep -qx True
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run API access tests
+        run: npm test
+
+      - name: Validate API access SAM template
+        run: sam validate --lint --template template.yaml
+
+      - name: Build API access stack
+        run: sam build --template template.yaml
+
+      - name: Validate dedicated KMS template
+        run: aws cloudformation validate-template --template-body file://../../ops/aws/customer-totp-kms-template.yaml >/dev/null
+
+      - name: Confirm authenticator implementation, rollback, serialization, and billing safety
+        shell: bash
+        env:
+          KMS_KEY_ARN: ${{ steps.kms.outputs.key_arn }}
+        run: |
+          set -euo pipefail
+          deploy_workflow="../../.github/workflows/deploy-api-access-production-totp.yml"
+          customer_deploy="../../.github/workflows/deploy-api-access-production-customer-accounts.yml"
+          queue_script="scripts/wait-for-production-deployment-turn.mjs"
+          rollback_script="scripts/rollback-production-customer-accounts.sh"
+          grep -q 'CustomerTotpEnabled:' template.yaml
+          grep -q 'CustomerTotpKmsKeyArn:' template.yaml
+          grep -q 'Default: "false"' template.yaml
+          grep -q 'Path: /customer/auth/totp/verify' template.yaml
+          grep -q 'Path: /customer/auth/totp/setup' template.yaml
+          grep -q 'Path: /customer/auth/totp/confirm' template.yaml
+          grep -q 'kms:Encrypt' template.yaml
+          grep -q 'kms:Decrypt' template.yaml
+          grep -q 'SubscriptionBillingRemainsTestOnly' template.yaml
+          grep -q 'CUSTOMER_TOTP_ENABLED: "true"' "$deploy_workflow"
+          grep -q 'CustomerTotpEnabled="\$CUSTOMER_TOTP_ENABLED"' "$deploy_workflow"
+          grep -q 'CustomerTotpKmsKeyArn="\$CUSTOMER_TOTP_KMS_KEY_ARN"' "$deploy_workflow"
+          grep -q 'INITIAL_CUSTOMER_TOTP_ENABLED' "$deploy_workflow"
+          grep -q 'INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN' "$deploy_workflow"
+          grep -q 'CustomerTotpEnabled="\$PRESERVED_CUSTOMER_TOTP_ENABLED"' "$customer_deploy"
+          grep -q 'CustomerTotpKmsKeyArn="\$PRESERVED_CUSTOMER_TOTP_KMS_KEY_ARN"' "$customer_deploy"
+          grep -q 'deploy-api-access-production-totp-kms.yml' "$queue_script"
+          grep -q 'deploy-api-access-production-totp.yml' "$queue_script"
+          grep -q 'CustomerTotpEnabled="\$INITIAL_CUSTOMER_TOTP_ENABLED"' "$rollback_script"
+          grep -q 'CustomerTotpKmsKeyArn="\$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN"' "$rollback_script"
+          node scripts/assert-no-production-stripe-secret-references.mjs "$deploy_workflow"
+          [[ "$KMS_KEY_ARN" == arn:aws:kms:* ]]
+
+      - name: Write readiness summary
+        env:
+          API_BASE: ${{ steps.api.outputs.api_base }}
+          KMS_KEY_ARN: ${{ steps.kms.outputs.key_arn }}
+        run: |
+          printf '## SolveLang production authenticator 2FA preflight\n\n- Validated commit: `%s`\n- Production API stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- Current API access enabled: **true**\n- Current customer accounts enabled: **true**\n- Current authenticator 2FA enabled: **false**\n- Current subscription billing enabled: **false**\n- Dedicated TOTP KMS key: `%s`\n- KMS key state/rotation/tags/alias/policy: verified\n- Production customer frontend TOTP routes/UI: verified\n- SES sender and production sending access: verified\n- API tests/SAM validate/build: passed\n- Rollback and production queue serialization: verified\n- Deployment performed: **no**\n- Customer enrolled: **no**\n- Email sent: **no**\n- Stripe/webhook used: **no**\n- Charges performed: **no**\n\nPassing this workflow is readiness evidence only. Production authenticator deployment still requires separate explicit owner approval.\n' \
+            "$GITHUB_SHA" "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$KMS_KEY_ARN" >> "$GITHUB_STEP_SUMMARY"

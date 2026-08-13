@@ -98,6 +98,7 @@ const application = createApiAccessHandler({
   adminSecret: environment.adminSecret,
   siteOrigin: environment.siteOrigin,
   customerAccountsEnabled: environment.customerAccountsEnabled,
+  customerTotpEnabled: environment.customerTotpEnabled,
   customerAuth,
   customerAccount,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,

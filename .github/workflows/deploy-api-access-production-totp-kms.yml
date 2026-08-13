@@ -1,0 +1,145 @@
+name: Deploy API Access Production TOTP KMS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_totp_kms:
+        description: Confirm creation or idempotent update of the dedicated production TOTP KMS stack only
+        required: true
+        default: false
+        type: boolean
+      confirm_totp_remains_disabled:
+        description: Confirm this workflow must not enable customer authenticator 2FA or change the API stack
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-kms:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      API_STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      KMS_STACK_NAME: solvelang-api-access-production-totp-kms
+      KMS_ALIAS: alias/solvelang-customer-totp-production
+      KMS_TEMPLATE: ops/aws/customer-totp-kms-template.yaml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce production TOTP KMS-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production TOTP KMS deployment must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_totp_kms }}" == "true" ]] || { echo "Explicit production TOTP KMS confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_totp_remains_disabled }}" == "true" ]] || { echo "Explicit TOTP-disabled confirmation is required." >&2; exit 1; }
+          [[ "$API_STACK_NAME" == *prod* || "$API_STACK_NAME" == *production* ]] || { echo "Production API stack name must contain prod or production." >&2; exit 1; }
+          [[ "$API_STACK_NAME" != *test* ]]
+          [[ "$KMS_STACK_NAME" == "solvelang-api-access-production-totp-kms" ]]
+          [[ "$KMS_ALIAS" == "alias/solvelang-customer-totp-production" ]]
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]]
+          test -f "$KMS_TEMPLATE"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        working-directory: services/api-access
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify live customer baseline and TOTP remains disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production API stack is not stable: $status" >&2; exit 1; }
+          api_access="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          totp="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$api_access" == true ]]
+          [[ "$accounts" == true ]]
+          [[ "$totp" == false ]] || { echo "Production authenticator 2FA is already enabled; KMS bootstrap workflow will not mutate its key stack." >&2; exit 1; }
+          [[ "$billing" == false ]]
+
+      - name: Validate dedicated KMS CloudFormation template
+        run: aws cloudformation validate-template --template-body "file://$KMS_TEMPLATE" >/dev/null
+
+      - name: Refuse unstable pre-existing KMS stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          if stack="$(aws cloudformation describe-stacks --stack-name "$KMS_STACK_NAME" --output json 2>/dev/null)"; then
+            status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+            [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Existing TOTP KMS stack is not stable: $status" >&2; exit 1; }
+          fi
+
+      - name: Deploy dedicated retained production TOTP KMS stack
+        run: |
+          set -euo pipefail
+          aws cloudformation deploy \
+            --stack-name "$KMS_STACK_NAME" \
+            --template-file "$KMS_TEMPLATE" \
+            --parameter-overrides CustomerTotpAliasName="$KMS_ALIAS" \
+            --tags Project=SolveLang Purpose=customer-totp Environment=production \
+            --no-fail-on-empty-changeset
+
+      - name: Enable KMS stack termination protection
+        run: aws cloudformation update-termination-protection --stack-name "$KMS_STACK_NAME" --enable-termination-protection >/dev/null
+
+      - name: Verify KMS key identity, rotation, tags, policy, alias, and stack protection
+        id: kms
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$KMS_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          jq -e '.Stacks[0].EnableTerminationProtection == true' <<<"$stack" >/dev/null
+          key_arn="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsKeyArn") | .OutputValue] | first // empty' <<<"$stack")"
+          key_id="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsKeyId") | .OutputValue] | first // empty' <<<"$stack")"
+          alias_name="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "CustomerTotpKmsAlias") | .OutputValue] | first // empty' <<<"$stack")"
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$key_arn" == "arn:aws:kms:${AWS_REGION}:${account_id}:key/"* ]] || { echo "TOTP key ARN is outside the production account or region." >&2; exit 1; }
+          [[ -n "$key_id" ]]
+          [[ "$alias_name" == "$KMS_ALIAS" ]]
+
+          metadata="$(aws kms describe-key --key-id "$key_arn" --output json)"
+          jq -e '.KeyMetadata.Enabled == true and .KeyMetadata.KeyState == "Enabled" and .KeyMetadata.KeyManager == "CUSTOMER" and .KeyMetadata.KeySpec == "SYMMETRIC_DEFAULT" and .KeyMetadata.KeyUsage == "ENCRYPT_DECRYPT" and .KeyMetadata.Origin == "AWS_KMS" and .KeyMetadata.MultiRegion == false' <<<"$metadata" >/dev/null
+          aws kms get-key-rotation-status --key-id "$key_arn" --query KeyRotationEnabled --output text | grep -qx True
+
+          tags="$(aws kms list-resource-tags --key-id "$key_arn" --output json)"
+          jq -e '[.Tags[] | {(.TagKey): .TagValue}] | add | .Project == "SolveLang" and .Purpose == "customer-totp" and .Environment == "production"' <<<"$tags" >/dev/null
+
+          alias_key_arn="$(aws kms describe-key --key-id "$KMS_ALIAS" --query 'KeyMetadata.Arn' --output text)"
+          [[ "$alias_key_arn" == "$key_arn" ]] || { echo "Stable TOTP alias does not resolve to the stack key." >&2; exit 1; }
+
+          policy="$(aws kms get-key-policy --key-id "$key_arn" --policy-name default --query Policy --output text)"
+          jq -e --arg root "arn:aws:iam::${account_id}:root" '[.Statement[] | select(.Effect == "Allow" and .Principal.AWS == $root and (.Action == "kms:*" or (.Action | type == "array" and index("kms:*") != null)))] | length >= 1' <<<"$policy" >/dev/null
+
+          echo "key_arn=$key_arn" >> "$GITHUB_OUTPUT"
+
+      - name: Write KMS deployment summary
+        env:
+          KEY_ARN: ${{ steps.kms.outputs.key_arn }}
+        run: |
+          printf '## SolveLang production authenticator KMS\n\n- Validated commit: `%s`\n- KMS stack: `%s`\n- Region: `%s`\n- Key ARN: `%s`\n- Key type: customer-managed symmetric ENCRYPT_DECRYPT\n- Automatic rotation: **enabled**\n- Deletion/update replacement protection: **Retain** in IaC\n- CloudFormation termination protection: **enabled**\n- Stable alias: `%s`\n- Customer authenticator 2FA enabled by this workflow: **no**\n- API stack changed: **no**\n- Email sent: **no**\n- Billing/Stripe/webhook used: **no**\n- Charges performed: **no**\n\nThis workflow creates or idempotently updates only the dedicated production TOTP KMS stack. Enabling authenticator 2FA requires a separate preflight and deployment approval.\n' \
+            "$GITHUB_SHA" "$KMS_STACK_NAME" "$AWS_REGION" "$KEY_ARN" "$KMS_ALIAS" >> "$GITHUB_STEP_SUMMARY"
