@@ -10,12 +10,9 @@ on:
         type: boolean
 
 permissions:
+  actions: read
   id-token: write
   contents: read
-
-concurrency:
-  group: api-access-production-foundation-deployment
-  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -58,6 +55,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
@@ -72,6 +75,9 @@ jobs:
           require_length API_KEY_PEPPER "$API_KEY_PEPPER" 32
           require_length API_ACCESS_ADMIN_SECRET "$API_ACCESS_ADMIN_SECRET" 32
           [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+
+      - name: Refuse to overwrite an enabled production stack
+        run: bash scripts/verify-production-foundation-is-inert.sh
 
       - name: Install pinned runtime dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
