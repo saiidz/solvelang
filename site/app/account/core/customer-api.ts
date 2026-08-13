@@ -14,6 +14,10 @@ export type CustomerDashboard = {
   accountId: string;
   email: string;
   csrfToken: string;
+  auth: {
+    username: string | null;
+    passwordConfigured: boolean;
+  };
   subscription: {
     plan: "developer" | "pro" | "business" | null;
     status: string;

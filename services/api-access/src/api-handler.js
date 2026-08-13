@@ -129,6 +129,18 @@ export function createApiAccessHandler({
           csrfToken: verified.csrfToken,
         }, {}, [verified.cookie]);
       }
+      if (method === "POST" && path.endsWith("/customer/auth/password")) {
+        if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        const verified = await customerAuth.loginWithPassword(
+          parseJson(event),
+          { sourceIp: event?.requestContext?.http?.sourceIp },
+        );
+        return response(200, {
+          accountId: verified.accountId,
+          email: verified.email,
+          csrfToken: verified.csrfToken,
+        }, {}, [verified.cookie]);
+      }
       if (method === "POST" && path.endsWith("/customer/auth/logout")) {
         const session = await customerSession(event, true);
         const cookie = await customerAuth.logout(cookieHeader(event));
@@ -152,7 +164,15 @@ export function createApiAccessHandler({
 
       if (method === "GET" && path.endsWith("/customer/account")) {
         const session = await customerSession(event);
-        return response(200, { ...(await customerAccount.getDashboard(session)), csrfToken: session.csrfToken });
+        const [dashboard, auth] = await Promise.all([
+          customerAccount.getDashboard(session),
+          customerAuth.getProfile(session),
+        ]);
+        return response(200, { ...dashboard, auth, csrfToken: session.csrfToken });
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/credentials")) {
+        const session = await customerSession(event, true);
+        return response(200, { auth: await customerAuth.setCredentials(session, parseJson(event)) });
       }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);

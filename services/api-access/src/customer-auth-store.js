@@ -10,8 +10,41 @@ function required(documentClient, tableName) {
   if (typeof tableName !== "string" || !tableName) throw new Error("Customer authentication table is required.");
 }
 
+function authVersionOf(value) {
+  if (value === undefined) return 1;
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error("Customer authentication version is invalid.");
+  return value;
+}
+
 export function createDynamoCustomerAuthStore(documentClient, tableName) {
   required(documentClient, tableName);
+
+  async function account(accountId) {
+    const response = await documentClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { authKey: `account#${accountId}` },
+      ConsistentRead: true,
+    }));
+    return response.Item?.kind === "account" ? response.Item : undefined;
+  }
+
+  function sessionVersionUpdate({ sessionId, accountId, currentAuthVersion, nextAuthVersion }) {
+    return {
+      Update: {
+        TableName: tableName,
+        Key: { authKey: `session#${sessionId}` },
+        UpdateExpression: "SET authVersion = :nextAuthVersion",
+        ConditionExpression: "kind = :sessionKind AND accountId = :accountId AND ((attribute_not_exists(authVersion) AND :currentAuthVersion = :one) OR authVersion = :currentAuthVersion)",
+        ExpressionAttributeValues: {
+          ":sessionKind": "session",
+          ":accountId": accountId,
+          ":currentAuthVersion": currentAuthVersion,
+          ":nextAuthVersion": nextAuthVersion,
+          ":one": 1,
+        },
+      },
+    };
+  }
 
   return {
     async reserveSourceRequest({ sourceKey, window, limit, expiresAt }) {
@@ -70,12 +103,18 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
       const magic = response.Item;
       if (!magic || magic.kind !== "magic" || magic.expiresAt <= now) return undefined;
 
+      const existingAccount = await account(magic.accountId);
+      const currentAuthVersion = authVersionOf(existingAccount?.authVersion);
+      const magicAuthVersion = authVersionOf(magic.authVersion);
+      if (magicAuthVersion !== currentAuthVersion) return undefined;
+
       const sessionItem = {
         authKey: `session#${session.sessionId}`,
         kind: "session",
         ...session,
         accountId: magic.accountId,
         email: magic.email,
+        authVersion: currentAuthVersion,
       };
       try {
         await documentClient.send(new TransactWriteCommand({
@@ -101,7 +140,146 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
         if (error?.name === "TransactionCanceledException") return undefined;
         throw error;
       }
-      return { accountId: magic.accountId, email: magic.email };
+      return { accountId: magic.accountId, email: magic.email, authVersion: currentAuthVersion };
+    },
+
+    async ensureAccount({ accountId, email, createdAt }) {
+      try {
+        await documentClient.send(new PutCommand({
+          TableName: tableName,
+          Item: {
+            authKey: `account#${accountId}`,
+            kind: "account",
+            accountId,
+            email,
+            authVersion: 1,
+            createdAt,
+            updatedAt: createdAt,
+          },
+          ConditionExpression: "attribute_not_exists(authKey)",
+        }));
+      } catch (error) {
+        if (error?.name !== "ConditionalCheckFailedException") throw error;
+        const existing = await account(accountId);
+        if (!existing || existing.email !== email) throw new Error("Customer account identity conflict.");
+        authVersionOf(existing.authVersion);
+      }
+      return account(accountId);
+    },
+
+    async getAccount(accountId) {
+      return account(accountId);
+    },
+
+    async getUsername(username) {
+      const response = await documentClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { authKey: `username#${username}` },
+        ConsistentRead: true,
+      }));
+      return response.Item?.kind === "username" ? response.Item : undefined;
+    },
+
+    async setCredentials({
+      accountId,
+      sessionId,
+      username,
+      passwordSalt,
+      passwordHash,
+      passwordScheme,
+      passwordUpdatedAt,
+    }) {
+      const existing = await account(accountId);
+      if (!existing) return "missing";
+      if (existing.username && existing.username !== username) return "username_locked";
+
+      const currentAuthVersion = authVersionOf(existing.authVersion);
+      const nextAuthVersion = currentAuthVersion + 1;
+      if (!Number.isSafeInteger(nextAuthVersion)) throw new Error("Customer authentication version overflowed.");
+      const accountVersionCondition = existing.authVersion === undefined
+        ? "attribute_not_exists(authVersion)"
+        : "authVersion = :currentAuthVersion";
+      const commonAccountValues = {
+        ":passwordSalt": passwordSalt,
+        ":passwordHash": passwordHash,
+        ":passwordScheme": passwordScheme,
+        ":passwordUpdatedAt": passwordUpdatedAt,
+        ":accountKind": "account",
+        ":currentAuthVersion": currentAuthVersion,
+        ":nextAuthVersion": nextAuthVersion,
+      };
+
+      try {
+        if (existing.username === username) {
+          await documentClient.send(new TransactWriteCommand({
+            TransactItems: [
+              {
+                Update: {
+                  TableName: tableName,
+                  Key: { authKey: `account#${accountId}` },
+                  UpdateExpression: "SET passwordSalt = :passwordSalt, passwordHash = :passwordHash, passwordScheme = :passwordScheme, passwordUpdatedAt = :passwordUpdatedAt, updatedAt = :passwordUpdatedAt, authVersion = :nextAuthVersion",
+                  ConditionExpression: `kind = :accountKind AND username = :username AND ${accountVersionCondition}`,
+                  ExpressionAttributeValues: {
+                    ...commonAccountValues,
+                    ":username": username,
+                  },
+                },
+              },
+              sessionVersionUpdate({ sessionId, accountId, currentAuthVersion, nextAuthVersion }),
+            ],
+          }));
+          return "updated";
+        }
+
+        await documentClient.send(new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: tableName,
+                Item: {
+                  authKey: `username#${username}`,
+                  kind: "username",
+                  username,
+                  accountId,
+                  createdAt: passwordUpdatedAt,
+                },
+                ConditionExpression: "attribute_not_exists(authKey)",
+              },
+            },
+            {
+              Update: {
+                TableName: tableName,
+                Key: { authKey: `account#${accountId}` },
+                UpdateExpression: "SET username = :username, passwordSalt = :passwordSalt, passwordHash = :passwordHash, passwordScheme = :passwordScheme, passwordUpdatedAt = :passwordUpdatedAt, updatedAt = :passwordUpdatedAt, authVersion = :nextAuthVersion",
+                ConditionExpression: `kind = :accountKind AND attribute_not_exists(username) AND ${accountVersionCondition}`,
+                ExpressionAttributeValues: {
+                  ...commonAccountValues,
+                  ":username": username,
+                },
+              },
+            },
+            sessionVersionUpdate({ sessionId, accountId, currentAuthVersion, nextAuthVersion }),
+          ],
+        }));
+        return "updated";
+      } catch (error) {
+        if (error?.name === "TransactionCanceledException") return "conflict";
+        throw error;
+      }
+    },
+
+    async putSession({ session, accountId, email }) {
+      await documentClient.send(new PutCommand({
+        TableName: tableName,
+        Item: {
+          authKey: `session#${session.sessionId}`,
+          kind: "session",
+          ...session,
+          accountId,
+          email,
+        },
+        ConditionExpression: "attribute_not_exists(authKey)",
+      }));
     },
 
     async getSession(sessionId) {

@@ -1,4 +1,10 @@
-import { createHmac, randomBytes as nodeRandomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  randomBytes as nodeRandomBytes,
+  scrypt as nodeScrypt,
+  timingSafeEqual,
+} from "node:crypto";
+import { promisify } from "node:util";
 import { ApiAccessError } from "./service.js";
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1_000;
@@ -6,7 +12,12 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const EMAIL_THROTTLE_MS = 60 * 1_000;
 const SOURCE_THROTTLE_WINDOW_MS = 60 * 1_000;
 const SOURCE_THROTTLE_LIMIT = 10;
+const PASSWORD_IDENTIFIER_LIMIT = 5;
+const PASSWORD_MIN_LENGTH = 12;
+const PASSWORD_MAX_LENGTH = 128;
+const PASSWORD_SCHEME = "scrypt-v1";
 const SESSION_COOKIE = "sl_api_session";
+const scrypt = promisify(nodeScrypt);
 
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -24,10 +35,57 @@ function normalizeEmail(value) {
   return email;
 }
 
+function normalizeUsername(value) {
+  if (typeof value !== "string") throw new ApiAccessError(400, "invalid_username", "Choose a valid username.");
+  const username = value.trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username) || username.includes("@")) {
+    throw new ApiAccessError(400, "invalid_username", "Use 3–32 letters, numbers, dots, underscores, or hyphens.");
+  }
+  return username;
+}
+
+function normalizeIdentifier(value) {
+  if (typeof value !== "string") return undefined;
+  const identifier = value.trim().toLowerCase();
+  if (!identifier || identifier.length > 254) return undefined;
+  if (identifier.includes("@")) {
+    try {
+      return { kind: "email", value: normalizeEmail(identifier) };
+    } catch {
+      return undefined;
+    }
+  }
+  try {
+    return { kind: "username", value: normalizeUsername(identifier) };
+  } catch {
+    return undefined;
+  }
+}
+
+function passwordForLogin(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= PASSWORD_MAX_LENGTH ? value : undefined;
+}
+
+function passwordForSetup(value) {
+  if (typeof value !== "string" || value.length < PASSWORD_MIN_LENGTH || value.length > PASSWORD_MAX_LENGTH) {
+    throw new ApiAccessError(
+      400,
+      "invalid_password",
+      `Use a password between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`,
+    );
+  }
+  return value;
+}
+
 function normalizeSource(value) {
   if (typeof value !== "string") return "unknown";
   const source = value.trim();
   return source && source.length <= 128 && !/[\u0000-\u001f\u007f]/.test(source) ? source : "unknown";
+}
+
+function authVersionOf(value) {
+  if (value === undefined) return 1;
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
 }
 
 function digest(pepper, purpose, value) {
@@ -68,6 +126,16 @@ function sessionCookie(token, maxAge) {
   return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
 }
 
+async function derivePassword(password, salt) {
+  const result = await scrypt(password, Buffer.from(salt, "base64url"), 32, {
+    N: 32768,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
+  return Buffer.from(result).toString("base64url");
+}
+
 export function accountIdForEmail(email, pepper) {
   return `acct_${digest(pepper, "account", normalizeEmail(email)).slice(0, 32)}`;
 }
@@ -84,6 +152,32 @@ export function createCustomerAuthService({
   if (!emailGateway || typeof emailGateway.sendMagicLink !== "function") throw new Error("Customer email gateway is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
+
+  function createSession(timestamp, authVersion = 1) {
+    if (!Number.isSafeInteger(authVersion) || authVersion < 1) {
+      throw new Error("Customer authentication version is invalid.");
+    }
+    const session = createOpaqueToken("sess", randomBytes);
+    return {
+      token: session.token,
+      record: {
+        sessionId: session.id,
+        secretFingerprint: digest(pepper, "session", session.token),
+        authVersion,
+        createdAt: new Date(timestamp).toISOString(),
+        expiresAt: Math.floor((timestamp + SESSION_TTL_MS) / 1_000),
+      },
+    };
+  }
+
+  function sessionResult(session, accountId, email) {
+    return {
+      accountId,
+      email,
+      csrfToken: digest(pepper, "csrf", session.token),
+      cookie: sessionCookie(session.token, Math.floor(SESSION_TTL_MS / 1_000)),
+    };
+  }
 
   async function requestMagicLink(input, context = {}) {
     const email = normalizeEmail(input?.email);
@@ -106,12 +200,17 @@ export function createCustomerAuthService({
     });
     if (throttle === "limited") return { accepted: true };
 
+    const account = await store.getAccount(accountId);
+    const authVersion = authVersionOf(account?.authVersion);
+    if (!authVersion) throw new Error("Customer authentication version is invalid.");
+
     const generated = createOpaqueToken("ml", randomBytes);
     await store.putMagicLink({
       tokenId: generated.id,
       secretFingerprint: digest(pepper, "magic-link", generated.token),
       accountId,
       email,
+      authVersion,
       createdAt: new Date(timestamp).toISOString(),
       expiresAt: Math.floor((timestamp + MAGIC_LINK_TTL_MS) / 1_000),
     });
@@ -123,28 +222,116 @@ export function createCustomerAuthService({
   async function verifyMagicLink(input) {
     const parsed = parseOpaqueToken(input?.token, "ml");
     const timestamp = now();
-    const session = createOpaqueToken("sess", randomBytes);
-    const sessionRecord = {
-      sessionId: session.id,
-      secretFingerprint: digest(pepper, "session", session.token),
-      createdAt: new Date(timestamp).toISOString(),
-      expiresAt: Math.floor((timestamp + SESSION_TTL_MS) / 1_000),
-    };
+    const session = createSession(timestamp);
     const result = await store.consumeMagicLinkAndCreateSession({
       tokenId: parsed.id,
       presentedFingerprint: digest(pepper, "magic-link", parsed.token),
       now: Math.floor(timestamp / 1_000),
-      session: sessionRecord,
+      session: session.record,
     });
     if (!result?.accountId || !result?.email) {
       throw new ApiAccessError(401, "invalid_magic_link", "This sign-in link is invalid or expired.");
     }
-    return {
+    await store.ensureAccount({
       accountId: result.accountId,
       email: result.email,
-      csrfToken: digest(pepper, "csrf", session.token),
-      cookie: sessionCookie(session.token, Math.floor(SESSION_TTL_MS / 1_000)),
+      createdAt: new Date(timestamp).toISOString(),
+    });
+    return sessionResult(session, result.accountId, result.email);
+  }
+
+  async function loginWithPassword(input, context = {}) {
+    const timestamp = now();
+    const source = normalizeSource(context.sourceIp);
+    const identifier = normalizeIdentifier(input?.identifier);
+    const password = passwordForLogin(input?.password);
+    const throttleWindow = Math.floor(timestamp / SOURCE_THROTTLE_WINDOW_MS);
+    const expiresAt = Math.floor((timestamp + 2 * SOURCE_THROTTLE_WINDOW_MS) / 1_000);
+
+    const sourceThrottle = await store.reserveSourceRequest({
+      sourceKey: digest(pepper, "password-source", source),
+      window: throttleWindow,
+      limit: SOURCE_THROTTLE_LIMIT,
+      expiresAt,
+    });
+    const identifierThrottle = await store.reserveSourceRequest({
+      sourceKey: digest(pepper, "password-identifier", identifier?.value ?? "invalid"),
+      window: throttleWindow,
+      limit: PASSWORD_IDENTIFIER_LIMIT,
+      expiresAt,
+    });
+    if (sourceThrottle === "limited" || identifierThrottle === "limited") {
+      throw new ApiAccessError(429, "login_rate_limited", "Sign-in is temporarily unavailable. Try again shortly.");
+    }
+
+    let account;
+    if (identifier?.kind === "email") {
+      account = await store.getAccount(accountIdForEmail(identifier.value, pepper));
+    } else if (identifier?.kind === "username") {
+      const username = await store.getUsername(identifier.value);
+      if (username?.accountId) account = await store.getAccount(username.accountId);
+    }
+
+    const fakeSalt = Buffer.from(digest(pepper, "password-dummy-salt", "constant").slice(0, 32), "hex").toString("base64url");
+    const salt = account?.passwordScheme === PASSWORD_SCHEME && account?.passwordSalt ? account.passwordSalt : fakeSalt;
+    const derived = await derivePassword(password ?? "invalid-password-value", salt);
+    const version = authVersionOf(account?.authVersion);
+    const matches = Boolean(
+      password
+      && version
+      && account?.passwordScheme === PASSWORD_SCHEME
+      && account?.passwordHash
+      && secureEqual(derived, account.passwordHash),
+    );
+    if (!matches) {
+      throw new ApiAccessError(401, "invalid_credentials", "Email/username or password is incorrect.");
+    }
+
+    const session = createSession(timestamp, version);
+    await store.putSession({ session: session.record, accountId: account.accountId, email: account.email });
+    return sessionResult(session, account.accountId, account.email);
+  }
+
+  async function getProfile(session) {
+    const account = await store.getAccount(session?.accountId);
+    return {
+      username: account?.username ?? null,
+      passwordConfigured: Boolean(
+        account?.username
+        && account?.passwordScheme === PASSWORD_SCHEME
+        && account?.passwordHash
+        && account?.passwordSalt,
+      ),
     };
+  }
+
+  async function setCredentials(session, input) {
+    if (!session?.sessionId || !session?.accountId || !session?.email) {
+      throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+    }
+    const username = normalizeUsername(input?.username);
+    const password = passwordForSetup(input?.password);
+    const timestamp = new Date(now()).toISOString();
+    await store.ensureAccount({ accountId: session.accountId, email: session.email, createdAt: timestamp });
+
+    const salt = randomBase64Url(16, randomBytes);
+    const passwordHash = await derivePassword(password, salt);
+    const result = await store.setCredentials({
+      accountId: session.accountId,
+      sessionId: session.sessionId,
+      username,
+      passwordSalt: salt,
+      passwordHash,
+      passwordScheme: PASSWORD_SCHEME,
+      passwordUpdatedAt: timestamp,
+    });
+    if (result === "username_locked") {
+      throw new ApiAccessError(409, "username_locked", "Your username cannot be changed from this screen.");
+    }
+    if (result !== "updated") {
+      throw new ApiAccessError(409, "username_unavailable", "That username is unavailable or account security changed. Sign in again and try again.");
+    }
+    return { username, passwordConfigured: true };
   }
 
   async function authenticate(cookieHeader) {
@@ -156,10 +343,32 @@ export function createCustomerAuthService({
     if (!record || record.expiresAt <= timestamp || !secureEqual(presented, record.secretFingerprint)) {
       throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
     }
+
+    let account = await store.getAccount(record.accountId);
+    if (!account) {
+      account = await store.ensureAccount({
+        accountId: record.accountId,
+        email: record.email,
+        createdAt: record.createdAt ?? new Date(now()).toISOString(),
+      });
+    }
+    const sessionAuthVersion = authVersionOf(record.authVersion);
+    const accountAuthVersion = authVersionOf(account?.authVersion);
+    if (
+      !account
+      || account.email !== record.email
+      || !sessionAuthVersion
+      || !accountAuthVersion
+      || sessionAuthVersion !== accountAuthVersion
+    ) {
+      throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+    }
+
     return {
       sessionId: parsed.id,
       accountId: record.accountId,
       email: record.email,
+      authVersion: accountAuthVersion,
       csrfToken: digest(pepper, "csrf", parsed.token),
     };
   }
@@ -183,5 +392,14 @@ export function createCustomerAuthService({
     return sessionCookie("", 0);
   }
 
-  return { requestMagicLink, verifyMagicLink, authenticate, assertCsrf, logout };
+  return {
+    requestMagicLink,
+    verifyMagicLink,
+    loginWithPassword,
+    getProfile,
+    setCredentials,
+    authenticate,
+    assertCsrf,
+    logout,
+  };
 }
