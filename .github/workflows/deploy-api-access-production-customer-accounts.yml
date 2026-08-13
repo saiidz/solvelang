@@ -31,6 +31,7 @@ jobs:
       API_ACCESS_ENABLED: "true"
       CUSTOMER_ACCOUNTS_ENABLED: "true"
       SUBSCRIPTION_BILLING_ENABLED: "false"
+      DISABLED_TOTP_KMS_ARN: arn:aws:kms:us-east-1:000000000000:key/disabled
       AWS_REGION: ${{ vars.AWS_REGION }}
       STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
       SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
@@ -91,7 +92,7 @@ jobs:
           [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
           test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
 
-      - name: Verify production stack is safe to enable
+      - name: Verify production stack and capture exact feature state
         id: stack
         shell: bash
         run: |
@@ -103,21 +104,41 @@ jobs:
           test -n "$api_base"
           initial_api_access_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
           initial_customer_accounts_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          initial_customer_totp_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpEnabled") | .ParameterValue] | first // "false"' <<<"$stack_description")"
+          initial_customer_totp_kms_key_arn="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpKmsKeyArn") | .ParameterValue] | first // empty' <<<"$stack_description")"
           initial_subscription_billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          [[ -n "$initial_customer_totp_kms_key_arn" ]] || initial_customer_totp_kms_key_arn="$DISABLED_TOTP_KMS_ARN"
           [[ "$initial_api_access_enabled" == true || "$initial_api_access_enabled" == false ]]
           [[ "$initial_customer_accounts_enabled" == true || "$initial_customer_accounts_enabled" == false ]]
+          [[ "$initial_customer_totp_enabled" == true || "$initial_customer_totp_enabled" == false ]]
           [[ "$initial_api_access_enabled" == "$initial_customer_accounts_enabled" ]] || { echo "Production API access and customer-account flags must begin in the same state." >&2; exit 1; }
+          [[ "$initial_customer_totp_enabled" == false || "$initial_customer_accounts_enabled" == true ]] || { echo "Production authenticator 2FA cannot be enabled without customer accounts." >&2; exit 1; }
           [[ "$initial_subscription_billing_enabled" == false ]] || { echo "Production subscription billing must remain disabled." >&2; exit 1; }
+          [[ "$initial_customer_totp_kms_key_arn" =~ ^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$ ]] || { echo "Stored authenticator KMS key ARN is malformed." >&2; exit 1; }
+          if [[ "$initial_customer_totp_enabled" == true && "$initial_customer_totp_kms_key_arn" == "$DISABLED_TOTP_KMS_ARN" ]]; then
+            echo "Enabled production authenticator 2FA has no real KMS key ARN." >&2
+            exit 1
+          fi
+          if [[ "$initial_customer_totp_kms_key_arn" != "$DISABLED_TOTP_KMS_ARN" ]]; then
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            [[ "$initial_customer_totp_kms_key_arn" == "arn:aws:kms:${AWS_REGION}:${account_id}:key/"* ]] || { echo "Authenticator KMS key must belong to the production account and region." >&2; exit 1; }
+            key_metadata="$(aws kms describe-key --key-id "$initial_customer_totp_kms_key_arn" --output json)"
+            jq -e '.KeyMetadata.KeyState == "Enabled" and .KeyMetadata.KeyManager == "CUSTOMER" and .KeyMetadata.KeySpec == "SYMMETRIC_DEFAULT" and .KeyMetadata.KeyUsage == "ENCRYPT_DECRYPT" and .KeyMetadata.Origin == "AWS_KMS" and .KeyMetadata.MultiRegion == false' <<<"$key_metadata" >/dev/null
+            aws kms get-key-rotation-status --key-id "$initial_customer_totp_kms_key_arn" --query KeyRotationEnabled --output text | grep -qx True
+          fi
           response="$(curl --fail --silent --show-error "$api_base/health")"
           jq -e \
             --argjson api_access "$initial_api_access_enabled" \
             --argjson customer_accounts "$initial_customer_accounts_enabled" \
-            '.status == "ok" and .enabled == $api_access and .customerAccountsEnabled == $customer_accounts and .subscriptionBillingEnabled == false' \
+            --argjson customer_totp "$initial_customer_totp_enabled" \
+            '.status == "ok" and .enabled == $api_access and .customerAccountsEnabled == $customer_accounts and .subscriptionBillingEnabled == false and (((has("customerTotpEnabled") | not) and $customer_totp == false) or .customerTotpEnabled == $customer_totp)' \
             <<<"$response" >/dev/null
           {
             echo "api_base=$api_base"
             echo "initial_api_access_enabled=$initial_api_access_enabled"
             echo "initial_customer_accounts_enabled=$initial_customer_accounts_enabled"
+            echo "initial_customer_totp_enabled=$initial_customer_totp_enabled"
+            echo "initial_customer_totp_kms_key_arn=$initial_customer_totp_kms_key_arn"
           } >> "$GITHUB_OUTPUT"
 
       - name: Verify deployed customer frontend targets exact production API
@@ -181,6 +202,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -q 'CustomerAccountsRequirements' template.yaml
+          grep -q 'CustomerTotpRequirements' template.yaml
           grep -q 'SubscriptionBillingRemainsTestOnly' template.yaml
           grep -q 'Subscription billing is test-mode only until production review is complete.' template.yaml
           ! grep -q 'Customer accounts are test-mode only until production review is complete.' template.yaml
@@ -207,10 +229,12 @@ jobs:
           aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
           echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy production customer accounts with billing disabled
+      - name: Deploy production customer accounts while preserving authenticator state
         id: deploy
         env:
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          PRESERVED_CUSTOMER_TOTP_ENABLED: ${{ steps.stack.outputs.initial_customer_totp_enabled }}
+          PRESERVED_CUSTOMER_TOTP_KMS_KEY_ARN: ${{ steps.stack.outputs.initial_customer_totp_kms_key_arn }}
         shell: bash
         run: |
           set -euo pipefail
@@ -218,6 +242,8 @@ jobs:
             ApiAccessEnabled="$API_ACCESS_ENABLED"
             ApiAccessMode="$API_ACCESS_MODE"
             CustomerAccountsEnabled="$CUSTOMER_ACCOUNTS_ENABLED"
+            CustomerTotpEnabled="$PRESERVED_CUSTOMER_TOTP_ENABLED"
+            CustomerTotpKmsKeyArn="$PRESERVED_CUSTOMER_TOTP_KMS_KEY_ARN"
             SubscriptionBillingEnabled="$SUBSCRIPTION_BILLING_ENABLED"
             SiteOrigin="$SITE_ORIGIN"
             ApiKeyPepper="$API_KEY_PEPPER"
@@ -235,15 +261,16 @@ jobs:
             --no-fail-on-empty-changeset \
             --parameter-overrides "${parameter_overrides[@]}"
 
-      - name: Verify customer-account health and billing boundary
+      - name: Verify customer-account health and exact authenticator state
         id: verify
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
+          PRESERVED_CUSTOMER_TOTP_ENABLED: ${{ steps.stack.outputs.initial_customer_totp_enabled }}
         shell: bash
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error "$API_BASE/health")"
-          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
+          jq -e --argjson customer_totp "$PRESERVED_CUSTOMER_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $customer_totp and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
           webhook_status="$(curl --silent --output /tmp/solvelang-webhook-disabled.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
           [[ "$webhook_status" == 503 ]]
           jq -e '.code == "subscription_billing_disabled"' /tmp/solvelang-webhook-disabled.json >/dev/null
@@ -258,6 +285,8 @@ jobs:
           API_BASE: ${{ steps.stack.outputs.api_base }}
           INITIAL_API_ACCESS_ENABLED: ${{ steps.stack.outputs.initial_api_access_enabled }}
           INITIAL_CUSTOMER_ACCOUNTS_ENABLED: ${{ steps.stack.outputs.initial_customer_accounts_enabled }}
+          INITIAL_CUSTOMER_TOTP_ENABLED: ${{ steps.stack.outputs.initial_customer_totp_enabled }}
+          INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN: ${{ steps.stack.outputs.initial_customer_totp_kms_key_arn }}
         shell: bash
         run: bash scripts/rollback-production-customer-accounts.sh
 
@@ -265,6 +294,7 @@ jobs:
         if: ${{ success() }}
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
+          PRESERVED_CUSTOMER_TOTP_ENABLED: ${{ steps.stack.outputs.initial_customer_totp_enabled }}
         run: |
-          printf '## SolveLang production customer-account enablement\n\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- API access enabled: **true**\n- Customer accounts enabled: **true**\n- Subscription billing enabled: **false**\n- SES sender configured: `%s`\n- Billing webhook disabled response: verified\n- Stripe credentials injected: **no**\n- Charges performed: **no**\n- Operations baseline: re-verified\n\nNo canary email is sent by this deployment workflow. Run the owner-controlled browser canary from the production customer page after deployment.\n' \
-            "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$CUSTOMER_AUTH_EMAIL_SENDER" >> "$GITHUB_STEP_SUMMARY"
+          printf '## SolveLang production customer-account deployment\n\n- Stack: `%s`\n- Region: `%s`\n- API base: `%s`\n- API access enabled: **true**\n- Customer accounts enabled: **true**\n- Authenticator 2FA state preserved: **%s**\n- Subscription billing enabled: **false**\n- SES sender configured: `%s`\n- Billing webhook disabled response: verified\n- Stripe credentials injected: **no**\n- Charges performed: **no**\n- Operations baseline: re-verified\n\nNo canary email is sent by this deployment workflow.\n' \
+            "$STACK_NAME" "$AWS_REGION" "$API_BASE" "$PRESERVED_CUSTOMER_TOTP_ENABLED" "$CUSTOMER_AUTH_EMAIL_SENDER" >> "$GITHUB_STEP_SUMMARY"
