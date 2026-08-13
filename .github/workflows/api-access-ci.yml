@@ -54,8 +54,14 @@ jobs:
         run: sam validate --lint --template priority-template.yaml
       - name: Build priority queue stack
         run: sam build --template priority-template.yaml --build-dir .aws-sam/priority-queue
+      - name: Install pinned CloudFormation linter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/cfn-lint-venv"
+          "$RUNNER_TEMP/cfn-lint-venv/bin/python" -m pip install --disable-pip-version-check --no-input 'cfn-lint==1.52.1'
       - name: Lint dedicated TOTP KMS CloudFormation template
-        run: cfn-lint ../../ops/aws/customer-totp-kms-template.yaml
+        run: "$RUNNER_TEMP/cfn-lint-venv/bin/cfn-lint" ../../ops/aws/customer-totp-kms-template.yaml
       - name: Parse production IAM policy contracts
         run: |
           node -e 'JSON.parse(require("fs").readFileSync("../../ops/aws/production-preflight-policy.json", "utf8")); JSON.parse(require("fs").readFileSync("../../ops/aws/production-foundation-deploy-policy.json", "utf8"));'
