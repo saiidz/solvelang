@@ -1,0 +1,107 @@
+import { GetCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+
+function authVersionOf(value) {
+  if (value === undefined) return 1;
+  return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+}
+
+export function createDynamoAccountAccessStore(documentClient, { tableName }) {
+  if (!documentClient) throw new Error("DynamoDB document client is required.");
+  if (typeof tableName !== "string" || !tableName) throw new Error("Customer auth table is required.");
+
+  async function getAccount(accountId) {
+    const response = await documentClient.send(new GetCommand({
+      TableName: tableName,
+      Key: { authKey: `account#${accountId}` },
+      ConsistentRead: true,
+    }));
+    return response.Item?.kind === "account" ? response.Item : undefined;
+  }
+
+  async function transitionAccess({
+    account,
+    previousState,
+    targetState,
+    reason,
+    changedAt,
+    changedBy,
+    requestId,
+    requestFingerprint,
+  }) {
+    const currentAuthVersion = authVersionOf(account.authVersion);
+    if (!currentAuthVersion) throw new Error("Customer authentication version is invalid.");
+    const nextAuthVersion = currentAuthVersion + 1;
+    if (!Number.isSafeInteger(nextAuthVersion)) throw new Error("Customer authentication version overflowed.");
+
+    const accessCondition = account.accessState === undefined
+      ? "attribute_not_exists(accessState)"
+      : "accessState = :previousState";
+    const versionCondition = account.authVersion === undefined
+      ? "attribute_not_exists(authVersion)"
+      : "authVersion = :currentAuthVersion";
+
+    try {
+      await documentClient.send(new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: tableName,
+              Item: {
+                authKey: `access-request#${requestFingerprint}`,
+                kind: "access-request",
+                accountId: account.accountId,
+                requestId,
+                previousState,
+                targetState,
+                changedAt,
+                changedBy,
+              },
+              ConditionExpression: "attribute_not_exists(authKey)",
+            },
+          },
+          {
+            Update: {
+              TableName: tableName,
+              Key: { authKey: `account#${account.accountId}` },
+              UpdateExpression: "SET accessState = :targetState, accessReason = :reason, accessChangedAt = :changedAt, accessChangedBy = :changedBy, updatedAt = :changedAt, authVersion = :nextAuthVersion",
+              ConditionExpression: `kind = :accountKind AND ${accessCondition} AND ${versionCondition}`,
+              ExpressionAttributeValues: {
+                ":accountKind": "account",
+                ":previousState": previousState,
+                ":targetState": targetState,
+                ":reason": reason,
+                ":changedAt": changedAt,
+                ":changedBy": changedBy,
+                ":currentAuthVersion": currentAuthVersion,
+                ":nextAuthVersion": nextAuthVersion,
+              },
+            },
+          },
+          {
+            Put: {
+              TableName: tableName,
+              Item: {
+                authKey: `access-audit#${account.accountId}#${changedAt}#${requestFingerprint.slice(0, 16)}`,
+                kind: "access-audit",
+                accountId: account.accountId,
+                previousState,
+                targetState,
+                reason,
+                changedAt,
+                changedBy,
+                requestId,
+              },
+              ConditionExpression: "attribute_not_exists(authKey)",
+            },
+          },
+        ],
+      }));
+      return "updated";
+    } catch (error) {
+      if (error?.name === "TransactionCanceledException") return "conflict";
+      throw error;
+    }
+  }
+
+  return { getAccount, transitionAccess };
+}
