@@ -167,7 +167,6 @@ jobs:
           mapfile -t scripts < <(grep -oE '<script[^>]+src="[^"]+"' <<<"$page" | sed -E 's/.*src="([^"]+)".*/\1/' | sort -u)
           (( ${#scripts[@]} > 0 )) || { echo "No production customer-page script assets found." >&2; exit 1; }
           found_api=false
-          found_totp=false
           combined=""
           for src in "${scripts[@]}"; do
             if [[ "$src" == https://* ]]; then asset_url="$src"; elif [[ "$src" == /* ]]; then asset_url="$SITE_ORIGIN$src"; else asset_url="$SITE_ORIGIN/$src"; fi
@@ -215,8 +214,7 @@ jobs:
           grep -q 'kms:Encrypt' template.yaml
           grep -q 'kms:Decrypt' template.yaml
           grep -q 'SubscriptionBillingRemainsTestOnly' template.yaml
-          ! grep -q 'secrets.STRIPE_SECRET_KEY' ../../.github/workflows/deploy-api-access-production-totp.yml
-          ! grep -q 'secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET' ../../.github/workflows/deploy-api-access-production-totp.yml
+          node scripts/assert-no-production-stripe-secret-references.mjs ../../.github/workflows/deploy-api-access-production-totp.yml
 
       - name: Assume production deploy role
         uses: aws-actions/configure-aws-credentials@v4
