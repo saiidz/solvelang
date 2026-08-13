@@ -10,6 +10,8 @@ import test from "node:test";
 const workflowUrl = new URL("../../../.github/workflows/deploy-api-access-production-customer-accounts.yml", import.meta.url);
 const rollbackUrl = new URL("../scripts/rollback-production-customer-accounts.sh", import.meta.url);
 const execFileAsync = promisify(execFile);
+const disabledTotpKmsArn = "arn:aws:kms:us-east-1:000000000000:key/disabled";
+const productionTotpKmsArn = "arn:aws:kms:us-east-2:123456789012:key/11111111-2222-3333-4444-555555555555";
 
 async function workflow() {
   return await readFile(workflowUrl, "utf8");
@@ -44,7 +46,7 @@ test("production customer-account deployment never injects billing credentials",
 test("deployment revalidates readiness before assuming deploy role", async () => {
   const source = await workflow();
   assert.match(source, /Assume production preflight role/);
-  assert.match(source, /Verify production stack is safe to enable/);
+  assert.match(source, /Verify production stack and capture exact feature state/);
   assert.match(source, /Verify deployed customer frontend targets exact production API/);
   assert.match(source, /Verify SES sender and production sending access/);
   assert.match(source, /Run API access tests/);
@@ -54,10 +56,24 @@ test("deployment revalidates readiness before assuming deploy role", async () =>
   assert.ok(source.indexOf("Assume production deploy role") > source.indexOf("Verify SES sender and production sending access"));
 });
 
+test("ordinary customer-account redeploy captures and preserves the exact authenticator flag and KMS ARN", async () => {
+  const source = await workflow();
+  assert.match(source, /ParameterKey == "CustomerTotpEnabled"/);
+  assert.match(source, /ParameterKey == "CustomerTotpKmsKeyArn"/);
+  assert.match(source, /initial_customer_totp_enabled=\$initial_customer_totp_enabled/);
+  assert.match(source, /initial_customer_totp_kms_key_arn=\$initial_customer_totp_kms_key_arn/);
+  assert.match(source, /PRESERVED_CUSTOMER_TOTP_ENABLED/);
+  assert.match(source, /PRESERVED_CUSTOMER_TOTP_KMS_KEY_ARN/);
+  assert.match(source, /CustomerTotpEnabled="\$PRESERVED_CUSTOMER_TOTP_ENABLED"/);
+  assert.match(source, /CustomerTotpKmsKeyArn="\$PRESERVED_CUSTOMER_TOTP_KMS_KEY_ARN"/);
+  assert.match(source, /aws kms describe-key/);
+  assert.match(source, /get-key-rotation-status/);
+  assert.match(source, /customerTotpEnabled == \$customer_totp/);
+});
+
 test("deployment captures the exact starting flags and invokes automatic state-preserving rollback", async () => {
   const source = await workflow();
   assert.match(source, /sam deploy/);
-  assert.match(source, /enabled == true and \.customerAccountsEnabled == true and \.subscriptionBillingEnabled == false/);
   assert.match(source, /ParameterKey == "ApiAccessEnabled"/);
   assert.match(source, /ParameterKey == "CustomerAccountsEnabled"/);
   assert.match(source, /ParameterKey == "SubscriptionBillingEnabled"/);
@@ -67,10 +83,17 @@ test("deployment captures the exact starting flags and invokes automatic state-p
   assert.match(source, /failure\(\) && steps\.deploy\.outcome == 'success'/);
   assert.match(source, /INITIAL_API_ACCESS_ENABLED: \$\{\{ steps\.stack\.outputs\.initial_api_access_enabled \}\}/);
   assert.match(source, /INITIAL_CUSTOMER_ACCOUNTS_ENABLED: \$\{\{ steps\.stack\.outputs\.initial_customer_accounts_enabled \}\}/);
+  assert.match(source, /INITIAL_CUSTOMER_TOTP_ENABLED: \$\{\{ steps\.stack\.outputs\.initial_customer_totp_enabled \}\}/);
+  assert.match(source, /INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN: \$\{\{ steps\.stack\.outputs\.initial_customer_totp_kms_key_arn \}\}/);
   assert.match(source, /bash scripts\/rollback-production-customer-accounts\.sh/);
 });
 
-async function simulatePostDeployFailureRollback(apiAccessEnabled, customerAccountsEnabled) {
+async function simulatePostDeployFailureRollback(
+  apiAccessEnabled,
+  customerAccountsEnabled,
+  customerTotpEnabled,
+  customerTotpKmsKeyArn,
+) {
   const directory = await mkdtemp(join(tmpdir(), "solvelang-api-access-rollback-"));
   const binDirectory = join(directory, "bin");
   const samArgsFile = join(directory, "sam-args.txt");
@@ -82,7 +105,7 @@ async function simulatePostDeployFailureRollback(apiAccessEnabled, customerAccou
     await writeFile(samPath, '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$SAM_ARGS_FILE"\n');
     await writeFile(
       curlPath,
-      '#!/usr/bin/env bash\nprintf \'{"status":"ok","enabled":%s,"customerAccountsEnabled":%s,"subscriptionBillingEnabled":false}\\n\' "$INITIAL_API_ACCESS_ENABLED" "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED"\n',
+      '#!/usr/bin/env bash\nprintf \'{"status":"ok","enabled":%s,"customerAccountsEnabled":%s,"customerTotpEnabled":%s,"subscriptionBillingEnabled":false}\\n\' "$INITIAL_API_ACCESS_ENABLED" "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" "$INITIAL_CUSTOMER_TOTP_ENABLED"\n',
     );
     await Promise.all([chmod(samPath, 0o755), chmod(curlPath, 0o755)]);
 
@@ -96,6 +119,8 @@ async function simulatePostDeployFailureRollback(apiAccessEnabled, customerAccou
         API_BASE: "https://api.example.com",
         INITIAL_API_ACCESS_ENABLED: String(apiAccessEnabled),
         INITIAL_CUSTOMER_ACCOUNTS_ENABLED: String(customerAccountsEnabled),
+        INITIAL_CUSTOMER_TOTP_ENABLED: String(customerTotpEnabled),
+        INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN: customerTotpKmsKeyArn,
         SITE_ORIGIN: "https://example.com",
         API_KEY_PEPPER: "api-key-pepper",
         API_ACCESS_ADMIN_SECRET: "api-access-admin-secret",
@@ -111,16 +136,28 @@ async function simulatePostDeployFailureRollback(apiAccessEnabled, customerAccou
   }
 }
 
-test("simulated post-deploy failure restores an already-enabled stack to true/true", async () => {
-  const samArgs = await simulatePostDeployFailureRollback(true, true);
+test("simulated rollback restores an enabled customer stack while preserving disabled authenticator state", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(true, true, false, disabledTotpKmsArn);
   assert.match(samArgs, /^ApiAccessEnabled=true$/m);
   assert.match(samArgs, /^CustomerAccountsEnabled=true$/m);
+  assert.match(samArgs, /^CustomerTotpEnabled=false$/m);
+  assert.match(samArgs, new RegExp(`^CustomerTotpKmsKeyArn=${disabledTotpKmsArn.replaceAll("/", "\\/")}$`, "m"));
   assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
 });
 
-test("simulated post-deploy failure restores a previously disabled stack to false/false", async () => {
-  const samArgs = await simulatePostDeployFailureRollback(false, false);
+test("simulated rollback restores enabled authenticator state with the exact production KMS ARN", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(true, true, true, productionTotpKmsArn);
+  assert.match(samArgs, /^ApiAccessEnabled=true$/m);
+  assert.match(samArgs, /^CustomerAccountsEnabled=true$/m);
+  assert.match(samArgs, /^CustomerTotpEnabled=true$/m);
+  assert.ok(samArgs.includes(`CustomerTotpKmsKeyArn=${productionTotpKmsArn}`));
+  assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
+});
+
+test("simulated rollback restores a previously disabled stack to false/false/false", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(false, false, false, disabledTotpKmsArn);
   assert.match(samArgs, /^ApiAccessEnabled=false$/m);
   assert.match(samArgs, /^CustomerAccountsEnabled=false$/m);
+  assert.match(samArgs, /^CustomerTotpEnabled=false$/m);
   assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
 });
