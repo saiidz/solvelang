@@ -49,19 +49,20 @@ test("authenticator URI is standards-compatible and does not alter the secret", 
 test("KMS protector binds encrypted TOTP material to non-secret account context", async () => {
   const calls = [];
   const ciphertext = Buffer.from("ciphertext");
+  const secret = encodeBase32(Buffer.alloc(20, 5));
   const client = {
     async send(command) {
       calls.push(command);
       if (command instanceof EncryptCommand) return { CiphertextBlob: ciphertext };
-      if (command instanceof DecryptCommand) return { Plaintext: Buffer.from("ABCDEF234567", "utf8") };
+      if (command instanceof DecryptCommand) return { Plaintext: Buffer.from(secret, "utf8") };
       throw new Error("unexpected command");
     },
   };
   const protector = createTotpSecretProtector(client, "arn:aws:kms:us-east-2:123456789012:key/example");
   const accountId = `acct_${"a".repeat(32)}`;
-  const encrypted = await protector.encrypt(accountId, "ABCDEF234567");
+  const encrypted = await protector.encrypt(accountId, secret);
   assert.equal(encrypted, ciphertext.toString("base64"));
-  assert.equal(await protector.decrypt(accountId, encrypted), "ABCDEF234567");
+  assert.equal(await protector.decrypt(accountId, encrypted), secret);
   assert.deepEqual(calls[0].input.EncryptionContext, { purpose: "solvelang-customer-totp", accountId });
   assert.deepEqual(calls[1].input.EncryptionContext, { purpose: "solvelang-customer-totp", accountId });
   assert.equal(calls[0].input.KeyId, calls[1].input.KeyId);
