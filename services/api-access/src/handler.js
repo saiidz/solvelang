@@ -3,9 +3,13 @@ import { KMSClient } from "@aws-sdk/client-kms";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
+import { createAccountAccessService } from "./account-access.js";
+import { createDynamoAccountAccessStore } from "./account-access-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
+import { createAccessGuardedCustomerAuthService } from "./customer-auth-access-service.js";
+import { createAccessGuardedCustomerAuthStore } from "./customer-auth-access-guard.js";
 import { createCustomerAuthService } from "./customer-auth.js";
 import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
 import { createCustomerEmailGateway } from "./customer-email.js";
@@ -35,13 +39,22 @@ const customerAccount = createCustomerAccountService({
   usageReader: createDynamoCustomerUsageReader(documentClient, environment.usageTable),
 });
 
+let accountAccess;
 let customerAuth;
 if (environment.customerAccountsEnabled) {
+  const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
+    tableName: environment.customerAuthTable,
+  });
+  accountAccess = createAccountAccessService({ store: accountAccessStore });
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
-  customerAuth = createCustomerAuthService({
-    store: createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
+  const guardedAuthStore = createAccessGuardedCustomerAuthStore(
+    createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
+    accountAccessStore,
+  );
+  customerAuth = createAccessGuardedCustomerAuthService(createCustomerAuthService({
+    store: guardedAuthStore,
     emailGateway: createCustomerEmailGateway(new SESv2Client({}), {
       sender: environment.customerAuthEmailSender,
       replyTo: environment.customerAuthEmailReplyTo,
@@ -50,7 +63,7 @@ if (environment.customerAccountsEnabled) {
     siteOrigin: environment.siteOrigin,
     totpFeatureEnabled: environment.customerTotpEnabled,
     totpProtector,
-  });
+  }));
 }
 
 let stripeGateway;
@@ -101,6 +114,7 @@ const application = createApiAccessHandler({
   customerTotpEnabled: environment.customerTotpEnabled,
   customerAuth,
   customerAccount,
+  accountAccess,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
   subscriptionPortal,
