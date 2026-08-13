@@ -38,7 +38,7 @@ const customerAccount = createCustomerAccountService({
 let customerAuth;
 if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled
-    ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyId)
+    ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
   customerAuth = createCustomerAuthService({
     store: createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
