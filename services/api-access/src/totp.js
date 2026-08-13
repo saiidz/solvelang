@@ -4,6 +4,11 @@ const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export const TOTP_PERIOD_SECONDS = 30;
 export const TOTP_DIGITS = 6;
 
+function keepLowBits(value, count) {
+  if (count <= 0) return 0;
+  return value & ((1 << count) - 1);
+}
+
 export function encodeBase32(value) {
   const bytes = Buffer.from(value);
   let bits = 0;
@@ -15,6 +20,7 @@ export function encodeBase32(value) {
     while (bitCount >= 5) {
       output += BASE32_ALPHABET[(bits >>> (bitCount - 5)) & 31];
       bitCount -= 5;
+      bits = keepLowBits(bits, bitCount);
     }
   }
   if (bitCount > 0) output += BASE32_ALPHABET[(bits << (5 - bitCount)) & 31];
@@ -33,9 +39,10 @@ export function decodeBase32(value) {
     if (index < 0) throw new Error("TOTP secret is invalid.");
     bits = (bits << 5) | index;
     bitCount += 5;
-    if (bitCount >= 8) {
+    while (bitCount >= 8) {
       bytes.push((bits >>> (bitCount - 8)) & 0xff);
       bitCount -= 8;
+      bits = keepLowBits(bits, bitCount);
     }
   }
   return Buffer.from(bytes);
