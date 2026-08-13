@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { KMSClient } from "@aws-sdk/client-kms";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
@@ -18,6 +19,7 @@ import { createSubscriptionManagementService } from "./subscription-management.j
 import { createSubscriptionPortalService } from "./subscription-portal.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
 import { createSubscriptionLifecycleService } from "./subscriptions.js";
+import { createTotpSecretProtector } from "./totp-kms.js";
 
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -35,6 +37,9 @@ const customerAccount = createCustomerAccountService({
 
 let customerAuth;
 if (environment.customerAccountsEnabled) {
+  const totpProtector = environment.customerTotpEnabled
+    ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyId)
+    : undefined;
   customerAuth = createCustomerAuthService({
     store: createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
     emailGateway: createCustomerEmailGateway(new SESv2Client({}), {
@@ -43,6 +48,8 @@ if (environment.customerAccountsEnabled) {
     }),
     pepper: environment.customerAuthPepper,
     siteOrigin: environment.siteOrigin,
+    totpFeatureEnabled: environment.customerTotpEnabled,
+    totpProtector,
   });
 }
 
