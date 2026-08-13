@@ -14,6 +14,10 @@ function passwordRecord() {
   return { passwordScheme: "scrypt-v1", passwordSalt: salt, passwordHash: hash };
 }
 
+function tokenFromUrl(url) {
+  return decodeURIComponent(new URL(url).hash.replace("#magic_token=", ""));
+}
+
 function fixture({ featureEnabled = true } = {}) {
   let clock = 1_800_000_000_000;
   const account = {
@@ -26,13 +30,33 @@ function fixture({ featureEnabled = true } = {}) {
   let pending;
   let challenge;
   let session;
+  let magic;
+  const sent = [];
   const store = {
     sessionsCreated: 0,
     async reserveSourceRequest() { return "created"; },
     async reserveEmailRequest() { return "created"; },
     async getAccount(accountId) { return accountId === account.accountId ? { ...account } : undefined; },
     async getUsername(username) { return username === account.username ? { accountId: account.accountId } : undefined; },
-    async putMagicLink() {},
+    async putMagicLink(value) { magic = { ...value }; },
+    async consumeMagicLinkForAuth({ tokenId, presentedFingerprint, now, session: created, mfaChallenge }) {
+      if (!magic || magic.tokenId !== tokenId || magic.secretFingerprint !== presentedFingerprint || magic.expiresAt <= now) return undefined;
+      if ((magic.authVersion ?? 1) !== (account.authVersion ?? 1)) return undefined;
+      magic = undefined;
+      if (account.totpEnabledAt && account.totpSecretCiphertext) {
+        challenge = {
+          ...mfaChallenge,
+          accountId: account.accountId,
+          email: account.email,
+          authVersion: account.authVersion,
+          attemptCount: 0,
+        };
+        return { accountId: account.accountId, email: account.email, authVersion: account.authVersion, mfaRequired: true };
+      }
+      session = { ...created, accountId: account.accountId, email: account.email, authVersion: account.authVersion };
+      this.sessionsCreated += 1;
+      return { accountId: account.accountId, email: account.email, authVersion: account.authVersion, mfaRequired: false };
+    },
     async ensureAccount() { return { ...account }; },
     async putSession({ session: created }) { session = created; this.sessionsCreated += 1; },
     async putMfaChallenge({ challenge: created, accountId, email }) {
@@ -78,7 +102,8 @@ function fixture({ featureEnabled = true } = {}) {
       account.authVersion += 1;
       return "updated";
     },
-    async disableTotp() {
+    async disableTotp({ proofTotpStep, proofBackupIndex }) {
+      if (!Number.isSafeInteger(proofTotpStep) && !Number.isSafeInteger(proofBackupIndex)) return "conflict";
       delete account.totpSecretCiphertext;
       delete account.totpEnabledAt;
       delete account.totpLastStep;
@@ -97,7 +122,7 @@ function fixture({ featureEnabled = true } = {}) {
   };
   const service = createCustomerAuthService({
     store,
-    emailGateway: { async sendMagicLink() {} },
+    emailGateway: { async sendMagicLink(message) { sent.push(message); } },
     pepper,
     siteOrigin: "https://www.solve-lang.com",
     totpFeatureEnabled: featureEnabled,
@@ -114,10 +139,20 @@ function fixture({ featureEnabled = true } = {}) {
     service,
     store,
     account,
+    sent,
     authenticatedSession,
     advance(milliseconds) { clock += milliseconds; },
     now() { return clock; },
   };
+}
+
+async function enroll(f) {
+  const setup = await f.service.beginTotpSetup(f.authenticatedSession);
+  const enrolled = await f.service.confirmTotpSetup(f.authenticatedSession, {
+    password,
+    code: generateTotpCode(setup.secret, totpStep(f.now())),
+  });
+  return { setup, enrolled };
 }
 
 test("authenticator enrollment requires password proof and returns ten unique one-time backup codes", async () => {
@@ -125,8 +160,17 @@ test("authenticator enrollment requires password proof and returns ten unique on
   const setup = await f.service.beginTotpSetup(f.authenticatedSession);
   assert.match(setup.secret, /^[A-Z2-7]{32}$/);
   assert.match(setup.otpauthUri, /^otpauth:\/\/totp\//);
-  const code = generateTotpCode(setup.secret, totpStep(f.now()));
-  const result = await f.service.confirmTotpSetup(f.authenticatedSession, { password, code });
+  await assert.rejects(
+    () => f.service.confirmTotpSetup(f.authenticatedSession, {
+      password: "wrong password",
+      code: generateTotpCode(setup.secret, totpStep(f.now())),
+    }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  const result = await f.service.confirmTotpSetup(f.authenticatedSession, {
+    password,
+    code: generateTotpCode(setup.secret, totpStep(f.now())),
+  });
   assert.equal(result.auth.totpEnabled, true);
   assert.equal(result.backupCodes.length, 10);
   assert.equal(new Set(result.backupCodes).size, 10);
@@ -138,11 +182,7 @@ test("authenticator enrollment requires password proof and returns ten unique on
 
 test("password login for a TOTP account creates only a short-lived challenge until a fresh code succeeds", async () => {
   const f = fixture();
-  const setup = await f.service.beginTotpSetup(f.authenticatedSession);
-  await f.service.confirmTotpSetup(f.authenticatedSession, {
-    password,
-    code: generateTotpCode(setup.secret, totpStep(f.now())),
-  });
+  const { setup } = await enroll(f);
   f.advance(31_000);
   const before = f.store.sessionsCreated;
   const first = await f.service.loginWithPassword({ identifier: "owner", password }, { sourceIp: "203.0.113.10" });
@@ -158,13 +198,27 @@ test("password login for a TOTP account creates only a short-lived challenge unt
   assert.equal(f.store.sessionsCreated, before + 1);
 });
 
+test("magic-link recovery for a TOTP account also stops at MFA and creates no session before second factor", async () => {
+  const f = fixture();
+  const { setup } = await enroll(f);
+  f.advance(31_000);
+  const before = f.store.sessionsCreated;
+  await f.service.requestMagicLink({ email: f.account.email }, { sourceIp: "203.0.113.15" });
+  assert.equal(f.sent.length, 1);
+  const first = await f.service.verifyMagicLink({ token: tokenFromUrl(f.sent[0].url) });
+  assert.equal(first.mfaRequired, true);
+  assert.equal(f.store.sessionsCreated, before);
+  const verified = await f.service.verifyMfaChallenge({
+    challengeToken: first.challengeToken,
+    code: generateTotpCode(setup.secret, totpStep(f.now())),
+  }, { sourceIp: "203.0.113.15" });
+  assert.equal(verified.mfaRequired, false);
+  assert.equal(f.store.sessionsCreated, before + 1);
+});
+
 test("a TOTP step cannot be replayed to satisfy a second login challenge", async () => {
   const f = fixture();
-  const setup = await f.service.beginTotpSetup(f.authenticatedSession);
-  await f.service.confirmTotpSetup(f.authenticatedSession, {
-    password,
-    code: generateTotpCode(setup.secret, totpStep(f.now())),
-  });
+  const { setup } = await enroll(f);
   f.advance(31_000);
   const code = generateTotpCode(setup.secret, totpStep(f.now()));
   const first = await f.service.loginWithPassword({ identifier: "owner", password });
@@ -178,11 +232,7 @@ test("a TOTP step cannot be replayed to satisfy a second login challenge", async
 
 test("backup codes are one-time second factors", async () => {
   const f = fixture();
-  const setup = await f.service.beginTotpSetup(f.authenticatedSession);
-  const enrolled = await f.service.confirmTotpSetup(f.authenticatedSession, {
-    password,
-    code: generateTotpCode(setup.secret, totpStep(f.now())),
-  });
+  const { enrolled } = await enroll(f);
   const backup = enrolled.backupCodes[0];
   const first = await f.service.loginWithPassword({ identifier: "owner", password });
   await f.service.verifyMfaChallenge({ challengeToken: first.challengeToken, code: backup });
@@ -192,6 +242,34 @@ test("backup codes are one-time second factors", async () => {
     () => f.service.verifyMfaChallenge({ challengeToken: second.challengeToken, code: backup }),
     (error) => error.code === "invalid_mfa",
   );
+});
+
+test("backup-code regeneration and TOTP disable require password plus fresh second-factor proof", async () => {
+  const f = fixture();
+  const { setup, enrolled } = await enroll(f);
+  const originalBackup = enrolled.backupCodes[0];
+  const initialVersion = f.account.authVersion;
+  f.advance(31_000);
+  const freshTotp = generateTotpCode(setup.secret, totpStep(f.now()));
+  await assert.rejects(
+    () => f.service.regenerateBackupCodes(f.authenticatedSession, { password: "wrong password", code: freshTotp }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  const rotated = await f.service.regenerateBackupCodes(f.authenticatedSession, { password, code: freshTotp });
+  assert.equal(rotated.backupCodes.length, 10);
+  assert.equal(f.account.authVersion, initialVersion + 1);
+  assert.equal(f.account.backupCodeCount, 10);
+
+  await assert.rejects(
+    () => f.service.disableTotp(f.authenticatedSession, { password, code: originalBackup }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  const currentBackup = rotated.backupCodes[0];
+  const disabled = await f.service.disableTotp(f.authenticatedSession, { password, code: currentBackup });
+  assert.equal(disabled.totpEnabled, false);
+  assert.equal(f.account.authVersion, initialVersion + 2);
+  assert.equal(f.account.totpSecretCiphertext, undefined);
+  assert.equal(f.account.backupCodeFingerprints, undefined);
 });
 
 test("TOTP-enabled accounts fail closed when the authenticator feature is unavailable", async () => {
