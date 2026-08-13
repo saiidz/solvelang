@@ -86,6 +86,22 @@ export function createApiAccessHandler({
     return session;
   }
 
+  function authResponse(verified) {
+    if (verified?.mfaRequired) {
+      return response(200, {
+        mfaRequired: true,
+        challengeToken: verified.challengeToken,
+        expiresInSeconds: verified.expiresInSeconds,
+      });
+    }
+    return response(200, {
+      accountId: verified.accountId,
+      email: verified.email,
+      csrfToken: verified.csrfToken,
+      mfaRequired: false,
+    }, {}, [verified.cookie]);
+  }
+
   return async function handle(event) {
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
@@ -122,24 +138,21 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-        const verified = await customerAuth.verifyMagicLink(parseJson(event));
-        return response(200, {
-          accountId: verified.accountId,
-          email: verified.email,
-          csrfToken: verified.csrfToken,
-        }, {}, [verified.cookie]);
+        return authResponse(await customerAuth.verifyMagicLink(parseJson(event)));
       }
       if (method === "POST" && path.endsWith("/customer/auth/password")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-        const verified = await customerAuth.loginWithPassword(
+        return authResponse(await customerAuth.loginWithPassword(
           parseJson(event),
           { sourceIp: event?.requestContext?.http?.sourceIp },
-        );
-        return response(200, {
-          accountId: verified.accountId,
-          email: verified.email,
-          csrfToken: verified.csrfToken,
-        }, {}, [verified.cookie]);
+        ));
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/totp/verify")) {
+        if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        return authResponse(await customerAuth.verifyMfaChallenge(
+          parseJson(event),
+          { sourceIp: event?.requestContext?.http?.sourceIp },
+        ));
       }
       if (method === "POST" && path.endsWith("/customer/auth/logout")) {
         const session = await customerSession(event, true);
@@ -173,6 +186,22 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/auth/credentials")) {
         const session = await customerSession(event, true);
         return response(200, { auth: await customerAuth.setCredentials(session, parseJson(event)) });
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/totp/setup")) {
+        const session = await customerSession(event, true);
+        return response(200, await customerAuth.beginTotpSetup(session));
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/totp/confirm")) {
+        const session = await customerSession(event, true);
+        return response(200, await customerAuth.confirmTotpSetup(session, parseJson(event)));
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/totp/backup-codes")) {
+        const session = await customerSession(event, true);
+        return response(200, await customerAuth.regenerateBackupCodes(session, parseJson(event)));
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/totp/disable")) {
+        const session = await customerSession(event, true);
+        return response(200, { auth: await customerAuth.disableTotp(session, parseJson(event)) });
       }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);

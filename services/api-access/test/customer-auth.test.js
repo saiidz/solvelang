@@ -151,6 +151,12 @@ async function authenticatedSession(service, verified) {
   return service.authenticate(cookieHeader(verified.cookie));
 }
 
+const noMfaProfile = {
+  totpAvailable: false,
+  totpEnabled: false,
+  backupCodesRemaining: 0,
+};
+
 test("sends a fragment-based, version-bound single-use magic link and stores only a fingerprint", async () => {
   const { store, sent, service } = setup();
   assert.deepEqual(await service.requestMagicLink({ email: " Dev@Example.com " }, { sourceIp: "203.0.113.1" }), { accepted: true });
@@ -219,12 +225,12 @@ test("an authenticated account can enable username/password and then sign in wit
   const verified = await verifiedSession(service, sent);
   const session = await authenticatedSession(service, verified);
 
-  assert.deepEqual(await service.getProfile(session), { username: null, passwordConfigured: false });
+  assert.deepEqual(await service.getProfile(session), { username: null, passwordConfigured: false, ...noMfaProfile });
   assert.deepEqual(
     await service.setCredentials(session, { username: "Dev.User", password: "correct horse battery staple" }),
-    { username: "dev.user", passwordConfigured: true },
+    { username: "dev.user", passwordConfigured: true, ...noMfaProfile },
   );
-  assert.deepEqual(await service.getProfile(session), { username: "dev.user", passwordConfigured: true });
+  assert.deepEqual(await service.getProfile(session), { username: "dev.user", passwordConfigured: true, ...noMfaProfile });
 
   const emailCount = sent.length;
   const byUsername = await service.loginWithPassword(

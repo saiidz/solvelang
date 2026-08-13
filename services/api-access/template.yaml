@@ -15,6 +15,14 @@ Parameters:
     Type: String
     AllowedValues: ["true", "false"]
     Default: "false"
+  CustomerTotpEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CustomerTotpKmsKeyArn:
+    Type: String
+    Default: arn:aws:kms:us-east-1:000000000000:key/disabled
+    AllowedPattern: '^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$'
   SubscriptionBillingEnabled:
     Type: String
     AllowedValues: ["true", "false"]
@@ -68,6 +76,13 @@ Rules:
         AssertDescription: Customer accounts require a separate authentication pepper.
       - Assert: !Not [!Equals [!Ref CustomerAuthEmailSender, ""]]
         AssertDescription: Customer accounts require a verified SES sender.
+  CustomerTotpRequirements:
+    RuleCondition: !Equals [!Ref CustomerTotpEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
+        AssertDescription: Authenticator 2FA requires customer accounts to be enabled.
+      - Assert: !Not [!Equals [!Ref CustomerTotpKmsKeyArn, "arn:aws:kms:us-east-1:000000000000:key/disabled"]]
+        AssertDescription: Authenticator 2FA requires a dedicated KMS encryption key ARN.
   SubscriptionBillingRemainsTestOnly:
     RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
     Assertions:
@@ -87,6 +102,9 @@ Rules:
         AssertDescription: Pro plan Stripe price ID is required.
       - Assert: !Not [!Equals [!Ref StripeApiBusinessPriceId, ""]]
         AssertDescription: Business plan Stripe price ID is required.
+
+Conditions:
+  CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
 
 Resources:
   ApiAccountsTable:
@@ -228,6 +246,8 @@ Resources:
           API_ACCESS_ENABLED: !Ref ApiAccessEnabled
           API_ACCESS_MODE: !Ref ApiAccessMode
           API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
+          API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
+          API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
           API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
@@ -265,6 +285,15 @@ Resources:
             Action:
               - ses:SendEmail
             Resource: '*'
+        - !If
+          - CustomerTotpFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+              Resource: !Ref CustomerTotpKmsKeyArn
+          - !Ref AWS::NoValue
       Events:
         Health:
           Type: HttpApi
@@ -290,6 +319,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/auth/password
             Method: POST
+        CustomerTotpVerify:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/totp/verify
+            Method: POST
         CustomerLogout:
           Type: HttpApi
           Properties:
@@ -307,6 +342,30 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/auth/credentials
+            Method: POST
+        CustomerTotpSetup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/totp/setup
+            Method: POST
+        CustomerTotpConfirm:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/totp/confirm
+            Method: POST
+        CustomerTotpBackupCodes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/totp/backup-codes
+            Method: POST
+        CustomerTotpDisable:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/totp/disable
             Method: POST
         CustomerIssueKey:
           Type: HttpApi
@@ -428,6 +487,8 @@ Outputs:
     Value: !Ref ApiAccessEnabled
   CustomerAccountsEnabledState:
     Value: !Ref CustomerAccountsEnabled
+  CustomerTotpEnabledState:
+    Value: !Ref CustomerTotpEnabled
   SubscriptionBillingEnabledState:
     Value: !Ref SubscriptionBillingEnabled
   StripeSubscriptionWebhookUrl:

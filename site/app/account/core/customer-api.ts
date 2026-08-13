@@ -10,14 +10,19 @@ export type ApiKeySummary = {
   revokedAt?: string;
 };
 
+export type CustomerAuthState = {
+  username: string | null;
+  passwordConfigured: boolean;
+  totpAvailable: boolean;
+  totpEnabled: boolean;
+  backupCodesRemaining: number;
+};
+
 export type CustomerDashboard = {
   accountId: string;
   email: string;
   csrfToken: string;
-  auth: {
-    username: string | null;
-    passwordConfigured: boolean;
-  };
+  auth: CustomerAuthState;
   subscription: {
     plan: "developer" | "pro" | "business" | null;
     status: string;
@@ -31,6 +36,15 @@ export type CustomerDashboard = {
     remaining: number | null;
   };
   keys: ApiKeySummary[];
+};
+
+export type AuthResult = {
+  accountId?: string;
+  email?: string;
+  csrfToken?: string;
+  mfaRequired: boolean;
+  challengeToken?: string;
+  expiresInSeconds?: number;
 };
 
 export type IssuedApiKey = {
