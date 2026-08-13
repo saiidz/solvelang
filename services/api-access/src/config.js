@@ -41,12 +41,16 @@ function billing(environment) {
 
 function customerAccounts(environment) {
   const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
+  const totpEnabled = environment.API_CUSTOMER_TOTP_ENABLED === "true";
+  if (totpEnabled && !enabled) throw new Error("Authenticator 2FA requires customer accounts to be enabled.");
   return {
     customerAccountsEnabled: enabled,
     customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
     customerAuthPepper: enabled ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
     customerAuthEmailSender: enabled ? required(environment, "API_CUSTOMER_AUTH_EMAIL_SENDER") : undefined,
     customerAuthEmailReplyTo: environment.API_CUSTOMER_AUTH_EMAIL_REPLY_TO || undefined,
+    customerTotpEnabled: totpEnabled,
+    customerTotpKmsKeyId: totpEnabled ? required(environment, "API_CUSTOMER_TOTP_KMS_KEY_ID") : undefined,
   };
 }
 
