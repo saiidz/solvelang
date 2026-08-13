@@ -19,9 +19,10 @@ Parameters:
     Type: String
     AllowedValues: ["true", "false"]
     Default: "false"
-  CustomerTotpKmsKeyId:
+  CustomerTotpKmsKeyArn:
     Type: String
-    Default: ""
+    Default: arn:aws:kms:us-east-1:000000000000:key/disabled
+    AllowedPattern: '^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$'
   SubscriptionBillingEnabled:
     Type: String
     AllowedValues: ["true", "false"]
@@ -80,8 +81,8 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
         AssertDescription: Authenticator 2FA requires customer accounts to be enabled.
-      - Assert: !Not [!Equals [!Ref CustomerTotpKmsKeyId, ""]]
-        AssertDescription: Authenticator 2FA requires a dedicated KMS encryption key.
+      - Assert: !Not [!Equals [!Ref CustomerTotpKmsKeyArn, "arn:aws:kms:us-east-1:000000000000:key/disabled"]]
+        AssertDescription: Authenticator 2FA requires a dedicated KMS encryption key ARN.
   SubscriptionBillingRemainsTestOnly:
     RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
     Assertions:
@@ -246,7 +247,7 @@ Resources:
           API_ACCESS_MODE: !Ref ApiAccessMode
           API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
           API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
-          API_CUSTOMER_TOTP_KMS_KEY_ID: !Ref CustomerTotpKmsKeyId
+          API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
           API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
@@ -291,7 +292,7 @@ Resources:
               Action:
                 - kms:Encrypt
                 - kms:Decrypt
-              Resource: !Ref CustomerTotpKmsKeyId
+              Resource: !Ref CustomerTotpKmsKeyArn
           - !Ref AWS::NoValue
       Events:
         Health:
