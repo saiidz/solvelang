@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import {
+  type AuthResult,
   CustomerApiError,
   type CustomerDashboard,
   type IssuedApiKey,
@@ -20,6 +21,7 @@ const plans = [
 ] as const;
 
 type Screen = "loading" | "signed-out" | "dashboard";
+type TotpSetup = { secret: string; otpauthUri: string; expiresInSeconds: number };
 
 function readableDate(value: number | string | null | undefined): string {
   if (!value) return "—";
@@ -33,8 +35,14 @@ export default function ApiKeysPage() {
   const [identifier, setIdentifier] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [mfaChallenge, setMfaChallenge] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
   const [credentialUsername, setCredentialUsername] = useState("");
   const [credentialPassword, setCredentialPassword] = useState("");
+  const [totpSetup, setTotpSetup] = useState<TotpSetup | null>(null);
+  const [totpPassword, setTotpPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [keyName, setKeyName] = useState("API integration");
   const [issued, setIssued] = useState<IssuedApiKey | null>(null);
   const [notice, setNotice] = useState("");
@@ -49,17 +57,34 @@ export default function ApiKeysPage() {
     return account;
   }
 
+  async function finishFirstFactor(result: AuthResult) {
+    if (result.mfaRequired && result.challengeToken) {
+      setMfaChallenge(result.challengeToken);
+      setMfaCode("");
+      setScreen("signed-out");
+      return;
+    }
+    setMfaChallenge("");
+    await refreshDashboard();
+  }
+
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         const token = magicTokenFromHash(window.location.hash);
         if (token) {
-          await customerApi(API_BASE, "/customer/auth/verify", {
+          const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/verify", {
             method: "POST",
             body: JSON.stringify({ token }),
           });
           window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+          if (!active) return;
+          if (result.mfaRequired && result.challengeToken) {
+            setMfaChallenge(result.challengeToken);
+            setScreen("signed-out");
+            return;
+          }
         }
         const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
         if (active) {
@@ -83,14 +108,36 @@ export default function ApiKeysPage() {
     setError("");
     setNotice("");
     try {
-      await customerApi(API_BASE, "/customer/auth/password", {
+      const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/password", {
         method: "POST",
         body: JSON.stringify({ identifier, password: loginPassword }),
       });
-      setLoginPassword("");
-      await refreshDashboard();
+      if (!result.mfaRequired) setLoginPassword("");
+      await finishFirstFactor(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyMfa(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!mfaChallenge) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/totp/verify", {
+        method: "POST",
+        body: JSON.stringify({ challengeToken: mfaChallenge, code: mfaCode }),
+      });
+      setMfaChallenge("");
+      setMfaCode("");
+      setLoginPassword("");
+      await finishFirstFactor(result);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authenticator verification failed.");
     } finally {
       setBusy(false);
     }
@@ -121,24 +168,114 @@ export default function ApiKeysPage() {
     setError("");
     setNotice("");
     try {
-      const result = await customerApi<{ auth: CustomerDashboard["auth"] }>(
-        API_BASE,
-        "/customer/auth/credentials",
-        {
-          method: "POST",
-          csrfToken: dashboard.csrfToken,
-          body: JSON.stringify({
-            username: credentialUsername,
-            password: credentialPassword,
-          }),
-        },
-      );
+      const result = await customerApi<{ auth: CustomerDashboard["auth"] }>(API_BASE, "/customer/auth/credentials", {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+        body: JSON.stringify({ username: credentialUsername, password: credentialPassword }),
+      });
       setCredentialPassword("");
       setDashboard({ ...dashboard, auth: result.auth });
       setCredentialUsername(result.auth.username ?? credentialUsername);
-      setNotice("Password sign-in is ready. Future sign-ins do not require an email.");
+      setNotice("Password sign-in is ready. Future sign-ins do not require an email unless you use recovery.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Password sign-in could not be configured.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function beginAuthenticatorSetup() {
+    if (!dashboard) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setBackupCodes([]);
+    try {
+      const setup = await customerApi<TotpSetup>(API_BASE, "/customer/auth/totp/setup", {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+      });
+      setTotpSetup(setup);
+      setNotice("Add the setup key to your authenticator app, then confirm with your password and a fresh 6-digit code.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authenticator setup could not start.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmAuthenticator(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dashboard || !totpSetup) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await customerApi<{ auth: CustomerDashboard["auth"]; backupCodes: string[] }>(
+        API_BASE,
+        "/customer/auth/totp/confirm",
+        {
+          method: "POST",
+          csrfToken: dashboard.csrfToken,
+          body: JSON.stringify({ password: totpPassword, code: totpCode }),
+        },
+      );
+      setDashboard({ ...dashboard, auth: result.auth });
+      setBackupCodes(result.backupCodes);
+      setTotpSetup(null);
+      setTotpPassword("");
+      setTotpCode("");
+      setNotice("Authenticator 2FA is enabled. Save the backup codes now; they will not be shown again.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authenticator setup could not be confirmed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function regenerateBackupCodes(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!dashboard) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await customerApi<{ backupCodes: string[]; backupCodesRemaining: number }>(
+        API_BASE,
+        "/customer/auth/totp/backup-codes",
+        {
+          method: "POST",
+          csrfToken: dashboard.csrfToken,
+          body: JSON.stringify({ password: totpPassword, code: totpCode }),
+        },
+      );
+      setDashboard({ ...dashboard, auth: { ...dashboard.auth, backupCodesRemaining: result.backupCodesRemaining } });
+      setBackupCodes(result.backupCodes);
+      setTotpPassword("");
+      setTotpCode("");
+      setNotice("New backup codes created. Every previous backup code is now invalid.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Backup codes could not be regenerated.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disableAuthenticator() {
+    if (!dashboard || !window.confirm("Disable authenticator 2FA for this account?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await customerApi<{ auth: CustomerDashboard["auth"] }>(API_BASE, "/customer/auth/totp/disable", {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+        body: JSON.stringify({ password: totpPassword, code: totpCode }),
+      });
+      setDashboard({ ...dashboard, auth: result.auth });
+      setBackupCodes([]);
+      setTotpPassword("");
+      setTotpCode("");
+      setNotice("Authenticator 2FA is disabled. Other existing sessions were invalidated by the security change.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Authenticator 2FA could not be disabled.");
     } finally {
       setBusy(false);
     }
@@ -219,6 +356,10 @@ export default function ApiKeysPage() {
       setIssued(null);
       setLoginPassword("");
       setCredentialPassword("");
+      setMfaChallenge("");
+      setMfaCode("");
+      setTotpSetup(null);
+      setBackupCodes([]);
       setScreen("signed-out");
       setBusy(false);
     }
@@ -226,6 +367,36 @@ export default function ApiKeysPage() {
 
   if (screen === "loading") {
     return <main className="grid min-h-screen place-items-center bg-slate-950 text-white">Loading your API account…</main>;
+  }
+
+  if (screen === "signed-out" && mfaChallenge) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-950 px-6 py-16 text-white">
+        <section className="w-full max-w-lg rounded-3xl border border-cyan-300/30 bg-white/5 p-8 shadow-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">Extra security</p>
+          <h1 className="mt-3 text-3xl font-bold">Authenticator verification</h1>
+          <p className="mt-4 text-slate-300">Enter the current 6-digit code from your authenticator app, or one unused backup code.</p>
+          <form className="mt-8 space-y-4" onSubmit={verifyMfa}>
+            <label className="block text-sm font-medium" htmlFor="mfa-code">Authenticator or backup code</label>
+            <input
+              id="mfa-code"
+              required
+              value={mfaCode}
+              onChange={(event) => setMfaCode(event.target.value)}
+              autoComplete="one-time-code"
+              inputMode="text"
+              className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-wider outline-none focus:border-cyan-300"
+              placeholder="123456 or XXXX-XXXX-XXXX-XXXX"
+            />
+            <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">
+              {busy ? "Verifying…" : "Verify and sign in"}
+            </button>
+          </form>
+          {error ? <p className="mt-5 rounded-xl bg-red-400/10 p-4 text-sm text-red-200">{error}</p> : null}
+          <button type="button" onClick={() => { setMfaChallenge(""); setMfaCode(""); setError(""); }} className="mt-5 text-sm text-slate-400 hover:text-white">Cancel sign-in</button>
+        </section>
+      </main>
+    );
   }
 
   if (screen === "signed-out") {
@@ -239,52 +410,21 @@ export default function ApiKeysPage() {
             <p className="mt-4 text-slate-300">Use your email address or username and password. Normal password sign-ins do not send email.</p>
             <form className="mt-8 space-y-4" onSubmit={passwordLogin}>
               <label className="block text-sm font-medium" htmlFor="identifier">Email or username</label>
-              <input
-                id="identifier"
-                required
-                value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
-                autoComplete="username"
-                className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300"
-                placeholder="you@company.com or username"
-              />
+              <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com or username" />
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
-              <input
-                id="password"
-                type="password"
-                required
-                value={loginPassword}
-                onChange={(event) => setLoginPassword(event.target.value)}
-                autoComplete="current-password"
-                className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300"
-              />
-              <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">
-                {busy ? "Signing in…" : "Sign in"}
-              </button>
+              <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
             </form>
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-400">First sign-in or recovery</p>
             <h2 className="mt-3 text-2xl font-bold">Use a secure email link</h2>
-            <p className="mt-4 text-slate-300">
-              New accounts verify their email once here. You can also use this if you forget your password, then set a new password after signing in.
-            </p>
+            <p className="mt-4 text-slate-300">New accounts verify their email once here. If authenticator 2FA is enabled, recovery still requires the authenticator or a backup code.</p>
             <form className="mt-8 space-y-4" onSubmit={requestLink}>
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300"
-                placeholder="you@company.com"
-              />
-              <button disabled={busy} className="w-full rounded-xl border border-cyan-300/40 px-5 py-3 font-bold text-cyan-100 disabled:opacity-60">
-                {busy ? "Sending…" : "Email me a sign-in link"}
-              </button>
+              <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com" />
+              <button disabled={busy} className="w-full rounded-xl border border-cyan-300/40 px-5 py-3 font-bold text-cyan-100 disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
             </form>
           </section>
         </div>
@@ -321,54 +461,99 @@ export default function ApiKeysPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Account security</p>
-              <h2 className="mt-2 text-2xl font-bold">
-                {dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}
-              </h2>
+              <h2 className="mt-2 text-2xl font-bold">{dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}</h2>
               <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                {dashboard.auth.passwordConfigured
-                  ? `Sign in with ${dashboard.auth.username} or your email. Use this form after an email recovery link to replace your password.`
-                  : "Choose a username and password once. Future sign-ins will not need an email link."}
+                {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Use this form after an email recovery link to replace your password.` : "Choose a username and password once. Future sign-ins will not need an email link."}
               </p>
             </div>
-            {dashboard.auth.passwordConfigured
-              ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span>
-              : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
+            {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span> : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
           </div>
           <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
             <div>
               <label htmlFor="credential-username" className="block text-sm font-medium">Username</label>
-              <input
-                id="credential-username"
-                required
-                minLength={3}
-                maxLength={32}
-                disabled={Boolean(dashboard.auth.username)}
-                value={credentialUsername}
-                onChange={(event) => setCredentialUsername(event.target.value)}
-                autoComplete="username"
-                className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60"
-              />
+              <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60" />
             </div>
             <div>
-              <label htmlFor="credential-password" className="block text-sm font-medium">
-                {dashboard.auth.passwordConfigured ? "New password" : "Password"}
-              </label>
-              <input
-                id="credential-password"
-                type="password"
-                required
-                minLength={12}
-                maxLength={128}
-                value={credentialPassword}
-                onChange={(event) => setCredentialPassword(event.target.value)}
-                autoComplete="new-password"
-                className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300"
-              />
+              <label htmlFor="credential-password" className="block text-sm font-medium">{dashboard.auth.passwordConfigured ? "New password" : "Password"}</label>
+              <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
             </div>
-            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40">
-              {dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}
-            </button>
+            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
           </form>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Authenticator app</p>
+                <h3 className="mt-2 text-xl font-bold">{dashboard.auth.totpEnabled ? "Two-factor authentication enabled" : "Optional two-factor authentication"}</h3>
+                <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                  {dashboard.auth.totpEnabled
+                    ? `Password and recovery-link sign-ins require your authenticator or one unused backup code. ${dashboard.auth.backupCodesRemaining ?? 0} backup codes remain.`
+                    : "Add a standards-compatible authenticator app for an extra factor after password or email recovery."}
+                </p>
+              </div>
+              {dashboard.auth.totpEnabled ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Enabled</span> : null}
+            </div>
+
+            {!dashboard.auth.totpAvailable ? (
+              <p className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4 text-sm text-slate-400">Authenticator setup is not enabled on this environment yet.</p>
+            ) : !dashboard.auth.totpEnabled ? (
+              <div className="mt-5">
+                {!totpSetup ? (
+                  <button type="button" disabled={busy || !dashboard.auth.passwordConfigured} onClick={beginAuthenticatorSetup} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-40">Set up authenticator app</button>
+                ) : (
+                  <form onSubmit={confirmAuthenticator} className="rounded-2xl border border-cyan-300/25 bg-cyan-300/5 p-5">
+                    <p className="text-sm text-slate-300">Add this key to Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another TOTP app.</p>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <code className="break-all rounded-lg bg-black/30 px-3 py-2 text-sm text-cyan-100">{totpSetup.secret}</code>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">Copy key</button>
+                      <a href={totpSetup.otpauthUri} className="rounded-lg border border-white/15 px-3 py-2 text-center text-sm">Open authenticator app</a>
+                    </div>
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label htmlFor="totp-enable-password" className="block text-sm font-medium">Current password</label>
+                        <input id="totp-enable-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                      </div>
+                      <div>
+                        <label htmlFor="totp-enable-code" className="block text-sm font-medium">6-digit authenticator code</label>
+                        <input id="totp-enable-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-widest" placeholder="123456" />
+                      </div>
+                    </div>
+                    <div className="mt-5 flex gap-3">
+                      <button disabled={busy} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Enable authenticator 2FA</button>
+                      <button type="button" onClick={() => { setTotpSetup(null); setTotpPassword(""); setTotpCode(""); }} className="rounded-xl border border-white/15 px-4 py-2">Cancel</button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <form onSubmit={regenerateBackupCodes} className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-5">
+                <p className="text-sm text-slate-300">Security changes require your current password plus a fresh authenticator code or unused backup code. Reusing a TOTP time-step is rejected.</p>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label htmlFor="totp-security-password" className="block text-sm font-medium">Current password</label>
+                    <input id="totp-security-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                  </div>
+                  <div>
+                    <label htmlFor="totp-security-code" className="block text-sm font-medium">Fresh authenticator or backup code</label>
+                    <input id="totp-security-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono" />
+                  </div>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button disabled={busy} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-60">Regenerate backup codes</button>
+                  <button type="button" disabled={busy} onClick={disableAuthenticator} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 disabled:opacity-60">Disable authenticator 2FA</button>
+                </div>
+              </form>
+            )}
+
+            {backupCodes.length > 0 ? (
+              <div className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-5">
+                <h4 className="font-bold text-amber-100">Save these one-time backup codes now</h4>
+                <p className="mt-2 text-sm text-amber-100/80">Each code works once. SolveLang stores only keyed fingerprints and will not show these plaintext codes again.</p>
+                <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-black/30 p-4 font-mono text-sm text-amber-50">{backupCodes.join("\n")}</pre>
+                <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy backup codes</button>
+              </div>
+            ) : null}
+          </div>
         </section>
 
         <section className="mt-8 grid gap-5 md:grid-cols-3">
@@ -376,11 +561,7 @@ export default function ApiKeysPage() {
             <p className="text-sm text-slate-400">Plan</p>
             <p className="mt-2 text-2xl font-bold capitalize">{dashboard.subscription.plan ?? "No subscription"}</p>
             <p className="mt-1 text-sm capitalize text-slate-300">{dashboard.subscription.status}</p>
-            {dashboard.subscription.plan ? (
-              <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">
-                Manage subscription
-              </button>
-            ) : null}
+            {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Manage subscription</button> : null}
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <p className="text-sm text-slate-400">Credits used</p>
@@ -394,9 +575,7 @@ export default function ApiKeysPage() {
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">
-          One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.
-        </section>
+        <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.</section>
 
         {!dashboard.subscription.plan ? (
           <section className="mt-8 rounded-3xl border border-cyan-300/30 bg-cyan-300/5 p-6">
@@ -408,9 +587,7 @@ export default function ApiKeysPage() {
                   <p className="mt-2 font-semibold text-cyan-200">{plan.price}</p>
                   <p className="mt-3 text-sm text-slate-300">{plan.credits}</p>
                   <p className="mt-1 text-sm text-slate-300">{plan.keys}</p>
-                  <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">
-                    Start checkout
-                  </button>
+                  <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Start checkout</button>
                 </div>
               ))}
             </div>
@@ -437,18 +614,14 @@ export default function ApiKeysPage() {
           <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
             <h2 className="text-2xl font-bold">API keys</h2>
             <div className="mt-5 space-y-3">
-              {dashboard.keys.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No API keys yet.</p>
-              ) : dashboard.keys.map((key) => (
+              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No API keys yet.</p> : dashboard.keys.map((key) => (
                 <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h3 className="font-bold">{key.name}</h3>
                     <p className="mt-1 font-mono text-sm text-slate-300">{key.prefix}…{key.lastFour}</p>
                     <p className="mt-2 text-xs text-slate-500">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
                   </div>
-                  {key.revokedAt
-                    ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-sm text-red-200">Revoked</span>
-                    : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-red-300/30 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Revoke</button>}
+                  {key.revokedAt ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-sm text-red-200">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-red-300/30 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Revoke</button>}
                 </article>
               ))}
             </div>
