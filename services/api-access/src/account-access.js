@@ -38,8 +38,23 @@ function cleanRequestId(value) {
   return cleaned;
 }
 
+function fingerprintRequest(requestId) {
+  return createHash("sha256").update(requestId).digest("hex");
+}
+
+function requestMatches(record, { accountId, requestId, targetState, reason }) {
+  return Boolean(
+    record
+    && record.kind === "access-request"
+    && record.accountId === accountId
+    && record.requestId === requestId
+    && record.targetState === targetState
+    && record.reason === reason,
+  );
+}
+
 export function accountAccessState(account) {
-  if (!account) return ACCOUNT_ACCESS_ACTIVE;
+  if (!account) return "missing";
   if (account.accessState === undefined) return ACCOUNT_ACCESS_ACTIVE;
   return ACCOUNT_ACCESS_STATES.has(account.accessState) ? account.accessState : "invalid";
 }
@@ -49,6 +64,7 @@ export function accountIsActive(account) {
 }
 
 export function publicAccountAccess(account) {
+  if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
   const state = accountAccessState(account);
   if (state === "invalid") throw new ApiAccessError(409, "account_access_state_invalid", "Account access state requires administrative review.");
   return {
@@ -80,16 +96,39 @@ export function createAccountAccessService({ store, now = Date.now }) {
 
   async function getStatus(input) {
     const account = await getAccount(typeof input === "string" ? input : input?.accountId);
-    if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
     return publicAccountAccess(account);
   }
 
+  async function duplicateResult(record, account) {
+    if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
+    return {
+      ...publicAccountAccess(account),
+      previousState: record.previousState,
+      requestedState: record.targetState,
+      changed: false,
+      duplicate: true,
+    };
+  }
+
   async function transition(input, actor = "api-access-admin") {
-    if (typeof store.transitionAccess !== "function") throw new Error("Account access mutation is not configured.");
+    if (typeof store.transitionAccess !== "function" || typeof store.getRequest !== "function") {
+      throw new Error("Account access mutation is not configured.");
+    }
     const accountId = cleanAccountId(input?.accountId);
     const targetState = cleanState(input?.state);
     const reason = cleanText(input?.reason, "Reason", 512);
     const requestId = cleanRequestId(input?.requestId);
+    const requestFingerprint = fingerprintRequest(requestId);
+    const requestShape = { accountId, requestId, targetState, reason };
+
+    const existingRequest = await store.getRequest(requestFingerprint);
+    if (existingRequest) {
+      if (!requestMatches(existingRequest, requestShape)) {
+        throw new ApiAccessError(409, "idempotency_conflict", "Request ID was already used for a different account access change.");
+      }
+      return duplicateResult(existingRequest, await store.getAccount(accountId));
+    }
+
     const account = await store.getAccount(accountId);
     if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
     const previousState = accountAccessState(account);
@@ -100,11 +139,10 @@ export function createAccountAccessService({ store, now = Date.now }) {
       throw new ApiAccessError(409, "account_terminated", "A terminated account cannot be reactivated.");
     }
     if (previousState === targetState) {
-      return { ...publicAccountAccess(account), previousState, changed: false, duplicate: true };
+      throw new ApiAccessError(409, "account_access_noop", "Account is already in the requested access state.");
     }
 
     const changedAt = new Date(now()).toISOString();
-    const requestFingerprint = createHash("sha256").update(requestId).digest("hex");
     const outcome = await store.transitionAccess({
       account,
       previousState,
@@ -116,14 +154,23 @@ export function createAccountAccessService({ store, now = Date.now }) {
       requestFingerprint,
     });
     if (outcome !== "updated") {
-      const latest = await store.getAccount(accountId);
-      if (latest && accountAccessState(latest) === targetState) {
-        return { ...publicAccountAccess(latest), previousState, changed: false, duplicate: true };
+      const racedRequest = await store.getRequest(requestFingerprint);
+      if (racedRequest) {
+        if (!requestMatches(racedRequest, requestShape)) {
+          throw new ApiAccessError(409, "idempotency_conflict", "Request ID was already used for a different account access change.");
+        }
+        return duplicateResult(racedRequest, await store.getAccount(accountId));
       }
       throw new ApiAccessError(409, "account_access_conflict", "Account access changed concurrently. Review the latest state and retry.");
     }
     const latest = await store.getAccount(accountId);
-    return { ...publicAccountAccess(latest), previousState, changed: true, duplicate: false };
+    return {
+      ...publicAccountAccess(latest),
+      previousState,
+      requestedState: targetState,
+      changed: true,
+      duplicate: false,
+    };
   }
 
   return { getStatus, transition, isActive, assertActive, getAccount };
