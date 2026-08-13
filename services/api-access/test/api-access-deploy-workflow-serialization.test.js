@@ -12,6 +12,8 @@ const testWorkflowName = "deploy-api-access.yml";
 const productionWorkflowNames = [
   "deploy-api-access-production-customer-accounts.yml",
   "deploy-api-access-production-foundation.yml",
+  "deploy-api-access-production-totp-kms.yml",
+  "deploy-api-access-production-totp.yml",
 ];
 
 async function workflow(name) {
@@ -28,13 +30,21 @@ function productionRun({ id, attempt = 1, startedAt, status = "in_progress", pat
   };
 }
 
-test("test deployment is isolated while both production deployments use the repository queue", async () => {
+test("test deployment is isolated while every production mutation uses the repository queue", async () => {
+  assert.deepEqual(
+    [...PRODUCTION_WORKFLOW_PATHS].sort(),
+    productionWorkflowNames.map((name) => `.github/workflows/${name}`).sort(),
+  );
+
   const workflowNames = (await readdir(workflowsDirectory)).filter((name) => /\.ya?ml$/.test(name));
   const deploymentWorkflowNames = [];
 
   for (const name of workflowNames) {
     const source = await workflow(name);
-    if (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy/.test(source)) deploymentWorkflowNames.push(name);
+    if (
+      (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy/.test(source))
+      || (/solvelang-api-access-production-totp-kms/.test(source) && /cloudformation deploy/.test(source))
+    ) deploymentWorkflowNames.push(name);
   }
 
   assert.deepEqual(deploymentWorkflowNames.sort(), [...productionWorkflowNames, testWorkflowName].sort());
@@ -53,7 +63,7 @@ test("test deployment is isolated while both production deployments use the repo
   const customerAccountsSource = await workflow("deploy-api-access-production-customer-accounts.yml");
   assert.ok(
     customerAccountsSource.indexOf("Wait for earlier production deployment requests")
-      < customerAccountsSource.indexOf("Verify production stack is safe to enable"),
+      < customerAccountsSource.indexOf("Verify production stack and capture exact feature state"),
   );
 
   const foundationSource = await workflow("deploy-api-access-production-foundation.yml");
@@ -61,13 +71,19 @@ test("test deployment is isolated while both production deployments use the repo
     foundationSource.indexOf("Wait for earlier production deployment requests")
       < foundationSource.indexOf("Refuse to overwrite an enabled production stack"),
   );
+
+  const kmsSource = await workflow("deploy-api-access-production-totp-kms.yml");
+  assert.ok(
+    kmsSource.indexOf("Wait for earlier production deployment requests")
+      < kmsSource.indexOf("Verify live customer baseline and TOTP remains disabled"),
+  );
 });
 
 test("three rapid production requests retain FIFO predecessors without dropping the middle request", () => {
   const runs = [
     productionRun({ id: 7001, startedAt: "2026-08-12T22:00:01Z" }),
-    productionRun({ id: 7002, startedAt: "2026-08-12T22:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] }),
-    productionRun({ id: 7003, startedAt: "2026-08-12T22:00:03Z" }),
+    productionRun({ id: 7002, startedAt: "2026-08-12T22:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[2] }),
+    productionRun({ id: 7003, startedAt: "2026-08-12T22:00:03Z", path: PRODUCTION_WORKFLOW_PATHS[3] }),
     productionRun({ id: 7000, startedAt: "2026-08-12T22:00:00Z", path: ".github/workflows/deploy-api-access.yml" }),
   ];
 
@@ -83,8 +99,8 @@ test("three rapid production requests retain FIFO predecessors without dropping 
 
 test("an old run ID rerun waits for a newer run that started first", () => {
   const runs = [
-    productionRun({ id: 7101, attempt: 2, startedAt: "2026-08-12T22:10:02Z" }),
-    productionRun({ id: 7102, startedAt: "2026-08-12T22:10:01Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+    productionRun({ id: 7101, attempt: 2, startedAt: "2026-08-12T22:10:02Z", path: PRODUCTION_WORKFLOW_PATHS[3] }),
+    productionRun({ id: 7102, startedAt: "2026-08-12T22:10:01Z", path: PRODUCTION_WORKFLOW_PATHS[2] }),
   ];
 
   assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7101, 2), [
@@ -95,8 +111,8 @@ test("an old run ID rerun waits for a newer run that started first", () => {
 
 test("a fresh deployment waits for an earlier rerun attempt", () => {
   const runs = [
-    productionRun({ id: 7201, attempt: 2, startedAt: "2026-08-12T22:20:01Z" }),
-    productionRun({ id: 7203, startedAt: "2026-08-12T22:20:02Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+    productionRun({ id: 7201, attempt: 2, startedAt: "2026-08-12T22:20:01Z", path: PRODUCTION_WORKFLOW_PATHS[2] }),
+    productionRun({ id: 7203, startedAt: "2026-08-12T22:20:02Z", path: PRODUCTION_WORKFLOW_PATHS[3] }),
   ];
 
   assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7203, 1), [
@@ -107,9 +123,9 @@ test("a fresh deployment waits for an earlier rerun attempt", () => {
 test("equal start timestamps use deterministic attempt-aware ordering without cycles", () => {
   const startedAt = "2026-08-12T22:30:00Z";
   const runs = [
-    productionRun({ id: 7301, attempt: 2, startedAt }),
+    productionRun({ id: 7301, attempt: 2, startedAt, path: PRODUCTION_WORKFLOW_PATHS[3] }),
     productionRun({ id: 7302, startedAt, path: PRODUCTION_WORKFLOW_PATHS[1] }),
-    productionRun({ id: 7303, startedAt }),
+    productionRun({ id: 7303, startedAt, path: PRODUCTION_WORKFLOW_PATHS[2] }),
   ];
 
   assert.deepEqual(findEarlierActiveProductionRunAttempts(runs, 7302, 1), []);
@@ -142,15 +158,15 @@ test("invalid or missing attempt metadata fails closed", () => {
 test("a later production run keeps waiting after the first run finishes until the middle run finishes", async () => {
   const snapshots = [
     [
-      productionRun({ id: 8001, startedAt: "2026-08-12T23:00:01Z" }),
-      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[1] }),
-      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" }),
+      productionRun({ id: 8001, startedAt: "2026-08-12T23:00:01Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
+      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", status: "queued", path: PRODUCTION_WORKFLOW_PATHS[2] }),
+      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z", path: PRODUCTION_WORKFLOW_PATHS[3] }),
     ],
     [
-      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", path: PRODUCTION_WORKFLOW_PATHS[1] }),
-      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" }),
+      productionRun({ id: 8002, startedAt: "2026-08-12T23:00:02Z", path: PRODUCTION_WORKFLOW_PATHS[2] }),
+      productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z", path: PRODUCTION_WORKFLOW_PATHS[3] }),
     ],
-    [productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z" })],
+    [productionRun({ id: 8003, startedAt: "2026-08-12T23:00:03Z", path: PRODUCTION_WORKFLOW_PATHS[3] })],
   ];
   let snapshotIndex = 0;
   const waits = [];
