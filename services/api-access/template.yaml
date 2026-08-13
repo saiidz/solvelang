@@ -284,6 +284,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/auth/verify
             Method: POST
+        CustomerPasswordLogin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/password
+            Method: POST
         CustomerLogout:
           Type: HttpApi
           Properties:
@@ -296,6 +302,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/account
             Method: GET
+        CustomerCredentials:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/auth/credentials
+            Method: POST
         CustomerIssueKey:
           Type: HttpApi
           Properties:
