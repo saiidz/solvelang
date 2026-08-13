@@ -1,0 +1,50 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadSolveLangProductionStacks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStackResources"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production/*",
+        "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*"
+      ]
+    },
+    {
+      "Sid": "ReadSolveLangProductionTotpKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:DescribeKey",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags"
+      ],
+      "Resource": "arn:aws:kms:*:*:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "SolveLang",
+          "aws:ResourceTag/Purpose": "customer-totp",
+          "aws:ResourceTag/Environment": "production"
+        }
+      }
+    },
+    {
+      "Sid": "ReadProductionSesReadiness",
+      "Effect": "Allow",
+      "Action": [
+        "ses:GetAccount",
+        "ses:GetEmailIdentity",
+        "sesv2:GetAccount",
+        "sesv2:GetEmailIdentity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
