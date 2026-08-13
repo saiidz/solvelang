@@ -27,32 +27,41 @@ function baseEnvironment(overrides = {}) {
   };
 }
 
-test("authenticator feature is off by default and requires a dedicated KMS key when enabled", () => {
+test("authenticator feature is off by default and requires a dedicated KMS key ARN when enabled", () => {
   const disabled = parseApiAccessEnvironment(baseEnvironment());
   assert.equal(disabled.customerTotpEnabled, false);
-  assert.equal(disabled.customerTotpKmsKeyId, undefined);
+  assert.equal(disabled.customerTotpKmsKeyArn, undefined);
   assert.throws(
     () => parseApiAccessEnvironment(baseEnvironment({ API_CUSTOMER_TOTP_ENABLED: "true" })),
-    /API_CUSTOMER_TOTP_KMS_KEY_ID is required/,
+    /API_CUSTOMER_TOTP_KMS_KEY_ARN is required/,
+  );
+  assert.throws(
+    () => parseApiAccessEnvironment(baseEnvironment({
+      API_CUSTOMER_TOTP_ENABLED: "true",
+      API_CUSTOMER_TOTP_KMS_KEY_ARN: "alias/solvelang-totp",
+    })),
+    /must contain a full KMS key ARN/,
   );
   const enabled = parseApiAccessEnvironment(baseEnvironment({
     API_CUSTOMER_TOTP_ENABLED: "true",
-    API_CUSTOMER_TOTP_KMS_KEY_ID: "arn:aws:kms:us-east-2:123456789012:key/example",
+    API_CUSTOMER_TOTP_KMS_KEY_ARN: "arn:aws:kms:us-east-2:123456789012:key/example",
   }));
   assert.equal(enabled.customerTotpEnabled, true);
-  assert.match(enabled.customerTotpKmsKeyId, /^arn:aws:kms:/);
+  assert.match(enabled.customerTotpKmsKeyArn, /^arn:aws:kms:/);
 });
 
 test("SAM template keeps authenticator opt-in and scopes runtime KMS permissions to Encrypt/Decrypt", async () => {
   const source = await readFile(templateUrl, "utf8");
   assert.match(source, /CustomerTotpEnabled:[\s\S]*Default: "false"/);
-  assert.match(source, /CustomerTotpKmsKeyId:/);
+  assert.match(source, /CustomerTotpKmsKeyArn:/);
+  assert.match(source, /AllowedPattern:.*kms/);
   assert.match(source, /CustomerTotpRequirements:/);
-  assert.match(source, /Authenticator 2FA requires a dedicated KMS encryption key/);
+  assert.match(source, /Authenticator 2FA requires a dedicated KMS encryption key ARN/);
   assert.match(source, /API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled/);
-  assert.match(source, /API_CUSTOMER_TOTP_KMS_KEY_ID: !Ref CustomerTotpKmsKeyId/);
+  assert.match(source, /API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn/);
   assert.match(source, /- kms:Encrypt/);
   assert.match(source, /- kms:Decrypt/);
+  assert.match(source, /Resource: !Ref CustomerTotpKmsKeyArn/);
   assert.doesNotMatch(source, /kms:\*/);
   assert.doesNotMatch(source, /kms:GenerateDataKey/);
   for (const path of [
