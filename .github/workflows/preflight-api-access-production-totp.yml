@@ -206,8 +206,7 @@ jobs:
           grep -q 'deploy-api-access-production-totp.yml' "$queue_script"
           grep -q 'CustomerTotpEnabled="\$INITIAL_CUSTOMER_TOTP_ENABLED"' "$rollback_script"
           grep -q 'CustomerTotpKmsKeyArn="\$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN"' "$rollback_script"
-          ! grep -q 'secrets.STRIPE_SECRET_KEY' "$deploy_workflow"
-          ! grep -q 'secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET' "$deploy_workflow"
+          node scripts/assert-no-production-stripe-secret-references.mjs "$deploy_workflow"
           [[ "$KMS_KEY_ARN" == arn:aws:kms:* ]]
 
       - name: Write readiness summary
