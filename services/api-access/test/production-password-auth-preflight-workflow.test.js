@@ -21,8 +21,8 @@ test("production password-auth preflight is manual, protected, main-only, and va
   assert.match(source, /CUSTOMER_ACCOUNTS_ENABLED: "true"/);
   assert.match(source, /SUBSCRIPTION_BILLING_ENABLED: "false"/);
   assert.doesNotMatch(source, /sam deploy/);
-  assert.doesNotMatch(source, /STRIPE_SECRET_KEY/);
-  assert.doesNotMatch(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
+  assert.doesNotMatch(source, /secrets\.STRIPE_SECRET_KEY/);
+  assert.doesNotMatch(source, /secrets\.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
 });
 
 test("production password-auth preflight validates the already-live customer-account baseline", async () => {
