@@ -9,9 +9,11 @@ function context(accountId) {
   return { purpose: PURPOSE, accountId };
 }
 
-export function createTotpSecretProtector(kmsClient, keyId) {
+export function createTotpSecretProtector(kmsClient, keyArn) {
   if (!kmsClient || typeof kmsClient.send !== "function") throw new Error("KMS client is required.");
-  if (typeof keyId !== "string" || !keyId.trim()) throw new Error("TOTP KMS key ID is required.");
+  if (typeof keyArn !== "string" || !/^arn:[^:]+:kms:[^:]+:\d{12}:key\/.+/.test(keyArn)) {
+    throw new Error("TOTP KMS key ARN is required.");
+  }
 
   return {
     async encrypt(accountId, secret) {
@@ -19,7 +21,7 @@ export function createTotpSecretProtector(kmsClient, keyId) {
         throw new Error("TOTP secret is invalid.");
       }
       const response = await kmsClient.send(new EncryptCommand({
-        KeyId: keyId,
+        KeyId: keyArn,
         Plaintext: Buffer.from(secret, "utf8"),
         EncryptionContext: context(accountId),
       }));
@@ -30,7 +32,7 @@ export function createTotpSecretProtector(kmsClient, keyId) {
     async decrypt(accountId, ciphertext) {
       if (typeof ciphertext !== "string" || !ciphertext) throw new Error("Encrypted TOTP secret is missing.");
       const response = await kmsClient.send(new DecryptCommand({
-        KeyId: keyId,
+        KeyId: keyArn,
         CiphertextBlob: Buffer.from(ciphertext, "base64"),
         EncryptionContext: context(accountId),
       }));
