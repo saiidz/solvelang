@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { scryptSync } from "node:crypto";
 import test from "node:test";
-import { createCustomerAuthService } from "../src/customer-auth.js";
+import { accountIdForEmail, createCustomerAuthService } from "../src/customer-auth.js";
 import { generateTotpCode, totpStep } from "../src/totp.js";
 
 const pepper = "p".repeat(64);
 const password = "correct horse battery staple";
+const email = "owner@example.com";
 
 function passwordRecord() {
   const saltBytes = Buffer.alloc(16, 9);
@@ -21,8 +22,8 @@ function tokenFromUrl(url) {
 function fixture({ featureEnabled = true } = {}) {
   let clock = 1_800_000_000_000;
   const account = {
-    accountId: `acct_${"a".repeat(32)}`,
-    email: "owner@example.com",
+    accountId: accountIdForEmail(email, pepper),
+    email,
     username: "owner",
     authVersion: 1,
     ...passwordRecord(),
@@ -59,8 +60,8 @@ function fixture({ featureEnabled = true } = {}) {
     },
     async ensureAccount() { return { ...account }; },
     async putSession({ session: created }) { session = created; this.sessionsCreated += 1; },
-    async putMfaChallenge({ challenge: created, accountId, email }) {
-      challenge = { ...created, accountId, email, attemptCount: 0 };
+    async putMfaChallenge({ challenge: created, accountId, email: challengeEmail }) {
+      challenge = { ...created, accountId, email: challengeEmail, attemptCount: 0 };
     },
     async reserveMfaAttempt({ challengeId, limit }) {
       if (!challenge || challenge.challengeId !== challengeId || challenge.attemptCount >= limit) return undefined;
