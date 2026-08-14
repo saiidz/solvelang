@@ -27,7 +27,7 @@ test("production account admin workflow accepts exactly one canonical account an
   assert.match(source, /\$\{#REASON\} >= 1/);
   assert.match(source, /\$\{#REASON\} <= 512/);
   assert.match(source, /\^\[A-Za-z0-9_\.:-\]\{8,128\}\$/);
-  assert.match(source, /test\("\[\\\\u0000-\\\\u001f\\\\u007f\]"\)/);
+  assert.match(source, /explode \| all\(\. >= 32 and \. != 127\)/);
   assert.doesNotMatch(source, /for\s+ACCOUNT_ID\s+in/);
 });
 
@@ -42,6 +42,15 @@ test("production account admin workflow supports status, reversible suspension, 
   assert.match(source, /terminate\) target_state="terminated"/);
   assert.match(source, /TERMINATION_CONFIRMATION.*TERMINATE \$ACCOUNT_ID/);
   assert.match(source, /if: inputs\.operation != 'status'/);
+});
+
+test("production account admin workflow allows exact idempotent replay while still rejecting unsafe terminated transitions", async () => {
+  const source = await workflow();
+  assert.match(source, /Suspend cannot operate on a terminated account/);
+  assert.match(source, /Reactivate cannot operate on a terminated account/);
+  assert.match(source, /before_state.*terminated/);
+  assert.match(source, /\.account\.changed == true or \.account\.duplicate == true/);
+  assert.match(source, /Idempotent replay unexpectedly changed authentication version/);
 });
 
 test("production account admin workflow resolves the live stack read-only and keeps billing disabled", async () => {
