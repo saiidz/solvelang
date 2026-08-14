@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export function createStripeSubscriptionGateway(stripe, webhookSecret) {
   if (!stripe?.checkout?.sessions
     || !stripe?.subscriptions
@@ -18,6 +20,11 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
 
   function belongsToCustomer(resource, customerId) {
     return objectId(resource?.customer) === customerId;
+  }
+
+  function webhookNormalizationIdempotencyKey(eventId, operation, paymentMethodId) {
+    const identity = `${eventId}\u0000${operation}\u0000${paymentMethodId}`;
+    return `api-subscription-webhook-${createHash("sha256").update(identity).digest("hex")}`;
   }
 
   async function supportedPaymentMethodById(paymentMethodId) {
@@ -129,16 +136,25 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       };
     },
 
-    async normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId }) {
+    async normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId, eventId }) {
+      if (eventId !== undefined && (typeof eventId !== "string" || !/^[A-Za-z0-9_.:-]+$/.test(eventId) || eventId.length > 200)) {
+        throw new Error("Stripe event ID is invalid for payment-method normalization.");
+      }
       const { invoices } = await managementSources({ customerId, subscriptionId });
       const paymentMethod = await paidInvoicePaymentMethod(invoices, customerId);
       if (!paymentMethod) return false;
-      await stripe.customers.update(customerId, {
-        invoice_settings: { default_payment_method: paymentMethod.id },
-      });
-      await stripe.subscriptions.update(subscriptionId, {
-        default_payment_method: paymentMethod.id,
-      });
+      const customerArgs = [customerId, { invoice_settings: { default_payment_method: paymentMethod.id } }];
+      const subscriptionArgs = [subscriptionId, { default_payment_method: paymentMethod.id }];
+      if (eventId) {
+        customerArgs.push({
+          idempotencyKey: webhookNormalizationIdempotencyKey(eventId, "customer-default", paymentMethod.id),
+        });
+        subscriptionArgs.push({
+          idempotencyKey: webhookNormalizationIdempotencyKey(eventId, "subscription-default", paymentMethod.id),
+        });
+      }
+      await stripe.customers.update(...customerArgs);
+      await stripe.subscriptions.update(...subscriptionArgs);
       return true;
     },
 

@@ -35,6 +35,14 @@ function lifecycleApiService({ existing, provision, reserve } = {}) {
   };
 }
 
+function lifecycleEventStore({ claim = "claimed", complete = "completed", onClaim, onComplete } = {}) {
+  return {
+    claimEvent: async (record, lease) => onClaim ? onClaim(record, lease) : claim,
+    completeEvent: async (input) => onComplete ? onComplete(input) : complete,
+    releaseEvent: async () => "released",
+  };
+}
+
 test("subscription Checkout stays disabled and uses unique request IDs when enabled", async () => {
   const calls = [];
   const gateway = {
@@ -105,7 +113,7 @@ test("maps signed subscription item periods into deterministic API account order
   const events = [];
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ provision: async (input) => { provisioned.push(input); return input; } }),
-    eventStore: { putEventIfAbsent: async (input) => { events.push(input); return "created"; } },
+    eventStore: lifecycleEventStore({ onClaim: async (input) => { events.push(input); return "claimed"; } }),
     priceIds,
   });
   const event = stripeEvent();
@@ -125,25 +133,26 @@ test("maps signed subscription item periods into deterministic API account order
   });
   assert.equal(events[0].eventId, "evt_1");
   assert.equal(events[0].accountId, "acct_1");
+  assert.match(events[0].payloadFingerprint, /^[a-f0-9]{64}$/);
 });
 
 test("normalizes the successful checkout card when an active subscription is provisioned", async () => {
   const normalized = [];
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService(),
-    eventStore: { putEventIfAbsent: async () => "created" },
+    eventStore: lifecycleEventStore(),
     gateway: { normalizeSuccessfulSubscriptionPaymentMethod: async (input) => { normalized.push(input); return true; } },
     priceIds,
   });
   await lifecycle.processEvent(stripeEvent());
-  assert.deepEqual(normalized, [{ customerId: "cus_1", subscriptionId: "sub_1" }]);
+  assert.deepEqual(normalized, [{ customerId: "cus_1", subscriptionId: "sub_1", eventId: "evt_1" }]);
 });
 
 test("uses the Stripe event timestamp for a bounded past-due grace period", async () => {
   let account;
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ provision: async (input) => { account = input; return input; } }),
-    eventStore: { putEventIfAbsent: async () => "created" },
+    eventStore: lifecycleEventStore(),
     priceIds,
     gracePeriodMs: 60_000,
   });
@@ -156,11 +165,11 @@ test("uses the Stripe event timestamp for a bounded past-due grace period", asyn
   assert.equal(account.subscriptionEventOrder, event.created * 1_000 + 62);
 });
 
-test("subscription deletion cancels access and duplicate delivery remains idempotent", async () => {
+test("subscription deletion cancels access and completed duplicate delivery does not reapply it", async () => {
   let account;
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ provision: async (input) => { account = input; return input; } }),
-    eventStore: { putEventIfAbsent: async () => "duplicate" },
+    eventStore: lifecycleEventStore(),
     priceIds,
   });
   const event = stripeEvent({ type: "customer.subscription.deleted" });
@@ -168,7 +177,16 @@ test("subscription deletion cancels access and duplicate delivery remains idempo
   const result = await lifecycle.processEvent(event);
   assert.equal(account.subscriptionStatus, "canceled");
   assert.equal(account.subscriptionEventOrder, event.created * 1_000 + 92);
-  assert.equal(result.duplicate, true);
+  assert.equal(result.duplicate, false);
+
+  let replayProvisioned = false;
+  const replay = createSubscriptionLifecycleService({
+    apiAccessService: lifecycleApiService({ provision: async () => { replayProvisioned = true; } }),
+    eventStore: lifecycleEventStore({ claim: "duplicate" }),
+    priceIds,
+  });
+  assert.deepEqual(await replay.processEvent(event), { handled: true, duplicate: true });
+  assert.equal(replayProvisioned, false);
 });
 
 test("events from a second or obsolete subscription cannot replace the current subscription", async () => {
@@ -182,7 +200,9 @@ test("events from a second or obsolete subscription cannot replace the current s
   const stored = [];
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ existing, provision: async () => { provisioned = true; } }),
-    eventStore: { putEventIfAbsent: async (record) => { stored.push(record); return "created"; } },
+    eventStore: lifecycleEventStore({
+      onClaim: async (record) => { stored.push(record); return "claimed"; },
+    }),
     priceIds,
   });
   const second = stripeEvent();
@@ -198,7 +218,7 @@ test("a canceled subscription cannot be restored by a later active event for the
   const existing = { accountId: "acct_1", stripeSubscriptionId: "sub_1", subscriptionStatus: "canceled" };
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ existing, provision: async () => { throw new Error("should not restore"); } }),
-    eventStore: { putEventIfAbsent: async () => "created" },
+    eventStore: lifecycleEventStore(),
     priceIds,
   });
   const result = await lifecycle.processEvent(stripeEvent());
@@ -209,7 +229,7 @@ test("a canceled subscription cannot be restored by a later active event for the
 test("ignores unrelated Stripe events and rejects unknown prices, malformed metadata, or missing item periods", async () => {
   const lifecycle = createSubscriptionLifecycleService({
     apiAccessService: lifecycleApiService({ provision: async () => { throw new Error("should not run"); } }),
-    eventStore: { putEventIfAbsent: async () => "created" },
+    eventStore: lifecycleEventStore(),
     priceIds,
   });
   assert.deepEqual(await lifecycle.processEvent({ id: "evt_ignore", type: "invoice.paid", created: 1, data: { object: {} } }), { handled: false, duplicate: false });

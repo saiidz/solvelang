@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { getApiPlan } from "./plans.js";
 
@@ -10,6 +11,7 @@ const SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "past_due", "cancel
 const REPLACEABLE_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid"]);
 const STATUS_ORDER = Object.freeze({ trialing: 1, active: 2, incomplete: 4, past_due: 6, unpaid: 8, canceled: 9 });
 const PLAN_RESTRICTIVENESS = Object.freeze({ business: 1, pro: 2, developer: 3 });
+const DEFAULT_EVENT_LEASE_MS = 60_000;
 
 function cleanText(value, label, maximum = 254) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_event", `${label} is invalid.`);
@@ -68,12 +70,24 @@ function eventOrder(created, status, plan) {
   return order;
 }
 
-function eventRecord({ eventId, eventType, subscriptionId, accountId, createdAtMs }) {
+function payloadFingerprint(parts) {
+  return createHash("sha256").update(parts.join("\u0000")).digest("hex");
+}
+
+function eventRecord({
+  eventId,
+  eventType,
+  subscriptionId,
+  accountId,
+  createdAtMs,
+  payloadFingerprint: fingerprint,
+}) {
   return {
     eventId,
     eventType,
     subscriptionId,
     accountId,
+    payloadFingerprint: fingerprint,
     createdAt: new Date(createdAtMs).toISOString(),
     expiresAt: Math.floor(createdAtMs / 1_000) + 60 * 60 * 24 * 400,
   };
@@ -126,15 +140,33 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
   };
 }
 
-export function createSubscriptionLifecycleService({ apiAccessService, eventStore, gateway, priceIds, gracePeriodMs = 3 * 24 * 60 * 60 * 1_000 }) {
+export function createSubscriptionLifecycleService({
+  apiAccessService,
+  eventStore,
+  gateway,
+  priceIds,
+  gracePeriodMs = 3 * 24 * 60 * 60 * 1_000,
+  eventLeaseMs = DEFAULT_EVENT_LEASE_MS,
+  now = Date.now,
+  claimToken = randomUUID,
+}) {
   if (!apiAccessService || typeof apiAccessService.provisionSubscription !== "function" || typeof apiAccessService.getSubscriptionAccount !== "function") {
     throw new Error("API access service is required.");
   }
-  if (!eventStore || typeof eventStore.putEventIfAbsent !== "function") throw new Error("Subscription event store is required.");
+  if (!eventStore
+    || typeof eventStore.claimEvent !== "function"
+    || typeof eventStore.completeEvent !== "function"
+    || typeof eventStore.releaseEvent !== "function") {
+    throw new Error("Subscription event store is required.");
+  }
   if (gateway && typeof gateway.normalizeSuccessfulSubscriptionPaymentMethod !== "function") {
     throw new Error("Stripe subscription gateway is invalid.");
   }
   if (!Number.isSafeInteger(gracePeriodMs) || gracePeriodMs < 0) throw new Error("Grace period is invalid.");
+  if (!Number.isSafeInteger(eventLeaseMs) || eventLeaseMs < 1_000 || eventLeaseMs > 15 * 60 * 1_000) {
+    throw new Error("Subscription event lease is invalid.");
+  }
+  if (typeof now !== "function" || typeof claimToken !== "function") throw new Error("Subscription event clock and claim-token source are required.");
 
   return {
     async processEvent(event) {
@@ -158,31 +190,103 @@ export function createSubscriptionLifecycleService({ apiAccessService, eventStor
         throw new ApiAccessError(400, "invalid_subscription_status", "Subscription status is invalid.");
       }
       const createdAtMs = event.created * 1_000;
-      const record = eventRecord({ eventId, eventType, subscriptionId, accountId, createdAtMs });
-      const existing = await apiAccessService.getSubscriptionAccount(accountId);
-      if (subscriptionConflict(existing, subscriptionId, rawStatus)
-        || (existing?.stripeSubscriptionId === subscriptionId && existing.subscriptionStatus === "canceled" && rawStatus !== "canceled")) {
-        const duplicate = await eventStore.putEventIfAbsent(record) === "duplicate";
-        return { handled: true, duplicate, ignored: "subscription_conflict", account: existing };
-      }
-
-      const account = await apiAccessService.provisionSubscription({
+      const fingerprint = payloadFingerprint([
+        eventId,
+        eventType,
+        String(event.created),
         accountId,
         email,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-        plan,
-        subscriptionStatus: rawStatus,
-        currentPeriodEnd: item.currentPeriodEnd * 1_000,
-        subscriptionEventCreatedAt: createdAtMs,
-        subscriptionEventOrder: eventOrder(event.created, rawStatus, plan),
-        ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
+        customerId,
+        subscriptionId,
+        item.priceId,
+        String(item.currentPeriodEnd),
+        rawStatus,
+      ]);
+      const record = eventRecord({
+        eventId,
+        eventType,
+        subscriptionId,
+        accountId,
+        createdAtMs,
+        payloadFingerprint: fingerprint,
       });
-      if ((rawStatus === "active" || rawStatus === "trialing") && gateway) {
-        await gateway.normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId });
+      const processingStartedAt = now();
+      if (!Number.isSafeInteger(processingStartedAt) || processingStartedAt <= 0) throw new Error("Subscription event clock is invalid.");
+      const token = claimToken();
+      if (typeof token !== "string" || !token || token.length > 200) throw new Error("Subscription event claim token is invalid.");
+      const claim = await eventStore.claimEvent(record, {
+        claimToken: token,
+        now: Math.floor(processingStartedAt / 1_000),
+        leaseUntil: Math.floor((processingStartedAt + eventLeaseMs) / 1_000),
+        claimedAt: new Date(processingStartedAt).toISOString(),
+      });
+      if (claim === "duplicate") return { handled: true, duplicate: true };
+      if (claim === "busy") {
+        throw new ApiAccessError(503, "subscription_event_in_progress", "Subscription event processing is temporarily busy.");
       }
-      const duplicate = await eventStore.putEventIfAbsent(record) === "duplicate";
-      return { handled: true, duplicate, account };
+      if (claim !== "claimed") {
+        throw new ApiAccessError(409, "subscription_event_conflict", "Subscription event identity conflicts with an existing record.");
+      }
+
+      let completed = false;
+      try {
+        const existing = await apiAccessService.getSubscriptionAccount(accountId);
+        if (subscriptionConflict(existing, subscriptionId, rawStatus)
+          || (existing?.stripeSubscriptionId === subscriptionId && existing.subscriptionStatus === "canceled" && rawStatus !== "canceled")) {
+          const completion = await eventStore.completeEvent({
+            eventId,
+            payloadFingerprint: fingerprint,
+            claimToken: token,
+            completedAt: new Date(now()).toISOString(),
+          });
+          if (completion !== "completed") {
+            throw new ApiAccessError(503, "subscription_event_lease_lost", "Subscription event processing must be retried.");
+          }
+          completed = true;
+          return { handled: true, duplicate: false, ignored: "subscription_conflict", account: existing };
+        }
+
+        const account = await apiAccessService.provisionSubscription({
+          accountId,
+          email,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          plan,
+          subscriptionStatus: rawStatus,
+          currentPeriodEnd: item.currentPeriodEnd * 1_000,
+          subscriptionEventCreatedAt: createdAtMs,
+          subscriptionEventOrder: eventOrder(event.created, rawStatus, plan),
+          ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
+        });
+        if ((rawStatus === "active" || rawStatus === "trialing") && gateway) {
+          await gateway.normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId, eventId });
+        }
+        const completion = await eventStore.completeEvent({
+          eventId,
+          payloadFingerprint: fingerprint,
+          claimToken: token,
+          completedAt: new Date(now()).toISOString(),
+        });
+        if (completion !== "completed") {
+          throw new ApiAccessError(503, "subscription_event_lease_lost", "Subscription event processing must be retried.");
+        }
+        completed = true;
+        return { handled: true, duplicate: false, account };
+      } catch (error) {
+        if (!completed) {
+          try {
+            await eventStore.releaseEvent({
+              eventId,
+              payloadFingerprint: fingerprint,
+              claimToken: token,
+              releasedAt: new Date(now()).toISOString(),
+            });
+          } catch {
+            // A retryable lease or a newer claimant remains authoritative if release also fails.
+          }
+        }
+        throw error;
+      }
     },
   };
 }
