@@ -45,12 +45,24 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
     const nextAuthVersion = currentAuthVersion + 1;
     if (!Number.isSafeInteger(nextAuthVersion)) throw new Error("Customer authentication version overflowed.");
 
-    const accessCondition = account.accessState === undefined
+    const legacyAccessState = account.accessState === undefined;
+    const legacyAuthVersion = account.authVersion === undefined;
+    const accessCondition = legacyAccessState
       ? "attribute_not_exists(accessState)"
       : "accessState = :previousState";
-    const versionCondition = account.authVersion === undefined
+    const versionCondition = legacyAuthVersion
       ? "attribute_not_exists(authVersion)"
       : "authVersion = :currentAuthVersion";
+    const expressionAttributeValues = {
+      ":accountKind": "account",
+      ":targetState": targetState,
+      ":reason": reason,
+      ":changedAt": changedAt,
+      ":changedBy": changedBy,
+      ":nextAuthVersion": nextAuthVersion,
+      ...(legacyAccessState ? {} : { ":previousState": previousState }),
+      ...(legacyAuthVersion ? {} : { ":currentAuthVersion": currentAuthVersion }),
+    };
 
     try {
       await documentClient.send(new TransactWriteCommand({
@@ -79,16 +91,7 @@ export function createDynamoAccountAccessStore(documentClient, { tableName }) {
               Key: { authKey: `account#${account.accountId}` },
               UpdateExpression: "SET accessState = :targetState, accessReason = :reason, accessChangedAt = :changedAt, accessChangedBy = :changedBy, updatedAt = :changedAt, authVersion = :nextAuthVersion",
               ConditionExpression: `kind = :accountKind AND ${accessCondition} AND ${versionCondition}`,
-              ExpressionAttributeValues: {
-                ":accountKind": "account",
-                ":previousState": previousState,
-                ":targetState": targetState,
-                ":reason": reason,
-                ":changedAt": changedAt,
-                ":changedBy": changedBy,
-                ":currentAuthVersion": currentAuthVersion,
-                ":nextAuthVersion": nextAuthVersion,
-              },
+              ExpressionAttributeValues: expressionAttributeValues,
             },
           },
           {
