@@ -30,6 +30,13 @@ function fixture() {
   return { guard: createAccessGuardedCustomerAuthStore(store, reader), calls, records };
 }
 
+test("guard rejects an access reader that cannot inspect magic-link records", () => {
+  assert.throws(
+    () => createAccessGuardedCustomerAuthStore({}, { async getAccount() { return undefined; } }),
+    /Account access reader is required/,
+  );
+});
+
 test("active account can create a session", async () => {
   const { guard, calls } = fixture();
   await guard.putSession({ accountId: ACTIVE, session: {} });
