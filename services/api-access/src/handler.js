@@ -5,6 +5,7 @@ import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
 import { createAccountAccessAdminHandler } from "./account-access-admin-handler.js";
 import { createAccessGuardedApiAccessService } from "./account-access-api-service.js";
+import { createDynamoAccountAccessReader } from "./account-access-reader.js";
 import { createAccountAccessService } from "./account-access.js";
 import { createDynamoAccountAccessStore } from "./account-access-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
@@ -42,13 +43,16 @@ if (environment.customerAccountsEnabled) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
     tableName: environment.customerAuthTable,
   });
+  const accountAccessReader = createDynamoAccountAccessReader(documentClient, {
+    tableName: environment.customerAuthTable,
+  });
   accountAccess = createAccountAccessService({ store: accountAccessStore });
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
   const guardedAuthStore = createAccessGuardedCustomerAuthStore(
     createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
-    accountAccessStore,
+    accountAccessReader,
   );
   customerAuth = createAccessGuardedCustomerAuthService(createCustomerAuthService({
     store: guardedAuthStore,
