@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Account operation to perform
+        description: "Account operation to perform"
         required: true
         default: status
         type: choice
@@ -14,21 +14,21 @@ on:
           - reactivate
           - terminate
       account_id:
-        description: Exact account ID (acct_ followed by 32 lowercase hex characters)
+        description: "Exact account ID (acct_ followed by 32 lowercase hex characters)"
         required: true
         type: string
       reason:
-        description: Required reason for suspend, reactivate, or terminate; ignored for status
+        description: "Required reason for suspend, reactivate, or terminate; ignored for status"
         required: false
         default: ""
         type: string
       request_id:
-        description: Unique idempotency request ID for mutations (8-128 characters: letters, digits, _ . : -)
+        description: "Unique idempotency request ID for mutations (8-128 characters: letters, digits, _ . : -)"
         required: false
         default: ""
         type: string
       termination_confirmation:
-        description: For terminate only, enter exactly TERMINATE <account_id>
+        description: "For terminate only, enter exactly TERMINATE <account_id>"
         required: false
         default: ""
         type: string
@@ -147,13 +147,13 @@ jobs:
             status)
               ;;
             suspend)
-              [[ "$before_state" == "active" ]] || { echo "Suspend requires an active account; current state is $before_state." >&2; exit 1; }
+              [[ "$before_state" == "active" || "$before_state" == "suspended" ]] || { echo "Suspend cannot operate on a terminated account." >&2; exit 1; }
               ;;
             reactivate)
-              [[ "$before_state" == "suspended" ]] || { echo "Reactivate requires a suspended account; current state is $before_state." >&2; exit 1; }
+              [[ "$before_state" == "suspended" || "$before_state" == "active" ]] || { echo "Reactivate cannot operate on a terminated account." >&2; exit 1; }
               ;;
             terminate)
-              [[ "$before_state" == "active" || "$before_state" == "suspended" ]] || { echo "Terminate requires an active or suspended account; current state is $before_state." >&2; exit 1; }
+              [[ "$before_state" == "active" || "$before_state" == "suspended" || "$before_state" == "terminated" ]] || { echo "Account state is invalid for termination." >&2; exit 1; }
               ;;
           esac
 
@@ -212,6 +212,7 @@ jobs:
           fi
           if [[ "$duplicate" == "true" ]]; then
             [[ "$changed" == "false" ]] || { echo "Duplicate result cannot also report a new change." >&2; exit 1; }
+            (( resulting_auth_version == BEFORE_AUTH_VERSION )) || { echo "Idempotent replay unexpectedly changed authentication version." >&2; exit 1; }
           fi
 
           echo "target_state=$target_state" >> "$GITHUB_OUTPUT"
