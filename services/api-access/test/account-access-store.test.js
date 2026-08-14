@@ -36,7 +36,7 @@ test("transition writes request ledger, account version bump, and audit record a
   const client = clientWithAccount({ kind: "account", accountId: ACCOUNT_ID, authVersion: 3 });
   const store = createDynamoAccountAccessStore(client, { tableName: "auth-table" });
   const outcome = await store.transitionAccess({
-    account: { kind: "account", accountId: ACCOUNT_ID, authVersion: 3 },
+    account: { kind: "account", accountId: ACCOUNT_ID, accessState: "active", authVersion: 3 },
     previousState: "active",
     targetState: "suspended",
     reason: "security review",
@@ -50,6 +50,7 @@ test("transition writes request ledger, account version bump, and audit record a
   assert.equal(transaction.length, 3);
   assert.match(transaction[0].Put.Item.authKey, /^access-request#/);
   assert.equal(transaction[0].Put.ConditionExpression, "attribute_not_exists(authKey)");
+  assert.equal(transaction[1].Update.ExpressionAttributeValues[":previousState"], "active");
   assert.equal(transaction[1].Update.ExpressionAttributeValues[":currentAuthVersion"], 3);
   assert.equal(transaction[1].Update.ExpressionAttributeValues[":nextAuthVersion"], 4);
   assert.match(transaction[1].Update.UpdateExpression, /authVersion = :nextAuthVersion/);
@@ -57,7 +58,7 @@ test("transition writes request ledger, account version bump, and audit record a
   assert.equal(transaction[2].Put.ConditionExpression, "attribute_not_exists(authKey)");
 });
 
-test("legacy versionless account transitions from auth version 1 to 2", async () => {
+test("fully legacy account omits unreferenced state/version placeholders", async () => {
   const client = clientWithAccount({ kind: "account", accountId: ACCOUNT_ID });
   const store = createDynamoAccountAccessStore(client, { tableName: "auth-table" });
   await store.transitionAccess({
@@ -71,9 +72,46 @@ test("legacy versionless account transitions from auth version 1 to 2", async ()
     requestFingerprint: "e".repeat(64),
   });
   const update = client.sent.at(-1).input.TransactItems[1].Update;
+  assert.match(update.ConditionExpression, /attribute_not_exists\(accessState\)/);
   assert.match(update.ConditionExpression, /attribute_not_exists\(authVersion\)/);
-  assert.equal(update.ExpressionAttributeValues[":currentAuthVersion"], 1);
+  assert.equal(update.ExpressionAttributeValues[":previousState"], undefined);
+  assert.equal(update.ExpressionAttributeValues[":currentAuthVersion"], undefined);
   assert.equal(update.ExpressionAttributeValues[":nextAuthVersion"], 2);
+});
+
+test("partially legacy account supplies only placeholders referenced by its selected conditions", async () => {
+  const missingStateClient = clientWithAccount({ kind: "account", accountId: ACCOUNT_ID, authVersion: 4 });
+  const missingStateStore = createDynamoAccountAccessStore(missingStateClient, { tableName: "auth-table" });
+  await missingStateStore.transitionAccess({
+    account: { kind: "account", accountId: ACCOUNT_ID, authVersion: 4 },
+    previousState: "active",
+    targetState: "suspended",
+    reason: "review",
+    changedAt: "2026-08-13T20:00:00.000Z",
+    changedBy: "api-access-admin",
+    requestId: "req_suspend_1003",
+    requestFingerprint: "c".repeat(64),
+  });
+  const missingStateUpdate = missingStateClient.sent.at(-1).input.TransactItems[1].Update;
+  assert.equal(missingStateUpdate.ExpressionAttributeValues[":previousState"], undefined);
+  assert.equal(missingStateUpdate.ExpressionAttributeValues[":currentAuthVersion"], 4);
+
+  const missingVersionClient = clientWithAccount({ kind: "account", accountId: ACCOUNT_ID, accessState: "active" });
+  const missingVersionStore = createDynamoAccountAccessStore(missingVersionClient, { tableName: "auth-table" });
+  await missingVersionStore.transitionAccess({
+    account: { kind: "account", accountId: ACCOUNT_ID, accessState: "active" },
+    previousState: "active",
+    targetState: "suspended",
+    reason: "review",
+    changedAt: "2026-08-13T20:00:00.000Z",
+    changedBy: "api-access-admin",
+    requestId: "req_suspend_1004",
+    requestFingerprint: "b".repeat(64),
+  });
+  const missingVersionUpdate = missingVersionClient.sent.at(-1).input.TransactItems[1].Update;
+  assert.equal(missingVersionUpdate.ExpressionAttributeValues[":previousState"], "active");
+  assert.equal(missingVersionUpdate.ExpressionAttributeValues[":currentAuthVersion"], undefined);
+  assert.equal(missingVersionUpdate.ExpressionAttributeValues[":nextAuthVersion"], 2);
 });
 
 test("transaction cancellation fails closed as conflict", async () => {
@@ -89,7 +127,7 @@ test("transaction cancellation fails closed as conflict", async () => {
   };
   const store = createDynamoAccountAccessStore(client, { tableName: "auth-table" });
   const result = await store.transitionAccess({
-    account: { kind: "account", accountId: ACCOUNT_ID, authVersion: 2 },
+    account: { kind: "account", accountId: ACCOUNT_ID, accessState: "active", authVersion: 2 },
     previousState: "active",
     targetState: "suspended",
     reason: "review",
