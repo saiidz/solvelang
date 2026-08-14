@@ -104,6 +104,7 @@ Rules:
         AssertDescription: Business plan Stripe price ID is required.
 
 Conditions:
+  CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
 
 Resources:
@@ -481,8 +482,14 @@ Resources:
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ApiAccountsTable
-        - DynamoDBReadPolicy:
-            TableName: !Ref ApiCustomerAuthTable
+        - !If
+          - CustomerAccountsFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !GetAtt ApiCustomerAuthTable.Arn
+          - !Ref AWS::NoValue
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiKeysTable
         - DynamoDBCrudPolicy:
