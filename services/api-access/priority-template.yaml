@@ -15,9 +15,15 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+  CustomerAuthTableName:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|[A-Za-z0-9_.-]{3,255}$'
+    Description: Optional CustomerAuthTable name used to verify customer-owned jobs before execution.
 
 Conditions:
   PriorityQueueIsEnabled: !Equals [!Ref PriorityQueueEnabled, "true"]
+  CustomerAccountVerificationConfigured: !Not [!Equals [!Ref CustomerAuthTableName, ""]]
 
 Globals:
   Function:
@@ -240,9 +246,18 @@ Resources:
         Variables:
           API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
           API_PRIORITY_LANE: standard
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerAccountVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
         - SQSPollerPolicy:
             QueueName: !GetAtt StandardQueue.QueueName
       Events:
@@ -265,9 +280,18 @@ Resources:
         Variables:
           API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
           API_PRIORITY_LANE: express
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerAccountVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
         - SQSPollerPolicy:
             QueueName: !GetAtt ExpressQueue.QueueName
       Events:
@@ -292,9 +316,18 @@ Resources:
         Variables:
           API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
           API_PRIORITY_LANE: priority
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerAccountVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
         - SQSPollerPolicy:
             QueueName: !GetAtt PriorityQueue.QueueName
       Events:
@@ -319,9 +352,18 @@ Resources:
         Variables:
           API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
           API_PRIORITY_LANE: critical
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerAccountVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
         - SQSPollerPolicy:
             QueueName: !GetAtt CriticalQueue.QueueName
       Events:

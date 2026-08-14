@@ -8,9 +8,17 @@ function requestIdempotencyKey(event) {
   return `request_${createHash("sha256").update(requestId).digest("hex")}`;
 }
 
-export function createApiKeyAuthorizer({ service, requiredScope = "repository:audit", enabled = false }) {
+export function createApiKeyAuthorizer({
+  service,
+  accountAccess,
+  requiredScope = "repository:audit",
+  enabled = false,
+}) {
   if (!service || typeof service.authorize !== "function" || typeof service.consumeUsage !== "function") {
     throw new Error("API access service is required.");
+  }
+  if (accountAccess !== undefined && (!accountAccess || typeof accountAccess.assertActive !== "function")) {
+    throw new Error("Account access service is invalid.");
   }
 
   return async function authorizeRequest(event) {
@@ -18,6 +26,7 @@ export function createApiKeyAuthorizer({ service, requiredScope = "repository:au
     try {
       const authorization = event?.headers?.authorization ?? event?.headers?.Authorization ?? event?.identitySource?.[0];
       const context = await service.authorize({ authorization, requiredScope });
+      if (accountAccess) await accountAccess.assertActive(context.accountId);
       const usage = await service.consumeUsage({
         accountId: context.accountId,
         credits: 1,

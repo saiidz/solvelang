@@ -4,6 +4,13 @@ function required(environment, name, minimum = 1) {
   return value;
 }
 
+function optional(environment, name) {
+  const value = environment[name];
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is invalid.`);
+  return value;
+}
+
 export function parsePriorityAdminEnvironment(environment = process.env) {
   return {
     priorityQueueEnabled: environment.API_PRIORITY_QUEUE_ENABLED === "true",
@@ -30,6 +37,7 @@ export function parsePriorityWorkerEnvironment(environment = process.env) {
   const logStream = environment.AWS_LAMBDA_LOG_STREAM_NAME;
   return {
     priorityJobsTable: required(environment, "API_PRIORITY_JOBS_TABLE"),
+    customerAuthTable: optional(environment, "API_CUSTOMER_AUTH_TABLE"),
     laneName,
     workerId: typeof logStream === "string" && logStream
       ? `${functionName}:${logStream}`
