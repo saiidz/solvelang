@@ -9,6 +9,9 @@ on:
       - 'ops/aws/customer-totp-kms-template.yaml'
       - 'ops/aws/production-preflight-policy.json'
       - 'ops/aws/production-foundation-deploy-policy.json'
+      - 'ops/aws/production-totp-preflight-supplemental-policy.json'
+      - 'ops/aws/production-totp-deploy-supplemental-policy.json'
+      - 'ops/aws/verify-production-totp-role-supplements.sh'
       - '.github/workflows/api-access-ci.yml'
       - '.github/workflows/account-access-production-admin.yml'
       - '.github/workflows/deploy-priority-queue.yml'
@@ -24,6 +27,9 @@ on:
       - 'ops/aws/customer-totp-kms-template.yaml'
       - 'ops/aws/production-preflight-policy.json'
       - 'ops/aws/production-foundation-deploy-policy.json'
+      - 'ops/aws/production-totp-preflight-supplemental-policy.json'
+      - 'ops/aws/production-totp-deploy-supplemental-policy.json'
+      - 'ops/aws/verify-production-totp-role-supplements.sh'
       - '.github/workflows/api-access-ci.yml'
       - '.github/workflows/account-access-production-admin.yml'
       - '.github/workflows/deploy-priority-queue.yml'
@@ -69,4 +75,14 @@ jobs:
           "$RUNNER_TEMP/cfn-lint-venv/bin/cfn-lint" ../../ops/aws/customer-totp-kms-template.yaml
       - name: Parse production IAM policy contracts
         run: |
-          node -e 'JSON.parse(require("fs").readFileSync("../../ops/aws/production-preflight-policy.json", "utf8")); JSON.parse(require("fs").readFileSync("../../ops/aws/production-foundation-deploy-policy.json", "utf8"));'
+          node - <<'NODE'
+          const fs = require('fs');
+          for (const path of [
+            '../../ops/aws/production-preflight-policy.json',
+            '../../ops/aws/production-foundation-deploy-policy.json',
+            '../../ops/aws/production-totp-preflight-supplemental-policy.json',
+            '../../ops/aws/production-totp-deploy-supplemental-policy.json',
+          ]) JSON.parse(fs.readFileSync(path, 'utf8'));
+          NODE
+      - name: Syntax-check read-only TOTP IAM verifier
+        run: bash -n ../../ops/aws/verify-production-totp-role-supplements.sh
