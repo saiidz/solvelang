@@ -3,6 +3,7 @@ import { KMSClient } from "@aws-sdk/client-kms";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
+import { createAccountAccessAdminHandler } from "./account-access-admin-handler.js";
 import { createAccessGuardedApiAccessService } from "./account-access-api-service.js";
 import { createAccountAccessService } from "./account-access.js";
 import { createDynamoAccountAccessStore } from "./account-access-store.js";
@@ -70,6 +71,13 @@ const customerAccount = createCustomerAccountService({
   apiAccessService: guardedService,
   usageReader: createDynamoCustomerUsageReader(documentClient, environment.usageTable),
 });
+const accountAccessAdminApplication = accountAccess
+  ? createAccountAccessAdminHandler({
+      accountAccess,
+      adminSecret: environment.adminSecret,
+      siteOrigin: environment.siteOrigin,
+    })
+  : undefined;
 
 let stripeGateway;
 let subscriptionCheckout;
@@ -119,7 +127,6 @@ const application = createApiAccessHandler({
   customerTotpEnabled: environment.customerTotpEnabled,
   customerAuth,
   customerAccount,
-  accountAccess,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
   subscriptionPortal,
@@ -129,6 +136,9 @@ const application = createApiAccessHandler({
 
 export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
+  if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) {
+    return accountAccessAdminApplication(event);
+  }
   if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) {
     return subscriptionManagementApplication(event);
   }
