@@ -7,7 +7,11 @@ function restricted() {
 
 export function createAccessGuardedCustomerAuthStore(store, accessReader) {
   if (!store || typeof store !== "object") throw new Error("Customer authentication store is required.");
-  if (!accessReader || typeof accessReader.getAccount !== "function") throw new Error("Account access reader is required.");
+  if (!accessReader
+    || typeof accessReader.getAccount !== "function"
+    || typeof accessReader.getRecord !== "function") {
+    throw new Error("Account access reader is required.");
+  }
 
   async function assertActiveAccount(accountId, { allowMissing = false } = {}) {
     const account = await accessReader.getAccount(accountId);
