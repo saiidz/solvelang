@@ -26,9 +26,13 @@ export function parsePriorityDispatcherEnvironment(environment = process.env) {
 
 export function parsePriorityWorkerEnvironment(environment = process.env) {
   const laneName = required(environment, "API_PRIORITY_LANE");
+  const functionName = environment.AWS_LAMBDA_FUNCTION_NAME || `priority-${laneName}-worker`;
+  const logStream = environment.AWS_LAMBDA_LOG_STREAM_NAME;
   return {
     priorityJobsTable: required(environment, "API_PRIORITY_JOBS_TABLE"),
     laneName,
-    workerId: environment.AWS_LAMBDA_FUNCTION_NAME || `priority-${laneName}-worker`,
+    workerId: typeof logStream === "string" && logStream
+      ? `${functionName}:${logStream}`
+      : functionName,
   };
 }

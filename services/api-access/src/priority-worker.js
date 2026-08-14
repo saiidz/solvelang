@@ -15,14 +15,24 @@ function parseMessage(record) {
   return payload;
 }
 
+function invocationWorkerId(baseWorkerId, context) {
+  const requestId = context?.awsRequestId;
+  if (typeof requestId !== "string" || !/^[A-Za-z0-9_.:-]{8,128}$/.test(requestId)) return baseWorkerId;
+  return `${baseWorkerId}:${requestId}`;
+}
+
 export function createPriorityWorker({ laneName, jobStore, now = Date.now, workerId = "priority-worker", logger = console }) {
   const lane = getPriorityLane(laneName);
   if (!jobStore || typeof jobStore.claimJob !== "function" || typeof jobStore.completeJob !== "function" || typeof jobStore.releaseJob !== "function" || typeof jobStore.failJob !== "function") {
     throw new Error("Priority job store is required.");
   }
+  if (typeof workerId !== "string" || !workerId || workerId.length > 256 || /[\u0000-\u001f\u007f]/.test(workerId)) {
+    throw new Error("Priority worker ID is invalid.");
+  }
 
-  return async function work(event = {}) {
+  return async function work(event = {}, context = {}) {
     const failures = [];
+    const leaseOwner = invocationWorkerId(workerId, context);
     for (const record of event.Records ?? []) {
       let message;
       let claimed = false;
@@ -30,7 +40,7 @@ export function createPriorityWorker({ laneName, jobStore, now = Date.now, worke
         message = parseMessage(record);
         if (message.priority !== lane.name) throw new Error("Priority queue message was sent to the wrong lane.");
         const claimedAt = now();
-        const claim = await jobStore.claimJob(message.jobId, lane.name, workerId, claimedAt, claimedAt + WORKER_LEASE_MS);
+        const claim = await jobStore.claimJob(message.jobId, lane.name, leaseOwner, claimedAt, claimedAt + WORKER_LEASE_MS);
         if (claim.status === "terminal") continue;
         if (claim.status === "busy") {
           logger.error({ type: "priority_worker_busy", lane: lane.name, messageId: record?.messageId });
@@ -42,13 +52,13 @@ export function createPriorityWorker({ laneName, jobStore, now = Date.now, worke
         const job = claim.job;
         if (job.jobType !== "queue_canary") throw new Error("Unsupported priority job type.");
         const completedAt = new Date(now()).toISOString();
-        await jobStore.completeJob(message.jobId, workerId, {
+        await jobStore.completeJob(message.jobId, leaseOwner, {
           schemaVersion: 1,
           jobType: job.jobType,
           priority: lane.name,
           capacityWeight: lane.capacityWeight,
           sourceFingerprint: job.sourceFingerprint,
-          processedBy: workerId,
+          processedBy: leaseOwner,
         }, completedAt);
       } catch {
         const messageId = record?.messageId ?? "unknown";
@@ -56,8 +66,8 @@ export function createPriorityWorker({ laneName, jobStore, now = Date.now, worke
         if (claimed && message?.jobId) {
           const failedAt = new Date(now()).toISOString();
           try {
-            if (receiveCount >= 3) await jobStore.failJob(message.jobId, workerId, "worker_failed", failedAt);
-            else await jobStore.releaseJob(message.jobId, workerId, "worker_retry", failedAt);
+            if (receiveCount >= 3) await jobStore.failJob(message.jobId, leaseOwner, "worker_failed", failedAt);
+            else await jobStore.releaseJob(message.jobId, leaseOwner, "worker_retry", failedAt);
           } catch {
             // The queue retry and expiring lease remain authoritative when cleanup also fails.
           }

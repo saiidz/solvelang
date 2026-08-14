@@ -12,6 +12,6 @@ const application = createPriorityWorker({
   jobStore: createDynamoPriorityJobStore(documentClient, { jobsTable: environment.priorityJobsTable }),
 });
 
-export async function handler(event) {
-  return application(event);
+export async function handler(event, context) {
+  return application(event, context);
 }
