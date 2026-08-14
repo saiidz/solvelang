@@ -1,0 +1,92 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageProductionTotpKmsStack",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:DescribeStacks",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:GetTemplate",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ListStackResources",
+        "cloudformation:UpdateStack"
+      ],
+      "Resource": "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*"
+    },
+    {
+      "Sid": "ProtectProductionTotpKmsStack",
+      "Effect": "Allow",
+      "Action": "cloudformation:UpdateTerminationProtection",
+      "Resource": "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*"
+    },
+    {
+      "Sid": "CreateProductionTotpKey",
+      "Effect": "Allow",
+      "Action": "kms:CreateKey",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:KeySpec": "SYMMETRIC_DEFAULT",
+          "kms:KeyUsage": "ENCRYPT_DECRYPT",
+          "aws:RequestTag/Project": "SolveLang",
+          "aws:RequestTag/Purpose": "customer-totp",
+          "aws:RequestTag/Environment": "production"
+        }
+      }
+    },
+    {
+      "Sid": "ManageTaggedProductionTotpKey",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:DescribeKey",
+        "kms:EnableKeyRotation",
+        "kms:GetKeyPolicy",
+        "kms:GetKeyRotationStatus",
+        "kms:ListResourceTags",
+        "kms:TagResource",
+        "kms:UntagResource",
+        "kms:UpdateAlias"
+      ],
+      "Resource": "arn:aws:kms:*:*:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/Project": "SolveLang",
+          "aws:ResourceTag/Purpose": "customer-totp",
+          "aws:ResourceTag/Environment": "production"
+        }
+      }
+    },
+    {
+      "Sid": "TagProductionTotpKeyOnCreate",
+      "Effect": "Allow",
+      "Action": "kms:TagResource",
+      "Resource": "arn:aws:kms:*:*:key/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestTag/Project": "SolveLang",
+          "aws:RequestTag/Purpose": "customer-totp",
+          "aws:RequestTag/Environment": "production"
+        }
+      }
+    },
+    {
+      "Sid": "ManageProductionTotpAlias",
+      "Effect": "Allow",
+      "Action": [
+        "kms:CreateAlias",
+        "kms:DeleteAlias",
+        "kms:UpdateAlias"
+      ],
+      "Resource": "arn:aws:kms:*:*:alias/solvelang-customer-totp-production"
+    }
+  ]
+}
