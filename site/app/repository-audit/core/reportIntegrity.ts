@@ -49,7 +49,8 @@ export async function verifyRepositoryAuditIntegrity(
   const integrity = report.integrity;
   if (!integrity || typeof integrity.canonicalJsonSha256 !== "string") return false;
   const { canonicalJsonSha256, ...integrityWithoutDigest } = integrity;
-  const { integrity: _integrity, ...reportWithoutIntegrity } = report;
+  const reportWithoutIntegrity: Record<string, unknown> = { ...report };
+  delete reportWithoutIntegrity.integrity;
   const digestInput = Object.keys(integrityWithoutDigest).length === 0
     ? reportWithoutIntegrity
     : { ...reportWithoutIntegrity, integrity: integrityWithoutDigest };
