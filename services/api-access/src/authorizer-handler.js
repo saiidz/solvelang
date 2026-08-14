@@ -1,5 +1,7 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { createDynamoAccountAccessReader } from "./account-access-reader.js";
+import { createAccountAccessService } from "./account-access.js";
 import { createApiKeyAuthorizer } from "./authorizer.js";
 import { parseApiKeyAuthorizerEnvironment } from "./config.js";
 import { createDynamoApiKeyAuthorizerStore } from "./dynamo-store.js";
@@ -13,8 +15,14 @@ const service = createApiAccessService({
   pepper: environment.pepper,
   mode: environment.mode,
 });
+const accountAccess = environment.customerAccountsEnabled
+  ? createAccountAccessService({
+      store: createDynamoAccountAccessReader(documentClient, { tableName: environment.customerAuthTable }),
+    })
+  : undefined;
 const authorizeRequest = createApiKeyAuthorizer({
   service,
+  accountAccess,
   enabled: environment.enabled,
   requiredScope: "repository:audit",
 });
