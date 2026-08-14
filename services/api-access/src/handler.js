@@ -8,6 +8,7 @@ import { createAccessGuardedApiAccessService } from "./account-access-api-servic
 import { createDynamoAccountAccessReader } from "./account-access-reader.js";
 import { createAccountAccessService } from "./account-access.js";
 import { createDynamoAccountAccessStore } from "./account-access-store.js";
+import { createAccountIdentityResolver } from "./account-identity-resolver.js";
 import { createApiAccessHandler } from "./api-handler.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
@@ -38,6 +39,7 @@ const service = createApiAccessService({
 });
 
 let accountAccess;
+let accountIdentityResolver;
 let customerAuth;
 if (environment.customerAccountsEnabled) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
@@ -50,8 +52,13 @@ if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
+  const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
+  accountIdentityResolver = createAccountIdentityResolver({
+    store: customerAuthStore,
+    pepper: environment.customerAuthPepper,
+  });
   const guardedAuthStore = createAccessGuardedCustomerAuthStore(
-    createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable),
+    customerAuthStore,
     accountAccessReader,
   );
   customerAuth = createAccessGuardedCustomerAuthService(createCustomerAuthService({
@@ -78,6 +85,7 @@ const customerAccount = createCustomerAccountService({
 const accountAccessAdminApplication = accountAccess
   ? createAccountAccessAdminHandler({
       accountAccess,
+      identityResolver: accountIdentityResolver,
       adminSecret: environment.adminSecret,
       siteOrigin: environment.siteOrigin,
     })

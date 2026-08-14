@@ -13,8 +13,17 @@ on:
           - suspend
           - reactivate
           - terminate
-      account_id:
-        description: "Exact account ID (acct_ followed by 32 lowercase hex characters)"
+      identity_type:
+        description: "How to identify the account"
+        required: true
+        default: account_id
+        type: choice
+        options:
+          - account_id
+          - email
+          - username
+      identity:
+        description: "Exact account ID, customer email, or username matching identity_type"
         required: true
         type: string
       reason:
@@ -28,7 +37,7 @@ on:
         default: ""
         type: string
       termination_confirmation:
-        description: "For terminate only, enter exactly TERMINATE <account_id>"
+        description: "For terminate only, enter exactly TERMINATE <resolved account_id>; run status first when using email/username"
         required: false
         default: ""
         type: string
@@ -51,7 +60,8 @@ jobs:
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       OWNER_LOGIN: ${{ github.repository_owner }}
       OPERATION: ${{ inputs.operation }}
-      ACCOUNT_ID: ${{ inputs.account_id }}
+      IDENTITY_TYPE: ${{ inputs.identity_type }}
+      IDENTITY: ${{ inputs.identity }}
       REASON: ${{ inputs.reason }}
       REQUEST_ID: ${{ inputs.request_id }}
       TERMINATION_CONFIRMATION: ${{ inputs.termination_confirmation }}
@@ -67,11 +77,30 @@ jobs:
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
           [[ "$GITHUB_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may run production account administration." >&2; exit 1; }
           [[ "$GITHUB_TRIGGERING_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may trigger or rerun production account administration." >&2; exit 1; }
-          [[ "$ACCOUNT_ID" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Account ID is invalid." >&2; exit 1; }
           [[ -n "$AWS_REGION" ]] || { echo "AWS_REGION is required." >&2; exit 1; }
           [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
           [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
           (( ${#API_ACCESS_ADMIN_SECRET} >= 32 )) || { echo "API access admin secret is unavailable." >&2; exit 1; }
+          (( ${#IDENTITY} >= 1 && ${#IDENTITY} <= 254 )) || { echo "Account identifier length is invalid." >&2; exit 1; }
+          jq -en --arg value "$IDENTITY" '$value | explode | all(. >= 32 and . != 127)' >/dev/null \
+            || { echo "Account identifier contains invalid control characters." >&2; exit 1; }
+
+          case "$IDENTITY_TYPE" in
+            account_id)
+              [[ "$IDENTITY" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Account ID is invalid." >&2; exit 1; }
+              ;;
+            email)
+              [[ "$IDENTITY" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || { echo "Email identifier is invalid." >&2; exit 1; }
+              ;;
+            username)
+              normalized_username="${IDENTITY,,}"
+              [[ "$normalized_username" =~ ^[a-z0-9][a-z0-9._-]{2,31}$ ]] || { echo "Username identifier is invalid." >&2; exit 1; }
+              ;;
+            *)
+              echo "Unsupported identity type." >&2
+              exit 1
+              ;;
+          esac
 
           case "$OPERATION" in
             status)
@@ -87,13 +116,6 @@ jobs:
               exit 1
               ;;
           esac
-
-          if [[ "$OPERATION" == "terminate" ]]; then
-            [[ "$TERMINATION_CONFIRMATION" == "TERMINATE $ACCOUNT_ID" ]] || {
-              echo "Termination requires exact confirmation: TERMINATE $ACCOUNT_ID" >&2
-              exit 1
-            }
-          fi
 
       - name: Assume production read-only preflight role
         uses: aws-actions/configure-aws-credentials@v4
@@ -123,24 +145,46 @@ jobs:
           jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
 
-      - name: Read current account state
+      - name: Resolve identity and read current account state
         id: before
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
         shell: bash
         run: |
           set -euo pipefail
+          case "$IDENTITY_TYPE" in
+            account_id) lookup_key="accountId" ;;
+            email) lookup_key="email" ;;
+            username) lookup_key="username" ;;
+            *) echo "Identity type is invalid." >&2; exit 1 ;;
+          esac
+
           http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --get \
+            --data-urlencode "$lookup_key=$IDENTITY" \
             --output /tmp/account-before.json \
             --write-out '%{http_code}' \
             -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
-            "$API_BASE/internal/accounts/access?accountId=$ACCOUNT_ID")"
+            "$API_BASE/internal/accounts/access")"
           if [[ "$http_status" != "200" ]]; then
             echo "Account status request failed with HTTP $http_status." >&2
             cat /tmp/account-before.json >&2
             exit 1
           fi
-          jq -e --arg account "$ACCOUNT_ID" '.account.accountId == $account and (.account.state == "active" or .account.state == "suspended" or .account.state == "terminated") and (.account.authVersion | type == "number")' /tmp/account-before.json >/dev/null
+
+          resolved_account_id="$(jq -r '.account.accountId // empty' /tmp/account-before.json)"
+          matched_by="$(jq -r '.lookup.matchedBy // empty' /tmp/account-before.json)"
+          [[ "$resolved_account_id" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Resolved account ID is invalid." >&2; exit 1; }
+          [[ "$matched_by" == "$IDENTITY_TYPE" ]] || { echo "Account identity lookup type did not match the requested selector." >&2; exit 1; }
+          jq -e --arg account "$resolved_account_id" '.account.accountId == $account and (.account.state == "active" or .account.state == "suspended" or .account.state == "terminated") and (.account.authVersion | type == "number")' /tmp/account-before.json >/dev/null
+
+          if [[ "$OPERATION" == "terminate" ]]; then
+            [[ "$TERMINATION_CONFIRMATION" == "TERMINATE $resolved_account_id" ]] || {
+              echo "Termination requires exact confirmation of the resolved canonical account ID." >&2
+              exit 1
+            }
+          fi
+
           before_state="$(jq -r '.account.state' /tmp/account-before.json)"
           before_auth_version="$(jq -r '.account.authVersion' /tmp/account-before.json)"
 
@@ -158,6 +202,8 @@ jobs:
               ;;
           esac
 
+          echo "account_id=$resolved_account_id" >> "$GITHUB_OUTPUT"
+          echo "matched_by=$matched_by" >> "$GITHUB_OUTPUT"
           echo "state=$before_state" >> "$GITHUB_OUTPUT"
           echo "auth_version=$before_auth_version" >> "$GITHUB_OUTPUT"
 
@@ -166,11 +212,13 @@ jobs:
         if: inputs.operation != 'status'
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
+          RESOLVED_ACCOUNT_ID: ${{ steps.before.outputs.account_id }}
           BEFORE_STATE: ${{ steps.before.outputs.state }}
           BEFORE_AUTH_VERSION: ${{ steps.before.outputs.auth_version }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$RESOLVED_ACCOUNT_ID" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Resolved account ID is invalid." >&2; exit 1; }
           case "$OPERATION" in
             suspend) target_state="suspended" ;;
             reactivate) target_state="active" ;;
@@ -179,7 +227,7 @@ jobs:
           esac
 
           payload="$(jq -cn \
-            --arg accountId "$ACCOUNT_ID" \
+            --arg accountId "$RESOLVED_ACCOUNT_ID" \
             --arg state "$target_state" \
             --arg reason "$REASON" \
             --arg requestId "$REQUEST_ID" \
@@ -200,7 +248,7 @@ jobs:
           fi
 
           jq -e \
-            --arg account "$ACCOUNT_ID" \
+            --arg account "$RESOLVED_ACCOUNT_ID" \
             --arg target "$target_state" \
             '.account.accountId == $account and .account.state == $target and .account.requestedState == $target and (.account.changed == true or .account.duplicate == true)' \
             /tmp/account-mutation.json >/dev/null
@@ -226,21 +274,24 @@ jobs:
         if: inputs.operation != 'status'
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
+          RESOLVED_ACCOUNT_ID: ${{ steps.before.outputs.account_id }}
           TARGET_STATE: ${{ steps.mutate.outputs.target_state }}
         shell: bash
         run: |
           set -euo pipefail
           http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --get \
+            --data-urlencode "accountId=$RESOLVED_ACCOUNT_ID" \
             --output /tmp/account-after.json \
             --write-out '%{http_code}' \
             -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
-            "$API_BASE/internal/accounts/access?accountId=$ACCOUNT_ID")"
+            "$API_BASE/internal/accounts/access")"
           if [[ "$http_status" != "200" ]]; then
             echo "Post-mutation status request failed with HTTP $http_status." >&2
             cat /tmp/account-after.json >&2
             exit 1
           fi
-          jq -e --arg account "$ACCOUNT_ID" --arg target "$TARGET_STATE" \
+          jq -e --arg account "$RESOLVED_ACCOUNT_ID" --arg target "$TARGET_STATE" \
             '.account.accountId == $account and .account.state == $target and (.account.authVersion | type == "number")' \
             /tmp/account-after.json >/dev/null
           echo "state=$(jq -r '.account.state' /tmp/account-after.json)" >> "$GITHUB_OUTPUT"
@@ -249,6 +300,8 @@ jobs:
       - name: Write account administration summary
         env:
           API_BASE: ${{ steps.stack.outputs.api_base }}
+          RESOLVED_ACCOUNT_ID: ${{ steps.before.outputs.account_id }}
+          MATCHED_BY: ${{ steps.before.outputs.matched_by }}
           BEFORE_STATE: ${{ steps.before.outputs.state }}
           BEFORE_AUTH_VERSION: ${{ steps.before.outputs.auth_version }}
           AFTER_STATE: ${{ steps.after.outputs.state }}
@@ -263,7 +316,8 @@ jobs:
             echo
             echo "- Commit: \`$GITHUB_SHA\`"
             echo "- Actor: \`$GITHUB_ACTOR\`"
-            echo "- Account: \`$ACCOUNT_ID\`"
+            echo "- Account: \`$RESOLVED_ACCOUNT_ID\`"
+            echo "- Lookup type: **$MATCHED_BY**"
             echo "- Operation: **$OPERATION**"
             echo "- API base: \`$API_BASE\`"
             echo "- Previous state: **$BEFORE_STATE**"

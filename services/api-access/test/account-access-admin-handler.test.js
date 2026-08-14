@@ -26,8 +26,18 @@ function fixture() {
       return { accountId: input.accountId, state: input.state, authVersion: 5, changed: true };
     },
   };
+  const identityResolver = {
+    async resolve(input) {
+      calls.push(["resolve", input]);
+      if (input.accountId) return { accountId: input.accountId, matchedBy: "account_id" };
+      if (input.email) return { accountId: ACCOUNT_ID, matchedBy: "email" };
+      if (input.username) return { accountId: ACCOUNT_ID, matchedBy: "username" };
+      throw new Error("Unexpected lookup fixture input.");
+    },
+  };
   const handler = createAccountAccessAdminHandler({
     accountAccess,
+    identityResolver,
     adminSecret: ADMIN_SECRET,
     siteOrigin: "https://www.solve-lang.com",
     logger: { error() {} },
@@ -47,15 +57,40 @@ test("GET status requires the admin secret and returns no-store metadata", async
   }, { accountId: ACCOUNT_ID }));
   assert.equal(accepted.statusCode, 200);
   assert.equal(accepted.headers["cache-control"], "no-store");
-  assert.deepEqual(JSON.parse(accepted.body).account, {
-    accountId: ACCOUNT_ID,
-    state: "active",
-    authVersion: 4,
+  assert.deepEqual(JSON.parse(accepted.body), {
+    account: {
+      accountId: ACCOUNT_ID,
+      state: "active",
+      authVersion: 4,
+    },
+    lookup: { matchedBy: "account_id" },
   });
-  assert.deepEqual(calls, [["status", ACCOUNT_ID]]);
+  assert.deepEqual(calls, [
+    ["resolve", { accountId: ACCOUNT_ID, email: undefined, username: undefined }],
+    ["status", ACCOUNT_ID],
+  ]);
 });
 
-test("POST transition uses a server-owned actor", async () => {
+test("GET can resolve email or username before reading canonical account status", async () => {
+  for (const [query, matchedBy] of [
+    [{ email: "owner@example.com" }, "email"],
+    [{ username: "owner.user" }, "username"],
+  ]) {
+    const { handler, calls } = fixture();
+    const response = await handler(event("GET", undefined, {
+      "x-solvelang-admin-secret": ADMIN_SECRET,
+    }, query));
+    assert.equal(response.statusCode, 200);
+    assert.equal(JSON.parse(response.body).account.accountId, ACCOUNT_ID);
+    assert.deepEqual(JSON.parse(response.body).lookup, { matchedBy });
+    assert.equal(calls[0][0], "resolve");
+    assert.equal(calls[1][0], "status");
+    assert.equal(calls[1][1], ACCOUNT_ID);
+    assert.doesNotMatch(response.body, /owner@example\.com|owner\.user/);
+  }
+});
+
+test("POST transition keeps mutations canonical and uses a server-owned actor", async () => {
   const { handler, calls } = fixture();
   const input = {
     accountId: ACCOUNT_ID,
