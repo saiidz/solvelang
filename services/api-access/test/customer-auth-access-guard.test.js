@@ -4,6 +4,7 @@ import { createAccessGuardedCustomerAuthStore } from "../src/customer-auth-acces
 
 const ACTIVE = `acct_${"a".repeat(32)}`;
 const SUSPENDED = `acct_${"b".repeat(32)}`;
+const NEW_ACCOUNT = `acct_${"c".repeat(32)}`;
 
 function fixture() {
   const accounts = new Map([
@@ -59,7 +60,7 @@ test("existing suspended session is treated as invalid before customer action", 
   assert.equal(await guard.getSession("old"), undefined);
 });
 
-test("magic link consumption is blocked before it can create a session", async () => {
+test("magic link consumption is blocked before it can create a session for a suspended account", async () => {
   const { guard, calls, records } = fixture();
   records.set("magic#token1", { kind: "magic", accountId: SUSPENDED });
   await assert.rejects(
@@ -67,6 +68,13 @@ test("magic link consumption is blocked before it can create a session", async (
     (error) => error.code === "account_access_restricted",
   );
   assert.equal(calls.length, 0);
+});
+
+test("first-sign-in magic link can be consumed before the account row exists", async () => {
+  const { guard, calls, records } = fixture();
+  records.set("magic#signup", { kind: "magic", accountId: NEW_ACCOUNT });
+  await guard.consumeMagicLinkForAuth({ tokenId: "signup" });
+  assert.deepEqual(calls, [["consumeMagicLinkForAuth", "signup"]]);
 });
 
 test("MFA challenge consumption is blocked for suspended account", async () => {
