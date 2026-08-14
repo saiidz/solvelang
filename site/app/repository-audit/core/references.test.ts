@@ -54,7 +54,10 @@ test("classifies package and builtin references and finds dependency candidates"
     ],
   );
   assert.deepEqual(
-    analysis.candidates.filter((candidate) => candidate.category === "unused-dependency").map((candidate) => candidate.evidence[1]),
+    analysis.candidates
+      .filter((candidate) => candidate.category === "unused-dependency")
+      .map((candidate) => candidate.evidence[1])
+      .sort(),
     ["lodash", "vitest"],
   );
   assert.deepEqual(
