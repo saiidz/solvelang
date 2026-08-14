@@ -14,17 +14,19 @@ function section(source, start, end) {
   return source.slice(from, to);
 }
 
-test("main API stack exposes protected account-access routes and keeps authorizer CustomerAuth access read-only", async () => {
+test("main API stack exposes protected account-access routes and gives the authorizer conditional GetItem-only CustomerAuth access", async () => {
   const source = await readFile(templateUrl, "utf8");
+  assert.match(source, /CustomerAccountsFeatureEnabled: !Equals \[!Ref CustomerAccountsEnabled, "true"\]/);
   assert.match(source, /AccountAccessStatus:[\s\S]*Path: \/internal\/accounts\/access[\s\S]*Method: GET/);
   assert.match(source, /AccountAccessTransition:[\s\S]*Path: \/internal\/accounts\/access[\s\S]*Method: POST/);
 
   const authorizer = section(source, "  ApiKeyAuthorizerFunction:", "  ApiKeyAuthorizerInvokePermission:");
   assert.match(authorizer, /API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled/);
   assert.match(authorizer, /API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable/);
-  assert.match(authorizer, /DynamoDBReadPolicy:[\s\S]*TableName: !Ref ApiCustomerAuthTable/);
+  assert.match(authorizer, /- !If[\s\S]*- CustomerAccountsFeatureEnabled[\s\S]*- dynamodb:GetItem[\s\S]*Resource: !GetAtt ApiCustomerAuthTable.Arn/);
+  assert.doesNotMatch(authorizer, /DynamoDBReadPolicy:[\s\S]{0,120}TableName: !Ref ApiCustomerAuthTable/);
   assert.doesNotMatch(authorizer, /DynamoDBCrudPolicy:[\s\S]{0,120}TableName: !Ref ApiCustomerAuthTable/);
-  assert.doesNotMatch(authorizer, /dynamodb:(?:PutItem|UpdateItem|DeleteItem)/);
+  assert.doesNotMatch(authorizer, /dynamodb:(?:BatchGetItem|Query|Scan|PutItem|UpdateItem|DeleteItem)/);
 });
 
 test("priority workers use optional GetItem-only customer account verification", async () => {
