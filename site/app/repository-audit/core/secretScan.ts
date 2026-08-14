@@ -33,7 +33,7 @@ type SecretPattern = {
 const patterns: SecretPattern[] = [
   {
     patternClass: "private-key",
-    expression: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g,
+    expression: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----/g,
     remediation: "Remove the private key from tracked content, rotate it, and replace it with a secret-manager reference.",
   },
   {
@@ -129,8 +129,14 @@ function likelyPlaceholder(value: string): boolean {
     || /^0+$/.test(normalized);
 }
 
-async function warningId(path: string, line: number, patternClass: RepositorySecretPatternClass, exposure: RepositorySecretExposure): Promise<string> {
-  return `sec_${(await sha256(`${path}\u0000${line}\u0000${patternClass}\u0000${exposure}`)).slice(0, 24)}`;
+async function warningId(
+  path: string,
+  line: number,
+  position: number,
+  patternClass: RepositorySecretPatternClass,
+  exposure: RepositorySecretExposure,
+): Promise<string> {
+  return `sec_${(await sha256(`${path}\u0000${line}\u0000${position}\u0000${patternClass}\u0000${exposure}`)).slice(0, 24)}`;
 }
 
 export async function scanRepositorySecrets(
@@ -150,8 +156,8 @@ export async function scanRepositorySecrets(
     const name = basename(file.path);
 
     if (credentialFileNames.has(name) && !name.endsWith(".example")) {
-      const id = await warningId(file.path, 1, "credential-file", exposure);
-      const key = `${id}:credential-file`;
+      const id = await warningId(file.path, 1, 0, "credential-file", exposure);
+      const key = `${file.path}:1:0:credential-file`;
       if (!seen.has(key)) {
         seen.add(key);
         warnings.push({
@@ -175,12 +181,14 @@ export async function scanRepositorySecrets(
       for (let match = expression.exec(file.text); match; match = expression.exec(file.text)) {
         const raw = definition.capture ? match[definition.capture] : match[0];
         if (!raw || likelyPlaceholder(raw)) continue;
-        const line = lineNumberAt(file.text, match.index);
-        const id = await warningId(file.path, line, definition.patternClass, exposure);
-        const dedupeKey = `${id}:${definition.patternClass}`;
+        const rawOffset = definition.capture ? match[0].indexOf(raw) : 0;
+        const secretPosition = match.index + Math.max(0, rawOffset);
+        const line = lineNumberAt(file.text, secretPosition);
+        const secretFingerprint = await hmacSha256(hmacKey, raw);
+        const dedupeKey = `${file.path}:${line}:${secretPosition}:${definition.patternClass}:${secretFingerprint}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
-        const secretFingerprint = await hmacSha256(hmacKey, raw);
+        const id = await warningId(file.path, line, secretPosition, definition.patternClass, exposure);
         warnings.push({
           warningId: id,
           path: file.path,
