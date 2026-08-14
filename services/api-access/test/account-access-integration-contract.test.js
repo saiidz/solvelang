@@ -41,6 +41,6 @@ test("signed Stripe lifecycle remains able to reconcile restricted accounts whil
   const source = await readFile(handlerUrl, "utf8");
   assert.match(source, /const guardedService = accountAccess[\s\S]*createAccessGuardedApiAccessService\(service, accountAccess\)/);
   assert.match(source, /subscriptionCheckout = createEmbeddedSubscriptionCheckoutService\([\s\S]*apiAccessService: guardedService/);
-  assert.match(source, /subscriptionManagementService\([\s\S]*apiAccessService: guardedService/);
+  assert.match(source, /createSubscriptionManagementService\([\s\S]*apiAccessService: guardedService/);
   assert.match(source, /subscriptionLifecycle = createSubscriptionLifecycleService\([\s\S]*apiAccessService: service,/);
 });
