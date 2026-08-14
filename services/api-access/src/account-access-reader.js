@@ -16,7 +16,9 @@ export function createDynamoAccountAccessReader(documentClient, { tableName }) {
 
   async function getAccount(accountId) {
     const record = await getRecord(`account#${accountId}`);
-    return record?.kind === "account" ? record : undefined;
+    if (!record || record.kind !== "account") return undefined;
+    if (record.accountId !== accountId) throw new Error("Customer account identity is invalid.");
+    return record;
   }
 
   async function isActive(accountId) {
