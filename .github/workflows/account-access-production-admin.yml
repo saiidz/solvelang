@@ -1,0 +1,283 @@
+name: Account Access Production Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Account operation to perform"
+        required: true
+        default: status
+        type: choice
+        options:
+          - status
+          - suspend
+          - reactivate
+          - terminate
+      account_id:
+        description: "Exact account ID (acct_ followed by 32 lowercase hex characters)"
+        required: true
+        type: string
+      reason:
+        description: "Required reason for suspend, reactivate, or terminate; ignored for status"
+        required: false
+        default: ""
+        type: string
+      request_id:
+        description: "Unique idempotency request ID for mutations (8-128 characters: letters, digits, _ . : -)"
+        required: false
+        default: ""
+        type: string
+      termination_confirmation:
+        description: "For terminate only, enter exactly TERMINATE <account_id>"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: api-access-production-account-admin
+  cancel-in-progress: false
+
+jobs:
+  account-access:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      OWNER_LOGIN: ${{ github.repository_owner }}
+      OPERATION: ${{ inputs.operation }}
+      ACCOUNT_ID: ${{ inputs.account_id }}
+      REASON: ${{ inputs.reason }}
+      REQUEST_ID: ${{ inputs.request_id }}
+      TERMINATION_CONFIRMATION: ${{ inputs.termination_confirmation }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce owner-only production account boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production account administration must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "$GITHUB_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may run production account administration." >&2; exit 1; }
+          [[ "$GITHUB_TRIGGERING_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may trigger or rerun production account administration." >&2; exit 1; }
+          [[ "$ACCOUNT_ID" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Account ID is invalid." >&2; exit 1; }
+          [[ -n "$AWS_REGION" ]] || { echo "AWS_REGION is required." >&2; exit 1; }
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          (( ${#API_ACCESS_ADMIN_SECRET} >= 32 )) || { echo "API access admin secret is unavailable." >&2; exit 1; }
+
+          case "$OPERATION" in
+            status)
+              ;;
+            suspend|reactivate|terminate)
+              (( ${#REASON} >= 1 && ${#REASON} <= 512 )) || { echo "A 1-512 character reason is required for mutations." >&2; exit 1; }
+              jq -en --arg value "$REASON" '$value | explode | all(. >= 32 and . != 127)' >/dev/null \
+                || { echo "Reason contains invalid control characters." >&2; exit 1; }
+              [[ "$REQUEST_ID" =~ ^[A-Za-z0-9_.:-]{8,128}$ ]] || { echo "Mutation request ID is invalid." >&2; exit 1; }
+              ;;
+            *)
+              echo "Unsupported account operation." >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ "$OPERATION" == "terminate" ]]; then
+            [[ "$TERMINATION_CONFIRMATION" == "TERMINATE $ACCOUNT_ID" ]] || {
+              echo "Termination requires exact confirmation: TERMINATE $ACCOUNT_ID" >&2
+              exit 1
+            }
+          fi
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Resolve stable production API
+        id: stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack_description="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack_description")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
+
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          customer_accounts_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack_description")"
+          [[ "$api_enabled" == true ]] || { echo "Production API access is not enabled." >&2; exit 1; }
+          [[ "$customer_accounts_enabled" == true ]] || { echo "Production customer accounts are not enabled." >&2; exit 1; }
+          [[ "$billing_enabled" == false ]] || { echo "Production subscription billing must remain disabled." >&2; exit 1; }
+
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack_description")"
+          [[ "$api_base" == https://* ]] || { echo "Production API base is invalid." >&2; exit 1; }
+          health="$(curl --proto '=https' --tlsv1.2 --fail --silent --show-error --connect-timeout 10 --max-time 30 "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+
+      - name: Read current account state
+        id: before
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output /tmp/account-before.json \
+            --write-out '%{http_code}' \
+            -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
+            "$API_BASE/internal/accounts/access?accountId=$ACCOUNT_ID")"
+          if [[ "$http_status" != "200" ]]; then
+            echo "Account status request failed with HTTP $http_status." >&2
+            cat /tmp/account-before.json >&2
+            exit 1
+          fi
+          jq -e --arg account "$ACCOUNT_ID" '.account.accountId == $account and (.account.state == "active" or .account.state == "suspended" or .account.state == "terminated") and (.account.authVersion | type == "number")' /tmp/account-before.json >/dev/null
+          before_state="$(jq -r '.account.state' /tmp/account-before.json)"
+          before_auth_version="$(jq -r '.account.authVersion' /tmp/account-before.json)"
+
+          case "$OPERATION" in
+            status)
+              ;;
+            suspend)
+              [[ "$before_state" == "active" || "$before_state" == "suspended" ]] || { echo "Suspend cannot operate on a terminated account." >&2; exit 1; }
+              ;;
+            reactivate)
+              [[ "$before_state" == "suspended" || "$before_state" == "active" ]] || { echo "Reactivate cannot operate on a terminated account." >&2; exit 1; }
+              ;;
+            terminate)
+              [[ "$before_state" == "active" || "$before_state" == "suspended" || "$before_state" == "terminated" ]] || { echo "Account state is invalid for termination." >&2; exit 1; }
+              ;;
+          esac
+
+          echo "state=$before_state" >> "$GITHUB_OUTPUT"
+          echo "auth_version=$before_auth_version" >> "$GITHUB_OUTPUT"
+
+      - name: Apply requested account mutation
+        id: mutate
+        if: inputs.operation != 'status'
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+          BEFORE_STATE: ${{ steps.before.outputs.state }}
+          BEFORE_AUTH_VERSION: ${{ steps.before.outputs.auth_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$OPERATION" in
+            suspend) target_state="suspended" ;;
+            reactivate) target_state="active" ;;
+            terminate) target_state="terminated" ;;
+            *) echo "Mutation operation is invalid." >&2; exit 1 ;;
+          esac
+
+          payload="$(jq -cn \
+            --arg accountId "$ACCOUNT_ID" \
+            --arg state "$target_state" \
+            --arg reason "$REASON" \
+            --arg requestId "$REQUEST_ID" \
+            '{accountId:$accountId,state:$state,reason:$reason,requestId:$requestId}')"
+
+          http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output /tmp/account-mutation.json \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
+            --data "$payload" \
+            "$API_BASE/internal/accounts/access")"
+          if [[ "$http_status" != "200" ]]; then
+            echo "Account mutation failed with HTTP $http_status." >&2
+            cat /tmp/account-mutation.json >&2
+            exit 1
+          fi
+
+          jq -e \
+            --arg account "$ACCOUNT_ID" \
+            --arg target "$target_state" \
+            '.account.accountId == $account and .account.state == $target and .account.requestedState == $target and (.account.changed == true or .account.duplicate == true)' \
+            /tmp/account-mutation.json >/dev/null
+
+          changed="$(jq -r '.account.changed' /tmp/account-mutation.json)"
+          duplicate="$(jq -r '.account.duplicate' /tmp/account-mutation.json)"
+          resulting_auth_version="$(jq -r '.account.authVersion' /tmp/account-mutation.json)"
+          if [[ "$changed" == "true" ]]; then
+            (( resulting_auth_version == BEFORE_AUTH_VERSION + 1 )) || { echo "Authentication version did not advance exactly once." >&2; exit 1; }
+          fi
+          if [[ "$duplicate" == "true" ]]; then
+            [[ "$changed" == "false" ]] || { echo "Duplicate result cannot also report a new change." >&2; exit 1; }
+            (( resulting_auth_version == BEFORE_AUTH_VERSION )) || { echo "Idempotent replay unexpectedly changed authentication version." >&2; exit 1; }
+          fi
+
+          echo "target_state=$target_state" >> "$GITHUB_OUTPUT"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "duplicate=$duplicate" >> "$GITHUB_OUTPUT"
+          echo "auth_version=$resulting_auth_version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify resulting account state
+        id: after
+        if: inputs.operation != 'status'
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+          TARGET_STATE: ${{ steps.mutate.outputs.target_state }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --output /tmp/account-after.json \
+            --write-out '%{http_code}' \
+            -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
+            "$API_BASE/internal/accounts/access?accountId=$ACCOUNT_ID")"
+          if [[ "$http_status" != "200" ]]; then
+            echo "Post-mutation status request failed with HTTP $http_status." >&2
+            cat /tmp/account-after.json >&2
+            exit 1
+          fi
+          jq -e --arg account "$ACCOUNT_ID" --arg target "$TARGET_STATE" \
+            '.account.accountId == $account and .account.state == $target and (.account.authVersion | type == "number")' \
+            /tmp/account-after.json >/dev/null
+          echo "state=$(jq -r '.account.state' /tmp/account-after.json)" >> "$GITHUB_OUTPUT"
+          echo "auth_version=$(jq -r '.account.authVersion' /tmp/account-after.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Write account administration summary
+        env:
+          API_BASE: ${{ steps.stack.outputs.api_base }}
+          BEFORE_STATE: ${{ steps.before.outputs.state }}
+          BEFORE_AUTH_VERSION: ${{ steps.before.outputs.auth_version }}
+          AFTER_STATE: ${{ steps.after.outputs.state }}
+          AFTER_AUTH_VERSION: ${{ steps.after.outputs.auth_version }}
+          MUTATION_CHANGED: ${{ steps.mutate.outputs.changed }}
+          MUTATION_DUPLICATE: ${{ steps.mutate.outputs.duplicate }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## SolveLang production account administration"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Actor: \`$GITHUB_ACTOR\`"
+            echo "- Account: \`$ACCOUNT_ID\`"
+            echo "- Operation: **$OPERATION**"
+            echo "- API base: \`$API_BASE\`"
+            echo "- Previous state: **$BEFORE_STATE**"
+            echo "- Previous auth version: \`$BEFORE_AUTH_VERSION\`"
+            if [[ "$OPERATION" == "status" ]]; then
+              echo "- Mutation performed: **no**"
+            else
+              echo "- Resulting state: **$AFTER_STATE**"
+              echo "- Resulting auth version: \`$AFTER_AUTH_VERSION\`"
+              echo "- New change performed: **$MUTATION_CHANGED**"
+              echo "- Idempotent replay: **$MUTATION_DUPLICATE**"
+              echo "- Request ID: \`$REQUEST_ID\`"
+            fi
+            echo "- Billing changed: **no**"
+            echo "- Email sent: **no**"
+            echo "- Stripe/webhook used: **no**"
+          } >> "$GITHUB_STEP_SUMMARY"
