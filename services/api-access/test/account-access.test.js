@@ -35,10 +35,11 @@ function memoryStore(initial) {
   };
 }
 
-test("legacy account state defaults to active", () => {
-  const account = { accountId: ACCOUNT_ID, authVersion: 1 };
+test("legacy account state and missing authVersion default to active version one", () => {
+  const account = { accountId: ACCOUNT_ID };
   assert.equal(accountAccessState(account), ACCOUNT_ACCESS_ACTIVE);
   assert.equal(accountIsActive(account), true);
+  assert.equal(publicAccountAccess(account).authVersion, 1);
 });
 
 test("known restricted states are not active", () => {
@@ -47,10 +48,27 @@ test("known restricted states are not active", () => {
   assert.equal(accountAccessState({ accountId: ACCOUNT_ID, accessState: "corrupt" }), "invalid");
 });
 
-test("public status rejects malformed access state", () => {
+test("public status rejects malformed access state or authentication version", () => {
   assert.throws(
     () => publicAccountAccess({ accountId: ACCOUNT_ID, accessState: "corrupt" }),
     (error) => error.code === "account_access_state_invalid" && error.statusCode === 409,
+  );
+  for (const authVersion of [0, -1, "2", 1.5]) {
+    const account = { accountId: ACCOUNT_ID, accessState: ACCOUNT_ACCESS_ACTIVE, authVersion };
+    assert.equal(accountIsActive(account), false);
+    assert.throws(
+      () => publicAccountAccess(account),
+      (error) => error.code === "account_access_state_invalid" && error.statusCode === 409,
+    );
+  }
+});
+
+test("assertActive fails closed on malformed authentication version", async () => {
+  const store = memoryStore({ accountId: ACCOUNT_ID, authVersion: "2" });
+  const service = createAccountAccessService({ store });
+  await assert.rejects(
+    () => service.assertActive(ACCOUNT_ID),
+    (error) => error.code === "account_access_restricted" && error.statusCode === 403,
   );
 });
 
