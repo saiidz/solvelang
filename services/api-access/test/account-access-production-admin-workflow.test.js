@@ -3,9 +3,14 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const workflowUrl = new URL("../../../.github/workflows/account-access-production-admin.yml", import.meta.url);
+const apiAccessCiUrl = new URL("../../../.github/workflows/api-access-ci.yml", import.meta.url);
 
 async function workflow() {
   return await readFile(workflowUrl, "utf8");
+}
+
+async function apiAccessCi() {
+  return await readFile(apiAccessCiUrl, "utf8");
 }
 
 test("production account admin workflow is manual, protected, main-only, owner-only, and serialized", async () => {
@@ -18,6 +23,7 @@ test("production account admin workflow is manual, protected, main-only, owner-o
   assert.match(source, /git rev-parse HEAD/);
   assert.match(source, /GITHUB_SHA/);
   assert.match(source, /GITHUB_ACTOR.*OWNER_LOGIN/);
+  assert.match(source, /GITHUB_TRIGGERING_ACTOR.*OWNER_LOGIN/);
   assert.match(source, /OWNER_LOGIN: \$\{\{ github\.repository_owner \}\}/);
 });
 
@@ -92,4 +98,10 @@ test("production account admin workflow verifies before and after state plus aut
   assert.match(source, /Billing changed: \*\*no\*\*/);
   assert.match(source, /Email sent: \*\*no\*\*/);
   assert.match(source, /Stripe\/webhook used: \*\*no\*\*/);
+});
+
+test("API Access CI runs whenever the production account admin workflow changes", async () => {
+  const source = await apiAccessCi();
+  const matches = source.match(/'\.github\/workflows\/account-access-production-admin\.yml'/g) ?? [];
+  assert.equal(matches.length, 2);
 });

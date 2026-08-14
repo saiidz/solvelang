@@ -66,6 +66,7 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production account administration must run from main." >&2; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
           [[ "$GITHUB_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may run production account administration." >&2; exit 1; }
+          [[ "$GITHUB_TRIGGERING_ACTOR" == "$OWNER_LOGIN" ]] || { echo "Only the repository owner may trigger or rerun production account administration." >&2; exit 1; }
           [[ "$ACCOUNT_ID" =~ ^acct_[a-f0-9]{32}$ ]] || { echo "Account ID is invalid." >&2; exit 1; }
           [[ -n "$AWS_REGION" ]] || { echo "AWS_REGION is required." >&2; exit 1; }
           [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
