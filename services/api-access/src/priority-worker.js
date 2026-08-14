@@ -21,10 +21,28 @@ function invocationWorkerId(baseWorkerId, context) {
   return `${baseWorkerId}:${requestId}`;
 }
 
-export function createPriorityWorker({ laneName, jobStore, now = Date.now, workerId = "priority-worker", logger = console }) {
+function customerAccountId(job) {
+  if (job?.accountId === undefined) return undefined;
+  if (typeof job.accountId !== "string" || !/^acct_[a-f0-9]{32}$/.test(job.accountId)) {
+    throw new Error("Priority job account is invalid.");
+  }
+  return job.accountId;
+}
+
+export function createPriorityWorker({
+  laneName,
+  jobStore,
+  accountAccess,
+  now = Date.now,
+  workerId = "priority-worker",
+  logger = console,
+}) {
   const lane = getPriorityLane(laneName);
   if (!jobStore || typeof jobStore.claimJob !== "function" || typeof jobStore.completeJob !== "function" || typeof jobStore.releaseJob !== "function" || typeof jobStore.failJob !== "function") {
     throw new Error("Priority job store is required.");
+  }
+  if (accountAccess !== undefined && (!accountAccess || typeof accountAccess.assertActive !== "function")) {
+    throw new Error("Priority account access verifier is invalid.");
   }
   if (typeof workerId !== "string" || !workerId || workerId.length > 256 || /[\u0000-\u001f\u007f]/.test(workerId)) {
     throw new Error("Priority worker ID is invalid.");
@@ -50,6 +68,11 @@ export function createPriorityWorker({ laneName, jobStore, now = Date.now, worke
         if (claim.status !== "claimed") throw new Error("Priority job could not be claimed.");
         claimed = true;
         const job = claim.job;
+        const accountId = customerAccountId(job);
+        if (accountId) {
+          if (!accountAccess) throw new Error("Customer priority job access verification is unavailable.");
+          await accountAccess.assertActive(accountId);
+        }
         if (job.jobType !== "queue_canary") throw new Error("Unsupported priority job type.");
         const completedAt = new Date(now()).toISOString();
         await jobStore.completeJob(message.jobId, leaseOwner, {
