@@ -22,11 +22,20 @@ function parseJson(event) {
   return text ? JSON.parse(text) : {};
 }
 
-export function createAccountAccessAdminHandler({ accountAccess, adminSecret, siteOrigin, logger = console }) {
+export function createAccountAccessAdminHandler({
+  accountAccess,
+  identityResolver,
+  adminSecret,
+  siteOrigin,
+  logger = console,
+}) {
   if (!accountAccess
     || typeof accountAccess.getStatus !== "function"
     || typeof accountAccess.transition !== "function") {
     throw new Error("Account access service is required.");
+  }
+  if (identityResolver !== undefined && typeof identityResolver?.resolve !== "function") {
+    throw new Error("Account identity resolver is invalid.");
   }
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
@@ -54,13 +63,31 @@ export function createAccountAccessAdminHandler({ accountAccess, adminSecret, si
     }
   }
 
+  async function resolveLookup(query = {}) {
+    if (identityResolver) {
+      return identityResolver.resolve({
+        accountId: query.accountId,
+        email: query.email,
+        username: query.username,
+      });
+    }
+    if (query.email !== undefined || query.username !== undefined) {
+      throw new ApiAccessError(400, "invalid_request", "Account identity lookup is unavailable.");
+    }
+    return { accountId: query.accountId, matchedBy: "account_id" };
+  }
+
   return async function handle(event) {
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
       if (method === "OPTIONS") return response(204, {});
       requireAdmin(event);
       if (method === "GET") {
-        return response(200, { account: await accountAccess.getStatus(event?.queryStringParameters?.accountId) });
+        const lookup = await resolveLookup(event?.queryStringParameters);
+        return response(200, {
+          account: await accountAccess.getStatus(lookup.accountId),
+          lookup: { matchedBy: lookup.matchedBy },
+        });
       }
       if (method === "POST") {
         return response(200, { account: await accountAccess.transition(parseJson(event), "api-access-admin") });
