@@ -53,6 +53,18 @@ function requestMatches(record, { accountId, requestId, targetState, reason }) {
   );
 }
 
+function accountAuthVersion(account) {
+  if (!account) return undefined;
+  if (account.authVersion === undefined) return 1;
+  return Number.isSafeInteger(account.authVersion) && account.authVersion >= 1
+    ? account.authVersion
+    : undefined;
+}
+
+function invalidAccountState() {
+  return new ApiAccessError(409, "account_access_state_invalid", "Account access state requires administrative review.");
+}
+
 export function accountAccessState(account) {
   if (!account) return "missing";
   if (account.accessState === undefined) return ACCOUNT_ACCESS_ACTIVE;
@@ -60,20 +72,21 @@ export function accountAccessState(account) {
 }
 
 export function accountIsActive(account) {
-  return accountAccessState(account) === ACCOUNT_ACCESS_ACTIVE;
+  return accountAccessState(account) === ACCOUNT_ACCESS_ACTIVE && accountAuthVersion(account) !== undefined;
 }
 
 export function publicAccountAccess(account) {
   if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
   const state = accountAccessState(account);
-  if (state === "invalid") throw new ApiAccessError(409, "account_access_state_invalid", "Account access state requires administrative review.");
+  const authVersion = accountAuthVersion(account);
+  if (state === "invalid" || authVersion === undefined) throw invalidAccountState();
   return {
     accountId: account.accountId,
     state,
     reason: account.accessReason ?? null,
     changedAt: account.accessChangedAt ?? null,
     changedBy: account.accessChangedBy ?? null,
-    authVersion: account.authVersion ?? 1,
+    authVersion,
   };
 }
 
@@ -134,10 +147,8 @@ export function createAccountAccessService({ store, now = Date.now }) {
 
     const account = await store.getAccount(accountId);
     if (!account) throw new ApiAccessError(404, "account_not_found", "Account was not found.");
-    const previousState = accountAccessState(account);
-    if (previousState === "invalid") {
-      throw new ApiAccessError(409, "account_access_state_invalid", "Account access state requires administrative review.");
-    }
+    const current = publicAccountAccess(account);
+    const previousState = current.state;
     if (previousState === ACCOUNT_ACCESS_TERMINATED && targetState !== ACCOUNT_ACCESS_TERMINATED) {
       throw new ApiAccessError(409, "account_terminated", "A terminated account cannot be reactivated.");
     }
