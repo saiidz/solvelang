@@ -18,7 +18,7 @@ function clientWithAccount(account) {
   };
 }
 
-test("reads only account records consistently", async () => {
+test("reads only the exact requested account record consistently", async () => {
   const client = clientWithAccount({ kind: "account", accountId: ACCOUNT_ID });
   const store = createDynamoAccountAccessStore(client, { tableName: "auth-table" });
   const account = await store.getAccount(ACCOUNT_ID);
@@ -26,6 +26,10 @@ test("reads only account records consistently", async () => {
   const input = client.sent[0].input;
   assert.deepEqual(input.Key, { authKey: `account#${ACCOUNT_ID}` });
   assert.equal(input.ConsistentRead, true);
+
+  const corruptClient = clientWithAccount({ kind: "account", accountId: `acct_${"d".repeat(32)}` });
+  const corruptStore = createDynamoAccountAccessStore(corruptClient, { tableName: "auth-table" });
+  await assert.rejects(() => corruptStore.getAccount(ACCOUNT_ID), /Customer account identity is invalid/);
 });
 
 test("transition writes request ledger, account version bump, and audit record atomically", async () => {
