@@ -30,7 +30,7 @@ export function createAccessGuardedCustomerAuthStore(store, accessReader) {
       if (property === "consumeMagicLinkAndCreateSession" || property === "consumeMagicLinkForAuth") {
         return async (input) => {
           const magic = await accessReader.getRecord(`magic#${input.tokenId}`);
-          if (magic?.accountId) await assertActiveAccount(magic.accountId);
+          if (magic?.accountId) await assertActiveAccount(magic.accountId, { allowMissing: true });
           return target[property](input);
         };
       }
