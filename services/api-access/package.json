@@ -13,5 +13,8 @@
     "@aws-sdk/client-sqs": "3.1090.0",
     "@aws-sdk/lib-dynamodb": "3.1090.0",
     "stripe": "22.1.1"
+  },
+  "overrides": {
+    "@aws-sdk/util-dynamodb": "3.996.7"
   }
 }
