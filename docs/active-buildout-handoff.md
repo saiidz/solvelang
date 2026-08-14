@@ -2,91 +2,107 @@
 
 **Purpose:** durable cross-chat execution state for the approved full SolveLang buildout.  
 **Owner master authorization:** `APPROVE FULL SOLVELANG BUILDOUT PLAN`  
-**Current production-mutating gates remain separate:** merge, AWS/KMS mutation, production preflight dispatch, production deployment, email canary, Stripe/billing enablement, and any real charge.
+**Major gates remain separate:** merge, live AWS/IAM/KMS mutation, production preflight dispatch, production deployment, email canary, Stripe/billing enablement, and any real charge.
 
-## Exact current repository state
+## Repository and production truth
 
 - Repository: `saiidz/solvelang`
-- Current production-code merge on `main`: `72219f057568c1cd8e3666950f67a0018ab9d252`
-- Merge: PR #141, optional authenticator-app 2FA implementation
-- Post-merge workflows on that exact SHA: API Access CI, CI, and Rust/RustSec all passed
-- Current active rollout-preparation branch: `agent/totp-production-rollout-prep`
-- Production API stack: `solvelang-api-access-production`
+- Current verified `main` before this draft PR: `07da1d5e4d01283549ff5df7cabd992731327cc9`
+- That commit merged PR #146 (`feat(audit): add redaction and report-integrity primitives`).
+- PR #145 priority lease-owner isolation and PR #146 Repository Audit hardening are merged.
 - Production region: `us-east-2`
-- Current production API access: enabled
-- Current production customer accounts: enabled
-- Current production subscription billing: disabled
-- Current production authenticator 2FA: not enabled yet
-- No production TOTP KMS key has been authorized for creation by this master coding approval alone
+- Production API access: enabled
+- Production customer accounts/password auth: enabled
+- Production authenticator TOTP: **disabled**
+- Production TOTP KMS key: **not created**
+- Production subscription billing / Stripe: **disabled**
+- Customer paid priority selection: **disabled**
+- No production AWS/IAM/KMS, deployment, email, billing, Stripe, or charge is authorized by the coding work recorded here.
 
-## Master execution sequence
+Always re-read current GitHub `main`, PR heads, CI, and review threads before relying on the SHAs in this file.
 
-1. Finish optional authenticator 2FA production rollout package and canary.
-2. Add centralized account suspension/termination enforcement.
-3. Finish remaining customer-account/security hardening and truth documentation.
-4. Clean stale/superseded project documentation and PR state.
-5. Finish production billing preparation, then separately gate live Stripe activation and any charge.
-6. Finish and validate queue-backed paid-priority execution before exposing paid priority choices.
-7. Build Repository Audit in staged read-only then approval-based remediation phases.
-8. Build Server Audit in staged read-only then approval-based remediation phases.
-9. Perform final production/IAM/rollback/operations hardening.
-10. Run final launch-readiness canaries and produce an exact live-state record.
+## Completed buildout stages
 
-## Current stage: authenticator production rollout preparation
+### Password/customer-account production foundation
 
-The implementation already merged in PR #141 provides:
+Live password authentication supports email or immutable username plus password, magic-link recovery, version-bound sessions, rate limiting, and fail-closed authentication-state handling. The owner password canary passed previously with subscription billing still disabled.
 
-- RFC 6238-compatible 6-digit TOTP;
-- unique 20-byte enrollment secret;
-- KMS secret protector with account-bound encryption context;
-- staged password/magic-link first factor followed by MFA challenge;
-- no full session before the second factor succeeds;
-- 5-minute challenge TTL and bounded attempts;
-- ten one-time backup codes stored only as keyed fingerprints;
-- TOTP time-step replay prevention;
-- `authVersion` session invalidation for security changes;
-- fail-closed malformed/partial TOTP-state handling;
-- optional feature flag defaulting off.
+### Optional authenticator 2FA implementation
 
-This rollout-preparation branch must finish before any production 2FA enablement:
+PR #141 merged the optional RFC 6238 TOTP implementation, including KMS-encrypted secrets, MFA challenges, one-time backup codes, TOTP replay prevention, `authVersion` invalidation, and fail-closed partial-state handling.
 
-- dedicated retained/rotating production KMS stack IaC;
-- narrowly scoped production deploy-role policy contract for that KMS stack;
-- hosted validation of KMS IaC;
-- validation-only production TOTP preflight workflow;
-- dedicated protected TOTP production deployment workflow;
-- state-preserving rollback including the TOTP flag and KMS ARN;
-- ordinary customer-account redeploys must preserve existing TOTP state rather than resetting it;
-- health output must expose the TOTP feature state for deterministic preflight/rollback verification;
-- regression tests for every rollout and rollback contract;
-- rollout documentation and exact manual approval sequence.
+PR #142 merged production rollout/preflight/KMS-stack preparation. Production TOTP is still disabled and the dedicated production key has not been created.
 
-## Hard safety boundary for this active branch
+PR #143 (`security(prod): add guarded TOTP IAM operator path`) remains **Draft/quarantined** and must not be merged in its current state. No live IAM mutation has been performed from it.
 
-Allowed under the master coding approval:
+### Priority hardening
 
-- create/update isolated branches;
-- code, tests, docs, workflows, and IaC;
-- run hosted CI automatically triggered by branch/PR changes;
-- diagnose and fix CI/review findings;
-- open/update PRs.
+PR #145 merged invocation-unique worker lease ownership using Lambda request identity. Priority remains test-only/customer-disabled.
 
-Not allowed without a fresh explicit gate:
+### Repository Audit
 
-- merge a rollout PR;
-- apply or mutate the live AWS deploy-role policy;
-- create/update the production KMS stack;
-- dispatch a protected production preflight;
-- deploy production API changes;
-- enroll or mutate the production owner account;
-- send a canary/recovery email;
-- enable subscription billing or Stripe/webhooks;
-- perform a real charge.
+PR #146 merged read-only/analyze-only primitives including HMAC-redacted secret warnings, encrypted private-key detection, canonical report integrity, deterministic report IDs, reference/import analysis, dependency candidates, and lockfile-conflict detection. This does not authorize repository remediation or hosted execution.
+
+## Current stage: PR #147 account suspension / termination enforcement
+
+Active PR: `#147 — feat(auth): add account suspension and termination foundation`  
+Branch: `agent/account-access-enforcement`  
+PR remains **Draft / DO NOT MERGE** until final hosted CI and review are clean.
+
+Implemented on this branch:
+
+- authoritative states: `active`, `suspended`, `terminated`;
+- legacy versionless accounts remain active; missing or malformed account state fails closed;
+- termination is irreversible;
+- every real transition increments `authVersion`;
+- Dynamo transition atomically writes request-idempotency state, account state/version, and immutable audit metadata;
+- exact request replay is idempotent; request-ID reuse with different input conflicts;
+- existing sessions, password session creation, MFA challenge creation/consumption, and existing-account magic-link consumption are blocked for restricted accounts;
+- first-ever magic-link signup still works when no account row exists;
+- suspended magic-link requests keep the enumeration-safe generic response and send no email;
+- customer API-key authorization checks authoritative account state before quota metering;
+- customer/internal key issuance, checkout reservation, direct subscription provisioning, and manual usage consumption use a centralized active-account guard;
+- security cleanup/key revocation and signed Stripe lifecycle reconciliation remain available so restriction cannot prevent cancellation/reconciliation;
+- admin GET/POST `/internal/accounts/access` is protected by the existing constant-time admin secret and uses a server-owned audit actor;
+- API-key authorizer CustomerAuth permission is conditional and `dynamodb:GetItem`-only;
+- priority workers preserve server-owned canaries and fail closed for customer-owned jobs unless an active-account verifier is configured;
+- optional priority CustomerAuth verification uses `GetItem`-only access and defaults unconfigured so the current test-only canary stack behavior remains unchanged;
+- focused tests cover transitions, auth-store behavior, no-email magic-link suppression, API-key no-metering denial, mutation gates, admin endpoints, SAM/IAM contracts, and customer-owned priority jobs.
+
+Before #147 can become merge-ready:
+
+1. exact current-head API Access CI must pass, including both SAM validate/build paths;
+2. general CI/static build and Rust runtime must pass;
+3. separate Rust/RustSec workflow must pass;
+4. automated review must be checked and every valid finding fixed/resolved;
+5. PR body/status must be updated from Draft to the exact completed scope;
+6. merge requires separate explicit approval: `APPROVE MERGE PR #147`.
+
+Merging #147 still does **not** authorize a production deployment or production account-state mutation.
+
+## Other active work after #147
+
+### PR #144 billing webhook serialization
+
+Branch: `agent/billing-webhook-idempotency`; remains Draft. It contains claim/lease/complete/retryable webhook processing and legacy-event compatibility. A remaining review item requires payment-method normalization idempotency to include or persist the selected payment-method target. Production billing remains OFF.
+
+### TOTP production IAM / rollout
+
+After account hardening, return to the quarantined TOTP IAM path using a corrected least-privilege implementation. Live IAM/KMS changes, TOTP preflight, TOTP deployment, and owner enrollment each remain separately gated.
+
+### Later stages
+
+- finish billing/webhook hardening, then separately gate Stripe production activation;
+- finish queue-backed paid-priority customer execution before exposing paid tiers;
+- expand Repository Audit toward the complete product and later approval-based remediation;
+- build Server Audit read-only foundations and later approval-based remediation;
+- fix SolveLang imported-file source provenance diagnostics;
+- final production/IAM/rollback/monitoring hardening and launch-readiness canaries.
 
 ## Cross-chat continuation
 
-When a conversation reaches its practical limit, start a new chat inside the same Solve project and say:
+When a conversation reaches its practical limit, start a new chat inside the SolveLang project and say:
 
 `continue SolveLang full buildout from docs/active-buildout-handoff.md`
 
-The new chat should read this file and verify current GitHub state before taking the next action. Never trust the handoff alone if GitHub has drifted; compare current `main`, active PR heads, CI conclusions, and unresolved review threads first.
+The new chat must verify GitHub state rather than trusting this file blindly. Do not collapse merge, AWS/IAM/KMS mutation, production preflight, deployment, email, Stripe/billing, or charge gates.
