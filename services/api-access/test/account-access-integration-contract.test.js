@@ -29,6 +29,13 @@ test("main API stack exposes protected account-access routes and gives the autho
   assert.doesNotMatch(authorizer, /dynamodb:(?:BatchGetItem|Query|Scan|PutItem|UpdateItem|DeleteItem)/);
 });
 
+test("runtime auth guard uses the read-only account reader while admin transitions use the mutation store", async () => {
+  const source = await readFile(handlerUrl, "utf8");
+  assert.match(source, /const accountAccessStore = createDynamoAccountAccessStore\([\s\S]*const accountAccessReader = createDynamoAccountAccessReader\(/);
+  assert.match(source, /accountAccess = createAccountAccessService\(\{ store: accountAccessStore \}\)/);
+  assert.match(source, /createAccessGuardedCustomerAuthStore\([\s\S]*accountAccessReader,/);
+});
+
 test("priority workers use optional GetItem-only customer account verification", async () => {
   const source = await readFile(priorityTemplateUrl, "utf8");
   assert.match(source, /CustomerAuthTableName:[\s\S]*Default: ""/);
