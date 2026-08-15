@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 type Customer = {
   accountId: string;
@@ -19,7 +19,6 @@ type Customer = {
 };
 
 type Profile = Customer["crm"]["profile"];
-
 type Recent = { customers: Profile[]; nextCursor: string | null };
 
 async function jsonFetch(url: string, init?: RequestInit) {
@@ -51,11 +50,15 @@ export default function AdminDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   async function loadRecent() {
+    setBusy(true);
+    setError("");
     try {
       const data: Recent = await jsonFetch("/api/customers");
       setRecent(data.customers ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load CRM customers.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -75,8 +78,6 @@ export default function AdminDashboard() {
     }
   }
 
-  useEffect(() => { void loadRecent(); }, []);
-
   async function search(event: FormEvent) {
     event.preventDefault();
     const value = identity.trim();
@@ -87,13 +88,14 @@ export default function AdminDashboard() {
   const canonicalIdentity = useMemo(() => customer ? { accountId: customer.accountId } : null, [customer]);
 
   async function crm(action: string, payload: unknown) {
-    if (!canonicalIdentity) return;
+    if (!canonicalIdentity || !customer) return;
     setBusy(true);
     setError("");
     try {
       await jsonFetch("/api/crm", { method: "POST", body: JSON.stringify({ action, identity: canonicalIdentity, payload }) });
-      await loadCustomer("accountId", customer!.accountId);
-      await loadRecent();
+      await loadCustomer("accountId", customer.accountId);
+      const data: Recent = await jsonFetch("/api/customers");
+      setRecent(data.customers ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "CRM update failed.");
     } finally {
@@ -150,21 +152,21 @@ export default function AdminDashboard() {
           <form className="card stack" onSubmit={search}>
             <h2>Find customer</h2>
             <label>Identity type
-              <select value={identityType} onChange={(e) => setIdentityType(e.target.value)}>
+              <select value={identityType} onChange={(event) => setIdentityType(event.target.value)}>
                 <option value="email">Email</option>
                 <option value="username">Username</option>
                 <option value="accountId">Account ID</option>
               </select>
             </label>
             <label>Exact identity
-              <input value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder={identityType === "email" ? "customer@example.com" : identityType === "username" ? "username" : "acct_…"} required />
+              <input value={identity} onChange={(event) => setIdentity(event.target.value)} placeholder={identityType === "email" ? "customer@example.com" : identityType === "username" ? "username" : "acct_…"} required />
             </label>
             <button className="primary" disabled={busy}>{busy ? "Loading…" : "Open customer"}</button>
           </form>
 
           <section className="card stack">
-            <div className="split"><h2>CRM customers</h2><button onClick={() => void loadRecent()}>Refresh</button></div>
-            {recent.length === 0 ? <p className="muted">No CRM profiles yet. Exact customer lookup never mutates CRM state.</p> : recent.map((item) => (
+            <div className="split"><h2>CRM customers</h2><button onClick={() => void loadRecent()} disabled={busy}>Load / refresh</button></div>
+            {recent.length === 0 ? <p className="muted">CRM profiles are loaded only when requested. Exact customer lookup never mutates CRM state.</p> : recent.map((item) => (
               <button key={item.accountId} onClick={() => void loadCustomer("accountId", item.accountId)} style={{ textAlign: "left" }}>
                 <strong>{item.company || item.accountId}</strong><br />
                 <small><Pill value={item.stage} /> &nbsp; {item.owner || "unassigned"}</small>
@@ -194,14 +196,14 @@ export default function AdminDashboard() {
             <section className="card stack">
               <h3>Account access</h3>
               <div className="notice">Suspension is reversible and invalidates existing sessions. Termination is irreversible and requires exact confirmation.</div>
-              <label>Reason<input value={accessReason} onChange={(e) => setAccessReason(e.target.value)} placeholder="Security, policy, support, or owner-approved reason" /></label>
+              <label>Reason<input value={accessReason} onChange={(event) => setAccessReason(event.target.value)} placeholder="Security, policy, support, or owner-approved reason" /></label>
               <div className="row">
                 {customer.access.state === "active" ? <button onClick={() => void transition("suspended")} disabled={busy}>Suspend</button> : null}
                 {customer.access.state === "suspended" ? <button onClick={() => void transition("active")} disabled={busy}>Reactivate</button> : null}
               </div>
               {customer.access.state !== "terminated" ? <>
                 <label>Irreversible termination confirmation
-                  <input value={terminationConfirmation} onChange={(e) => setTerminationConfirmation(e.target.value)} placeholder={`TERMINATE ${customer.accountId}`} />
+                  <input value={terminationConfirmation} onChange={(event) => setTerminationConfirmation(event.target.value)} placeholder={`TERMINATE ${customer.accountId}`} />
                 </label>
                 <button className="danger" onClick={() => void transition("terminated")} disabled={busy || terminationConfirmation !== `TERMINATE ${customer.accountId}`}>Terminate account</button>
               </> : null}
@@ -210,14 +212,14 @@ export default function AdminDashboard() {
             {profile ? <section className="card stack">
               <h3>CRM profile</h3>
               <div className="section-grid">
-                <label>Stage<select value={profile.stage} onChange={(e) => setProfile({ ...profile, stage: e.target.value })}>{["new","trial","active","at_risk","churned","blocked"].map((x) => <option key={x}>{x}</option>)}</select></label>
-                <label>Priority<select value={profile.priority} onChange={(e) => setProfile({ ...profile, priority: e.target.value })}>{["low","normal","high","critical"].map((x) => <option key={x}>{x}</option>)}</select></label>
-                <label>Company<input value={profile.company} onChange={(e) => setProfile({ ...profile, company: e.target.value })} /></label>
-                <label>Owner<input value={profile.owner} onChange={(e) => setProfile({ ...profile, owner: e.target.value })} placeholder="team member" /></label>
+                <label>Stage<select value={profile.stage} onChange={(event) => setProfile({ ...profile, stage: event.target.value })}>{["new","trial","active","at_risk","churned","blocked"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label>Priority<select value={profile.priority} onChange={(event) => setProfile({ ...profile, priority: event.target.value })}>{["low","normal","high","critical"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label>Company<input value={profile.company} onChange={(event) => setProfile({ ...profile, company: event.target.value })} /></label>
+                <label>Owner<input value={profile.owner} onChange={(event) => setProfile({ ...profile, owner: event.target.value })} placeholder="team member" /></label>
               </div>
-              <label>Tags<input value={profile.tags.join(", ")} onChange={(e) => setProfile({ ...profile, tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) })} placeholder="enterprise, pilot" /></label>
-              <label>Summary<textarea value={profile.summary} onChange={(e) => setProfile({ ...profile, summary: e.target.value })} /></label>
-              <label>Next action<textarea value={profile.nextAction} onChange={(e) => setProfile({ ...profile, nextAction: e.target.value })} /></label>
+              <label>Tags<input value={profile.tags.join(", ")} onChange={(event) => setProfile({ ...profile, tags: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="enterprise, pilot" /></label>
+              <label>Summary<textarea value={profile.summary} onChange={(event) => setProfile({ ...profile, summary: event.target.value })} /></label>
+              <label>Next action<textarea value={profile.nextAction} onChange={(event) => setProfile({ ...profile, nextAction: event.target.value })} /></label>
               <button className="primary" onClick={() => void crm("profile", profile)} disabled={busy}>Save CRM profile</button>
             </section> : null}
 
@@ -246,11 +248,11 @@ export default function AdminDashboard() {
 
 function NoteCard({ customer, busy, add }: { customer: Customer; busy: boolean; add: (text: string) => Promise<void> | void }) {
   const [text, setText] = useState("");
-  return <section className="card stack"><h3>Notes</h3><textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Support context, decision, customer request…" /><button onClick={async () => { if (!text.trim()) return; await add(text); setText(""); }} disabled={busy}>Add note</button><div className="timeline">{customer.crm.notes.map((note) => <div className="timeline-item" key={note.noteId}><div>{note.text}</div><small>{fmt(note.createdAt)} · {note.createdBy}</small></div>)}</div></section>;
+  return <section className="card stack"><h3>Notes</h3><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Support context, decision, customer request…" /><button onClick={async () => { if (!text.trim()) return; await add(text); setText(""); }} disabled={busy}>Add note</button><div className="timeline">{customer.crm.notes.map((note) => <div className="timeline-item" key={note.noteId}><div>{note.text}</div><small>{fmt(note.createdAt)} · {note.createdBy}</small></div>)}</div></section>;
 }
 
 function TaskCard({ customer, busy, create, update }: { customer: Customer; busy: boolean; create: (task: unknown) => Promise<void> | void; update: (task: unknown) => Promise<void> | void }) {
   const [title, setTitle] = useState("");
   const [dueAt, setDueAt] = useState("");
-  return <section className="card stack"><h3>Tasks</h3><label>Title<input value={title} onChange={(e) => setTitle(e.target.value)} /></label><label>Due<input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} /></label><button onClick={async () => { if (!title.trim()) return; await create({ title, dueAt: dueAt ? new Date(dueAt).toISOString() : "" }); setTitle(""); setDueAt(""); }} disabled={busy}>Create task</button><div className="timeline">{customer.crm.tasks.map((task) => <div className="timeline-item" key={task.taskId}><div className="split"><div><strong>{task.title}</strong><div><small>{task.dueAt ? `Due ${fmt(task.dueAt)}` : "No due date"}</small></div></div><select style={{ width: 140 }} value={task.status} onChange={(e) => void update({ taskId: task.taskId, status: e.target.value })}>{["open","in_progress","done","canceled"].map((x) => <option key={x}>{x}</option>)}</select></div></div>)}</div></section>;
+  return <section className="card stack"><h3>Tasks</h3><label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>Due<input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><button onClick={async () => { if (!title.trim()) return; await create({ title, dueAt: dueAt ? new Date(dueAt).toISOString() : "" }); setTitle(""); setDueAt(""); }} disabled={busy}>Create task</button><div className="timeline">{customer.crm.tasks.map((task) => <div className="timeline-item" key={task.taskId}><div className="split"><div><strong>{task.title}</strong><div><small>{task.dueAt ? `Due ${fmt(task.dueAt)}` : "No due date"}</small></div></div><select style={{ width: 140 }} value={task.status} onChange={(event) => void update({ taskId: task.taskId, status: event.target.value })}>{["open","in_progress","done","canceled"].map((item) => <option key={item}>{item}</option>)}</select></div></div>)}</div></section>;
 }
