@@ -35,10 +35,23 @@ export function parsePriorityWorkerEnvironment(environment = process.env) {
   const laneName = required(environment, "API_PRIORITY_LANE");
   const functionName = environment.AWS_LAMBDA_FUNCTION_NAME || `priority-${laneName}-worker`;
   const logStream = environment.AWS_LAMBDA_LOG_STREAM_NAME;
+  const providerExecutionEnabled = environment.API_PRIORITY_PROVIDER_EXECUTION_ENABLED === "true";
+  const sourceBucket = optional(environment, "API_PRIORITY_SOURCE_BUCKET");
+  const providerUrl = optional(environment, "API_PRIORITY_PROVIDER_URL");
+  const providerSecret = optional(environment, "API_PRIORITY_PROVIDER_SECRET");
+  if (providerExecutionEnabled) {
+    if (!sourceBucket) throw new Error("API_PRIORITY_SOURCE_BUCKET is required when provider execution is enabled.");
+    if (!providerUrl) throw new Error("API_PRIORITY_PROVIDER_URL is required when provider execution is enabled.");
+    if (!providerSecret || providerSecret.length < 32) throw new Error("API_PRIORITY_PROVIDER_SECRET is required when provider execution is enabled.");
+  }
   return {
     priorityJobsTable: required(environment, "API_PRIORITY_JOBS_TABLE"),
     customerAuthTable: optional(environment, "API_CUSTOMER_AUTH_TABLE"),
     laneName,
+    providerExecutionEnabled,
+    sourceBucket,
+    providerUrl,
+    providerSecret,
     workerId: typeof logStream === "string" && logStream
       ? `${functionName}:${logStream}`
       : functionName,
