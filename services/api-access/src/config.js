@@ -65,12 +65,22 @@ function customerAccounts(environment) {
   };
 }
 
+function adminCrm(environment) {
+  const enabled = environment.API_ADMIN_CRM_ENABLED === "true";
+  return {
+    adminCrmEnabled: enabled,
+    adminCrmTable: enabled ? required(environment, "API_ADMIN_CRM_TABLE") : undefined,
+    adminCrmProfileIndex: environment.API_ADMIN_CRM_PROFILE_INDEX ?? "RecordTypeUpdatedAtIndex",
+  };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   return {
     ...shared(environment),
     ...usage(environment),
     ...billing(environment),
     ...customerAccounts(environment),
+    ...adminCrm(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
     siteOrigin: required(environment, "SITE_ORIGIN"),
   };
