@@ -18,13 +18,14 @@ function parseJson(event) {
   return text ? JSON.parse(text) : {};
 }
 
-export function createCustomerPriorityHandler({ customerAuth, priority, siteOrigin, logger = console }) {
+export function createCustomerPriorityHandler({ customerAuth, priority, source, siteOrigin, logger = console }) {
   if (!customerAuth || typeof customerAuth.authenticate !== "function" || typeof customerAuth.assertCsrf !== "function") {
     throw new Error("Customer authentication service is required.");
   }
   if (!priority || typeof priority.quote !== "function" || typeof priority.submit !== "function" || typeof priority.getJob !== "function") {
     throw new Error("Customer priority service is required.");
   }
+  if (source !== undefined && typeof source?.reserve !== "function") throw new Error("Customer priority source service is invalid.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
 
   function response(statusCode, body) {
@@ -59,6 +60,12 @@ export function createCustomerPriorityHandler({ customerAuth, priority, siteOrig
         const authenticated = await session(event, true);
         const body = parseJson(event);
         return response(200, { quote: await priority.quote({ ...body, accountId: authenticated.accountId }) });
+      }
+      if (method === "POST" && path.endsWith("/customer/priority/sources")) {
+        if (!source) throw new PriorityJobError(503, "priority_source_upload_disabled", "Priority source upload is not enabled.");
+        const authenticated = await session(event, true);
+        const body = parseJson(event);
+        return response(201, { source: await source.reserve({ ...body, accountId: authenticated.accountId }) });
       }
       if (method === "POST" && path.endsWith("/customer/priority/jobs")) {
         const authenticated = await session(event, true);
