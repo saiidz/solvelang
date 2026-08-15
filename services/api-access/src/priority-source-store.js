@@ -5,6 +5,7 @@ import { PriorityJobError } from "./priority-jobs.js";
 export const MAX_PRIORITY_SOURCE_BYTES = 5 * 1024 * 1024;
 const ACCOUNT_ID = /^acct_[a-f0-9]{32}$/;
 const FINGERPRINT = /^[a-f0-9]{64}$/;
+const ZIP_SIGNATURES = new Set(["504b0304", "504b0506", "504b0708"]);
 
 function cleanAccountId(value) {
   if (typeof value !== "string" || !ACCOUNT_ID.test(value)) {
@@ -34,7 +35,7 @@ function validateArchive(bytes) {
   if (bytes.length < 4 || bytes.length > MAX_PRIORITY_SOURCE_BYTES) {
     throw new PriorityJobError(413, "source_archive_too_large", "Repository source exceeds the upload limit.");
   }
-  if (!(bytes[0] === 0x50 && bytes[1] === 0x4b && [0x03, 0x05, 0x07].includes(bytes[2]) && [0x04, 0x06, 0x08].includes(bytes[3]))) {
+  if (!ZIP_SIGNATURES.has(bytes.subarray(0, 4).toString("hex"))) {
     throw new PriorityJobError(400, "invalid_source_archive", "Repository source must be a ZIP archive.");
   }
 }
@@ -84,7 +85,6 @@ export function createS3PrioritySourceStore(client, { bucketName }) {
       const response = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
       const bytes = await bodyBytes(response.Body);
       validateArchive(bytes);
-      if (bytes.length > MAX_PRIORITY_SOURCE_BYTES) throw new Error("Stored priority source exceeds the size contract.");
       const actual = createHash("sha256").update(bytes).digest("hex");
       if (actual !== fingerprint) throw new Error("Stored priority source fingerprint mismatch.");
       const metadataFingerprint = response.Metadata?.["source-sha256"];
