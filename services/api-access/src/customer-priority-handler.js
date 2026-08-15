@@ -58,12 +58,12 @@ export function createCustomerPriorityHandler({ customerAuth, priority, siteOrig
       if (method === "POST" && path.endsWith("/customer/priority/quote")) {
         const authenticated = await session(event, true);
         const body = parseJson(event);
-        return response(200, { quote: await priority.quote({ accountId: authenticated.accountId, ...body }) });
+        return response(200, { quote: await priority.quote({ ...body, accountId: authenticated.accountId }) });
       }
       if (method === "POST" && path.endsWith("/customer/priority/jobs")) {
         const authenticated = await session(event, true);
         const body = parseJson(event);
-        return response(201, { job: await priority.submit({ accountId: authenticated.accountId, ...body }) });
+        return response(201, { job: await priority.submit({ ...body, accountId: authenticated.accountId }) });
       }
       if (method === "GET" && path.includes("/customer/priority/jobs/")) {
         const authenticated = await session(event);
