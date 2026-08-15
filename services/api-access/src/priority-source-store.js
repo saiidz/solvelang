@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { PriorityJobError } from "./priority-jobs.js";
 
 export const MAX_PRIORITY_SOURCE_BYTES = 5 * 1024 * 1024;
@@ -48,6 +48,10 @@ async function bodyBytes(body) {
   return Buffer.concat(chunks);
 }
 
+function missingSource(error) {
+  return error?.name === "NotFound" || error?.$metadata?.httpStatusCode === 404;
+}
+
 export function fingerprintPrioritySource(source) {
   const bytes = bytesOf(source);
   validateArchive(bytes);
@@ -78,6 +82,25 @@ export function createS3PrioritySourceStore(client, { bucketName }) {
         },
       }));
       return { fingerprint, bytes: bytes.length };
+    },
+
+    async assertSource({ accountId, fingerprint }) {
+      const key = sourceKey(accountId, fingerprint);
+      let response;
+      try {
+        response = await client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      } catch (error) {
+        if (missingSource(error)) {
+          throw new PriorityJobError(404, "priority_source_not_found", "Repository source is not available.");
+        }
+        throw error;
+      }
+      const metadataFingerprint = response.Metadata?.["source-sha256"];
+      const sourceBytes = Number(response.Metadata?.["source-bytes"] ?? response.ContentLength);
+      if (metadataFingerprint !== fingerprint || !Number.isSafeInteger(sourceBytes) || sourceBytes < 4 || sourceBytes > MAX_PRIORITY_SOURCE_BYTES) {
+        throw new Error("Stored priority source metadata is invalid.");
+      }
+      return { fingerprint, bytes: sourceBytes };
     },
 
     async getSource({ accountId, fingerprint }) {
