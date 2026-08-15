@@ -48,6 +48,11 @@ function isNo(value: string | undefined) {
   return ["no", "false", "disabled", "off", "inactive"].includes(normalize(value));
 }
 
+function firewallActive(value: string | undefined) {
+  const tokens = normalize(value).split(/[^a-z]+/).filter(Boolean);
+  return tokens.some((token) => ["active", "enabled", "on", "running"].includes(token));
+}
+
 export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   const findings: ServerAuditFinding[] = [];
 
@@ -82,7 +87,7 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
   }
 
   const firewall = normalize(snapshot.security?.firewall);
-  if (firewall && !["active", "enabled", "on", "running"].some((state) => firewall.includes(state))) {
+  if (firewall && !firewallActive(snapshot.security?.firewall)) {
     findings.push(finding("high", "network", "Host firewall not reported active", `Firewall posture was reported as ${snapshot.security?.firewall}.`, "Verify the effective host/network firewall policy and enable an allowlist-based policy if the host is otherwise exposed.", [{ source: "firewall", summary: snapshot.security?.firewall ?? "unknown" }]));
   }
 
@@ -111,7 +116,7 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
         findings.push(finding("medium", "permissions", "Web root is group-writable", `${root.path} has mode ${mode}.`, "Confirm the owning group is intentionally constrained and reduce write scope if broad deployment groups are unnecessary.", [{ source: root.path, summary: `mode ${mode}` }]));
       }
     }
-    if (root.owner === "root" && root.frameworkHints?.some((hint) => /laravel|node|next|wordpress/i.test(hint))) {
+    if ((root.owner === "root" || root.owner === "0") && root.frameworkHints?.some((hint) => /laravel|node|next|wordpress/i.test(hint))) {
       findings.push(finding("low", "permissions", "Application web root owned by root", `${root.path} is owned by root.`, "Confirm deployment/runtime ownership is intentional; prefer a dedicated application owner where feasible.", [{ source: root.path, summary: "owner root" }]));
     }
   }
