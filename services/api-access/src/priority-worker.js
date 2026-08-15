@@ -29,10 +29,19 @@ function customerAccountId(job) {
   return job.accountId;
 }
 
+function cleanExecutorField(value, label) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value.length < 1 || value.length > 128 || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new Error(`Priority executor ${label} is invalid.`);
+  }
+  return value;
+}
+
 export function createPriorityWorker({
   laneName,
   jobStore,
   accountAccess,
+  executeCustomerJob,
   now = Date.now,
   workerId = "priority-worker",
   logger = console,
@@ -43,6 +52,9 @@ export function createPriorityWorker({
   }
   if (accountAccess !== undefined && (!accountAccess || typeof accountAccess.assertActive !== "function")) {
     throw new Error("Priority account access verifier is invalid.");
+  }
+  if (executeCustomerJob !== undefined && typeof executeCustomerJob !== "function") {
+    throw new Error("Priority customer executor is invalid.");
   }
   if (typeof workerId !== "string" || !workerId || workerId.length > 256 || /[\u0000-\u001f\u007f]/.test(workerId)) {
     throw new Error("Priority worker ID is invalid.");
@@ -73,16 +85,46 @@ export function createPriorityWorker({
           if (!accountAccess) throw new Error("Customer priority job access verification is unavailable.");
           await accountAccess.assertActive(accountId);
         }
-        if (job.jobType !== "queue_canary") throw new Error("Unsupported priority job type.");
+
+        let result;
+        if (job.jobType === "queue_canary") {
+          result = {
+            schemaVersion: 1,
+            jobType: job.jobType,
+            priority: lane.name,
+            capacityWeight: lane.capacityWeight,
+            sourceFingerprint: job.sourceFingerprint,
+            processedBy: leaseOwner,
+          };
+        } else if (job.jobType === "repository_audit") {
+          if (!accountId) throw new Error("Customer priority job account is required.");
+          if (!executeCustomerJob) throw new Error("Customer priority job executor is unavailable.");
+          const execution = await executeCustomerJob({
+            jobId: message.jobId,
+            accountId,
+            priority: lane.name,
+            sourceFingerprint: job.sourceFingerprint,
+            weightedCredits: job.weightedCredits,
+          });
+          if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
+            throw new Error("Customer priority executor result is invalid.");
+          }
+          result = {
+            schemaVersion: 1,
+            jobType: job.jobType,
+            priority: lane.name,
+            capacityWeight: lane.capacityWeight,
+            sourceFingerprint: job.sourceFingerprint,
+            processedBy: leaseOwner,
+            ...(cleanExecutorField(execution.reportId, "report ID") ? { reportId: cleanExecutorField(execution.reportId, "report ID") } : {}),
+            ...(cleanExecutorField(execution.provider, "provider") ? { provider: cleanExecutorField(execution.provider, "provider") } : {}),
+          };
+        } else {
+          throw new Error("Unsupported priority job type.");
+        }
+
         const completedAt = new Date(now()).toISOString();
-        await jobStore.completeJob(message.jobId, leaseOwner, {
-          schemaVersion: 1,
-          jobType: job.jobType,
-          priority: lane.name,
-          capacityWeight: lane.capacityWeight,
-          sourceFingerprint: job.sourceFingerprint,
-          processedBy: leaseOwner,
-        }, completedAt);
+        await jobStore.completeJob(message.jobId, leaseOwner, result, completedAt);
       } catch {
         const messageId = record?.messageId ?? "unknown";
         const receiveCount = Number.parseInt(record?.attributes?.ApproximateReceiveCount ?? "1", 10);
