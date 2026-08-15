@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: SolveLang API subscription keys, customer accounts, billing lifecycle, authorization, and hard usage limits
+Description: SolveLang API subscription keys, customer accounts, billing lifecycle, authorization, admin CRM, and hard usage limits
 
 Parameters:
   ApiAccessEnabled:
@@ -23,6 +23,10 @@ Parameters:
     Type: String
     Default: arn:aws:kms:us-east-1:000000000000:key/disabled
     AllowedPattern: '^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$'
+  AdminCrmEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
   SubscriptionBillingEnabled:
     Type: String
     AllowedValues: ["true", "false"]
@@ -83,6 +87,13 @@ Rules:
         AssertDescription: Authenticator 2FA requires customer accounts to be enabled.
       - Assert: !Not [!Equals [!Ref CustomerTotpKmsKeyArn, "arn:aws:kms:us-east-1:000000000000:key/disabled"]]
         AssertDescription: Authenticator 2FA requires a dedicated KMS encryption key ARN.
+  AdminCrmRequirements:
+    RuleCondition: !Equals [!Ref AdminCrmEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
+        AssertDescription: Admin CRM requires API access to be enabled.
+      - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
+        AssertDescription: Admin CRM requires customer accounts to be enabled.
   SubscriptionBillingRemainsTestOnly:
     RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
     Assertions:
@@ -106,6 +117,7 @@ Rules:
 Conditions:
   CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
+  AdminCrmFeatureEnabled: !Equals [!Ref AdminCrmEnabled, "true"]
 
 Resources:
   ApiAccountsTable:
@@ -207,6 +219,41 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  AdminCrmTable:
+    Type: AWS::DynamoDB::Table
+    Condition: AdminCrmFeatureEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: recordType
+          AttributeType: S
+        - AttributeName: updatedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: RecordTypeUpdatedAtIndex
+          KeySchema:
+            - AttributeName: recordType
+              KeyType: HASH
+            - AttributeName: updatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   ApiAccessHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -249,6 +296,9 @@ Resources:
           API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
           API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
           API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
+          API_ADMIN_CRM_ENABLED: !Ref AdminCrmEnabled
+          API_ADMIN_CRM_TABLE: !If [AdminCrmFeatureEnabled, !Ref AdminCrmTable, disabled]
+          API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
           API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
@@ -281,6 +331,11 @@ Resources:
             TableName: !Ref ApiSubscriptionEventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
+        - !If
+          - AdminCrmFeatureEnabled
+          - DynamoDBCrudPolicy:
+              TableName: !Ref AdminCrmTable
+          - !Ref AWS::NoValue
         - Statement:
             Effect: Allow
             Action:
@@ -449,6 +504,36 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /internal/accounts/access
             Method: POST
+        AdminCustomers:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/admin/customers
+            Method: GET
+        AdminCustomerProfile:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/admin/customers/profile
+            Method: POST
+        AdminCustomerNotes:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/admin/customers/notes
+            Method: POST
+        AdminCustomerTasks:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/admin/customers/tasks
+            Method: POST
+        AdminCustomerTaskUpdate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/admin/customers/tasks/update
+            Method: POST
         WhoAmI:
           Type: HttpApi
           Properties:
@@ -521,6 +606,8 @@ Outputs:
     Value: !Ref CustomerAccountsEnabled
   CustomerTotpEnabledState:
     Value: !Ref CustomerTotpEnabled
+  AdminCrmEnabledState:
+    Value: !Ref AdminCrmEnabled
   SubscriptionBillingEnabledState:
     Value: !Ref SubscriptionBillingEnabled
   StripeSubscriptionWebhookUrl:
