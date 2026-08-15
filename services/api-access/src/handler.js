@@ -1,6 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
-import { S3Client } from "@aws-sdk/client-s3";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
@@ -21,13 +20,9 @@ import { createAccessGuardedCustomerAuthStore } from "./customer-auth-access-gua
 import { createCustomerAuthService } from "./customer-auth.js";
 import { createDynamoCustomerAuthStore } from "./customer-auth-store.js";
 import { createCustomerEmailGateway } from "./customer-email.js";
-import { createCustomerPriorityHandler } from "./customer-priority-handler.js";
-import { createCustomerPriorityService } from "./customer-priority.js";
 import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
-import { createDynamoPriorityJobStore } from "./priority-job-store.js";
-import { createS3PrioritySourceStore } from "./priority-source-store.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
 import { createSubscriptionManagementHandler } from "./subscription-management-handler.js";
@@ -119,29 +114,6 @@ const adminCustomerApplication = environment.adminCrmEnabled && accountAccess &&
     })
   : undefined;
 
-let customerPriorityApplication;
-if (environment.customerPriorityEnabled && accountAccess && customerAuth) {
-  const sourceStore = createS3PrioritySourceStore(new S3Client({}), {
-    bucketName: environment.prioritySourceBucket,
-  });
-  customerPriorityApplication = createCustomerPriorityHandler({
-    customerAuth,
-    sourceStore,
-    siteOrigin: environment.siteOrigin,
-    priority: createCustomerPriorityService({
-      accountAccess,
-      apiAccessService: guardedService,
-      jobStore: createDynamoPriorityJobStore(documentClient, {
-        jobsTable: environment.priorityJobsTable,
-      }),
-      sourceStore,
-      queueEnabled: environment.priorityQueueEnabled,
-      customerPriorityEnabled: environment.customerPriorityEnabled,
-      providerExecutionEnabled: environment.priorityProviderExecutionEnabled,
-    }),
-  });
-}
-
 let stripeGateway;
 let subscriptionCheckout;
 let subscriptionPortal;
@@ -197,24 +169,6 @@ const application = createApiAccessHandler({
   stripeGateway,
 });
 
-function disabledCustomerPriorityResponse() {
-  return {
-    statusCode: 503,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": environment.siteOrigin,
-      "access-control-allow-credentials": "true",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-      vary: "Origin",
-    },
-    body: JSON.stringify({
-      error: "Customer priority processing is not enabled.",
-      code: "customer_priority_disabled",
-    }),
-  };
-}
-
 export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
   if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) {
@@ -222,11 +176,6 @@ export async function handler(event) {
   }
   if (path.includes("/internal/admin/customers") && adminCustomerApplication) {
     return adminCustomerApplication(event);
-  }
-  if (path.includes("/customer/priority/")) {
-    return customerPriorityApplication
-      ? customerPriorityApplication(event)
-      : disabledCustomerPriorityResponse();
   }
   if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) {
     return subscriptionManagementApplication(event);
