@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import os from "node:os";
 
 const COLLECTOR_VERSION = "0.1.0";
@@ -33,6 +33,20 @@ function safeStat(path) {
 
 function listDir(path, max = 500) {
   try { return readdirSync(path, { withFileTypes: true }).slice(0, max); } catch { return []; }
+}
+
+function osRelease() {
+  try {
+    const values = {};
+    for (const line of readFileSync("/etc/os-release", "utf8").split("\n")) {
+      const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+      if (!match) continue;
+      values[match[1]] = match[2].replace(/^['"]|['"]$/g, "").replace(/\\([\\"'$`])/g, "$1");
+    }
+    return [values.NAME, values.VERSION_ID].filter(Boolean).join(" ").slice(0, 500);
+  } catch {
+    return "";
+  }
 }
 
 function collectFilesystems() {
@@ -224,7 +238,7 @@ const snapshot = {
   collectedAt: new Date().toISOString(),
   host: {
     hostname: os.hostname().replace(/[^A-Za-z0-9._-]/g, "-").slice(0, 253) || "unknown-host",
-    os: command("sh", ["-c", ". /etc/os-release 2>/dev/null; printf '%s %s' \"$NAME\" \"$VERSION_ID\""]) || os.type(),
+    os: osRelease() || os.type(),
     kernel: os.release(),
     architecture: os.arch(),
   },
