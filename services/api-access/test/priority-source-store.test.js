@@ -10,10 +10,14 @@ function zipBytes(body = "fixture") {
 class FakeS3 {
   constructor() { this.calls = []; this.object = null; }
   async send(command) {
-    this.calls.push(command.input);
+    this.calls.push({ type: command.constructor.name, input: command.input });
     if (command.constructor.name === "PutObjectCommand") {
       this.object = { bytes: Buffer.from(command.input.Body), metadata: command.input.Metadata };
       return {};
+    }
+    if (command.constructor.name === "HeadObjectCommand") {
+      if (!this.object) throw Object.assign(new Error("missing"), { name: "NotFound", $metadata: { httpStatusCode: 404 } });
+      return { ContentLength: this.object.bytes.length, Metadata: this.object.metadata };
     }
     if (command.constructor.name === "GetObjectCommand") {
       if (!this.object) throw new Error("missing");
@@ -37,11 +41,26 @@ test("source storage is content-addressed, private-by-contract, encrypted, and f
   const fingerprint = fingerprintPrioritySource(source);
   const saved = await store.putSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", source });
   assert.equal(saved.fingerprint, fingerprint);
-  assert.equal(client.calls[0].Key, `customer/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${fingerprint}.zip`);
-  assert.equal(client.calls[0].ServerSideEncryption, "AES256");
-  assert.equal(client.calls[0].ContentType, "application/zip");
-  assert.equal(client.calls[0].Metadata["source-sha256"], fingerprint);
+  assert.equal(client.calls[0].input.Key, `customer/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${fingerprint}.zip`);
+  assert.equal(client.calls[0].input.ServerSideEncryption, "AES256");
+  assert.equal(client.calls[0].input.ContentType, "application/zip");
+  assert.equal(client.calls[0].input.Metadata["source-sha256"], fingerprint);
+  assert.deepEqual(
+    await store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }),
+    { fingerprint, bytes: source.length },
+  );
   assert.deepEqual(await store.getSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }), source);
+});
+
+test("source existence is account-bound and missing source is a public 404 before usage", async () => {
+  const client = new FakeS3();
+  const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
+  await assert.rejects(
+    store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint: "f".repeat(64) }),
+    (error) => error?.statusCode === 404 && error?.code === "priority_source_not_found",
+  );
+  assert.equal(client.calls[0].type, "HeadObjectCommand");
+  assert.match(client.calls[0].input.Key, /^customer\/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\//);
 });
 
 test("source storage rejects non-ZIP, malformed ownership, and oversized source before S3", async () => {
