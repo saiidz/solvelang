@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solve-lang.com/schemas/server-audit-report.schema.json",
+  "title": "SolveLang Server Audit Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion","reportId","snapshotCollectedAt","generatedAt","host","summary","findings","limitations"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "reportId": { "type": "string", "pattern": "^server-audit-[a-f0-9]{8}$" },
+    "snapshotCollectedAt": { "type":"string", "format":"date-time" },
+    "generatedAt": { "type":"string", "format":"date-time" },
+    "host": { "type":"object" },
+    "summary": {
+      "type":"object", "additionalProperties":false,
+      "required":["critical","high","medium","low","info","score"],
+      "properties": {
+        "critical":{"type":"integer","minimum":0},"high":{"type":"integer","minimum":0},"medium":{"type":"integer","minimum":0},"low":{"type":"integer","minimum":0},"info":{"type":"integer","minimum":0},"score":{"type":"integer","minimum":0,"maximum":100}
+      }
+    },
+    "findings": {
+      "type":"array",
+      "items": {
+        "type":"object", "additionalProperties":false,
+        "required":["id","severity","category","title","summary","recommendation","evidence"],
+        "properties": {
+          "id":{"type":"string","pattern":"^srv_[a-f0-9]{8}$"},
+          "severity":{"enum":["critical","high","medium","low","info"]},
+          "category":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"recommendation":{"type":"string"},
+          "evidence":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["source","summary"],"properties":{"source":{"type":"string"},"summary":{"type":"string"}}}}
+        }
+      }
+    },
+    "limitations": { "type":"array", "items":{"type":"string"} }
+  }
+}
