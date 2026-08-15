@@ -9,6 +9,9 @@ import { createDynamoAccountAccessReader } from "./account-access-reader.js";
 import { createAccountAccessService } from "./account-access.js";
 import { createDynamoAccountAccessStore } from "./account-access-store.js";
 import { createAccountIdentityResolver } from "./account-identity-resolver.js";
+import { createAdminCustomerHandler } from "./admin-customer-handler.js";
+import { createAdminCustomerService } from "./admin-customer-service.js";
+import { createDynamoAdminCrmStore } from "./admin-crm-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
@@ -32,6 +35,7 @@ import { createTotpSecretProtector } from "./totp-kms.js";
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const store = createDynamoApiAccessStore(documentClient, environment);
+const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
 const service = createApiAccessService({
   store,
   pepper: environment.pepper,
@@ -41,6 +45,7 @@ const service = createApiAccessService({
 let accountAccess;
 let accountIdentityResolver;
 let customerAuth;
+let customerAuthStore;
 if (environment.customerAccountsEnabled) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
     tableName: environment.customerAuthTable,
@@ -52,7 +57,7 @@ if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
-  const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
+  customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   accountIdentityResolver = createAccountIdentityResolver({
     store: customerAuthStore,
     pepper: environment.customerAuthPepper,
@@ -80,12 +85,29 @@ const guardedService = accountAccess
 const customerAccount = createCustomerAccountService({
   store,
   apiAccessService: guardedService,
-  usageReader: createDynamoCustomerUsageReader(documentClient, environment.usageTable),
+  usageReader,
 });
 const accountAccessAdminApplication = accountAccess
   ? createAccountAccessAdminHandler({
       accountAccess,
       identityResolver: accountIdentityResolver,
+      adminSecret: environment.adminSecret,
+      siteOrigin: environment.siteOrigin,
+    })
+  : undefined;
+const adminCustomerApplication = environment.adminCrmEnabled && accountAccess && accountIdentityResolver && customerAuthStore
+  ? createAdminCustomerHandler({
+      customers: createAdminCustomerService({
+        identityResolver: accountIdentityResolver,
+        accountAccess,
+        apiStore: store,
+        authStore: customerAuthStore,
+        usageReader,
+        crmStore: createDynamoAdminCrmStore(documentClient, {
+          tableName: environment.adminCrmTable,
+          profileIndex: environment.adminCrmProfileIndex,
+        }),
+      }),
       adminSecret: environment.adminSecret,
       siteOrigin: environment.siteOrigin,
     })
@@ -150,6 +172,9 @@ export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
   if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) {
     return accountAccessAdminApplication(event);
+  }
+  if (path.includes("/internal/admin/customers") && adminCustomerApplication) {
+    return adminCustomerApplication(event);
   }
   if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) {
     return subscriptionManagementApplication(event);
