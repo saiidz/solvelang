@@ -13,6 +13,7 @@
     "@aws-sdk/client-sesv2": "3.1095.0",
     "@aws-sdk/client-sqs": "3.1090.0",
     "@aws-sdk/lib-dynamodb": "3.1090.0",
+    "@aws-sdk/s3-request-presigner": "3.1090.0",
     "stripe": "22.1.1"
   }
 }
