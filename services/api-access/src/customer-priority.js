@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { customerPriorityJobId } from "./customer-priority-id.js";
 import { calculateCreditCharge } from "./credits.js";
 import { getPriorityLane } from "./priority-lanes.js";
 import { PriorityJobError } from "./priority-jobs.js";
@@ -54,10 +55,6 @@ function quoteWorkload(input = {}) {
   }
 }
 
-function customerJobId(accountId, requestId) {
-  return `job_${createHash("sha256").update(`${accountId}\u001f${requestId}`).digest("hex").slice(0, 32)}`;
-}
-
 function publicCustomerJob(record) {
   return {
     jobId: record.jobId,
@@ -82,6 +79,8 @@ export function createCustomerPriorityService({
   accountAccess,
   apiAccessService,
   jobStore,
+  sourceVerifier,
+  sourceVerificationRequired = false,
   queueEnabled = false,
   customerPriorityEnabled = false,
   providerExecutionEnabled = false,
@@ -90,6 +89,8 @@ export function createCustomerPriorityService({
   if (!accountAccess || typeof accountAccess.assertActive !== "function") throw new Error("Customer account access verifier is required.");
   if (!apiAccessService || typeof apiAccessService.consumeUsage !== "function") throw new Error("API access service is required.");
   if (!jobStore || typeof jobStore.putJob !== "function" || typeof jobStore.getJob !== "function") throw new Error("Priority job store is required.");
+  if (sourceVerifier !== undefined && typeof sourceVerifier?.verifySource !== "function") throw new Error("Priority source verifier is invalid.");
+  if (sourceVerificationRequired && !sourceVerifier) throw new Error("Priority source verification is required.");
 
   function assertCustomerFeature() {
     if (!queueEnabled || !customerPriorityEnabled) throw new PriorityJobError(503, "customer_priority_disabled", "Customer priority processing is not enabled.");
@@ -114,7 +115,7 @@ export function createCustomerPriorityService({
     const sourceFingerprint = cleanFingerprint(input.sourceFingerprint);
     await accountAccess.assertActive(accountId);
     const quote = quoteWorkload(input.workload ?? input);
-    const jobId = customerJobId(accountId, requestId);
+    const jobId = customerPriorityJobId(accountId, requestId);
     const requestFingerprint = createHash("sha256")
       .update(JSON.stringify({ accountId, requestId, sourceFingerprint, priority: quote.priority, weightedCredits: quote.weightedCredits }))
       .digest("hex");
@@ -122,6 +123,10 @@ export function createCustomerPriorityService({
     if (existing) {
       if (existing.requestFingerprint !== requestFingerprint || existing.accountId !== accountId) throw new PriorityJobError(409, "job_idempotency_conflict", "The job request ID was already used with different inputs.");
       return { ...publicCustomerJob(existing), duplicate: true };
+    }
+
+    if (sourceVerificationRequired) {
+      await sourceVerifier.verifySource({ accountId, jobId, sourceFingerprint });
     }
 
     const usage = await apiAccessService.consumeUsage({
