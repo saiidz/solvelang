@@ -5,7 +5,7 @@ import { alternatesForRoute } from "../../i18n/seo";
 export const metadata: Metadata = {
   title: "Resources",
   description:
-    "A static index of SolveLang demos, audit resources, browser preview, local runtime, and crawlability files for AI discovery.",
+    "A static index of SolveLang workflow, repository, and server audit resources, browser preview, local runtime, and crawlability files for AI discovery.",
   alternates: alternatesForRoute("resources"),
 };
 
@@ -36,6 +36,18 @@ const resourceGroups = [
         label: "Open Repository Audit",
         href: "/repository-audit/",
         note: "Upload ZIP or TAR and receive deterministic inventory, duplicate and backup findings, and downloadable evidence.",
+      },
+    ],
+  },
+  {
+    title: "Server Audit",
+    description:
+      "Inspect a redacted, read-only Linux server posture snapshot before changing services, packages, permissions, or infrastructure.",
+    links: [
+      {
+        label: "Open Server Audit",
+        href: "/server-audit/",
+        note: "Analyze a local snapshot for storage, exposure, SSH, firewall, TLS, backup, log, service, and permission risks without uploading it or executing remediation.",
       },
     ],
   },
@@ -131,46 +143,25 @@ export default function ResourcesPage() {
     <main className="min-h-screen bg-white text-slate-900">
       <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
         <div className="mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Resources
-          </p>
-          <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight sm:text-6xl">
-            SolveLang resources for workflow mapping and repository analysis.
-          </h1>
-          <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">
-            Use the local-first tools to inspect a workflow or repository before production automation or cleanup begins.
-          </p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Resources</p>
+          <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight sm:text-6xl">SolveLang resources for workflow, repository, and server analysis.</h1>
+          <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">Use the local-first tools to inspect a workflow, repository, or redacted server snapshot before production automation or cleanup begins.</p>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
         <div className="grid gap-6 md:grid-cols-2">
           {resourceGroups.map((group) => (
-            <section
-              key={group.title}
-              className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm"
-            >
+            <section key={group.title} className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
               <h2 className="text-2xl font-semibold tracking-tight">{group.title}</h2>
               <p className="mt-3 leading-7 text-slate-600">{group.description}</p>
-
               <div className="mt-8 space-y-4">
                 {group.links.map((link) => {
                   const external = link.href.startsWith("https://");
-
                   return (
-                    <Link
-                      key={`${group.title}-${link.href}-${link.label}`}
-                      href={link.href}
-                      target={external ? "_blank" : undefined}
-                      rel={external ? "noreferrer" : undefined}
-                      className="block rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white"
-                    >
-                      <span className="text-lg font-semibold text-slate-950">
-                        {link.label}
-                      </span>
-                      <span className="mt-2 block leading-7 text-slate-600">
-                        {link.note}
-                      </span>
+                    <Link key={`${group.title}-${link.href}-${link.label}`} href={link.href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className="block rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:-translate-y-0.5 hover:bg-white">
+                      <span className="text-lg font-semibold text-slate-950">{link.label}</span>
+                      <span className="mt-2 block leading-7 text-slate-600">{link.note}</span>
                     </Link>
                   );
                 })}

@@ -20,6 +20,7 @@ export const publicRoutes = [
   { segment: "n8n-workflow-documentation-generator", classification: "localizable-public", sitemap: true },
   { segment: "run", classification: "english-only-technical", sitemap: true },
   { segment: "repository-audit", classification: "english-only-technical", sitemap: true },
+  { segment: "server-audit", classification: "english-only-technical", sitemap: true },
   { segment: "check", classification: "english-only-technical", sitemap: true },
   { segment: "status", classification: "english-only-technical", sitemap: true },
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },

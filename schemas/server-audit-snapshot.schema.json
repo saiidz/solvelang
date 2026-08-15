@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solve-lang.com/schemas/server-audit-snapshot.schema.json",
+  "title": "SolveLang Server Audit Snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "collectedAt", "host"],
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "collectedAt": { "type": "string", "format": "date-time" },
+    "host": {
+      "type": "object", "additionalProperties": false, "required": ["hostname"],
+      "properties": {
+        "hostname": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$" },
+        "os": { "type": "string", "maxLength": 500 },
+        "kernel": { "type": "string", "maxLength": 300 },
+        "architecture": { "type": "string", "maxLength": 100 }
+      }
+    },
+    "system": { "type": "object", "additionalProperties": false },
+    "filesystems": { "type": "array", "maxItems": 5000, "items": { "type": "object", "additionalProperties": false, "required": ["mount"], "properties": { "mount": {"type":"string"}, "filesystem":{"type":"string"}, "sizeBytes":{"type":"number","minimum":0}, "usedBytes":{"type":"number","minimum":0}, "availableBytes":{"type":"number","minimum":0}, "usagePercent":{"type":"number","minimum":0,"maximum":100} } } },
+    "listeningSockets": { "type": "array", "maxItems": 5000, "items": { "type": "object", "additionalProperties": false, "required": ["protocol","localAddress","port"], "properties": { "protocol":{"type":"string"}, "localAddress":{"type":"string"}, "port":{"type":"integer","minimum":1,"maximum":65535}, "process":{"type":"string"} } } },
+    "services": { "type": "array", "maxItems": 5000, "items": { "type":"object", "additionalProperties":false, "required":["name","state"], "properties":{"name":{"type":"string"},"state":{"type":"string"},"enabled":{"type":"string"}} } },
+    "packages": { "type": "array", "maxItems": 5000, "items": { "type":"object", "additionalProperties":false, "required":["name","version"], "properties":{"name":{"type":"string"},"version":{"type":"string"}} } },
+    "scheduledJobs": { "type":"array", "maxItems":5000, "items":{"type":"object","additionalProperties":false,"required":["source","commandSummary"],"properties":{"source":{"type":"string"},"schedule":{"type":"string"},"commandSummary":{"type":"string"}}} },
+    "web": { "type":"object", "additionalProperties":false },
+    "backups": { "type":"array", "maxItems":1000 },
+    "logs": { "type":"array", "maxItems":1000 },
+    "security": { "type":"object", "additionalProperties":false },
+    "metadata": { "type":"object", "additionalProperties":false, "properties":{"collectorVersion":{"type":"string"},"redactionsApplied":{"type":"boolean"},"notes":{"type":"array","maxItems":100,"items":{"type":"string"}}} }
+  }
+}
