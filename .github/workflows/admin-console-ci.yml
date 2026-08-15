@@ -1,0 +1,44 @@
+name: Admin Console CI
+
+on:
+  pull_request:
+    paths:
+      - 'admin-console/**'
+      - '.github/workflows/admin-console-ci.yml'
+  push:
+    branches:
+      - main
+      - 'agent/**'
+      - 'codex/**'
+    paths:
+      - 'admin-console/**'
+      - '.github/workflows/admin-console-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  admin-console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Unit tests
+        run: npm test
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        env:
+          SOLVELANG_ADMIN_API_BASE: https://example.execute-api.us-east-2.amazonaws.com
+          SOLVELANG_ADMIN_API_SECRET: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          SOLVELANG_ADMIN_PASSWORD_SCRYPT: 070707070707070707070707070707070707070707070707:1e806d945abf5225c2b75021b46489458b54021f210e5d9db34f32b86fe9ac52bc7e1b6a821ab997095115be2221f511ff8c4834ff9b73701dfb593a0cc7e690
+          SOLVELANG_ADMIN_SESSION_SECRET: ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss
+          SOLVELANG_ADMIN_CONSOLE_ORIGIN: http://localhost:3000
+        run: npm run build
