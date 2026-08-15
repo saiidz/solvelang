@@ -60,15 +60,17 @@ export function createDynamoAdminCrmStore(documentClient, {
 }) {
   required(documentClient, tableName);
 
+  async function getProfile(accountId) {
+    const response = await documentClient.send(new GetCommand({
+      TableName: tableName,
+      Key: profileKey(accountId),
+      ConsistentRead: true,
+    }));
+    return response.Item;
+  }
+
   return {
-    async getProfile(accountId) {
-      const response = await documentClient.send(new GetCommand({
-        TableName: tableName,
-        Key: profileKey(accountId),
-        ConsistentRead: true,
-      }));
-      return response.Item;
-    },
+    getProfile,
 
     async listProfiles({ limit = 50, exclusiveStartKey } = {}) {
       const response = await documentClient.send(new QueryCommand({
@@ -137,7 +139,7 @@ export function createDynamoAdminCrmStore(documentClient, {
           auditPut(tableName, accountId, audit),
         ],
       }));
-      return this.getProfile(accountId);
+      return getProfile(accountId);
     },
 
     async addNote(accountId, note, audit) {
