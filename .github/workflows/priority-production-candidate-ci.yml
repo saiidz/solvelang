@@ -1,0 +1,53 @@
+name: Priority Production Candidate CI
+
+on:
+  pull_request:
+    paths:
+      - "services/api-access/priority-production-template.yaml"
+      - "services/api-access/src/customer-priority*.js"
+      - "services/api-access/src/priority-*.js"
+      - "services/api-access/test/customer-priority-production-candidate.test.js"
+      - "services/api-access/package.json"
+      - ".github/workflows/priority-production-candidate-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/api-access/priority-production-template.yaml"
+      - "services/api-access/src/customer-priority*.js"
+      - "services/api-access/src/priority-*.js"
+      - "services/api-access/test/customer-priority-production-candidate.test.js"
+      - "services/api-access/package.json"
+      - ".github/workflows/priority-production-candidate-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-access
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API and production-candidate tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate production priority candidate
+        run: sam validate --lint --template priority-production-template.yaml
+      - name: Build production priority candidate
+        run: sam build --template priority-production-template.yaml
+      - name: Assert build-only and default-off boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'PriorityQueueEnabled:' priority-production-template.yaml
+          grep -q 'PriorityProviderExecutionEnabled:' priority-production-template.yaml
+          [[ "$(grep -c 'Default: "false"' priority-production-template.yaml)" -ge 2 ]]
+          ! grep -Eqi 'stripe|subscriptionbilling|sk_live|charge' priority-production-template.yaml
+          ! grep -Eq 'sam deploy|cloudformation deploy|aws s3 cp' ../../.github/workflows/priority-production-candidate-ci.yml
