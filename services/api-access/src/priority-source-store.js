@@ -26,6 +26,18 @@ export function createS3PrioritySourceStore(client, { bucket, maxBytes = MAX_SOU
   if (typeof bucket !== "string" || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error("Priority source bucket is invalid.");
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1024 || maxBytes > MAX_SOURCE_BYTES) throw new Error("Priority source maximum is invalid.");
 
+  async function inspect({ accountId, jobId, sourceFingerprint }) {
+    if (!SHA256.test(sourceFingerprint ?? "")) throw new PriorityJobError(400, "invalid_source_fingerprint", "Source fingerprint is invalid.");
+    const key = keyFor(accountId, jobId);
+    const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    const size = Number(head.ContentLength);
+    if (!Number.isSafeInteger(size) || size < 1 || size > maxBytes) throw new PriorityJobError(413, "source_size_invalid", "Priority source size is invalid.");
+    if (head.Metadata?.accountid !== accountId || head.Metadata?.jobid !== jobId || head.Metadata?.sha256 !== sourceFingerprint) {
+      throw new PriorityJobError(409, "source_metadata_mismatch", "Priority source metadata does not match the job.");
+    }
+    return { key, byteLength: size, sourceFingerprint };
+  }
+
   async function putSource({ accountId, jobId, bytes, sourceFingerprint }) {
     const body = Buffer.from(bytes ?? []);
     if (body.length < 1 || body.length > maxBytes) throw new PriorityJobError(413, "source_size_invalid", "Priority source size is invalid.");
@@ -44,23 +56,20 @@ export function createS3PrioritySourceStore(client, { bucket, maxBytes = MAX_SOU
     return { key, byteLength: body.length, sourceFingerprint };
   }
 
-  async function getSource({ accountId, jobId, sourceFingerprint }) {
-    if (!SHA256.test(sourceFingerprint ?? "")) throw new PriorityJobError(400, "invalid_source_fingerprint", "Source fingerprint is invalid.");
-    const key = keyFor(accountId, jobId);
-    const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    const size = Number(head.ContentLength);
-    if (!Number.isSafeInteger(size) || size < 1 || size > maxBytes) throw new PriorityJobError(413, "source_size_invalid", "Priority source size is invalid.");
-    if (head.Metadata?.accountid !== accountId || head.Metadata?.jobid !== jobId || head.Metadata?.sha256 !== sourceFingerprint) {
-      throw new PriorityJobError(409, "source_metadata_mismatch", "Priority source metadata does not match the job.");
-    }
-    const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    const bytes = await readBody(object.Body, maxBytes);
-    const actual = createHash("sha256").update(bytes).digest("hex");
-    if (actual !== sourceFingerprint) throw new PriorityJobError(409, "source_fingerprint_mismatch", "Stored priority source failed integrity verification.");
-    return { bytes, key, sourceFingerprint };
+  async function verifySource(input) {
+    return inspect(input);
   }
 
-  return { putSource, getSource, keyFor };
+  async function getSource(input) {
+    const verified = await inspect(input);
+    const object = await client.send(new GetObjectCommand({ Bucket: bucket, Key: verified.key }));
+    const bytes = await readBody(object.Body, maxBytes);
+    const actual = createHash("sha256").update(bytes).digest("hex");
+    if (actual !== verified.sourceFingerprint) throw new PriorityJobError(409, "source_fingerprint_mismatch", "Stored priority source failed integrity verification.");
+    return { bytes, ...verified };
+  }
+
+  return { putSource, verifySource, getSource, keyFor };
 }
 
 export { MAX_SOURCE_BYTES };
