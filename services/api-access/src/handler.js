@@ -42,13 +42,11 @@ const service = createApiAccessService({
   mode: environment.mode,
 });
 
-const customerAuthStore = environment.customerAccountsEnabled
-  ? createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable)
-  : undefined;
 let accountAccess;
 let accountIdentityResolver;
 let customerAuth;
-if (environment.customerAccountsEnabled && customerAuthStore) {
+let customerAuthStoreForAdmin;
+if (environment.customerAccountsEnabled) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
     tableName: environment.customerAuthTable,
   });
@@ -59,6 +57,8 @@ if (environment.customerAccountsEnabled && customerAuthStore) {
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
+  const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
+  customerAuthStoreForAdmin = customerAuthStore;
   accountIdentityResolver = createAccountIdentityResolver({
     store: customerAuthStore,
     pepper: environment.customerAuthPepper,
@@ -96,13 +96,13 @@ const accountAccessAdminApplication = accountAccess
       siteOrigin: environment.siteOrigin,
     })
   : undefined;
-const adminCustomerApplication = environment.adminCrmEnabled && accountAccess && accountIdentityResolver && customerAuthStore
+const adminCustomerApplication = environment.adminCrmEnabled && accountAccess && accountIdentityResolver && customerAuthStoreForAdmin
   ? createAdminCustomerHandler({
       customers: createAdminCustomerService({
         identityResolver: accountIdentityResolver,
         accountAccess,
         apiStore: store,
-        authStore: customerAuthStore,
+        authStore: customerAuthStoreForAdmin,
         usageReader,
         crmStore: createDynamoAdminCrmStore(documentClient, {
           tableName: environment.adminCrmTable,
