@@ -1,0 +1,286 @@
+name: Deploy API Access Production Admin CRM
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_admin_crm_enable:
+        description: Confirm enabling the private production Admin CRM backend only
+        required: true
+        default: false
+        type: boolean
+      confirm_billing_remains_disabled:
+        description: Confirm subscription billing, Stripe, webhooks, and charges must remain disabled
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "true"
+      CUSTOMER_ACCOUNTS_ENABLED: "true"
+      ADMIN_CRM_ENABLED: "true"
+      SUBSCRIPTION_BILLING_ENABLED: "false"
+      DISABLED_TOTP_KMS_ARN: arn:aws:kms:us-east-1:000000000000:key/disabled
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      CUSTOMER_AUTH_EMAIL_REPLY_TO: ${{ vars.CUSTOMER_AUTH_EMAIL_REPLY_TO }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce production Admin CRM boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production Admin CRM deployment must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_admin_crm_enable }}" == "true" ]] || { echo "Explicit Admin CRM confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_billing_remains_disabled }}" == "true" ]] || { echo "Explicit billing-disabled confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == true ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == true ]]
+          [[ "$ADMIN_CRM_ENABLED" == true ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == false ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          (( ${#API_KEY_PEPPER} >= 32 ))
+          (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
+          (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          test -n "$AWS_REGION"
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Capture exact production feature state
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
+
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          totp_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          totp_kms="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpKmsKeyArn") | .ParameterValue] | first // empty' <<<"$stack")"
+          crm_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ -n "$totp_kms" ]] || totp_kms="$DISABLED_TOTP_KMS_ARN"
+
+          [[ "$api_enabled" == true ]]
+          [[ "$accounts_enabled" == true ]]
+          [[ "$billing_enabled" == false ]]
+          [[ "$totp_enabled" == true || "$totp_enabled" == false ]]
+          [[ "$crm_enabled" == true || "$crm_enabled" == false ]]
+          [[ "$totp_kms" =~ ^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$ ]]
+          if [[ "$totp_enabled" == true ]]; then
+            [[ "$totp_kms" != "$DISABLED_TOTP_KMS_ARN" ]] || { echo "Enabled TOTP has no real KMS key." >&2; exit 1; }
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            [[ "$totp_kms" == "arn:aws:kms:${AWS_REGION}:${account_id}:key/"* ]] || { echo "TOTP KMS key must belong to the production account and region." >&2; exit 1; }
+            key_metadata="$(aws kms describe-key --key-id "$totp_kms" --output json)"
+            jq -e '.KeyMetadata.KeyState == "Enabled" and .KeyMetadata.KeyManager == "CUSTOMER" and .KeyMetadata.KeySpec == "SYMMETRIC_DEFAULT" and .KeyMetadata.KeyUsage == "ENCRYPT_DECRYPT" and .KeyMetadata.MultiRegion == false' <<<"$key_metadata" >/dev/null
+            aws kms get-key-rotation-status --key-id "$totp_kms" --query KeyRotationEnabled --output text | grep -qx True
+          fi
+
+          health="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e --argjson totp "$totp_enabled" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+
+          {
+            echo "api_base=$api_base"
+            echo "totp_enabled=$totp_enabled"
+            echo "totp_kms=$totp_kms"
+            echo "crm_enabled=$crm_enabled"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate candidate CRM stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          sam validate --lint --template template.yaml
+          sam build --template template.yaml
+          grep -q '^  AdminCrmEnabled:' template.yaml
+          grep -q '^  AdminCrmTable:' template.yaml
+          grep -q 'PointInTimeRecoveryEnabled: true' template.yaml
+          grep -q 'DeletionPolicy: Retain' template.yaml
+          grep -q 'UpdateReplacePolicy: Retain' template.yaml
+          ! grep -Rq 'secrets\.STRIPE' ../../.github/workflows/deploy-api-access-production-admin-crm.yml
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare dedicated production SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]]
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Enable production Admin CRM while preserving auth state
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          PRESERVED_TOTP_KMS: ${{ steps.before.outputs.totp_kms }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            ApiAccessEnabled="true"
+            ApiAccessMode="live"
+            CustomerAccountsEnabled="true"
+            CustomerTotpEnabled="$PRESERVED_TOTP_ENABLED"
+            CustomerTotpKmsKeyArn="$PRESERVED_TOTP_KMS"
+            AdminCrmEnabled="true"
+            SubscriptionBillingEnabled="false"
+            SiteOrigin="$SITE_ORIGIN"
+            ApiKeyPepper="$API_KEY_PEPPER"
+            ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+            CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER"
+            CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER"
+          )
+          [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME-admin-crm" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+
+      - name: Verify Admin CRM production state without customer mutation
+        env:
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          crm_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$crm_enabled" == true ]]
+          [[ "$billing_enabled" == false ]]
+          aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id AdminCrmTable --output json \
+            | jq -e '.StackResourceDetail.ResourceType == "AWS::DynamoDB::Table" and (.StackResourceDetail.PhysicalResourceId | length > 0)' >/dev/null
+
+          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          jq -e --argjson totp "$PRESERVED_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+
+          http_status="$(curl --proto '=https' --tlsv1.2 --silent --show-error --connect-timeout 10 --max-time 30 \
+            --get --data-urlencode 'accountId=invalid' \
+            --output /tmp/admin-crm-probe.json --write-out '%{http_code}' \
+            -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" \
+            "$API_BASE/internal/admin/customers")"
+          [[ "$http_status" == 400 ]] || { echo "Admin CRM route probe expected HTTP 400 but got $http_status." >&2; cat /tmp/admin-crm-probe.json >&2; exit 1; }
+          jq -e '.code == "invalid_request"' /tmp/admin-crm-probe.json >/dev/null
+
+      - name: Restore previous CRM flag on failed rollout
+        if: ${{ failure() && steps.before.outcome == 'success' && steps.artifact-bucket.outcome == 'success' }}
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          PRESERVED_TOTP_KMS: ${{ steps.before.outputs.totp_kms }}
+          INITIAL_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            ApiAccessEnabled="true"
+            ApiAccessMode="live"
+            CustomerAccountsEnabled="true"
+            CustomerTotpEnabled="$PRESERVED_TOTP_ENABLED"
+            CustomerTotpKmsKeyArn="$PRESERVED_TOTP_KMS"
+            AdminCrmEnabled="$INITIAL_CRM_ENABLED"
+            SubscriptionBillingEnabled="false"
+            SiteOrigin="$SITE_ORIGIN"
+            ApiKeyPepper="$API_KEY_PEPPER"
+            ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+            CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER"
+            CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER"
+          )
+          [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME-admin-crm-rollback" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          jq -e --argjson totp "$PRESERVED_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        env:
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          PREVIOUS_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+        shell: bash
+        run: |
+          {
+            echo "## SolveLang production Admin CRM rollout"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- API base: \`$API_BASE\`"
+            echo "- Previous Admin CRM enabled: **$PREVIOUS_CRM_ENABLED**"
+            echo "- Admin CRM enabled: **true**"
+            echo "- Customer accounts enabled: **true**"
+            echo "- Authenticator 2FA preserved: **$PRESERVED_TOTP_ENABLED**"
+            echo "- Subscription billing enabled: **false**"
+            echo "- Stripe credentials injected: **no**"
+            echo "- Charges performed: **no**"
+            echo "- Email sent by this workflow: **no**"
+            echo "- Customer/CRM records mutated by verification: **no**"
+          } >> "$GITHUB_STEP_SUMMARY"
