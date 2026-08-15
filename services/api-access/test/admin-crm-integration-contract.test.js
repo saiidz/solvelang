@@ -20,6 +20,8 @@ function baseEnvironment(overrides = {}) {
     API_CUSTOMER_AUTH_TABLE: "auth",
     API_CUSTOMER_AUTH_PEPPER: "c".repeat(64),
     API_CUSTOMER_AUTH_EMAIL_SENDER: "hello@example.com",
+    API_CUSTOMER_TOTP_ENABLED: "false",
+    API_ADMIN_CRM_ENABLED: "false",
     API_SUBSCRIPTION_BILLING_ENABLED: "false",
     SITE_ORIGIN: "https://www.solve-lang.com",
     ...overrides,
