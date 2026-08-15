@@ -40,7 +40,7 @@ function knownKeys(value: Record<string, unknown>, allowed: string[], name: stri
 }
 
 export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
-  if (typeof raw !== "string" || Buffer.byteLength(raw, "utf8") > MAX_SNAPSHOT_BYTES) throw new Error("Snapshot is too large.");
+  if (typeof raw !== "string" || new TextEncoder().encode(raw).length > MAX_SNAPSHOT_BYTES) throw new Error("Snapshot is too large.");
   let input: unknown;
   try { input = JSON.parse(raw); } catch { throw new Error("Snapshot is not valid JSON."); }
   assertObject(input, "Snapshot");
