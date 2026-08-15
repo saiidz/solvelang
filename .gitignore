@@ -9,6 +9,15 @@ site/app/\[locale\]/
 site/.env.local
 site/.env*.local
 
+# Private admin console
+admin-console/node_modules/
+admin-console/.next/
+admin-console/out/
+admin-console/dist/
+admin-console/build/
+admin-console/.env.local
+admin-console/.env*.local
+
 # MCP package build output
 packages/mcp-server/node_modules/
 packages/mcp-server/dist/
