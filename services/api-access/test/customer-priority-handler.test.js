@@ -4,12 +4,13 @@ import { createCustomerPriorityHandler } from "../src/customer-priority-handler.
 
 const ACCOUNT_ID = `acct_${"d".repeat(32)}`;
 
-function event(method, path, { body, headers = {}, cookies } = {}) {
+function event(method, path, { body, headers = {}, cookies, isBase64Encoded = false } = {}) {
   return {
     rawPath: path,
     headers,
     cookies,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : (isBase64Encoded ? body : JSON.stringify(body)),
+    isBase64Encoded,
     requestContext: { http: { method } },
   };
 }
@@ -37,11 +38,44 @@ function fixture() {
     async submit(input) { calls.push(["submit", input]); return { jobId: "job_" + "a".repeat(32), accountId: input.accountId, status: "queued" }; },
     async getJob(input) { calls.push(["getJob", input]); return { jobId: input.jobId, accountId: input.accountId, status: "queued" }; },
   };
+  const sourceStore = {
+    async putSource(input) {
+      calls.push(["putSource", input]);
+      return { fingerprint: "f".repeat(64), bytes: input.source.length };
+    },
+  };
   return {
     calls,
-    handler: createCustomerPriorityHandler({ customerAuth, priority, siteOrigin: "https://www.solve-lang.com", logger: { error() {} } }),
+    handler: createCustomerPriorityHandler({ customerAuth, priority, sourceStore, siteOrigin: "https://www.solve-lang.com", logger: { error() {} } }),
   };
 }
+
+test("source upload derives ownership from the authenticated session, requires CSRF, and accepts only binary application/zip", async () => {
+  const { handler, calls } = fixture();
+  const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 1, 2, 3]);
+  const response = await handler(event("POST", "/customer/priority/source", {
+    headers: { cookie: "session=abc", "x-solvelang-csrf": "csrf-good", "content-type": "application/zip" },
+    body: zip.toString("base64"),
+    isBase64Encoded: true,
+  }));
+  assert.equal(response.statusCode, 201);
+  const upload = calls.find((call) => call[0] === "putSource");
+  assert.equal(upload[1].accountId, ACCOUNT_ID);
+  assert.deepEqual(upload[1].source, zip);
+
+  const wrongType = await handler(event("POST", "/customer/priority/source", {
+    headers: { cookie: "session=abc", "x-solvelang-csrf": "csrf-good", "content-type": "application/json" },
+    body: zip.toString("base64"),
+    isBase64Encoded: true,
+  }));
+  assert.equal(wrongType.statusCode, 415);
+
+  const notBinary = await handler(event("POST", "/customer/priority/source", {
+    headers: { cookie: "session=abc", "x-solvelang-csrf": "csrf-good", "content-type": "application/zip" },
+    body: { fake: true },
+  }));
+  assert.equal(notBinary.statusCode, 400);
+});
 
 test("quote and submit derive account ownership from the authenticated session and require CSRF", async () => {
   const { handler, calls } = fixture();
