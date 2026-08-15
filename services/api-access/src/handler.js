@@ -42,11 +42,13 @@ const service = createApiAccessService({
   mode: environment.mode,
 });
 
+const customerAuthStore = environment.customerAccountsEnabled
+  ? createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable)
+  : undefined;
 let accountAccess;
 let accountIdentityResolver;
 let customerAuth;
-let customerAuthStore;
-if (environment.customerAccountsEnabled) {
+if (environment.customerAccountsEnabled && customerAuthStore) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
     tableName: environment.customerAuthTable,
   });
@@ -57,7 +59,6 @@ if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled
     ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
     : undefined;
-  customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   accountIdentityResolver = createAccountIdentityResolver({
     store: customerAuthStore,
     pepper: environment.customerAuthPepper,
