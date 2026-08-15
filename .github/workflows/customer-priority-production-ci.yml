@@ -55,4 +55,4 @@ jobs:
           grep -q 'BlockPublicPolicy: true' "$template"
           grep -q 'ExpirationInDays: 7' "$template"
           ! grep -E -q 'STRIPE|sk_live|sk_test|PROVIDER_(API_)?KEY|Bearer' "$template"
-          ! grep -E -q 'workflow_dispatch|sam deploy|cloudformation deploy' ../../.github/workflows/customer-priority-production-ci.yml
+          ! grep -E -q 'workflow[_]dispatch|sam[ ]deploy|cloudformation[ ]deploy' ../../.github/workflows/customer-priority-production-ci.yml
