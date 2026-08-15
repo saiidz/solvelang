@@ -74,13 +74,31 @@ function adminCrm(environment) {
   };
 }
 
+function customerPriority(environment, customerAccountsEnabled) {
+  const queueEnabled = environment.API_PRIORITY_QUEUE_ENABLED === "true";
+  const customerPriorityEnabled = environment.API_CUSTOMER_PRIORITY_ENABLED === "true";
+  const providerExecutionEnabled = environment.API_PRIORITY_PROVIDER_EXECUTION_ENABLED === "true";
+  if (customerPriorityEnabled && !customerAccountsEnabled) throw new Error("Customer priority requires customer accounts to be enabled.");
+  if (customerPriorityEnabled && !queueEnabled) throw new Error("Customer priority requires the priority queue to be enabled.");
+  if (providerExecutionEnabled && !customerPriorityEnabled) throw new Error("Priority provider execution requires customer priority to be enabled.");
+  return {
+    priorityQueueEnabled: queueEnabled,
+    customerPriorityEnabled,
+    priorityProviderExecutionEnabled: providerExecutionEnabled,
+    priorityJobsTable: customerPriorityEnabled ? required(environment, "API_PRIORITY_JOBS_TABLE") : undefined,
+    prioritySourceBucket: customerPriorityEnabled ? required(environment, "API_PRIORITY_SOURCE_BUCKET") : undefined,
+  };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
+  const accounts = customerAccounts(environment);
   return {
     ...shared(environment),
     ...usage(environment),
     ...billing(environment),
-    ...customerAccounts(environment),
+    ...accounts,
     ...adminCrm(environment),
+    ...customerPriority(environment, accounts.customerAccountsEnabled),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
     siteOrigin: required(environment, "SITE_ORIGIN"),
   };
