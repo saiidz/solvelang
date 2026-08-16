@@ -1,0 +1,94 @@
+name: Preflight Production Admin Console Gateway
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_admin_console_preflight:
+        description: Confirm validation-only private admin gateway readiness; do not deploy or mutate production
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      ADMIN_ORIGIN: ${{ vars.ADMIN_CONSOLE_ORIGIN }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      ADMIN_PASSWORD_SCRYPT: ${{ secrets.ADMIN_CONSOLE_PASSWORD_SCRYPT }}
+      ADMIN_SESSION_SECRET: ${{ secrets.ADMIN_CONSOLE_SESSION_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce validation-only boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ "${{ inputs.confirm_production_admin_console_preflight }}" == "true" ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]]
+          [[ "$STACK_NAME" != *test* ]]
+          [[ "$ADMIN_ORIGIN" == https://* ]]
+          [[ "$ADMIN_ORIGIN" != "https://www.solve-lang.com" ]] || { echo "Private admin origin must not reuse the public customer origin." >&2; exit 1; }
+          (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
+          (( ${#ADMIN_SESSION_SECRET} >= 32 ))
+          [[ "$ADMIN_SESSION_SECRET" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$ADMIN_PASSWORD_SCRYPT" =~ ^[0-9a-fA-F]{32,128}:[0-9a-fA-F]{64,256}$ ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+      - name: Verify live CRM backend baseline read-only
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          crm="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$api_enabled" == true ]]
+          [[ "$accounts" == true ]]
+          [[ "$crm" == true ]]
+          [[ "$billing" == false ]]
+          test -n "$api_base"
+          health="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+      - name: Run gateway unit tests
+        working-directory: services/admin-console-gateway
+        run: npm test
+      - name: Validate gateway SAM contract
+        working-directory: services/admin-console-gateway
+        run: sam validate --lint --template template.yaml
+      - name: Build gateway SAM contract
+        working-directory: services/admin-console-gateway
+        run: sam build --template template.yaml
+      - name: Verify static admin bundle contains no privileged secret material
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -n -E 'API_ACCESS_ADMIN_SECRET|SOLVELANG_ADMIN_UPSTREAM_SECRET|ADMIN_CONSOLE_PASSWORD_SCRYPT|ADMIN_CONSOLE_SESSION_SECRET|STRIPE_SECRET_KEY|CUSTOMER_AUTH_PEPPER|API_KEY_PEPPER' admin-console-static
+          grep -q '__Host-solvelang-admin' services/admin-console-gateway/src/gateway.js
+          grep -q 'termination_confirmation_required' services/admin-console-gateway/src/gateway.js
+          ! grep -R -n -E 'sam[ ]deploy|cloudformation[ ]deploy|aws[ ]s3[ ]sync|aws[ ]s3[ ]cp' .github/workflows/preflight-production-admin-console-gateway.yml
+      - name: Write readiness summary
+        env:
+          API_BASE: ${{ steps.live.outputs.api_base }}
+        run: |
+          printf '## SolveLang private admin gateway preflight\n\n- Commit: `%s`\n- API base: `%s`\n- Admin CRM backend enabled: **true**\n- Billing enabled: **false**\n- Private admin origin: `%s`\n- Gateway tests/SAM validate/build: passed\n- Static secret scan: passed\n- Deployment performed: **no**\n- Customer/CRM mutation: **no**\n- Email sent: **no**\n- Stripe/charges: **no**\n' "$GITHUB_SHA" "$API_BASE" "$ADMIN_ORIGIN" >> "$GITHUB_STEP_SUMMARY"
