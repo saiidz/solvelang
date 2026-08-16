@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang private admin-console gateway. Build-only contract; disabled by default.
+
+Parameters:
+  AdminConsoleGatewayEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  AdminOrigin:
+    Type: String
+    AllowedPattern: '^https://[^ ]+$'
+  UpstreamApiBase:
+    Type: String
+    AllowedPattern: '^https://[A-Za-z0-9.-]+(?:/.*)?$'
+  UpstreamAdminSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+  AdminPasswordScrypt:
+    Type: String
+    NoEcho: true
+    MinLength: 64
+  AdminSessionSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+
+Conditions:
+  GatewayEnabled: !Equals [!Ref AdminConsoleGatewayEnabled, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Timeout: 15
+    MemorySize: 256
+    Tracing: Active
+
+Resources:
+  AdminGatewayApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: GatewayEnabled
+    Properties:
+      Name: solvelang-private-admin-gateway
+      ProtocolType: HTTP
+      DisableExecuteApiEndpoint: false
+
+  AdminGatewayFunction:
+    Type: AWS::Serverless::Function
+    Condition: GatewayEnabled
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-admin-gateway
+      Handler: src/handler.handler
+      CodeUri: .
+      Environment:
+        Variables:
+          SOLVELANG_ADMIN_UPSTREAM_API_BASE: !Ref UpstreamApiBase
+          SOLVELANG_ADMIN_UPSTREAM_SECRET: !Ref UpstreamAdminSecret
+          SOLVELANG_ADMIN_ORIGIN: !Ref AdminOrigin
+          SOLVELANG_ADMIN_PASSWORD_SCRYPT: !Ref AdminPasswordScrypt
+          SOLVELANG_ADMIN_SESSION_SECRET: !Ref AdminSessionSecret
+
+  AdminGatewayIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: GatewayEnabled
+    Properties:
+      ApiId: !Ref AdminGatewayApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AdminGatewayFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  AdminGatewayRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: GatewayEnabled
+    Properties:
+      ApiId: !Ref AdminGatewayApi
+      RouteKey: 'ANY /admin-gateway/{proxy+}'
+      Target: !Sub integrations/${AdminGatewayIntegration}
+
+  AdminGatewayStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: GatewayEnabled
+    Properties:
+      ApiId: !Ref AdminGatewayApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  AdminGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: GatewayEnabled
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AdminGatewayFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AdminGatewayApi}/*/*
+
+  AdminGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: GatewayEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-admin-gateway
+      RetentionInDays: 30
+
+Outputs:
+  AdminConsoleGatewayEnabledState:
+    Value: !Ref AdminConsoleGatewayEnabled
+  AdminGatewayBaseUrl:
+    Condition: GatewayEnabled
+    Value: !Sub https://${AdminGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/admin-gateway
