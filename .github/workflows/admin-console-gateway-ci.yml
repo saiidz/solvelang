@@ -5,12 +5,16 @@ on:
     paths:
       - 'services/admin-console-gateway/**'
       - 'admin-console-static/**'
+      - 'services/api-access/test/production-admin-console-gateway-preflight.test.js'
+      - '.github/workflows/preflight-production-admin-console-gateway.yml'
       - '.github/workflows/admin-console-gateway-ci.yml'
   push:
     branches: [main]
     paths:
       - 'services/admin-console-gateway/**'
       - 'admin-console-static/**'
+      - 'services/api-access/test/production-admin-console-gateway-preflight.test.js'
+      - '.github/workflows/preflight-production-admin-console-gateway.yml'
       - '.github/workflows/admin-console-gateway-ci.yml'
 
 permissions:
@@ -29,6 +33,9 @@ jobs:
           node-version: 22
       - name: Run gateway tests
         run: npm test
+      - name: Run production preflight contract tests
+        working-directory: .
+        run: node --test services/api-access/test/production-admin-console-gateway-preflight.test.js
       - uses: aws-actions/setup-sam@v2
       - name: Validate gateway SAM template
         run: sam validate --lint --template template.yaml
