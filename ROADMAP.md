@@ -55,13 +55,16 @@ The current factual production record is `docs/current-production-status-2026-08
 
 ## Product Direction
 
-SolveLang should grow into a safe language, analysis, and automation platform with three distinct audit/product surfaces:
+SolveLang should grow into a safe language, analysis, and automation platform with distinct product surfaces plus a shared structural-intelligence layer:
 
 1. **Workflow Preflight** — analyze exported workflow files before production.
 2. **Repository Audit** — analyze a repository and produce safe, prioritized architecture and cleanup recommendations.
 3. **Server Audit** — inspect a server through read-only access and produce operational/security findings.
+4. **Solve Graph / Solve Intelligence** — build a local-first software knowledge graph for architecture, dependency, impact, deployment, security-path, MCP/agent, and visual-explorer use cases.
 
-These surfaces must remain separate because their permissions, blast radius, evidence, and execution models differ.
+Workflow Preflight, Repository Audit, and Server Audit must remain separate where their permissions, blast radius, evidence, and execution models differ. Solve Graph is a shared evidence/intelligence layer, not a reason to merge those permission boundaries.
+
+The detailed Solve Graph product and implementation plan is `docs/solve-graph-product-plan-2026-08-16.md`.
 
 ## Immediate Engineering Order
 
@@ -72,13 +75,15 @@ The current buildout sequence is:
 3. finish remaining account/security hardening and truth documentation;
 4. finish production billing preparation before any separately approved billing activation or real charge;
 5. finish and validate queue-backed paid-priority execution before exposing paid priority choices;
-6. build Repository Audit in read-only-first stages;
-7. build Server Audit in read-only-first stages;
-8. complete final production IAM/rollback/operations hardening;
-9. continue language/runtime correctness and developer-experience work in parallel where independent;
-10. run final launch-readiness canaries and maintain an exact live-state record.
+6. finish Repository Audit deterministic read-only inventory/scanner foundations;
+7. build Solve Graph v0 contracts, `.solve` semantic graphing, and bounded local query primitives;
+8. integrate Solve Graph into Repository Audit v1 instead of creating a separate duplicate dependency engine;
+9. build Server Audit in read-only-first stages;
+10. complete final production IAM/rollback/operations hardening;
+11. continue language/runtime correctness and developer-experience work in parallel where independent;
+12. run final launch-readiness canaries and maintain an exact live-state record.
 
-Production mutations remain separately gated even when implementation code and workflows already exist.
+Production mutations remain separately gated even when implementation code and workflows already exist. Local/read-only Solve Graph work may proceed independently when it does not alter production state.
 
 ## Account And Security Hardening
 
@@ -154,6 +159,55 @@ Studio v1 is a static, browser-local product surface. It provides workflow model
 
 Future Studio work may add opt-in hosted collaboration, larger graph performance, richer condition expressions, and server-side Rust validation. Those capabilities require explicit privacy, authentication, and runtime design and are not implied by v1.
 
+## Solve Graph / Solve Intelligence
+
+Solve Graph is a planned local-first software knowledge graph that should become a shared structural-intelligence layer for developers, Repository Audit, MCP/Codex/agents, impact analysis, and a future visual repository explorer.
+
+The core thesis is:
+
+> The compiler explains what a Solve program means. Solve Graph explains what the whole software system means to developers and AI agents.
+
+### Initial local scope
+
+- versioned deterministic node/edge/provenance contract;
+- exact compiler-backed semantic graphing for `.solve` source;
+- polyglot adapters added incrementally after schema stability;
+- repository/file/module/function/type/dependency relationships;
+- GitHub Actions and deployment relationships;
+- bounded path, neighbor, dependency-cone, cycle, and impact queries;
+- exact source provenance for graph facts;
+- incremental local cache with generated artifacts ignored by Git by default;
+- no repository code execution during indexing;
+- no hosted source upload in the initial phases;
+- optional MCP tools only after deterministic query behavior is proven;
+- local visual explorer before any hosted repository product.
+
+### High-value use cases
+
+- dependency and reverse-dependency analysis;
+- PR/git-diff blast radius;
+- affected tests and deployment workflows;
+- architecture hotspots and cycles;
+- route/service/resource paths;
+- security-sensitive structural paths;
+- Repository Audit evidence;
+- bounded structural context for Codex/agents;
+- interactive architecture exploration.
+
+### `.solve` differentiation
+
+The `.solve` adapter should use compiler/AST/semantic structures rather than generic syntax-only parsing so calls, imports, types, agents/tools, and source provenance are as exact as the language implementation allows.
+
+### Hosted scope is later and separately gated
+
+Potential future hosted capabilities include private repository graph workspaces, opt-in public repository pages, historical graph snapshots, PR graph diffs, organization/cross-repository relationships, and grounded AI architecture Q&A.
+
+Hosted private-source ingestion requires a separate privacy/security design covering GitHub App scopes, tenant isolation, source retention/deletion, encryption, repository visibility changes, model-provider boundaries, and public/private publication rules.
+
+No private repository should become a public graph implicitly.
+
+See `docs/solve-graph-product-plan-2026-08-16.md` for the phased PR sequence, graph contracts, CLI/MCP design, explorer requirements, security rules, testing strategy, and go/no-go gates.
+
 ## Repository Audit
 
 Repository Audit remains a planned product surface. The v0 report contract and schema exist, but the scanner engine is **not implemented yet**.
@@ -176,7 +230,7 @@ Target scope:
 
 ### Repository Audit v1: code and dependency intelligence
 
-After v0 accuracy is proven:
+After v0 accuracy is proven, use the shared Solve Graph engine for structural intelligence rather than implementing a second graph system:
 
 - import/reference graph
 - dead-code candidates
@@ -184,6 +238,8 @@ After v0 accuracy is proven:
 - route/configuration consistency checks
 - test/documentation coverage map
 - architecture and maintainability scoring
+- dependency cycles and high-risk hubs
+- change/blast-radius evidence where applicable
 
 ### Repository Audit v2: approval-based cleanup
 
@@ -253,6 +309,8 @@ Repository Audit and Server Audit must share these rules:
 - bounded scans with file, size, time, and command limits
 - fail closed when permissions, evidence, or validation are incomplete
 
+Solve Graph should follow the same deterministic/evidence/redaction/boundedness principles when it supplies structural evidence to those products.
+
 ## Language Runtime
 
 ### Phase 1: Core interpreter
@@ -309,6 +367,7 @@ Still planned or incomplete:
 - richer CLI diagnostics
 - VS Code syntax highlighting
 - stable language specification/versioning
+- Solve Graph semantic emitter and structural query tooling after its contracts are stabilized
 
 ### Phase 5: platform/runtime adapters
 
@@ -353,7 +412,11 @@ SolveLang should become a simple, readable, safe, and AI-native language and ana
 - tool-using agents
 - workflow preflight
 - repository architecture/cleanup audits
+- local and hosted software knowledge graphs
+- PR/change impact analysis
+- bounded structural context for AI coding agents
+- visual architecture exploration
 - server posture/operational audits
 - eventually, managed workflow execution where the runtime and operational guarantees are proven
 
-The immediate priority is security/account completion and production truthfulness, followed by billing/priority readiness and read-only audit products, while language/runtime correctness continues in parallel.
+The immediate priority remains security/account completion and production truthfulness, followed by billing/priority readiness and read-only audit products, while language/runtime correctness continues in parallel. Solve Graph is a parallel local/read-only strategic track that should become the shared structural engine for Repository Audit v1 and AI/visual architecture tooling without bypassing production safety gates.
