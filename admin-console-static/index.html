@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https:; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" />
+  <title>SolveLang Admin</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">SolveLang internal operations</p>
+      <h1>Admin CRM</h1>
+      <p class="subtle">The browser never receives the API admin secret. All privileged calls pass through the signed-session admin gateway.</p>
+    </header>
+
+    <section id="login-panel" class="card">
+      <h2>Sign in</h2>
+      <form id="login-form">
+        <label>Admin password <input id="password" type="password" autocomplete="current-password" minlength="12" maxlength="512" required /></label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p id="login-error" class="error" aria-live="polite"></p>
+    </section>
+
+    <section id="app-panel" class="hidden">
+      <div class="toolbar card">
+        <form id="search-form" class="search-grid">
+          <label>Lookup type
+            <select id="lookup-type">
+              <option value="email">Email</option>
+              <option value="username">Username</option>
+              <option value="accountId">Account ID</option>
+            </select>
+          </label>
+          <label>Lookup value <input id="lookup-value" required /></label>
+          <button type="submit">Find customer</button>
+        </form>
+        <button id="logout" class="secondary">Sign out</button>
+      </div>
+
+      <p id="app-error" class="error" aria-live="polite"></p>
+      <section id="customer" class="hidden">
+        <div class="grid">
+          <article class="card"><h2>Customer</h2><pre id="customer-json"></pre></article>
+          <article class="card">
+            <h2>Access control</h2>
+            <label>Reason <input id="access-reason" maxlength="240" placeholder="Required for state changes" /></label>
+            <div class="button-row">
+              <button data-state="suspended">Suspend</button>
+              <button data-state="active">Reactivate</button>
+            </div>
+            <label>Termination confirmation <input id="termination-confirmation" placeholder="TERMINATE acct_..." /></label>
+            <button id="terminate" class="danger">Terminate permanently</button>
+          </article>
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <h2>CRM profile</h2>
+            <form id="profile-form">
+              <label>Stage <input id="crm-stage" maxlength="40" /></label>
+              <label>Priority <input id="crm-priority" maxlength="40" /></label>
+              <label>Owner <input id="crm-owner" maxlength="120" /></label>
+              <label>Company <input id="crm-company" maxlength="160" /></label>
+              <label>Summary <textarea id="crm-summary" maxlength="2000"></textarea></label>
+              <label>Next action <textarea id="crm-next-action" maxlength="1000"></textarea></label>
+              <button type="submit">Save profile</button>
+            </form>
+          </article>
+          <article class="card">
+            <h2>Add note</h2>
+            <form id="note-form"><textarea id="note-body" maxlength="4000" required></textarea><button type="submit">Add note</button></form>
+            <h2>Create task</h2>
+            <form id="task-form"><label>Title <input id="task-title" maxlength="240" required /></label><label>Due date <input id="task-due" type="date" /></label><button type="submit">Create task</button></form>
+          </article>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

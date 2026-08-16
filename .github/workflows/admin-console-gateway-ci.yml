@@ -1,0 +1,45 @@
+name: Admin Console Gateway CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/admin-console-gateway/**'
+      - 'admin-console-static/**'
+      - '.github/workflows/admin-console-gateway-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/admin-console-gateway/**'
+      - 'admin-console-static/**'
+      - '.github/workflows/admin-console-gateway-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/admin-console-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run gateway tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate gateway SAM template
+        run: sam validate --lint --template template.yaml
+      - name: Build gateway SAM stack
+        run: sam build --template template.yaml
+      - name: Assert static console contains no privileged secret names or server routes
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -n -E 'API_ACCESS_ADMIN_SECRET|SOLVELANG_ADMIN_UPSTREAM_SECRET|SOLVELANG_ADMIN_SESSION_SECRET|STRIPE_SECRET_KEY|CUSTOMER_AUTH_PEPPER|API_KEY_PEPPER' admin-console-static
+          ! find admin-console-static -type d -name api -print -quit | grep -q .
+          grep -q '__Host-solvelang-admin' services/admin-console-gateway/src/gateway.js
+          grep -q 'termination_confirmation_required' services/admin-console-gateway/src/gateway.js
