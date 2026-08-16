@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import TotpQrEnhancer from "./TotpQrEnhancer";
 
 export const metadata: Metadata = {
   title: "API Account",
@@ -11,5 +12,10 @@ export const metadata: Metadata = {
 };
 
 export default function ApiAccountLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return (
+    <>
+      {children}
+      <TotpQrEnhancer />
+    </>
+  );
 }
