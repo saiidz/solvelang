@@ -1,5 +1,6 @@
 import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
+import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 
@@ -52,6 +53,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...analyzeServerSnapshot(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
+    ...createServerAuditCoverageFindings(snapshot),
   ]);
   const canonical = JSON.stringify({
     schemaVersion: snapshot.schemaVersion,
@@ -76,6 +78,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     findings,
     limitations: [
       "This report analyzes only the supplied read-only snapshot; absence of evidence is not proof of secure configuration.",
+      "Coverage-gap findings report structurally absent snapshot sections only; a present section does not prove that collection was complete or authoritative.",
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
