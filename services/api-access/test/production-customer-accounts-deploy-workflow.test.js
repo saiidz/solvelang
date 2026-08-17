@@ -93,6 +93,7 @@ async function simulatePostDeployFailureRollback(
   customerAccountsEnabled,
   customerTotpEnabled,
   customerTotpKmsKeyArn,
+  adminCrmEnabled,
 ) {
   const directory = await mkdtemp(join(tmpdir(), "solvelang-api-access-rollback-"));
   const binDirectory = join(directory, "bin");
@@ -102,12 +103,17 @@ async function simulatePostDeployFailureRollback(
     await mkdir(binDirectory);
     const samPath = join(binDirectory, "sam");
     const curlPath = join(binDirectory, "curl");
+    const awsPath = join(binDirectory, "aws");
     await writeFile(samPath, '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$SAM_ARGS_FILE"\n');
     await writeFile(
       curlPath,
       '#!/usr/bin/env bash\nprintf \'{"status":"ok","enabled":%s,"customerAccountsEnabled":%s,"customerTotpEnabled":%s,"subscriptionBillingEnabled":false}\\n\' "$INITIAL_API_ACCESS_ENABLED" "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" "$INITIAL_CUSTOMER_TOTP_ENABLED"\n',
     );
-    await Promise.all([chmod(samPath, 0o755), chmod(curlPath, 0o755)]);
+    await writeFile(
+      awsPath,
+      '#!/usr/bin/env bash\nif [[ "$1 $2" == "cloudformation describe-stacks" ]]; then\n  printf \'{"Stacks":[{"Parameters":[{"ParameterKey":"AdminCrmEnabled","ParameterValue":"%s"}]}]}\\n\' "$INITIAL_ADMIN_CRM_ENABLED"\n  exit 0\nfi\nprintf "unexpected aws invocation: %s\\n" "$*" >&2\nexit 1\n',
+    );
+    await Promise.all([chmod(samPath, 0o755), chmod(curlPath, 0o755), chmod(awsPath, 0o755)]);
 
     await execFileAsync("bash", [fileURLToPath(rollbackUrl)], {
       env: {
@@ -121,6 +127,7 @@ async function simulatePostDeployFailureRollback(
         INITIAL_CUSTOMER_ACCOUNTS_ENABLED: String(customerAccountsEnabled),
         INITIAL_CUSTOMER_TOTP_ENABLED: String(customerTotpEnabled),
         INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN: customerTotpKmsKeyArn,
+        INITIAL_ADMIN_CRM_ENABLED: String(adminCrmEnabled),
         SITE_ORIGIN: "https://example.com",
         API_KEY_PEPPER: "api-key-pepper",
         API_ACCESS_ADMIN_SECRET: "api-access-admin-secret",
@@ -136,28 +143,31 @@ async function simulatePostDeployFailureRollback(
   }
 }
 
-test("simulated rollback restores an enabled customer stack while preserving disabled authenticator state", async () => {
-  const samArgs = await simulatePostDeployFailureRollback(true, true, false, disabledTotpKmsArn);
+test("simulated rollback restores an enabled customer stack while preserving disabled authenticator and enabled CRM state", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(true, true, false, disabledTotpKmsArn, true);
   assert.match(samArgs, /^ApiAccessEnabled=true$/m);
   assert.match(samArgs, /^CustomerAccountsEnabled=true$/m);
   assert.match(samArgs, /^CustomerTotpEnabled=false$/m);
   assert.match(samArgs, new RegExp(`^CustomerTotpKmsKeyArn=${disabledTotpKmsArn.replaceAll("/", "\\/")}$`, "m"));
+  assert.match(samArgs, /^AdminCrmEnabled=true$/m);
   assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
 });
 
-test("simulated rollback restores enabled authenticator state with the exact production KMS ARN", async () => {
-  const samArgs = await simulatePostDeployFailureRollback(true, true, true, productionTotpKmsArn);
+test("simulated rollback restores enabled authenticator state with the exact production KMS ARN and CRM state", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(true, true, true, productionTotpKmsArn, true);
   assert.match(samArgs, /^ApiAccessEnabled=true$/m);
   assert.match(samArgs, /^CustomerAccountsEnabled=true$/m);
   assert.match(samArgs, /^CustomerTotpEnabled=true$/m);
   assert.ok(samArgs.includes(`CustomerTotpKmsKeyArn=${productionTotpKmsArn}`));
+  assert.match(samArgs, /^AdminCrmEnabled=true$/m);
   assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
 });
 
-test("simulated rollback restores a previously disabled stack to false/false/false", async () => {
-  const samArgs = await simulatePostDeployFailureRollback(false, false, false, disabledTotpKmsArn);
+test("simulated rollback restores a previously disabled stack to false/false/false/false", async () => {
+  const samArgs = await simulatePostDeployFailureRollback(false, false, false, disabledTotpKmsArn, false);
   assert.match(samArgs, /^ApiAccessEnabled=false$/m);
   assert.match(samArgs, /^CustomerAccountsEnabled=false$/m);
   assert.match(samArgs, /^CustomerTotpEnabled=false$/m);
+  assert.match(samArgs, /^AdminCrmEnabled=false$/m);
   assert.match(samArgs, /^SubscriptionBillingEnabled=false$/m);
 });
