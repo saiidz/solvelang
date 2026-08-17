@@ -1,5 +1,6 @@
-import type { ServerAuditFinding, ServerAuditReport, ServerAuditSnapshot } from "./types";
+import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
+import { createServerAuditTemporalFindings } from "./temporalFindings";
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -7,6 +8,14 @@ const HTML_ESCAPES: Record<string, string> = {
   ">": "&gt;",
   '"': "&quot;",
   "'": "&#39;",
+};
+
+const SEVERITY_ORDER: Record<ServerAuditSeverity, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
 };
 
 function stableHash(input: string) {
@@ -28,8 +37,20 @@ function score(findings: ServerAuditFinding[]) {
   return Math.max(0, 100 - penalty);
 }
 
+function sortFindings(findings: ServerAuditFinding[]): ServerAuditFinding[] {
+  return [...findings].sort(
+    (left, right) =>
+      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
+      || left.category.localeCompare(right.category)
+      || left.id.localeCompare(right.id),
+  );
+}
+
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
-  const findings = analyzeServerSnapshot(snapshot);
+  const findings = sortFindings([
+    ...analyzeServerSnapshot(snapshot),
+    ...createServerAuditTemporalFindings(snapshot),
+  ]);
   const canonical = JSON.stringify({
     schemaVersion: snapshot.schemaVersion,
     collectedAt: snapshot.collectedAt,
@@ -53,6 +74,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     findings,
     limitations: [
       "This report analyzes only the supplied read-only snapshot; absence of evidence is not proof of secure configuration.",
+      "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
       "Restore testing, external firewall rules, cloud IAM, database contents, application secrets, and customer data are outside the v0 snapshot contract unless represented by safe summary evidence.",
