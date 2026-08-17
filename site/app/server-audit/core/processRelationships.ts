@@ -1,11 +1,14 @@
 import type { ServerAuditSnapshot } from "./types";
 
+const MAX_SOURCES_PER_RELATIONSHIP = 32;
+
 export type ServerAuditProcessRelationshipKind = "parent-process" | "listener-process" | "ambiguous-listener-process";
 
 export type ServerAuditProcessRelationship = {
   id: string;
   kind: ServerAuditProcessRelationshipKind;
   sources: string[];
+  sourcesTruncated?: true;
 };
 
 export type ServerAuditProcessRelationshipOptions = {
@@ -24,11 +27,13 @@ export type ServerAuditProcessRelationshipAnalysis = {
     ambiguousListenerAttributions: number;
     unresolvedListenerAttributions: number;
     duplicateProcessIdsSkipped: number;
+    relationshipsWithTruncatedSources: number;
   };
   execution: {
     networkAccess: false;
     writeAccess: false;
     maxRelationships: number;
+    maxSourcesPerRelationship: number;
     relationshipsTruncated: boolean;
   };
 };
@@ -53,6 +58,16 @@ function stableId(kind: ServerAuditProcessRelationshipKind, sources: string[]): 
 
 function compareRelationship(left: ServerAuditProcessRelationship, right: ServerAuditProcessRelationship): number {
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function relationship(kind: ServerAuditProcessRelationshipKind, allSources: string[]): ServerAuditProcessRelationship {
+  const sources = allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP);
+  return {
+    id: stableId(kind, allSources),
+    kind,
+    sources,
+    ...(allSources.length > sources.length ? { sourcesTruncated: true as const } : {}),
+  };
 }
 
 export function analyzeServerAuditProcessRelationships(
@@ -90,8 +105,7 @@ export function analyzeServerAuditProcessRelationships(
     const parentIndex = uniqueIndexByPid.get(child.ppid);
     if (parentIndex === undefined) continue;
     parentRelationshipsFound += 1;
-    const sources = [`processes[${parentIndex}]`, `processes[${childIndex}]`];
-    relationships.push({ id: stableId("parent-process", sources), kind: "parent-process", sources });
+    relationships.push(relationship("parent-process", [`processes[${parentIndex}]`, `processes[${childIndex}]`]));
   }
 
   let listenerRelationshipsFound = 0;
@@ -107,28 +121,24 @@ export function analyzeServerAuditProcessRelationships(
     }
     if (processIndexes.length === 1) {
       listenerRelationshipsFound += 1;
-      const sources = [`listeningSockets[${listenerIndex}]`, `processes[${processIndexes[0]}]`];
-      relationships.push({ id: stableId("listener-process", sources), kind: "listener-process", sources });
+      relationships.push(relationship("listener-process", [`listeningSockets[${listenerIndex}]`, `processes[${processIndexes[0]}]`]));
       return;
     }
 
     ambiguousListenerAttributions += 1;
-    const sources = [
+    const allSources = [
       `listeningSockets[${listenerIndex}]`,
       ...processIndexes.map((index) => `processes[${index}]`).sort(),
     ];
-    relationships.push({
-      id: stableId("ambiguous-listener-process", sources),
-      kind: "ambiguous-listener-process",
-      sources,
-    });
+    relationships.push(relationship("ambiguous-listener-process", allSources));
   });
 
   relationships.sort(compareRelationship);
+  const boundedRelationships = relationships.slice(0, maxRelationships);
   return {
     schema: "solvelang.server-audit.process-relationships.v0",
     mode: "analyze-only",
-    relationships: relationships.slice(0, maxRelationships),
+    relationships: boundedRelationships,
     summary: {
       processesChecked: processes.length,
       listenersChecked: listeners.length,
@@ -137,11 +147,13 @@ export function analyzeServerAuditProcessRelationships(
       ambiguousListenerAttributions,
       unresolvedListenerAttributions,
       duplicateProcessIdsSkipped,
+      relationshipsWithTruncatedSources: boundedRelationships.filter((entry) => entry.sourcesTruncated).length,
     },
     execution: {
       networkAccess: false,
       writeAccess: false,
       maxRelationships,
+      maxSourcesPerRelationship: MAX_SOURCES_PER_RELATIONSHIP,
       relationshipsTruncated: relationships.length > maxRelationships,
     },
   };
