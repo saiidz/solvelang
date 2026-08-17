@@ -5,6 +5,7 @@ import {
 } from "./graphPipeline";
 import {
   analyzeRepositoryInventory,
+  normalizeRepositoryPath,
   type RepositoryInventoryAnalysis,
   type RepositoryScanLimits,
   type RepositorySnapshot,
@@ -32,6 +33,7 @@ export type RepositoryAuditAnalysisResult = {
     truncated: boolean;
     inventoryTruncationReasons: RepositoryInventoryAnalysis["execution"]["truncationReasons"];
     graphTruncationReasons: RepositoryAuditGraphPipelineResult["execution"]["truncationReasons"];
+    secretFilesScanned: number;
     redactedSecretMatches: number;
     networkAccess: false;
     writeAccess: false;
@@ -46,6 +48,25 @@ function sameSource(
     && expected.displayName === actual.displayName
     && expected.revision === actual.revision
     && expected.fingerprint === actual.fingerprint;
+}
+
+function graphAcceptedSecretSnapshot(
+  snapshot: RepositorySnapshot,
+  graph: RepositoryAuditGraphPipelineResult,
+): RepositorySnapshot {
+  const filesByPath = new Map(snapshot.files.map((file) => {
+    const path = normalizeRepositoryPath(file.path);
+    return [path, { ...file, path }] as const;
+  }));
+  const acceptedPaths = graph.graph.nodes
+    .filter((node) => node.kind === "file" && typeof node.metadata?.path === "string")
+    .map((node) => node.metadata!.path as string);
+  const files = acceptedPaths.map((path) => {
+    const file = filesByPath.get(path);
+    if (!file) throw new Error(`Repository Audit graph references an unavailable source file: ${path}`);
+    return file;
+  });
+  return { source: { ...snapshot.source }, files };
 }
 
 export async function analyzeRepositorySnapshot(
@@ -69,8 +90,11 @@ export async function analyzeRepositorySnapshot(
     throw new Error("Repository Audit graph source does not match the analyzed snapshot.");
   }
 
+  // Secret matching is restricted to files accepted by the bounded graph scan.
+  // This prevents a secondary scanner from silently bypassing file/byte/depth limits.
+  const secretSnapshot = graphAcceptedSecretSnapshot(snapshot, graph);
   const secretWarnings = await scanRepositorySecrets(
-    snapshot,
+    secretSnapshot,
     options.secretHmacKey ? { hmacKey: options.secretHmacKey } : {},
   );
 
@@ -87,6 +111,7 @@ export async function analyzeRepositorySnapshot(
       truncated,
       inventoryTruncationReasons: [...inventory.execution.truncationReasons],
       graphTruncationReasons: [...graph.execution.truncationReasons],
+      secretFilesScanned: secretSnapshot.files.length,
       redactedSecretMatches: secretWarnings.length,
       networkAccess: false,
       writeAccess: false,
