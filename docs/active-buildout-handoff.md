@@ -1,108 +1,153 @@
 # SolveLang Active Buildout Handoff
 
-**Purpose:** durable cross-chat execution state for the approved full SolveLang buildout.  
-**Owner master authorization:** `APPROVE FULL SOLVELANG BUILDOUT PLAN`  
-**Major gates remain separate:** merge, live AWS/IAM/KMS mutation, production preflight dispatch, production deployment, email canary, Stripe/billing enablement, and any real charge.
+**Purpose:** durable cross-chat execution state for the approved SolveLang buildout.  
+**Repository:** `saiidz/solvelang`  
+**Repository state captured:** 2026-08-17  
+**Major live gates remain separate:** production merge where explicitly gated, AWS/IAM/KMS mutation, production preflight dispatch, production deployment, DNS/private ingress, Admin console publication, email canary, Stripe/billing enablement, and any real charge.
 
-## Repository and production truth
+This file records repository/build truth. It must not be used to infer a newer live production state than the last separately verified production record. Re-read current GitHub `main`, PR heads, hosted CI, review threads, and the current production-status document before acting.
 
-- Repository: `saiidz/solvelang`
-- Current verified `main` before this draft PR: `07da1d5e4d01283549ff5df7cabd992731327cc9`
-- That commit merged PR #146 (`feat(audit): add redaction and report-integrity primitives`).
-- PR #145 priority lease-owner isolation and PR #146 Repository Audit hardening are merged.
-- Production region: `us-east-2`
-- Production API access: enabled
-- Production customer accounts/password auth: enabled
-- Production authenticator TOTP: **disabled**
-- Production TOTP KMS key: **not created**
-- Production subscription billing / Stripe: **disabled**
-- Customer paid priority selection: **disabled**
-- No production AWS/IAM/KMS, deployment, email, billing, Stripe, or charge is authorized by the coding work recorded here.
+## Current repository baseline
 
-Always re-read current GitHub `main`, PR heads, CI, and review threads before relying on the SHAs in this file.
+- `main` at the time of this sync: `668187aa8079d4c5610783aac47d80fca94fb759`.
+- That commit merged PR #179, Repository Audit reuse of Solve Graph impact intelligence.
+- Centralized account suspension/termination foundation is merged through PR #147.
+- Admin Gateway rollout machinery is merged through PR #168.
+- Deterministic private Admin console publication preparation is merged through PR #172.
+- Solve Graph has progressed well beyond Phase 0: deterministic inventory extraction, query/impact analysis, JavaScript/TypeScript import relationships, bounded tool contracts, MCP/Codex integration, and a local integrity-verified explorer are merged through PRs #171, #173-#178.
+- Repository Audit already contains bounded archive ingestion/extraction, deterministic inventory/classification, exact duplicate/backup/generated/large-file findings, reference/dependency analysis, HMAC-redacted secret warnings, canonical report integrity, HTML/JSON product reports, and Solve Graph impact reuse. Older text saying the scanner engine is not implemented is stale.
 
-## Completed buildout stages
+## Last separately verified production truth
 
-### Password/customer-account production foundation
+The last repository production-status record is `docs/current-production-status-2026-08-13.md`. Until a newer live audit is performed, retain its production claims:
 
-Live password authentication supports email or immutable username plus password, magic-link recovery, version-bound sessions, rate limiting, and fail-closed authentication-state handling. The owner password canary passed previously with subscription billing still disabled.
+- API access: enabled;
+- customer accounts/password authentication: enabled;
+- ordinary password login sends no email;
+- authenticator-app TOTP production feature: disabled;
+- subscription billing: disabled;
+- paid customer priority: disabled;
+- real charge authorization: none.
 
-### Optional authenticator 2FA implementation
+Merged code, deployment workflows, or IAM policy files are not evidence that a production feature is enabled.
 
-PR #141 merged the optional RFC 6238 TOTP implementation, including KMS-encrypted secrets, MFA challenges, one-time backup codes, TOTP replay prevention, `authVersion` invalidation, and fail-closed partial-state handling.
+## Admin console / private gateway
 
-PR #142 merged production rollout/preflight/KMS-stack preparation. Production TOTP is still disabled and the dedicated production key has not been created.
+### Merged safe preparation
 
-PR #143 (`security(prod): add guarded TOTP IAM operator path`) remains **Draft/quarantined** and must not be merged in its current state. No live IAM mutation has been performed from it.
+PR #168 provides the protected manual Admin Gateway production rollout machinery, exact-stack deploy-role policy supplement, serialization, rollback/state preservation, termination protection, and post-deploy session verification.
 
-### Priority hardening
+PR #172 provides the deterministic static Admin console release builder, CSP/noindex/public-secret contract tests, CI artifact generation, and private publication runbook.
 
-PR #145 merged invocation-unique worker lease ownership using Lambda request identity. Priority remains test-only/customer-disabled.
+### Remaining live gates
 
-### Repository Audit
+The next Admin action is a live IAM change and therefore remains separately controlled:
 
-PR #146 merged read-only/analyze-only primitives including HMAC-redacted secret warnings, encrypted private-key detection, canonical report integrity, deterministic report IDs, reference/import analysis, dependency candidates, and lockfile-conflict detection. This does not authorize repository remediation or hosted execution.
+`APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-## Current stage: PR #147 account suspension / termination enforcement
+After a separately verified IAM apply, later gates remain separate for the Admin Gateway deployment, private HTTPS/DNS/Zero-Trust ingress, static Admin console publication, and login/session canary. Do not publish the Admin UI on a public customer origin as a shortcut.
 
-Active PR: `#147 — feat(auth): add account suspension and termination foundation`  
-Branch: `agent/account-access-enforcement`  
-PR remains **Draft / DO NOT MERGE** until final hosted CI and review are clean.
+## Production-sensitive PRs currently awaiting explicit merge approval
 
-Implemented on this branch:
+These branches are build/test preparation only. Refresh against current `main` before merge if `main` advances.
 
-- authoritative states: `active`, `suspended`, `terminated`;
-- legacy versionless accounts remain active; missing or malformed account state fails closed;
-- termination is irreversible;
-- every real transition increments `authVersion`;
-- Dynamo transition atomically writes request-idempotency state, account state/version, and immutable audit metadata;
-- exact request replay is idempotent; request-ID reuse with different input conflicts;
-- existing sessions, password session creation, MFA challenge creation/consumption, and existing-account magic-link consumption are blocked for restricted accounts;
-- first-ever magic-link signup still works when no account row exists;
-- suspended magic-link requests keep the enumeration-safe generic response and send no email;
-- customer API-key authorization checks authoritative account state before quota metering;
-- customer/internal key issuance, checkout reservation, direct subscription provisioning, and manual usage consumption use a centralized active-account guard;
-- security cleanup/key revocation and signed Stripe lifecycle reconciliation remain available so restriction cannot prevent cancellation/reconciliation;
-- admin GET/POST `/internal/accounts/access` is protected by the existing constant-time admin secret and uses a server-owned audit actor;
-- API-key authorizer CustomerAuth permission is conditional and `dynamodb:GetItem`-only;
-- priority workers preserve server-owned canaries and fail closed for customer-owned jobs unless an active-account verifier is configured;
-- optional priority CustomerAuth verification uses `GetItem`-only access and defaults unconfigured so the current test-only canary stack behavior remains unchanged;
-- focused tests cover transitions, auth-store behavior, no-email magic-link suppression, API-key no-metering denial, mutation gates, admin endpoints, SAM/IAM contracts, and customer-owned priority jobs.
+### PR #161 — preserve Admin CRM through auth rollbacks
 
-Before #147 can become merge-ready:
+- Branch: `agent/preserve-crm-through-totp-rollout`.
+- Refreshed head at this sync: `7ed31ea332a16a3280dae1e7c067b4d18ddeb262`.
+- Preserves and verifies `AdminCrmEnabled` during shared production customer-account/TOTP rollback while billing remains OFF.
+- Fresh exact-head API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Merge gate: `APPROVE PR #161 MERGE`.
 
-1. exact current-head API Access CI must pass, including both SAM validate/build paths;
-2. general CI/static build and Rust runtime must pass;
-3. separate Rust/RustSec workflow must pass;
-4. automated review must be checked and every valid finding fixed/resolved;
-5. PR body/status must be updated from Draft to the exact completed scope;
-6. merge requires separate explicit approval: `APPROVE MERGE PR #147`.
+### PR #164 — validation-only customer-priority production preflight
 
-Merging #147 still does **not** authorize a production deployment or production account-state mutation.
+- Branch: `agent/customer-priority-production-preflight`.
+- Refreshed head at this sync: `8831f0d9525a75decb2b56350746c17e3e7ca84f`.
+- Adds only a protected validation/preflight path; queue/customer/provider launch gates remain OFF and billing remains OFF.
+- Fresh Customer Priority Production CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Merge gate: `APPROVE PR #164 MERGE`.
 
-## Other active work after #147
+### PR #169 — dormant customer-priority production foundation rollout preparation
 
-### PR #144 billing webhook serialization
+- Branch: `agent/customer-priority-queue-foundation-rollout`.
+- Refreshed head at this sync: `8fdf39f6b2ac083b36b33cabcf8a6c18597e8419`.
+- Adds a durable jobs/source/SQS/DLQ/alarm foundation and protected future rollout workflow while queue/customer/provider gates are forced OFF.
+- Fresh Customer Priority Foundation Rollout CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Merge gate: `APPROVE PR #169 MERGE`.
 
-Branch: `agent/billing-webhook-idempotency`; remains Draft. It contains claim/lease/complete/retryable webhook processing and legacy-event compatibility. A remaining review item requires payment-method normalization idempotency to include or persist the selected payment-method target. Production billing remains OFF.
+Merging these PRs still does not authorize workflow dispatch, IAM application, queue activation, billing, provider execution, email, or charges.
 
-### TOTP production IAM / rollout
+## Active safe Repository Audit buildout
 
-After account hardening, return to the quarantined TOTP IAM path using a corrected least-privilege implementation. Live IAM/KMS changes, TOTP preflight, TOTP deployment, and owner enrollment each remain separately gated.
+PR #180 introduced a bounded Repository Audit graph pipeline that composes deterministic repository inventory/import extraction with Solve Graph impact intelligence.
 
-### Later stages
+PR #181 supersedes that work with a broader combined analysis pipeline on `main`. It composes inventory, bounded Solve Graph dependency/impact analysis, and HMAC-redacted secret scanning. Secondary secret scanning is restricted to files accepted by the bounded graph scan so it cannot silently bypass graph file/byte/depth limits. It remains analyze-only with network/write access false and exposes no raw secret values.
 
-- finish billing/webhook hardening, then separately gate Stripe production activation;
-- finish queue-backed paid-priority customer execution before exposing paid tiers;
-- expand Repository Audit toward the complete product and later approval-based remediation;
-- build Server Audit read-only foundations and later approval-based remediation;
-- fix SolveLang imported-file source provenance diagnostics;
-- final production/IAM/rollback/monitoring hardening and launch-readiness canaries.
+At handoff update time, #181 hosted exact-head CI was still running. Do not merge it until its final exact-head general CI and Rust/RustSec checks are green and review threads are clean.
 
-## Cross-chat continuation
+## Solve Graph current state
 
-When a conversation reaches its practical limit, start a new chat inside the SolveLang project and say:
+Merged capabilities now include:
 
-`continue SolveLang full buildout from docs/active-buildout-handoff.md`
+1. canonical `solvelang.graph.v0` contracts, stable IDs, canonical serialization, integrity digest, bounded scan semantics;
+2. deterministic repository/directory/file inventory extraction;
+3. integrity-gated node queries plus bounded dependency/dependent traversal and blast-radius analysis;
+4. lexical JavaScript/TypeScript import extraction without repository execution;
+5. bounded MCP-ready tool contracts;
+6. local MCP/Codex integration for graph queries;
+7. browser-local integrity-verified graph explorer;
+8. Repository Audit graph hotspot/impact reuse.
 
-The new chat must verify GitHub state rather than trusting this file blindly. Do not collapse merge, AWS/IAM/KMS mutation, production preflight, deployment, email, Stripe/billing, or charge gates.
+Next safe direction is deeper Repository Audit composition and product/report integration, followed by richer deterministic relationships where evidence is strong. Keep repository execution, package execution, network acquisition, and remediation separate from analyze-only graph construction.
+
+## Account/security state
+
+PR #147 merged centralized `active` / `suspended` / `terminated` account-state enforcement, auth-version invalidation, API-key/quota enforcement, protected admin access-state endpoints, and customer-owned priority verification hooks. Merge status does not prove a production deployment of newer account-state code; verify live stack state before making that claim.
+
+Authenticator TOTP implementation and rollout preparation exist in the repository, but production enablement remains separately gated. Do not infer TOTP/KMS live state from merged code.
+
+## Customer priority
+
+Customer-priority source storage/upload, same-host API attachment, worker foundations, entitlement/account checks, and production-off rollout preparation exist in code. Customer paid priority remains OFF unless a separately verified production rollout explicitly changes that state.
+
+Safe build work may continue on queue/provider reliability, idempotency, DLQ/retry/lease behavior, preflight validation, and operations tests while every launch gate remains OFF.
+
+## Billing
+
+Billing/Checkout/webhook/management code exists, but production billing remains OFF in the last verified production record. Continue safe hardening only: webhook idempotency/replay handling, subscription lifecycle correctness, payment-method ownership, upgrade/downgrade/cancellation behavior, and production preflight preparation. Any live Stripe configuration, billing activation, or real-charge canary remains separately approved.
+
+## Repository Audit next work
+
+Continue read-only-first development in this order:
+
+1. finish and verify the combined inventory + Solve Graph + redacted-secret analysis pipeline;
+2. integrate bounded graph hotspots/impact and redacted secret warnings into browser-local product output without exposing raw values;
+3. preserve canonical report integrity and deterministic ordering when graph intelligence is added to a versioned report contract;
+4. expand deterministic code/dependency/reference intelligence where evidence is reliable;
+5. keep remediation/write mode separate, branch-based, reversible, and human-approved.
+
+## Server Audit next work
+
+Server Audit remains read-only-first. Continue the constrained collector, explicit command allowlist, OS/package/service/port/process/scheduled-job inventory, disk/log/cache/backup posture, web/domain/SSL/public-file checks, permission/version findings, redacted evidence, bounded execution, and deterministic reports. No live remediation without individual approval.
+
+## Language/runtime and DX
+
+Continue independent correctness work after higher-priority safe build items, including imported-file source provenance, formatter/linter work, stronger semantic/type checks, module/package design, and diagnostics. Preserve deterministic tests and do not introduce network/package execution into analysis paths.
+
+## Safety boundary for continuing work
+
+Safe automation may create/refresh isolated branches, implement code/tests/docs, create/update PRs, fix review findings/CI, and rebuild stale PRs without overwriting newer work.
+
+Do not automatically:
+
+- apply live AWS/IAM/KMS changes;
+- deploy production stacks;
+- configure DNS/private ingress;
+- publish the production Admin UI;
+- enable TOTP, paid customer priority, or billing;
+- use Stripe for live activity or perform a charge;
+- send email;
+- mutate production customer/CRM data;
+- merge a production-sensitive PR whose exact merge is separately gated.
+
+If a production gate blocks one track, record the exact approval phrase and continue the next safe unblocked engineering task instead of idling.
