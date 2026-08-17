@@ -67,7 +67,7 @@ test("process topology consistency reports conflicting PIDs, self-parenting, and
     { pid: 100, ppid: 1, uid: 0, state: "R", name: "sensitive-worker" },
     { pid: 200, ppid: 201, uid: 1000, state: "S", name: "cycle-a" },
     { pid: 201, ppid: 200, uid: 1000, state: "S", name: "cycle-b" },
-    { pid: 300, ppid: 300, uid: 1000, state: "S", name: "self-parent" },
+    { pid: 300, ppid: 300, uid: 1000, state: "S", name: "private-self-exec" },
   ];
 
   const analysis = analyzeServerAuditInventoryConsistency(input);
@@ -80,7 +80,7 @@ test("process topology consistency reports conflicting PIDs, self-parenting, and
   const serialized = JSON.stringify(analysis.issues);
   assert.equal(serialized.includes("sensitive-worker"), false);
   assert.equal(serialized.includes("cycle-a"), false);
-  assert.equal(serialized.includes("self-parent"), false);
+  assert.equal(serialized.includes("private-self-exec"), false);
   assert.ok(serialized.includes("processes[0]"));
   assert.ok(serialized.includes("processes[2]"));
   assert.ok(serialized.includes("processes[4]"));
