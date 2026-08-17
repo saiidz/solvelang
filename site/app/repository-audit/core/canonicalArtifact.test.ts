@@ -40,6 +40,7 @@ test("creates a versioned integrity-covered canonical browser artifact without s
   assert.equal(artifact.report.mode, "analyze-only");
   assert.equal(artifact.report.execution.networkAccess, false);
   assert.equal(artifact.report.execution.writeAccess, false);
+  assert.ok(artifact.report.graph);
   assert.ok(artifact.report.graph.counts.edges > 0);
   assert.equal(artifact.report.detections.secretExposureWarnings.length, 1);
   assert.match(artifact.report.integrity.canonicalJsonSha256, /^[a-f0-9]{64}$/);
