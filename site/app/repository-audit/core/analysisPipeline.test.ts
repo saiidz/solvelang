@@ -38,7 +38,7 @@ function fixture(files?: RepositorySnapshot["files"]): RepositorySnapshot {
   };
 }
 
-test("composes inventory, dependency impact, and redacted secret warnings without exposing secret values", async () => {
+test("composes inventory, dependency impact, dependency consistency, and redacted secret warnings without exposing secret values", async () => {
   const result = await analyzeRepositorySnapshot(fixture(), { secretHmacKey: hmacKey });
   assert.equal(result.schema, "solvelang.repository-audit.analysis.v0");
   assert.equal(result.mode, "analyze-only");
@@ -47,12 +47,28 @@ test("composes inventory, dependency impact, and redacted secret warnings withou
   assert.equal(result.execution.writeAccess, false);
   assert.equal(result.graph.graph.source.private, true);
   assert.ok(result.graph.graph.edges.some((edge) => edge.kind === "imports"));
+  assert.equal(result.dependencyConsistency.schema, "solvelang.repository-audit.dependency-consistency.v0");
+  assert.equal(result.execution.dependencyConsistencyStatus, "complete");
+  assert.equal(result.execution.dependencyFilesScanned, 2);
+  assert.equal(result.execution.undeclaredDependencyFindings, 0);
   assert.equal(result.execution.secretFilesScanned, 3);
   assert.equal(result.secretWarnings.length, 1);
   assert.equal(result.execution.redactedSecretMatches, 1);
   assert.equal(result.secretWarnings[0].redacted, true);
   assert.match(result.secretWarnings[0].fingerprint, /^hmac-sha256:[a-f0-9]{64}$/);
   assert.ok(!JSON.stringify(result).includes(secret));
+});
+
+test("surfaces bounded undeclared dependency candidates in the combined analysis", async () => {
+  const result = await analyzeRepositorySnapshot(fixture([
+    { path: "package.json", byteSize: 20, text: "{}" },
+    { path: "src/app.ts", byteSize: 48, text: 'import helper from "missing-package";\nvoid helper;\n' },
+  ]));
+
+  assert.equal(result.execution.status, "complete");
+  assert.equal(result.execution.undeclaredDependencyFindings, 1);
+  assert.equal(result.dependencyConsistency.undeclaredImports[0].packageName, "missing-package");
+  assert.equal(result.dependencyConsistency.undeclaredImports[0].confidence, "high");
 });
 
 test("a supplied HMAC key makes redacted warning fingerprints reproducible without storing the secret", async () => {
@@ -62,7 +78,7 @@ test("a supplied HMAC key makes redacted warning fingerprints reproducible witho
   assert.ok(!left.secretWarnings[0].fingerprint.includes(secret));
 });
 
-test("partial inventory or graph work is surfaced as partial and secondary secret scanning obeys graph bounds", async () => {
+test("partial inventory or graph work is surfaced as partial and secondary scanners obey graph bounds", async () => {
   const result = await analyzeRepositorySnapshot(fixture(), {
     inventoryLimits: { maxFiles: 2 },
     graph: {
@@ -75,6 +91,7 @@ test("partial inventory or graph work is surfaced as partial and secondary secre
   assert.equal(result.execution.truncated, true);
   assert.ok(result.execution.inventoryTruncationReasons.includes("file-count"));
   assert.ok(result.execution.graphTruncationReasons.includes("file-count"));
+  assert.equal(result.dependencyConsistency.execution.findingsSuppressed, true);
   assert.equal(result.execution.secretFilesScanned, 1);
   assert.equal(result.execution.redactedSecretMatches, 0);
   assert.deepEqual(result.secretWarnings, []);
