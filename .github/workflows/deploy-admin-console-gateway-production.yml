@@ -1,0 +1,239 @@
+name: Deploy Admin Console Gateway Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_admin_gateway:
+        description: Confirm deploying only the private SolveLang admin gateway stack
+        required: true
+        default: false
+        type: boolean
+      confirm_billing_remains_disabled:
+        description: Confirm subscription billing, Stripe, webhooks, charges, and customer data remain untouched
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/admin-console-gateway
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      API_STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      GATEWAY_STACK_NAME: solvelang-api-access-production-admin-console
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      ADMIN_ORIGIN: ${{ vars.ADMIN_CONSOLE_ORIGIN }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      ADMIN_PASSWORD_SCRYPT: ${{ secrets.ADMIN_CONSOLE_PASSWORD_SCRYPT }}
+      ADMIN_SESSION_SECRET: ${{ secrets.ADMIN_CONSOLE_SESSION_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce production private-admin deployment boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production admin gateway deployment must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_admin_gateway }}" == true ]] || { echo "Explicit admin gateway confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_billing_remains_disabled }}" == true ]] || { echo "Explicit billing-disabled confirmation is required." >&2; exit 1; }
+          [[ "$GATEWAY_STACK_NAME" == "solvelang-api-access-production-admin-console" ]]
+          [[ "$API_STACK_NAME" == *prod* || "$API_STACK_NAME" == *production* ]]
+          [[ "$API_STACK_NAME" != *test* ]]
+          [[ "$ADMIN_ORIGIN" == https://* ]] || { echo "ADMIN_CONSOLE_ORIGIN must use HTTPS." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          [[ "$ADMIN_ORIGIN" != "$SITE_ORIGIN" ]] || { echo "Private admin origin must be separate from the public site origin." >&2; exit 1; }
+          (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
+          (( ${#ADMIN_SESSION_SECRET} >= 32 ))
+          [[ "$ADMIN_SESSION_SECRET" != "$API_ACCESS_ADMIN_SECRET" ]] || { echo "Admin session secret must be independent from the upstream admin secret." >&2; exit 1; }
+          [[ "$ADMIN_PASSWORD_SCRYPT" =~ ^[0-9a-fA-F]{32,128}:[0-9a-fA-F]{64,256}$ ]] || { echo "Admin password verifier has an invalid scrypt encoding." >&2; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        working-directory: services/api-access
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Capture live API/CRM baseline and previous gateway state
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$api_stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production API stack is not stable: $status" >&2; exit 1; }
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$api_stack")"
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
+          customers="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
+          crm="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$api_stack")"
+          billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
+          [[ "$api_enabled" == true && "$customers" == true && "$crm" == true && "$billing" == false ]]
+          test -n "$api_base"
+          health="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+
+          previous_enabled=false
+          set +e
+          aws cloudformation describe-stacks --stack-name "$GATEWAY_STACK_NAME" >/tmp/solvelang-admin-stack.json 2>/tmp/solvelang-admin-stack.err
+          gateway_describe_status=$?
+          set -e
+          if (( gateway_describe_status == 0 )); then
+            gateway_status="$(jq -r '.Stacks[0].StackStatus // empty' /tmp/solvelang-admin-stack.json)"
+            [[ "$gateway_status" == CREATE_COMPLETE || "$gateway_status" == UPDATE_COMPLETE ]] || { echo "Existing admin gateway stack is not stable: $gateway_status" >&2; exit 1; }
+            previous_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminConsoleGatewayEnabled") | .ParameterValue] | first // "false"' /tmp/solvelang-admin-stack.json)"
+            [[ "$previous_enabled" == true || "$previous_enabled" == false ]]
+          elif grep -Fqi 'does not exist' /tmp/solvelang-admin-stack.err; then
+            previous_enabled=false
+          else
+            echo "Unable to determine the existing admin gateway stack state; refusing deployment." >&2
+            exit 1
+          fi
+          {
+            echo "api_base=$api_base"
+            echo "previous_enabled=$previous_enabled"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run gateway tests
+        run: npm test
+
+      - name: Validate gateway SAM template
+        run: sam validate --lint --template template.yaml
+
+      - name: Build gateway SAM stack
+        run: sam build --template template.yaml
+
+      - name: Assert candidate contains no Stripe/billing or public-secret path
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Eqi 'stripe|subscriptionbilling|webhook|charge' template.yaml
+          ! grep -R -E 'NEXT_PUBLIC_.*(SECRET|PASSWORD|SESSION)|x-solvelang-admin-secret' ../../admin-console-static --include='*.js' --include='*.html'
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare production SAM artifact bucket
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy private admin gateway only
+        id: deploy
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact.outputs.bucket }}
+          API_BASE: ${{ steps.baseline.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --stack-name "$GATEWAY_STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$GATEWAY_STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              AdminConsoleGatewayEnabled=true \
+              AdminOrigin="$ADMIN_ORIGIN" \
+              UpstreamApiBase="$API_BASE" \
+              UpstreamAdminSecret="$API_ACCESS_ADMIN_SECRET" \
+              AdminPasswordScrypt="$ADMIN_PASSWORD_SCRYPT" \
+              AdminSessionSecret="$ADMIN_SESSION_SECRET"
+          aws cloudformation update-termination-protection --stack-name "$GATEWAY_STACK_NAME" --enable-termination-protection
+
+      - name: Verify gateway without customer or CRM mutation
+        id: verify
+        env:
+          API_BASE: ${{ steps.baseline.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$GATEWAY_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminConsoleGatewayEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          gateway_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "AdminGatewayBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          [[ "$enabled" == true ]]
+          [[ "$gateway_base" == https://* ]]
+          protection="$(aws cloudformation describe-stacks --stack-name "$GATEWAY_STACK_NAME" --query 'Stacks[0].EnableTerminationProtection' --output text)"
+          [[ "$protection" == True ]]
+          code="$(curl --silent --show-error --output /tmp/admin-session.json --dump-header /tmp/admin-session.headers --write-out '%{http_code}' -H "Origin: $ADMIN_ORIGIN" "$gateway_base/session")"
+          [[ "$code" == 401 ]]
+          jq -e '.authenticated == false' /tmp/admin-session.json >/dev/null
+          grep -Fqi "access-control-allow-origin: $ADMIN_ORIGIN" /tmp/admin-session.headers
+          grep -Fqi 'cache-control: no-store' /tmp/admin-session.headers
+          api_stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$api_stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == false ]]
+          echo "gateway_base=$gateway_base" >> "$GITHUB_OUTPUT"
+
+      - name: Restore previous gateway flag after post-deploy verification failure
+        if: ${{ failure() && steps.deploy.outcome == 'success' }}
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact.outputs.bucket }}
+          API_BASE: ${{ steps.baseline.outputs.api_base }}
+          PREVIOUS_ENABLED: ${{ steps.baseline.outputs.previous_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIOUS_ENABLED" == true || "$PREVIOUS_ENABLED" == false ]]
+          sam deploy \
+            --stack-name "$GATEWAY_STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$GATEWAY_STACK_NAME-rollback" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              AdminConsoleGatewayEnabled="$PREVIOUS_ENABLED" \
+              AdminOrigin="$ADMIN_ORIGIN" \
+              UpstreamApiBase="$API_BASE" \
+              UpstreamAdminSecret="$API_ACCESS_ADMIN_SECRET" \
+              AdminPasswordScrypt="$ADMIN_PASSWORD_SCRYPT" \
+              AdminSessionSecret="$ADMIN_SESSION_SECRET"
+          current="$(aws cloudformation describe-stacks --stack-name "$GATEWAY_STACK_NAME" --query 'Stacks[0].Parameters[?ParameterKey==`AdminConsoleGatewayEnabled`].ParameterValue | [0]' --output text)"
+          [[ "$current" == "$PREVIOUS_ENABLED" ]]
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        env:
+          GATEWAY_BASE: ${{ steps.verify.outputs.gateway_base }}
+        shell: bash
+        run: |
+          printf '## SolveLang private Admin gateway production rollout\n\n- Commit: `%s`\n- Gateway stack: `%s`\n- Gateway origin: `%s`\n- Gateway API base: `%s`\n- Admin CRM backend preserved: **true**\n- Subscription billing enabled: **false**\n- Stripe/webhook used: **no**\n- Customer/CRM mutation by verification: **no**\n- Email sent: **no**\n- Charges performed: **no**\n- Termination protection: **enabled**\n\nStatic admin hosting and external ingress controls remain a separate deployment decision.\n' \
+            "$GITHUB_SHA" "$GATEWAY_STACK_NAME" "$ADMIN_ORIGIN" "$GATEWAY_BASE" >> "$GITHUB_STEP_SUMMARY"
