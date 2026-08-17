@@ -38,6 +38,7 @@ test("process relationship analysis maps bounded parent and listener evidence wi
   assert.equal(analysis.summary.ambiguousListenerAttributions, 1);
   assert.equal(analysis.summary.unresolvedListenerAttributions, 1);
   assert.equal(analysis.summary.duplicateProcessIdsSkipped, 0);
+  assert.equal(analysis.summary.relationshipsWithTruncatedSources, 0);
   assert.equal(analysis.execution.networkAccess, false);
   assert.equal(analysis.execution.writeAccess, false);
 
@@ -65,7 +66,27 @@ test("duplicate PIDs are excluded from parent relationships instead of guessing 
   assert.deepEqual(analysis.relationships, []);
 });
 
-test("relationship output is deterministic across input order when structural evidence is unchanged", () => {
+test("ambiguous listener evidence caps structural sources without losing ambiguity truth", () => {
+  const input = snapshot();
+  input.processes = Array.from({ length: 100 }, (_, index) => ({
+    pid: 1000 + index,
+    ppid: 1,
+    uid: 1000,
+    state: "S",
+    name: "shared-private-worker",
+  }));
+  input.listeningSockets = [{ protocol: "tcp", localAddress: "127.0.0.1", port: 4000, process: "shared-private-worker" }];
+
+  const analysis = analyzeServerAuditProcessRelationships(input);
+  assert.equal(analysis.relationships.length, 1);
+  assert.equal(analysis.relationships[0].kind, "ambiguous-listener-process");
+  assert.equal(analysis.relationships[0].sources.length, analysis.execution.maxSourcesPerRelationship);
+  assert.equal(analysis.relationships[0].sourcesTruncated, true);
+  assert.equal(analysis.summary.relationshipsWithTruncatedSources, 1);
+  assert.equal(JSON.stringify(analysis).includes("shared-private-worker"), false);
+});
+
+test("relationship output is deterministic when the supplied snapshot is unchanged", () => {
   const input = snapshot();
   const first = analyzeServerAuditProcessRelationships(input);
   const second = analyzeServerAuditProcessRelationships(input);
