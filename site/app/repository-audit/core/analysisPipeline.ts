@@ -4,6 +4,11 @@ import {
   type RepositoryAuditGraphPipelineResult,
 } from "./graphPipeline";
 import {
+  analyzeRepositoryDependencyConsistency,
+  type RepositoryDependencyConsistency,
+  type RepositoryDependencyConsistencyOptions,
+} from "./dependencyConsistency";
+import {
   analyzeRepositoryInventory,
   normalizeRepositoryPath,
   type RepositoryInventoryAnalysis,
@@ -18,6 +23,7 @@ import {
 export type RepositoryAuditAnalysisOptions = {
   inventoryLimits?: Partial<RepositoryScanLimits>;
   graph?: RepositoryAuditGraphPipelineOptions;
+  dependencyConsistency?: RepositoryDependencyConsistencyOptions;
   secretHmacKey?: Uint8Array;
 };
 
@@ -27,12 +33,16 @@ export type RepositoryAuditAnalysisResult = {
   source: RepositorySnapshot["source"];
   inventory: RepositoryInventoryAnalysis;
   graph: RepositoryAuditGraphPipelineResult;
+  dependencyConsistency: RepositoryDependencyConsistency;
   secretWarnings: RepositorySecretWarning[];
   execution: {
     status: "complete" | "partial";
     truncated: boolean;
     inventoryTruncationReasons: RepositoryInventoryAnalysis["execution"]["truncationReasons"];
     graphTruncationReasons: RepositoryAuditGraphPipelineResult["execution"]["truncationReasons"];
+    dependencyConsistencyStatus: RepositoryDependencyConsistency["execution"]["status"];
+    dependencyFilesScanned: number;
+    undeclaredDependencyFindings: number;
     secretFilesScanned: number;
     redactedSecretMatches: number;
     networkAccess: false;
@@ -90,6 +100,14 @@ export async function analyzeRepositorySnapshot(
     throw new Error("Repository Audit graph source does not match the analyzed snapshot.");
   }
 
+  // Dependency checks consume only files accepted by the bounded graph scan and
+  // suppress findings when declaration or alias evidence is incomplete.
+  const dependencyConsistency = analyzeRepositoryDependencyConsistency(
+    snapshot,
+    graph.graph,
+    options.dependencyConsistency,
+  );
+
   // Secret matching is restricted to files accepted by the bounded graph scan.
   // This prevents a secondary scanner from silently bypassing file/byte/depth limits.
   const secretSnapshot = graphAcceptedSecretSnapshot(snapshot, graph);
@@ -98,19 +116,26 @@ export async function analyzeRepositorySnapshot(
     options.secretHmacKey ? { hmacKey: options.secretHmacKey } : {},
   );
 
-  const truncated = inventory.execution.truncated || graph.execution.truncated;
+  const truncated = inventory.execution.truncated
+    || graph.execution.truncated
+    || dependencyConsistency.execution.findingsTruncated;
+  const partial = truncated || dependencyConsistency.execution.status === "partial";
   return {
     schema: "solvelang.repository-audit.analysis.v0",
     mode: "analyze-only",
     source: { ...snapshot.source },
     inventory,
     graph,
+    dependencyConsistency,
     secretWarnings,
     execution: {
-      status: truncated ? "partial" : "complete",
+      status: partial ? "partial" : "complete",
       truncated,
       inventoryTruncationReasons: [...inventory.execution.truncationReasons],
       graphTruncationReasons: [...graph.execution.truncationReasons],
+      dependencyConsistencyStatus: dependencyConsistency.execution.status,
+      dependencyFilesScanned: dependencyConsistency.execution.filesScanned,
+      undeclaredDependencyFindings: dependencyConsistency.undeclaredImports.length,
       secretFilesScanned: secretSnapshot.files.length,
       redactedSecretMatches: secretWarnings.length,
       networkAccess: false,
