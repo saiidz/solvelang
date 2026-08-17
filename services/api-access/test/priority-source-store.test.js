@@ -92,10 +92,15 @@ test("source retrieval rejects oversized stored objects before or while reading 
   );
   assert.equal(transformed, false);
 
+  let streamTransformed = false;
   const oversizedStream = {
     async send() {
       return {
         Body: {
+          async transformToByteArray() {
+            streamTransformed = true;
+            return zipBytes("unsafe fallback");
+          },
           async *[Symbol.asyncIterator]() {
             yield Buffer.from([0x50, 0x4b, 0x03, 0x04]);
             yield Buffer.alloc(MAX_PRIORITY_SOURCE_BYTES);
@@ -109,6 +114,7 @@ test("source retrieval rejects oversized stored objects before or while reading 
     streamStore.getSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint: "a".repeat(64) }),
     /upload limit/,
   );
+  assert.equal(streamTransformed, false);
 });
 
 test("executor loads only the account-bound fingerprint, forwards an abort signal, sanitizes result, and deletes source after success", async () => {
