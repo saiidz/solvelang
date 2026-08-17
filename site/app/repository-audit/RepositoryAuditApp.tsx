@@ -3,6 +3,7 @@
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { analyzeRepositorySnapshot, type RepositoryAuditAnalysisResult } from "./core/analysisPipeline";
 import { extractRepositoryArchive, type RepositoryArchiveExtractionResult } from "./core/archiveExtraction";
+import { createCanonicalRepositoryAuditArtifact, type CanonicalRepositoryAuditArtifact } from "./core/canonicalArtifact";
 import type { RepositoryInventoryAnalysis, RepositorySeverity } from "./core/inventory";
 import { ingestArchiveSnapshotEntries, type RepositoryIngestionResult, type RepositorySnapshotEntry } from "./core/ingestion";
 import { createRepositoryAuditHtmlReport, createRepositoryAuditProductReport, repositoryAuditSafeFilename, type RepositoryAuditProductReport } from "./core/report";
@@ -19,6 +20,7 @@ type ScanResult = {
   analysis: RepositoryInventoryAnalysis;
   intelligence: RepositoryAuditAnalysisResult;
   report: RepositoryAuditProductReport;
+  canonicalArtifact: CanonicalRepositoryAuditArtifact;
 };
 
 const severityClasses: Record<RepositorySeverity, string> = {
@@ -121,12 +123,22 @@ export function RepositoryAuditApp() {
       },
     });
     const analysis = intelligence.inventory;
+    const now = new Date();
+    const report = createRepositoryAuditProductReport({ archiveName, extraction, ingestion, analysis, intelligence, now });
+    const canonicalArtifact = await createCanonicalRepositoryAuditArtifact({
+      archiveName,
+      analysis,
+      intelligence,
+      maxArchiveEntries: MAX_ENTRIES,
+      now,
+    });
     return {
       extraction,
       ingestion,
       analysis,
       intelligence,
-      report: createRepositoryAuditProductReport({ archiveName, extraction, ingestion, analysis, intelligence }),
+      report,
+      canonicalArtifact,
     };
   }
 
@@ -187,12 +199,13 @@ export function RepositoryAuditApp() {
     }
   }
 
-  function exportReport(format: "json" | "html"): void {
+  function exportReport(format: "product-json" | "canonical-json" | "html"): void {
     if (!result) return;
     const base = `${repositoryAuditSafeFilename(result.report.archive.name)}-solvelang-repository-audit`;
-    if (format === "json") download(`${base}.json`, `${JSON.stringify(result.report, null, 2)}\n`, "application/json;charset=utf-8");
+    if (format === "product-json") download(`${base}.json`, `${JSON.stringify(result.report, null, 2)}\n`, "application/json;charset=utf-8");
+    else if (format === "canonical-json") download(result.canonicalArtifact.filename, result.canonicalArtifact.content, result.canonicalArtifact.mediaType);
     else download(`${base}.html`, createRepositoryAuditHtmlReport(result.report), "text/html;charset=utf-8");
-    recordEvent("repository_audit_report_downloaded");
+    recordEvent(format === "canonical-json" ? "repository_audit_canonical_evidence_downloaded" : "repository_audit_report_downloaded");
   }
 
   const shownFindings = result?.analysis.findings.slice(0, 100) ?? [];
@@ -253,7 +266,7 @@ export function RepositoryAuditApp() {
             <li>✓ Maps bounded JavaScript/TypeScript dependencies and impact hotspots without executing code</li>
             <li>✓ Flags credential patterns with values redacted from reports and the UI</li>
             <li>✓ Never executes repository code, scripts, hooks, or package managers</li>
-            <li>✓ Produces JSON evidence and a printable HTML report</li>
+            <li>✓ Produces product JSON, integrity-covered canonical JSON, and a printable HTML report</li>
           </ul>
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-6 text-slate-300">
             No file is deleted, moved, renamed, merged, or rewritten. Cleanup recommendations require a separate branch, validation, rollback planning, and human approval.
@@ -282,12 +295,15 @@ export function RepositoryAuditApp() {
           <section className="rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Evidence export</p>
             <h2 className="mt-2 text-2xl font-semibold">Keep the audit record</h2>
-            <p className="mt-3 leading-7 text-slate-700">Download the deterministic result, including source fingerprint, applied limits, inventory, findings, bounded dependency intelligence, redacted credential warnings, evidence, validation steps, and rollback notes.</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <p className="mt-3 leading-7 text-slate-700">Download the product report for review or the versioned canonical evidence artifact for integrity verification. Both include bounded dependency intelligence and redacted credential warnings without exporting secret values or keyed HMAC correlation fingerprints.</p>
+            <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:flex-wrap">
               <button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800">Download HTML report</button>
-              <button type="button" onClick={() => exportReport("json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Download JSON evidence</button>
+              <button type="button" onClick={() => exportReport("product-json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Download product JSON</button>
+              <button type="button" onClick={() => exportReport("canonical-json")} className="rounded-xl border border-blue-300 bg-white px-5 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">Download canonical evidence</button>
             </div>
-            <p className="mt-5 break-all font-mono text-xs leading-5 text-slate-600">{result.analysis.source.fingerprint}</p>
+            <p className="mt-5 text-sm font-semibold text-slate-700">Canonical schema {result.canonicalArtifact.report.schemaVersion} · report {result.canonicalArtifact.report.reportId}</p>
+            <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Integrity SHA-256: {result.canonicalArtifact.report.integrity.canonicalJsonSha256}</p>
+            <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Source: {result.analysis.source.fingerprint}</p>
           </section>
         </div>
 
