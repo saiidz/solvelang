@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 
-const COLLECTOR_VERSION = "0.1.0";
+const COLLECTOR_VERSION = "0.2.0";
 const MAX_OUTPUT = 4 * 1024 * 1024;
 const MAX_ITEMS = 5000;
 
@@ -81,6 +81,25 @@ function collectSockets() {
     const port = Number(bracket?.[2] ?? plain?.[2]);
     if (!address || !Number.isInteger(port) || port < 1 || port > 65535) return [];
     return [{ protocol: match[1].toLowerCase(), localAddress: address, port, process: match[3] || undefined }];
+  });
+}
+
+function collectProcesses() {
+  const output = command("ps", ["-eo", "pid=,ppid=,uid=,stat=,comm="]);
+  if (!output) return [];
+  return output.split("\n").slice(0, MAX_ITEMS).flatMap((line) => {
+    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/);
+    if (!match) return [];
+    const pid = Number(match[1]);
+    const ppid = Number(match[2]);
+    const uid = Number(match[3]);
+    const state = match[4].slice(0, 32);
+    const name = match[5].trim().slice(0, 200);
+    if (!Number.isSafeInteger(pid) || pid < 1 || pid > 4_194_304) return [];
+    if (!Number.isSafeInteger(ppid) || ppid < 0 || ppid > 4_194_304) return [];
+    if (!Number.isSafeInteger(uid) || uid < 0 || uid > 4_294_967_295) return [];
+    if (!state || !name) return [];
+    return [{ pid, ppid, uid, state, name }];
   });
 }
 
@@ -250,6 +269,7 @@ const snapshot = {
   },
   filesystems: collectFilesystems(),
   listeningSockets: collectSockets(),
+  processes: collectProcesses(),
   services: collectServices(),
   packages: collectPackages(),
   scheduledJobs: collectCronEvidence(),
@@ -266,6 +286,7 @@ const snapshot = {
     redactionsApplied: true,
     notes: [
       "Collector runs a fixed read-only command allowlist and accepts no command arguments from user input.",
+      "Process inventory contains PID, parent PID, numeric uid, state, and executable comm name only; arguments, command lines, and environment variables are not collected.",
       "Environment variables, file contents, database contents, private keys, credentials, process command lines, and cron command bodies are not collected.",
       "Web-root ownership is emitted as numeric uid to avoid unrelated account-directory metadata.",
     ],
