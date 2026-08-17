@@ -49,6 +49,7 @@ test("source storage rejects non-ZIP, malformed ownership, and oversized source 
   const client = new FakeS3();
   const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
   assert.throws(() => fingerprintPrioritySource(Buffer.from("not a zip")), /ZIP archive/);
+  assert.throws(() => fingerprintPrioritySource(Buffer.from([0x50, 0x4b, 0x03])), /ZIP archive/);
   await assert.rejects(store.putSource({ accountId: "bad", source: zipBytes() }), /Account ID/);
   const oversized = Buffer.alloc(MAX_PRIORITY_SOURCE_BYTES + 1);
   oversized.set([0x50, 0x4b, 0x03, 0x04]);
