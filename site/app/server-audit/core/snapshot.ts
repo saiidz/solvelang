@@ -70,11 +70,16 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
     knownKeys(input.system, ["uptimeSeconds","load","memoryTotalBytes","memoryAvailableBytes"], "system");
     const load = array<number>(input.system.load, "system.load", 3);
     if (load?.some((entry) => typeof entry !== "number" || !Number.isFinite(entry) || entry < 0 || entry > 1_000_000)) throw new Error("system.load is invalid.");
+    const memoryTotalBytes = number(input.system.memoryTotalBytes, "system.memoryTotalBytes");
+    const memoryAvailableBytes = number(input.system.memoryAvailableBytes, "system.memoryAvailableBytes");
+    if (memoryTotalBytes !== undefined && memoryAvailableBytes !== undefined && memoryAvailableBytes > memoryTotalBytes) {
+      throw new Error("system.memoryAvailableBytes exceeds system.memoryTotalBytes.");
+    }
     snapshot.system = {
       uptimeSeconds: number(input.system.uptimeSeconds, "system.uptimeSeconds"),
       load,
-      memoryTotalBytes: number(input.system.memoryTotalBytes, "system.memoryTotalBytes"),
-      memoryAvailableBytes: number(input.system.memoryAvailableBytes, "system.memoryAvailableBytes"),
+      memoryTotalBytes,
+      memoryAvailableBytes,
     };
   }
 
@@ -82,12 +87,22 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
   if (filesystems) snapshot.filesystems = filesystems.map((entry, index) => {
     assertObject(entry, `filesystems[${index}]`);
     knownKeys(entry, ["mount","filesystem","sizeBytes","usedBytes","availableBytes","usagePercent"], `filesystems[${index}]`);
+    const sizeBytes = number(entry.sizeBytes, `filesystems[${index}].sizeBytes`);
+    const usedBytes = number(entry.usedBytes, `filesystems[${index}].usedBytes`);
+    const availableBytes = number(entry.availableBytes, `filesystems[${index}].availableBytes`);
+    if (sizeBytes !== undefined) {
+      if (usedBytes !== undefined && usedBytes > sizeBytes) throw new Error(`filesystems[${index}].usedBytes exceeds sizeBytes.`);
+      if (availableBytes !== undefined && availableBytes > sizeBytes) throw new Error(`filesystems[${index}].availableBytes exceeds sizeBytes.`);
+      if (usedBytes !== undefined && availableBytes !== undefined && usedBytes > sizeBytes - availableBytes) {
+        throw new Error(`filesystems[${index}] usedBytes plus availableBytes exceeds sizeBytes.`);
+      }
+    }
     return {
       mount: text(entry.mount, `filesystems[${index}].mount`, 500, false)!,
       filesystem: text(entry.filesystem, `filesystems[${index}].filesystem`, 100),
-      sizeBytes: number(entry.sizeBytes, `filesystems[${index}].sizeBytes`),
-      usedBytes: number(entry.usedBytes, `filesystems[${index}].usedBytes`),
-      availableBytes: number(entry.availableBytes, `filesystems[${index}].availableBytes`),
+      sizeBytes,
+      usedBytes,
+      availableBytes,
       usagePercent: number(entry.usagePercent, `filesystems[${index}].usagePercent`, { min: 0, max: 100 }),
     };
   });
