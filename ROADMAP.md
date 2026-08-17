@@ -11,6 +11,18 @@ This roadmap distinguishes four states deliberately:
 
 A merged feature is not automatically production-enabled, and production account infrastructure is not evidence that general hosted SolveLang workflow execution exists.
 
+## Current implementation overlay — 2026-08-17
+
+This overlay corrects historical roadmap sections below without erasing their design context. When a lower section conflicts with this overlay, `docs/active-buildout-handoff.md`, or the separately verified production record, use the newer truth source.
+
+- Centralized account suspension/termination foundations are **merged in code** through PR #147; they are no longer merely planned.
+- Imported-file source provenance is **merged** through PR #159; the older flattened-import diagnostic limitation below is historical.
+- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**, but live IAM, gateway deployment, private ingress/DNS, publication, and canaries remain separately gated.
+- Repository Audit is **implemented well beyond the old v0-contract-only state**: deterministic inventory, bounded Solve Graph dependency/impact analysis, redacted secret analysis, product/canonical reports, browser findings, and canonical evidence export are merged through #186. Python import relationships remain active in #188 pending exact-head trusted-Mac validation.
+- Server Audit is **implemented as a read-only browser/snapshot analysis surface** with parser, analyzer, types, and reporting on `main`; current hardening work pins collector command safety (#190) and snapshot consistency invariants (#191).
+- Customer-priority source/upload/API foundations are merged but production customer priority remains **OFF**. Protected #164/#169 remain preparation only.
+- Production TOTP remains **OFF**, dedicated production TOTP KMS has not been created, production billing remains **OFF**, paid priority remains **OFF**, and no real-charge authorization exists. The authoritative live-state record remains `docs/current-production-status-2026-08-13.md` until a newer production audit is performed.
+
 ## Current Baseline
 
 ### Language/runtime working today
