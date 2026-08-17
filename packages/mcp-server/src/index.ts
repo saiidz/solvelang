@@ -5,6 +5,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
+import {
+  MAX_SOLVE_GRAPH_BYTES,
+  executeSolveGraphTool,
+  parseSolveGraphText,
+  solveGraphEdgeKinds,
+  solveGraphNodeKinds,
+  type SolveGraphDocument,
+} from "./solve-graph.js";
 import { readWorkspaceText, resolveWorkspacePath, workspaceRoot } from "./workspace.js";
 
 function textResult(value: unknown) {
@@ -39,6 +47,46 @@ async function readN8nInput(input: N8nInput): Promise<string> {
   return text;
 }
 
+const solveGraphInputFields = {
+  path: z.string().min(1).optional().describe("Workspace-relative path to a canonical Solve Graph JSON document"),
+  rawJson: z.string().min(1).optional().describe("Raw canonical Solve Graph JSON processed only in memory"),
+};
+
+const solveGraphFindInputSchema = z.object({
+  ...solveGraphInputFields,
+  kinds: z.array(z.enum(solveGraphNodeKinds)).max(solveGraphNodeKinds.length).optional(),
+  text: z.string().min(1).max(2_048).optional(),
+  evidencePath: z.string().min(1).max(2_048).optional(),
+  limit: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphTraversalInputSchema = z.object({
+  ...solveGraphInputFields,
+  rootIds: z.array(z.string().regex(/^sgn_[a-f0-9]{32}$/)).min(1).max(128),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(64).optional(),
+  maxResults: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphImpactInputSchema = z.object({
+  ...solveGraphInputFields,
+  changedNodeIds: z.array(z.string().regex(/^sgn_[a-f0-9]{32}$/)).min(1).max(128),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(64).optional(),
+  maxResults: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+type SolveGraphInput = { path?: string; rawJson?: string };
+
+async function readSolveGraphInput(input: SolveGraphInput): Promise<SolveGraphDocument> {
+  if (input.rawJson !== undefined) {
+    if (Buffer.byteLength(input.rawJson, "utf8") > MAX_SOLVE_GRAPH_BYTES) throw new Error("The Solve Graph exceeds the 2 MB safety limit.");
+    return parseSolveGraphText(input.rawJson);
+  }
+  const { text } = await readWorkspaceText(input.path!);
+  return parseSolveGraphText(text);
+}
+
 async function runSolvec(filePath: string): Promise<{ ok: boolean; output: string }> {
   const configured = process.env.SOLVELANG_SOLVEC;
   const candidates = [
@@ -69,7 +117,7 @@ async function runSolvec(filePath: string): Promise<{ ok: boolean; output: strin
 const server = new McpServer(
   { name: "solvelang", version: "0.2.0" },
   {
-    instructions: "Use SolveLang tools for deterministic workflow validation. Tools are read-only, bounded to 2 MB and 5,000 n8n nodes, never execute workflows, and process raw JSON only in memory.",
+    instructions: "Use SolveLang tools for deterministic workflow and Solve Graph analysis. Tools are read-only, bounded to 2 MB inputs and 5,000 n8n nodes, never execute workflows, never mutate repositories, and process raw JSON only in memory.",
   },
 );
 
@@ -117,6 +165,62 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_find_nodes",
+  {
+    title: "Find Solve Graph nodes",
+    description: "Search an integrity-valid analyze-only Solve Graph by node kind, text, or exact evidence path. Returns bounded node summaries only.",
+    inputSchema: solveGraphFindInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, kinds, text, evidencePath, limit }) => textResult(executeSolveGraphTool(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { tool: "solve_graph.find_nodes", query: { kinds, text, evidencePath, limit } },
+  )),
+);
+
+server.registerTool(
+  "solvelang_graph_dependencies",
+  {
+    title: "Traverse Solve Graph dependencies",
+    description: "Traverse outbound dependency edges from one or more stable Solve Graph node IDs with explicit depth, result, and edge-kind bounds.",
+    inputSchema: solveGraphTraversalInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, rootIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { tool: "solve_graph.dependencies", rootIds, options: { edgeKinds, maxDepth, maxResults } },
+  )),
+);
+
+server.registerTool(
+  "solvelang_graph_dependents",
+  {
+    title: "Traverse Solve Graph dependents",
+    description: "Traverse inbound dependency edges from one or more stable Solve Graph node IDs with explicit depth, result, and edge-kind bounds.",
+    inputSchema: solveGraphTraversalInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, rootIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { tool: "solve_graph.dependents", rootIds, options: { edgeKinds, maxDepth, maxResults } },
+  )),
+);
+
+server.registerTool(
+  "solvelang_graph_impact",
+  {
+    title: "Analyze Solve Graph impact",
+    description: "Compute bounded transitive dependents for changed stable node IDs while excluding containment-only noise by default.",
+    inputSchema: solveGraphImpactInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, changedNodeIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { tool: "solve_graph.impact", changedNodeIds, options: { edgeKinds, maxDepth, maxResults } },
+  )),
+);
+
+server.registerTool(
   "solvelang_capabilities",
   {
     title: "List SolveLang capabilities",
@@ -126,10 +230,28 @@ server.registerTool(
   },
   async () => textResult({
     workspaceRoot: workspaceRoot(),
-    limits: { maxFileBytes: MAX_N8N_BYTES, maxN8nNodes: MAX_N8N_NODES },
+    limits: { maxFileBytes: MAX_N8N_BYTES, maxN8nNodes: MAX_N8N_NODES, maxSolveGraphBytes: MAX_SOLVE_GRAPH_BYTES },
     n8nInputModes: ["workspace-relative path", "raw JSON processed only in memory"],
-    tools: ["solvelang_analyze_n8n", "solvelang_validate_solve", "solvelang_generate_n8n_report", "solvelang_capabilities"],
-    privacy: ["No workflow execution", "No network calls", "No credential-value inspection", "No file writes", "Raw JSON is not logged or persisted", "Paths cannot escape the configured workspace"],
+    solveGraphInputModes: ["workspace-relative canonical graph JSON", "raw canonical graph JSON processed only in memory"],
+    tools: [
+      "solvelang_analyze_n8n",
+      "solvelang_validate_solve",
+      "solvelang_generate_n8n_report",
+      "solvelang_graph_find_nodes",
+      "solvelang_graph_dependencies",
+      "solvelang_graph_dependents",
+      "solvelang_graph_impact",
+      "solvelang_capabilities",
+    ],
+    privacy: [
+      "No workflow execution",
+      "No network calls",
+      "No credential-value inspection",
+      "No file writes",
+      "Raw JSON is not logged or persisted",
+      "Paths cannot escape the configured workspace",
+      "Solve Graph tools require canonical integrity-valid analyze-only documents with networkAccess=false and writeAccess=false",
+    ],
   }),
 );
 
