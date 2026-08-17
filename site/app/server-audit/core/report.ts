@@ -1,5 +1,6 @@
 import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
+import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -50,6 +51,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
   const findings = sortFindings([
     ...analyzeServerSnapshot(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
+    ...createServerAuditInventoryFindings(snapshot),
   ]);
   const canonical = JSON.stringify({
     schemaVersion: snapshot.schemaVersion,
@@ -75,6 +77,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     limitations: [
       "This report analyzes only the supplied read-only snapshot; absence of evidence is not proof of secure configuration.",
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
+      "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
       "Restore testing, external firewall rules, cloud IAM, database contents, application secrets, and customer data are outside the v0 snapshot contract unless represented by safe summary evidence.",
