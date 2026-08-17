@@ -33,6 +33,7 @@ Current `main` after this refresh base is `47b118d072b30cc3389bbcf03f0ff3faf314b
 ### Admin console publication preparation
 
 - **#172 — deterministic private console publication artifact** is open and refreshed directly onto current `main` at head `ebd141e453547c11f0abb81fef2f5b217c85c7b5`.
+- Exact-head GitHub-hosted validation is green: Admin Console Gateway CI, general CI, API Access CI, and Rust all passed.
 - It builds the static Admin console deterministically, records file hashes/byte lengths, tightens browser CSP to same-origin connections, tests noindex/no-secret/same-origin contracts, uploads only a short-lived CI review artifact, and documents the private `/admin-gateway` ingress contract.
 - It does **not** create DNS, choose a Zero-Trust provider, publish the UI, or deploy production infrastructure.
 
@@ -40,15 +41,15 @@ Private origin / identity-aware ingress remains intentionally owner/operator-spe
 
 ### Customer-priority build stack
 
-- **#160 — production-OFF source/executor foundation** refreshed onto current `main` at head `12ed4f8e8d2c6fb3d2ce4b0d860106b7199fb564`; exact-head hosted CI is being revalidated. Its production queue/customer/provider gates remain default OFF and no provider credential or billing path is introduced.
-- **#164 — validation-only customer-priority production preflight** remains stacked on #160 and must be refreshed against #160's final reviewed head before merge consideration.
-- **#165 — authenticated ZIP source upload and release-gated customer UI** remains stacked on #160 and must be refreshed against #160's final reviewed head. UI enablement remains OFF.
-- **#166 — isolated same-host customer-priority API attachment** remains stacked on #165 and must be refreshed after #165's final head. Route attachment remains OFF.
-- **#169 — dormant production queue foundation rollout preparation** remains stacked on #160. Its future workflow is intended to provision dormant queue resources only while queue/customer/provider gates remain OFF; live IAM/deployment stays separately gated.
+- **#160 — production-OFF source/executor foundation** is refreshed onto current `main` at head `12ed4f8e8d2c6fb3d2ce4b0d860106b7199fb564`. Exact-head Customer Priority Production CI, general CI, API Access CI, and Rust all passed. Its production queue/customer/provider gates remain default OFF and no provider credential or billing path is introduced.
+- **#164 — validation-only customer-priority production preflight** is refreshed on #160 at head `14e03a546026ad726dc84d3f504ccda0216dce23`. The refresh also closes a CI path-filter gap so production-priority CI reruns when the preflight workflow or its contract test changes. Customer Priority Production CI passed; Rust revalidation was still running at this documentation update.
+- **#165 — authenticated ZIP source upload and release-gated customer UI** is refreshed on #160 at head `1d7f9ed40283a6290468a1788519f3be3328bd6a`. Customer Priority Production CI passed; Rust revalidation was still running. UI enablement remains OFF.
+- **#166 — isolated same-host customer-priority API attachment** is refreshed on #165 at head `b9a5f9fd34f58306dbc6c15213698cb906479226`. Customer Priority API CI passed; Rust revalidation was still running. Route attachment remains OFF.
+- **#169 — dormant production queue foundation rollout preparation** is refreshed on #160 at head `d7eb4bf837e6e4ece5385e60da4c45499f767d55`. Initial refresh CI exposed that the new production workflow used a separate concurrency group instead of the repository-wide attempt-aware production serializer. That safety defect was fixed: the workflow now has `actions: read`, joins `wait-for-production-deployment-turn.mjs`, is included in `PRODUCTION_WORKFLOW_PATHS`, and regression coverage enforces shared serialization. Exact-head revalidation is required before merge consideration. Its future workflow still keeps queue/customer/provider gates OFF; live IAM/deployment stays separately gated.
 
 ### Cross-feature production-state hardening
 
-- **#161 — preserve Admin CRM through auth rollback/redeploy paths** refreshed onto current `main` at head `0e5398ef2d2f5886e72cfebfe80bd3293f76257b`; exact-head hosted CI is being revalidated.
+- **#161 — preserve Admin CRM through auth rollback/redeploy paths** is refreshed onto current `main` at head `0e5398ef2d2f5886e72cfebfe80bd3293f76257b`. Exact-head API Access CI, general CI, and Rust all passed.
 - This is production-sensitive rollback code but performs no production action by being present in a branch.
 
 ### This truth sync
@@ -73,10 +74,10 @@ Only after those gates succeed is `https://admin.solve-lang.com` expected to be 
 
 Safe build work may continue automatically while all launch gates remain OFF. The dependency order is:
 
-1. finish exact-head validation of #160;
-2. refresh/revalidate #164 and #165 on #160's final reviewed head;
-3. refresh/revalidate #166 on #165's final reviewed head;
-4. refresh/revalidate #169 on #160's final reviewed head;
+1. obtain review/merge approval for exact-head-green #160;
+2. finish exact-head revalidation of refreshed #164 and #165 on #160;
+3. finish exact-head revalidation of refreshed #166 on #165;
+4. finish exact-head revalidation of refreshed #169 on #160 after the serializer safety fix;
 5. keep queue/customer/provider flags OFF until separately approved production resource/IAM work exists;
 6. choose and review the real provider/executor contract and credentials separately;
 7. establish alarms, DLQ/stop thresholds, canaries, and rollback before any customer execution;
