@@ -44,7 +44,7 @@ test("tool adapter exposes bounded safe node summaries without arbitrary metadat
     query: { kinds: ["file"], text: "route", limit: 10 },
   });
 
-  assert.equal(response.tool, "solve_graph.find_nodes");
+  if (response.tool !== "solve_graph.find_nodes") throw new Error(`unexpected response tool: ${response.tool}`);
   assert.equal(response.graphId, graph.graphId);
   assert.deepEqual(response.nodes, [{
     id: fileNodeId(graph, "src/route.ts"),
@@ -69,7 +69,7 @@ test("dependencies and impact return deterministic enriched paths suitable for t
     rootIds: [routeId],
     options: { edgeKinds: ["imports"], maxDepth: 3, maxResults: 20 },
   });
-  assert.equal(dependencies.tool, "solve_graph.dependencies");
+  if (dependencies.tool !== "solve_graph.dependencies") throw new Error(`unexpected response tool: ${dependencies.tool}`);
   assert.deepEqual(
     dependencies.entries.filter((entry) => entry.node.kind === "file").map((entry) => [entry.node.path, entry.depth]),
     [["src/route.ts", 0], ["src/service.ts", 1], ["src/lib.ts", 2]],
@@ -81,7 +81,7 @@ test("dependencies and impact return deterministic enriched paths suitable for t
     changedNodeIds: [libId],
     options: { maxDepth: 3, maxResults: 20 },
   });
-  assert.equal(impact.tool, "solve_graph.impact");
+  if (impact.tool !== "solve_graph.impact") throw new Error(`unexpected response tool: ${impact.tool}`);
   assert.deepEqual(impact.entries.map((entry) => entry.id), [libId, serviceId, routeId]);
   assert.deepEqual(impact.entries.map((entry) => entry.depth), [0, 1, 2]);
   assert.equal(impact.truncated, false);
