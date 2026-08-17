@@ -25,6 +25,13 @@ function number(value: unknown, name: string, { min = 0, max = Number.MAX_SAFE_I
   return value;
 }
 
+function integer(value: unknown, name: string, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = number(value, name, { min, max });
+  if (parsed === undefined) return undefined;
+  if (!Number.isSafeInteger(parsed)) throw new Error(`${name} is invalid.`);
+  return parsed;
+}
+
 function assertObject(value: unknown, name: string): asserts value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${name} is invalid.`);
   const prototype = Object.getPrototypeOf(value);
@@ -44,7 +51,7 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
   let input: unknown;
   try { input = JSON.parse(raw); } catch { throw new Error("Snapshot is not valid JSON."); }
   assertObject(input, "Snapshot");
-  knownKeys(input, ["schemaVersion","collectedAt","host","system","filesystems","listeningSockets","services","packages","scheduledJobs","web","backups","logs","security","metadata"], "Snapshot");
+  knownKeys(input, ["schemaVersion","collectedAt","host","system","filesystems","listeningSockets","processes","services","packages","scheduledJobs","web","backups","logs","security","metadata"], "Snapshot");
   if (input.schemaVersion !== "1") throw new Error("Unsupported snapshot schema version.");
   const collectedAt = text(input.collectedAt, "collectedAt", 40, false)!;
   if (!Number.isFinite(Date.parse(collectedAt))) throw new Error("collectedAt is invalid.");
@@ -101,6 +108,19 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
       localAddress: text(entry.localAddress, `listeningSockets[${index}].localAddress`, 100, false)!,
       port: number(entry.port, `listeningSockets[${index}].port`, { min: 1, max: 65535 })!,
       process: text(entry.process, `listeningSockets[${index}].process`, 200),
+    };
+  });
+
+  const processes = array<Record<string, unknown>>(input.processes, "processes");
+  if (processes) snapshot.processes = processes.map((entry, index) => {
+    assertObject(entry, `processes[${index}]`);
+    knownKeys(entry, ["pid","ppid","uid","state","name"], `processes[${index}]`);
+    return {
+      pid: integer(entry.pid, `processes[${index}].pid`, { min: 1, max: 4_194_304 })!,
+      ppid: integer(entry.ppid, `processes[${index}].ppid`, { min: 0, max: 4_194_304 })!,
+      uid: integer(entry.uid, `processes[${index}].uid`, { min: 0, max: 4_294_967_295 })!,
+      state: text(entry.state, `processes[${index}].state`, 32, false)!,
+      name: text(entry.name, `processes[${index}].name`, 200, false)!,
     };
   });
 

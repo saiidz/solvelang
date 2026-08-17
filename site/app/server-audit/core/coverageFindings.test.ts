@@ -12,6 +12,7 @@ function completeSnapshot(): ServerAuditSnapshot {
     system: {},
     filesystems: [],
     listeningSockets: [],
+    processes: [],
     services: [],
     packages: [],
     scheduledJobs: [],
