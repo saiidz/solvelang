@@ -8,12 +8,10 @@ This file records repository state, not a newer production audit. Before acting,
 
 ## Current repository baseline
 
-- `main` at this sync: `3d1257d5123a53e8d3aa3015c2b4dcc1c7b2eeb8`.
-- PR #185 is merged: the browser-local Repository Audit now surfaces bounded dependency/blast-radius hotspots and redacted credential-pattern warnings.
-- PR #184 is merged: canonical Repository Audit reports use schema `1.1.0` when graph/security intelligence is present, with integrity-covered canonical serialization.
-- PR #183 is merged: product/HTML reports export bounded graph intelligence and redacted credential warnings without keyed HMAC correlation fingerprints.
-- PR #181 is merged: bounded Repository Audit inventory + Solve Graph + secret-analysis composition.
-- Solve Graph capabilities are merged through PRs #171 and #173-#179: deterministic inventory, dependency/dependent traversal, impact analysis, lexical JS/TS import relationships, bounded tools, MCP/Codex integration, local explorer, and Repository Audit reuse.
+- `main` at this sync: `9f464238a42fceb7c878946a0ce97c4b5c8d5f39`.
+- PR #186 is merged: the browser-local Repository Audit exports product JSON, printable HTML, and a versioned integrity-covered canonical JSON evidence artifact. It also added the trusted push-only Mac CI workflow for `agent/mac-*` branches.
+- PRs #181, #183, #184, and #185 are merged: bounded inventory + Solve Graph + redacted secret analysis are composed into Repository Audit; product/canonical reports carry graph/security intelligence; the browser surfaces dependency/blast-radius hotspots and redacted credential-pattern warnings.
+- Solve Graph capabilities are merged through PRs #171 and #173-#179: deterministic inventory, dependency/dependent traversal, impact analysis, lexical JavaScript/TypeScript import relationships, bounded tools, MCP/Codex integration, local explorer, and Repository Audit reuse.
 - Centralized account suspension/termination foundations are merged through PR #147.
 - Imported-file source provenance is merged through PR #159.
 - Customer-priority production-off source/upload/API foundations are merged through PRs #160, #165, and #166.
@@ -46,41 +44,49 @@ Later gates remain separate for gateway deployment, private HTTPS/DNS/Zero-Trust
 
 ## Production-sensitive PRs awaiting explicit merge approval
 
-These remain build/test preparation only. Refresh against current `main` before an approved merge whenever `main` has advanced.
+All three protected backlog PRs below were replayed on `main` `9f464238a42fceb7c878946a0ce97c4b5c8d5f39` as one clean commit each on 2026-08-17. Re-read their exact-head hosted CI before any approved merge. Do not dispatch their production workflows from automation.
 
 ### PR #161 — preserve Admin CRM through auth rollbacks
 
 - Branch: `agent/preserve-crm-through-totp-rollout`.
-- Last known head before this sync: `7ed31ea332a16a3280dae1e7c067b4d18ddeb262`.
+- Current head: `c86077640ca54d178e3f8641a28ad4e233f14a80`.
+- Diff: four files, one commit on current `main`.
 - Preserves and verifies `AdminCrmEnabled` during shared production customer-account/TOTP rollback while billing remains OFF.
-- It is currently behind newer `main` and requires refresh/retest before merge.
 - Merge gate: `APPROVE PR #161 MERGE`.
 
 ### PR #164 — validation-only customer-priority production preflight
 
 - Branch: `agent/customer-priority-production-preflight`.
+- Current head: `cabf7325226e62459db3c7bc94f4e0a4f62cdefd`.
+- Diff: three files, one commit on current `main`.
 - Adds a protected validation/preflight path only; queue/customer/provider launch gates and billing remain OFF.
-- Refresh/retest against current `main` before merge.
 - Merge gate: `APPROVE PR #164 MERGE`.
 
 ### PR #169 — dormant customer-priority production foundation rollout preparation
 
 - Branch: `agent/customer-priority-queue-foundation-rollout`.
+- Current head: `101996dfdbdfd95a932f09c9ebca4e5c9a9312dc`.
+- Diff: eight files, one commit on current `main`.
 - Adds durable jobs/source/SQS/DLQ/alarm foundation preparation while queue/customer/provider gates are forced OFF.
-- Refresh/retest against current `main` before merge.
 - Merge gate: `APPROVE PR #169 MERGE`.
 
 Merging any of these PRs would still not authorize workflow dispatch, IAM application, queue activation, provider execution, billing, email, or charges.
 
-## Active safe Repository Audit buildout
+## Active safe Repository Audit / Solve Graph buildout
 
-PR #186 is the active browser evidence step on branch `agent/mac-repository-audit-canonical-export`. It adds a browser-local canonical `1.1.0` JSON evidence artifact with report ID and integrity SHA-256, while retaining product JSON and HTML reports. Secret values and keyed HMAC correlation fingerprints remain excluded from portable reports.
+PR #188 is the active safe graph step on branch `agent/mac-solve-graph-python-imports`, head `3c75eeb6a34d3751689c1acf83677fb8682088cb` at this sync.
 
-PR #186 also introduces a trusted push-only Mac CI path for `agent/mac-*` branches using `[self-hosted, macOS, ARM64]`; it does not expose the self-hosted runner to arbitrary pull-request code and does not target Windows.
+It adds deterministic lexical Python import relationships for `.py` and `.pyi`, resolves repository-local modules/packages only, composes them with the existing JavaScript/TypeScript graph, and feeds the combined graph into Repository Audit impact analysis. It does not execute repository code and deliberately does not invent external Python package dependency nodes. Existing node/edge/evidence bounds remain authoritative.
 
-Do not merge #186 until its exact current head is green in hosted CI/Rust and review threads are clean. Prefer a successful Mac validation as well; if the Mac job remains queued, record that fact rather than claiming it ran.
+Exact-head hosted CI and Rust/RustSec passed for #188 before this handoff sync. The trusted Mac job targets `[self-hosted, macOS, ARM64]` and was still queued; do not claim Mac validation unless that exact-head job actually completes successfully. Windows runners are not part of this trusted workflow.
 
-After the canonical browser evidence step, continue deterministic Repository Audit v1 intelligence where evidence is reliable: reference/import graphs beyond the existing lexical JS/TS subset, dependency consistency, dead-code candidates with conservative confidence, and test/documentation coverage mapping. Keep all analysis bounded and non-executing.
+After Python import relationships, continue deterministic Repository Audit v1 intelligence where evidence is reliable: dependency consistency, additional language relationships where bounded/non-executing extraction is practical, dead-code candidates with conservative confidence, and test/documentation coverage mapping.
+
+## Trusted Mac runner path
+
+`.github/workflows/trusted-mac-ci.yml` is merged on `main` and runs only on pushes to `agent/mac-*` branches. It targets `[self-hosted, macOS, ARM64]`, has read-only repository permissions, and runs Repository Audit/Studio tests, lint, static build, and i18n export verification.
+
+GitHub runner-inventory API access is unavailable to the current connector, so runner online/idle state cannot be inferred from inventory. A queued Mac job means only that GitHub has not assigned it yet; do not guess why. Never substitute a Windows runner for this trusted Mac path.
 
 ## Solve Graph current state
 
@@ -96,7 +102,7 @@ Merged capabilities include:
 8. browser-local integrity-verified visual explorer;
 9. Repository Audit hotspot/impact reuse.
 
-Keep repository execution, package execution, network acquisition, and remediation separate from analyze-only graph construction.
+PR #188 extends the analyze-only dependency layer with bounded local Python import relationships. Keep repository execution, package execution, network acquisition, and remediation separate from graph construction.
 
 ## Server Audit next stages
 
