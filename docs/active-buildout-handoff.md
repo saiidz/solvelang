@@ -9,13 +9,14 @@ This file records repository/build truth. It must not be used to infer a newer l
 
 ## Current repository baseline
 
-- `main` at the time of this sync: `a163f84784da6633cbf9b86f61fee7867e5108ca`.
-- That commit merged PR #181, the bounded Repository Audit inventory + Solve Graph + redacted-secret analysis pipeline.
+- `main` at the time of this sync: `00b555012b2136de64efbbf965183b4069954661`.
+- PR #181 is merged: bounded Repository Audit inventory + Solve Graph + HMAC-redacted secret analysis pipeline.
+- PR #183 is merged: product/HTML report exports can include bounded graph counts/hotspots and redacted credential warnings while omitting keyed HMAC correlation fingerprints.
 - Centralized account suspension/termination foundation is merged through PR #147.
 - Admin Gateway rollout machinery is merged through PR #168.
 - Deterministic private Admin console publication preparation is merged through PR #172.
-- Solve Graph has progressed well beyond Phase 0: deterministic inventory extraction, query/impact analysis, JavaScript/TypeScript import relationships, bounded tool contracts, MCP/Codex integration, a local integrity-verified explorer, and Repository Audit reuse are merged through PRs #171, #173-#179.
-- Repository Audit already contains bounded archive ingestion/extraction, deterministic inventory/classification, exact duplicate/backup/generated/large-file findings, reference/dependency analysis, HMAC-redacted secret warnings, canonical report integrity, HTML/JSON product reports, and a bounded composed graph/security analysis pipeline. Older text saying the scanner engine is not implemented is stale.
+- Solve Graph has progressed well beyond Phase 0: deterministic inventory extraction, query/impact analysis, JavaScript/TypeScript import relationships, bounded tool contracts, MCP/Codex integration, a local integrity-verified explorer, and Repository Audit reuse are merged through PRs #171 and #173-#179.
+- Repository Audit already contains bounded archive ingestion/extraction, deterministic inventory/classification, exact duplicate/backup/generated/large-file findings, reference/dependency analysis, HMAC-redacted secret warnings, canonical report integrity, HTML/JSON product reports, a bounded composed graph/security analysis pipeline, and product-report graph/security export. Older text saying the scanner engine is not implemented is stale.
 
 ## Last separately verified production truth
 
@@ -54,25 +55,25 @@ These branches are build/test preparation only. Refresh against current `main` b
 ### PR #161 — preserve Admin CRM through auth rollbacks
 
 - Branch: `agent/preserve-crm-through-totp-rollout`.
-- Refreshed head at this sync: `7ed31ea332a16a3280dae1e7c067b4d18ddeb262`.
+- Last verified head before this documentation sync: `7ed31ea332a16a3280dae1e7c067b4d18ddeb262`.
 - Preserves and verifies `AdminCrmEnabled` during shared production customer-account/TOTP rollback while billing remains OFF.
-- Fresh exact-head API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Exact-head API Access CI, general CI, and Rust/RustSec passed before this handoff update; refresh again if `main` advances before approval.
 - Merge gate: `APPROVE PR #161 MERGE`.
 
 ### PR #164 — validation-only customer-priority production preflight
 
 - Branch: `agent/customer-priority-production-preflight`.
-- Refreshed head at this sync: `8831f0d9525a75decb2b56350746c17e3e7ca84f`.
+- Last verified head before this documentation sync: `8831f0d9525a75decb2b56350746c17e3e7ca84f`.
 - Adds only a protected validation/preflight path; queue/customer/provider launch gates remain OFF and billing remains OFF.
-- Fresh Customer Priority Production CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Customer Priority Production CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update; refresh again if `main` advances before approval.
 - Merge gate: `APPROVE PR #164 MERGE`.
 
 ### PR #169 — dormant customer-priority production foundation rollout preparation
 
 - Branch: `agent/customer-priority-queue-foundation-rollout`.
-- Refreshed head at this sync: `8fdf39f6b2ac083b36b33cabcf8a6c18597e8419`.
+- Last verified head before this documentation sync: `8fdf39f6b2ac083b36b33cabcf8a6c18597e8419`.
 - Adds a durable jobs/source/SQS/DLQ/alarm foundation and protected future rollout workflow while queue/customer/provider gates are forced OFF.
-- Fresh Customer Priority Foundation Rollout CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update.
+- Customer Priority Foundation Rollout CI, API Access CI, general CI, and Rust/RustSec passed before this handoff update; refresh again if `main` advances before approval.
 - Merge gate: `APPROVE PR #169 MERGE`.
 
 Merging these PRs still does not authorize workflow dispatch, IAM application, queue activation, billing, provider execution, email, or charges.
@@ -81,9 +82,11 @@ Merging these PRs still does not authorize workflow dispatch, IAM application, q
 
 PR #181 is merged. It composes deterministic inventory, bounded Solve Graph dependency/impact analysis, and HMAC-redacted secret scanning in one analyze-only pipeline. Secondary secret scanning is restricted to files accepted by the bounded graph scan so it cannot silently bypass graph file/byte/depth limits. Exact-head general CI and Rust/RustSec passed before merge.
 
-PR #183 is the current reporting step on branch `agent/repository-audit-product-intelligence`, head `e04edff659f5a6ab63c75bb952c8ce623f1c2e1c` at this sync. It lets product/HTML reports include graph counts, ranked dependency hotspots, bounded execution metadata, and redacted credential-pattern warnings while deliberately omitting keyed HMAC correlation fingerprints from exported artifacts. Existing inventory-only report callers remain backward-compatible. Do not merge #183 until its exact-head CI and Rust checks finish green and review threads are clean.
+PR #183 is merged at `00b555012b2136de64efbbf965183b4069954661`. Product/HTML reports can now include graph counts, ranked dependency hotspots, bounded execution metadata, and redacted credential-pattern warnings while deliberately omitting keyed HMAC correlation fingerprints from exported artifacts. Existing inventory-only report callers remain backward-compatible.
 
-The next safe Repository Audit step after #183 is to wire the browser-local archive scan to call the composed analysis pipeline and pass that intelligence into the product report, then surface bounded hotspot/security summaries in the UI without exposing raw secret values.
+PR #184 is the active canonical-report step on branch `agent/repository-audit-canonical-intelligence`, refreshed onto `00b555012b2136de64efbbf965183b4069954661` at head `66e2e02666bb70739b2047673d3e26331f416c7b`. It keeps the inventory-only canonical schema at `1.0.0` and adds an additive `1.1.0` shape when full bounded intelligence is supplied, so graph/security data participates in the canonical integrity digest. It must not merge until its refreshed exact-head CI and Rust checks finish green and review threads are clean.
+
+The next safe Repository Audit step after #184 is to wire the browser-local archive scan to call the composed analysis pipeline and pass that intelligence into the product report, then surface bounded hotspot/security summaries in the UI without exposing raw secret values or correlation fingerprints.
 
 ## Solve Graph current state
 
@@ -120,9 +123,9 @@ Billing/Checkout/webhook/management code exists, but production billing remains 
 
 Continue read-only-first development in this order:
 
-1. finish and verify product/HTML export of bounded graph intelligence and redacted security warnings (#183);
-2. wire browser-local archive scans to the composed analysis pipeline and show bounded dependency/security summaries without exposing raw values;
-3. preserve canonical report integrity and deterministic ordering when graph intelligence is added to a versioned canonical report contract;
+1. finish and verify the versioned canonical graph/security report contract (#184);
+2. wire browser-local archive scans to the composed analysis pipeline and show bounded dependency/security summaries without exposing raw values or HMAC fingerprints;
+3. keep canonical report integrity and deterministic ordering over all graph/security extensions;
 4. expand deterministic code/dependency/reference intelligence where evidence is reliable;
 5. keep remediation/write mode separate, branch-based, reversible, and human-approved.
 
