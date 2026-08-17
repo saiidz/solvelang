@@ -47,6 +47,7 @@ test("composes inventory, dependency impact, and redacted secret warnings withou
   assert.equal(result.execution.writeAccess, false);
   assert.equal(result.graph.graph.source.private, true);
   assert.ok(result.graph.graph.edges.some((edge) => edge.kind === "imports"));
+  assert.equal(result.execution.secretFilesScanned, 3);
   assert.equal(result.secretWarnings.length, 1);
   assert.equal(result.execution.redactedSecretMatches, 1);
   assert.equal(result.secretWarnings[0].redacted, true);
@@ -61,7 +62,7 @@ test("a supplied HMAC key makes redacted warning fingerprints reproducible witho
   assert.ok(!left.secretWarnings[0].fingerprint.includes(secret));
 });
 
-test("partial inventory or graph work is surfaced as partial with separate truncation evidence", async () => {
+test("partial inventory or graph work is surfaced as partial and secondary secret scanning obeys graph bounds", async () => {
   const result = await analyzeRepositorySnapshot(fixture(), {
     inventoryLimits: { maxFiles: 2 },
     graph: {
@@ -74,6 +75,9 @@ test("partial inventory or graph work is surfaced as partial with separate trunc
   assert.equal(result.execution.truncated, true);
   assert.ok(result.execution.inventoryTruncationReasons.includes("file-count"));
   assert.ok(result.execution.graphTruncationReasons.includes("file-count"));
+  assert.equal(result.execution.secretFilesScanned, 1);
+  assert.equal(result.execution.redactedSecretMatches, 0);
+  assert.deepEqual(result.secretWarnings, []);
 });
 
 test("unsafe repository paths fail closed before redacted secret analysis", async () => {
