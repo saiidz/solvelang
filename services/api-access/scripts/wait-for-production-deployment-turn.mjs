@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 export const PRODUCTION_WORKFLOW_PATHS = Object.freeze([
+  ".github/workflows/deploy-admin-console-gateway-production.yml",
   ".github/workflows/deploy-api-access-production-admin-crm.yml",
   ".github/workflows/deploy-api-access-production-customer-accounts.yml",
   ".github/workflows/deploy-api-access-production-foundation.yml",

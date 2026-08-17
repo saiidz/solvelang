@@ -10,6 +10,7 @@ import {
 const workflowsDirectory = new URL("../../../.github/workflows/", import.meta.url);
 const testWorkflowName = "deploy-api-access.yml";
 const productionWorkflowNames = [
+  "deploy-admin-console-gateway-production.yml",
   "deploy-api-access-production-admin-crm.yml",
   "deploy-api-access-production-customer-accounts.yml",
   "deploy-api-access-production-foundation.yml",
@@ -44,6 +45,7 @@ test("test deployment is isolated while every production mutation uses the repos
     const source = await workflow(name);
     if (
       (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy/.test(source))
+      || (/solvelang-api-access-production-admin-console/.test(source) && /sam deploy/.test(source))
       || (/solvelang-api-access-production-totp-kms/.test(source) && /cloudformation deploy/.test(source))
     ) deploymentWorkflowNames.push(name);
   }
