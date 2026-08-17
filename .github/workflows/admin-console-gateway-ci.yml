@@ -6,6 +6,7 @@ on:
       - 'services/admin-console-gateway/**'
       - 'admin-console-static/**'
       - 'services/api-access/test/production-admin-console-gateway-preflight.test.js'
+      - 'services/api-access/test/admin-console-static-publication.test.js'
       - '.github/workflows/preflight-production-admin-console-gateway.yml'
       - '.github/workflows/admin-console-gateway-ci.yml'
   push:
@@ -14,6 +15,7 @@ on:
       - 'services/admin-console-gateway/**'
       - 'admin-console-static/**'
       - 'services/api-access/test/production-admin-console-gateway-preflight.test.js'
+      - 'services/api-access/test/admin-console-static-publication.test.js'
       - '.github/workflows/preflight-production-admin-console-gateway.yml'
       - '.github/workflows/admin-console-gateway-ci.yml'
 
@@ -36,6 +38,18 @@ jobs:
       - name: Run production preflight contract tests
         working-directory: .
         run: node --test services/api-access/test/production-admin-console-gateway-preflight.test.js
+      - name: Run static publication contract tests
+        working-directory: .
+        run: node --test services/api-access/test/admin-console-static-publication.test.js
+      - name: Build deterministic static Admin release artifact
+        working-directory: .
+        run: node admin-console-static/build-release.mjs "$RUNNER_TEMP/admin-console-static-release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-console-static-${{ github.sha }}
+          path: ${{ runner.temp }}/admin-console-static-release
+          if-no-files-found: error
+          retention-days: 7
       - uses: aws-actions/setup-sam@v2
       - name: Validate gateway SAM template
         run: sam validate --lint --template template.yaml
