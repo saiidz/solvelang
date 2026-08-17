@@ -53,8 +53,8 @@ test("maps package entrypoints without treating out-of-scope files as scanned", 
     analysis.references.map((reference) => [reference.evidence.field, reference.targetPath, reference.targetState]),
     [
       ["bin.solve", "bin/solve.js", "missing"],
-      ["main", "dist/index.js", "present"],
       ["types", "dist/index.d.ts", "outside-bounded-scan"],
+      ["main", "dist/index.js", "present"],
     ],
   );
   assert.equal(analysis.execution.networkAccess, false);
