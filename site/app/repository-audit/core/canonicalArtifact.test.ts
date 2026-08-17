@@ -34,7 +34,7 @@ test("creates a versioned integrity-covered canonical browser artifact without s
     now: new Date("2026-08-17T09:50:00.000Z"),
   });
 
-  assert.equal(artifact.filename, "Browser-Evidence.zip-solvelang-repository-audit-canonical.json");
+  assert.equal(artifact.filename, "Browser-Evidence-solvelang-repository-audit-canonical.json");
   assert.equal(artifact.mediaType, "application/json;charset=utf-8");
   assert.equal(artifact.report.schemaVersion, "1.1.0");
   assert.equal(artifact.report.mode, "analyze-only");
