@@ -1,3 +1,4 @@
+import type { RepositoryAuditAnalysisResult } from "./analysisPipeline";
 import type {
   RepositoryDetection,
   RepositoryEvidence,
@@ -6,6 +7,7 @@ import type {
   RepositoryRecommendation,
   RepositorySeverity,
 } from "./inventory";
+import type { RepositorySecretWarning } from "./secretScan";
 import { repositoryAuditIntegrityDigest, repositoryAuditReportId } from "./reportIntegrity";
 
 const severityOrder: Record<RepositorySeverity, number> = {
@@ -99,6 +101,40 @@ function date(value: Date, label: string) {
   return value.toISOString();
 }
 
+function sameSource(analysis: RepositoryInventoryAnalysis, intelligence: RepositoryAuditAnalysisResult): boolean {
+  return analysis.source.kind === intelligence.source.kind
+    && analysis.source.displayName === intelligence.source.displayName
+    && analysis.source.revision === intelligence.source.revision
+    && analysis.source.fingerprint === intelligence.source.fingerprint;
+}
+
+function secretWarning({ fingerprint: _fingerprint, ...warning }: RepositorySecretWarning) {
+  return { ...warning };
+}
+
+function graphExtension(intelligence: RepositoryAuditAnalysisResult) {
+  const graph = intelligence.graph.intelligence;
+  return {
+    schema: "solvelang.repository-audit.graph-intelligence.v0" as const,
+    graphId: graph.graphId,
+    counts: {
+      nodes: graph.counts.nodes,
+      edges: graph.counts.edges,
+      nodesByKind: graph.counts.nodesByKind.map((item) => ({ ...item })),
+      edgesByKind: graph.counts.edgesByKind.map((item) => ({ ...item })),
+    },
+    hotspots: graph.hotspots.map((item) => ({ ...item })),
+    execution: {
+      ...graph.execution,
+      graphStatus: intelligence.graph.execution.status,
+      graphTruncated: intelligence.graph.execution.truncated,
+      graphTruncationReasons: [...intelligence.graph.execution.truncationReasons],
+      networkAccess: false as const,
+      writeAccess: false as const,
+    },
+  };
+}
+
 export type CanonicalReportOptions = {
   generatedAt?: Date;
   startedAt?: Date;
@@ -111,6 +147,7 @@ export type CanonicalReportOptions = {
   defaultBranch?: string;
   archiveName?: string;
   privateSource?: boolean;
+  intelligence?: RepositoryAuditAnalysisResult;
 };
 
 export async function createCanonicalRepositoryAuditReport(
@@ -121,13 +158,18 @@ export async function createCanonicalRepositoryAuditReport(
   const startedAt = options.startedAt ?? generatedAt;
   const finishedAt = options.finishedAt ?? generatedAt;
   if (finishedAt.getTime() < startedAt.getTime()) throw new Error("Repository Audit finish time cannot precede start time.");
+  if (options.intelligence && !sameSource(analysis, options.intelligence)) {
+    throw new Error("Repository Audit canonical intelligence source does not match the inventory analysis.");
+  }
 
+  const schemaVersion = options.intelligence ? "1.1.0" as const : "1.0.0" as const;
   const engineVersion = options.engineVersion ?? "0.1.0";
   const rulesetVersion = options.rulesetVersion ?? "2026-08-13";
   const maxArchiveEntries = options.maxArchiveEntries ?? 100_000;
   const timeoutMs = options.timeoutMs ?? 300_000;
   const limits = { ...analysis.limits, maxArchiveEntries, timeoutMs };
   const findings = sortFindings(analysis.findings.map(finding));
+  const secretWarnings = options.intelligence?.secretWarnings.map(secretWarning) ?? [];
 
   let source;
   if (analysis.source.kind === "github") {
@@ -160,8 +202,14 @@ export async function createCanonicalRepositoryAuditReport(
     limits,
   });
 
+  const executionTruncationReasons = options.intelligence
+    ? [
+        ...options.intelligence.execution.inventoryTruncationReasons.map((reason) => `inventory:${reason}`),
+        ...options.intelligence.execution.graphTruncationReasons.map((reason) => `graph:${reason}`),
+      ]
+    : [...analysis.execution.truncationReasons];
   const reportWithoutIntegrity = {
-    schemaVersion: "1.0.0" as const,
+    schemaVersion,
     reportId,
     generatedAt: date(generatedAt, "generatedAt"),
     mode: "analyze-only" as const,
@@ -176,9 +224,9 @@ export async function createCanonicalRepositoryAuditReport(
     execution: {
       startedAt: date(startedAt, "startedAt"),
       finishedAt: date(finishedAt, "finishedAt"),
-      status: analysis.execution.status,
-      truncated: analysis.execution.truncated,
-      truncationReasons: [...analysis.execution.truncationReasons],
+      status: options.intelligence?.execution.status ?? analysis.execution.status,
+      truncated: options.intelligence?.execution.truncated ?? analysis.execution.truncated,
+      truncationReasons: executionTruncationReasons,
       networkAccess: false as const,
       writeAccess: false as const,
       errors: [] as const,
@@ -190,6 +238,12 @@ export async function createCanonicalRepositoryAuditReport(
       directoriesSeen: analysis.summary.directoriesSeen,
       findingsBySeverity: severityCounts(findings),
       actionsByType: actionCounts(findings),
+      ...(options.intelligence ? {
+        graphNodes: options.intelligence.graph.intelligence.counts.nodes,
+        graphEdges: options.intelligence.graph.intelligence.counts.edges,
+        graphHotspots: options.intelligence.graph.intelligence.hotspots.length,
+        redactedSecretMatches: secretWarnings.length,
+      } : {}),
     },
     inventory: {
       languages: analysis.inventory.languages.map(detection),
@@ -208,15 +262,17 @@ export async function createCanonicalRepositoryAuditReport(
       })),
       backupCandidates: analysis.detections.backupCandidates.map(evidence),
       generatedCandidates: analysis.detections.generatedCandidates.map(evidence),
-      secretExposureWarnings: [] as const,
+      secretExposureWarnings: secretWarnings,
     },
+    ...(options.intelligence ? { graph: graphExtension(options.intelligence) } : {}),
     findings,
     redaction: {
       policyVersion: "1.0.0" as const,
       secretValuesIncluded: false as const,
+      secretCorrelationFingerprintsIncluded: false as const,
       pathNormalization: "repository-relative-posix" as const,
       contentExcerptPolicy: "none" as const,
-      redactedMatchCount: 0,
+      redactedMatchCount: secretWarnings.length,
     },
   };
 
