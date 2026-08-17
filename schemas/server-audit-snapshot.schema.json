@@ -7,9 +7,11 @@
   "required": ["schemaVersion", "collectedAt", "host"],
   "properties": {
     "schemaVersion": { "const": "1" },
-    "collectedAt": { "type": "string", "format": "date-time" },
+    "collectedAt": { "type": "string", "format": "date-time", "maxLength": 40 },
     "host": {
-      "type": "object", "additionalProperties": false, "required": ["hostname"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname"],
       "properties": {
         "hostname": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$" },
         "os": { "type": "string", "maxLength": 500 },
@@ -17,16 +19,190 @@
         "architecture": { "type": "string", "maxLength": 100 }
       }
     },
-    "system": { "type": "object", "additionalProperties": false },
-    "filesystems": { "type": "array", "maxItems": 5000, "items": { "type": "object", "additionalProperties": false, "required": ["mount"], "properties": { "mount": {"type":"string"}, "filesystem":{"type":"string"}, "sizeBytes":{"type":"number","minimum":0}, "usedBytes":{"type":"number","minimum":0}, "availableBytes":{"type":"number","minimum":0}, "usagePercent":{"type":"number","minimum":0,"maximum":100} } } },
-    "listeningSockets": { "type": "array", "maxItems": 5000, "items": { "type": "object", "additionalProperties": false, "required": ["protocol","localAddress","port"], "properties": { "protocol":{"type":"string"}, "localAddress":{"type":"string"}, "port":{"type":"integer","minimum":1,"maximum":65535}, "process":{"type":"string"} } } },
-    "services": { "type": "array", "maxItems": 5000, "items": { "type":"object", "additionalProperties":false, "required":["name","state"], "properties":{"name":{"type":"string"},"state":{"type":"string"},"enabled":{"type":"string"}} } },
-    "packages": { "type": "array", "maxItems": 5000, "items": { "type":"object", "additionalProperties":false, "required":["name","version"], "properties":{"name":{"type":"string"},"version":{"type":"string"}} } },
-    "scheduledJobs": { "type":"array", "maxItems":5000, "items":{"type":"object","additionalProperties":false,"required":["source","commandSummary"],"properties":{"source":{"type":"string"},"schedule":{"type":"string"},"commandSummary":{"type":"string"}}} },
-    "web": { "type":"object", "additionalProperties":false },
-    "backups": { "type":"array", "maxItems":1000 },
-    "logs": { "type":"array", "maxItems":1000 },
-    "security": { "type":"object", "additionalProperties":false },
-    "metadata": { "type":"object", "additionalProperties":false, "properties":{"collectorVersion":{"type":"string"},"redactionsApplied":{"type":"boolean"},"notes":{"type":"array","maxItems":100,"items":{"type":"string"}}} }
+    "system": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uptimeSeconds": { "type": "number", "minimum": 0 },
+        "load": { "type": "array", "maxItems": 3, "items": { "type": "number", "minimum": 0, "maximum": 1000000 } },
+        "memoryTotalBytes": { "type": "number", "minimum": 0 },
+        "memoryAvailableBytes": { "type": "number", "minimum": 0 }
+      }
+    },
+    "filesystems": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mount"],
+        "properties": {
+          "mount": { "type": "string", "maxLength": 500 },
+          "filesystem": { "type": "string", "maxLength": 100 },
+          "sizeBytes": { "type": "number", "minimum": 0 },
+          "usedBytes": { "type": "number", "minimum": 0 },
+          "availableBytes": { "type": "number", "minimum": 0 },
+          "usagePercent": { "type": "number", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "listeningSockets": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protocol", "localAddress", "port"],
+        "properties": {
+          "protocol": { "type": "string", "maxLength": 20 },
+          "localAddress": { "type": "string", "maxLength": 100 },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "process": { "type": "string", "maxLength": 200 }
+        }
+      }
+    },
+    "processes": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pid", "ppid", "uid", "state", "name"],
+        "properties": {
+          "pid": { "type": "integer", "minimum": 1, "maximum": 4194304 },
+          "ppid": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+          "uid": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+          "state": { "type": "string", "maxLength": 32 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "services": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "state"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 200 },
+          "state": { "type": "string", "maxLength": 100 },
+          "enabled": { "type": "string", "maxLength": 100 }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 200 },
+          "version": { "type": "string", "maxLength": 200 }
+        }
+      }
+    },
+    "scheduledJobs": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "commandSummary"],
+        "properties": {
+          "source": { "type": "string", "maxLength": 300 },
+          "schedule": { "type": "string", "maxLength": 100 },
+          "commandSummary": { "type": "string", "maxLength": 500 }
+        }
+      }
+    },
+    "web": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": { "type": "array", "maxItems": 50, "items": { "type": "string", "maxLength": 100 } },
+        "roots": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string", "maxLength": 500 },
+              "owner": { "type": "string", "maxLength": 100 },
+              "mode": { "type": "string", "maxLength": 20 },
+              "frameworkHints": { "type": "array", "maxItems": 30, "items": { "type": "string", "maxLength": 100 } }
+            }
+          }
+        },
+        "certificates": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 300 },
+              "notAfter": { "type": "string", "maxLength": 100 },
+              "daysRemaining": { "type": "number", "minimum": -10000, "maximum": 10000 }
+            }
+          }
+        }
+      }
+    },
+    "backups": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 200 },
+          "path": { "type": "string", "maxLength": 500 },
+          "ageHours": { "type": "number", "minimum": 0 },
+          "sizeBytes": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string", "maxLength": 500 },
+          "sizeBytes": { "type": "number", "minimum": 0 },
+          "modifiedAt": { "type": "string", "maxLength": 100 }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "firewall": { "type": "string", "maxLength": 100 },
+        "selinux": { "type": "string", "maxLength": 100 },
+        "apparmor": { "type": "string", "maxLength": 100 },
+        "automaticUpdates": { "type": "string", "maxLength": 100 },
+        "rootSshLogin": { "type": "string", "maxLength": 100 },
+        "passwordSshLogin": { "type": "string", "maxLength": 100 }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "collectorVersion": { "type": "string", "maxLength": 100 },
+        "redactionsApplied": { "type": "boolean" },
+        "notes": { "type": "array", "maxItems": 100, "items": { "type": "string", "maxLength": 500 } }
+      }
+    }
   }
 }
