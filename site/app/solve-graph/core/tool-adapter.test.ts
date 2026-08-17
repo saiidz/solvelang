@@ -49,7 +49,7 @@ test("tool adapter exposes bounded safe node summaries without arbitrary metadat
   assert.deepEqual(response.nodes, [{
     id: fileNodeId(graph, "src/route.ts"),
     kind: "file",
-    label: "src/route.ts",
+    label: "route.ts",
     path: "src/route.ts",
   }]);
   assert.equal(response.truncated, false);
