@@ -1,0 +1,47 @@
+name: Trusted Mac CI
+
+on:
+  push:
+    branches:
+      - "agent/mac-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-audit-site:
+    name: Repository Audit on Mac
+    if: github.repository == 'saiidz/solvelang'
+    runs-on: [self-hosted, macOS, ARM64]
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run deterministic Studio and audit tests
+        run: npm run test:studio
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build static site
+        run: npm run build
+
+      - name: Verify exported document languages
+        run: npm run verify:i18n-export
