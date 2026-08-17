@@ -61,6 +61,22 @@
         }
       }
     },
+    "processes": {
+      "type": "array",
+      "maxItems": 5000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pid", "ppid", "uid", "state", "name"],
+        "properties": {
+          "pid": { "type": "integer", "minimum": 1, "maximum": 4194304 },
+          "ppid": { "type": "integer", "minimum": 0, "maximum": 4194304 },
+          "uid": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+          "state": { "type": "string", "maxLength": 32 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
     "services": {
       "type": "array",
       "maxItems": 5000,

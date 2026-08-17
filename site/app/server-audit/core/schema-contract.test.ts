@@ -46,6 +46,7 @@ test("Server Audit JSON schema pins the parser and collector field surface", () 
     "logs",
     "metadata",
     "packages",
+    "processes",
     "scheduledJobs",
     "schemaVersion",
     "security",
@@ -58,6 +59,7 @@ test("Server Audit JSON schema pins the parser and collector field surface", () 
   assert.deepEqual(objectKeys(property(root, "system")), ["load", "memoryAvailableBytes", "memoryTotalBytes", "uptimeSeconds"]);
   assert.deepEqual(itemObjectKeys(property(root, "filesystems")), ["availableBytes", "filesystem", "mount", "sizeBytes", "usagePercent", "usedBytes"]);
   assert.deepEqual(itemObjectKeys(property(root, "listeningSockets")), ["localAddress", "port", "process", "protocol"]);
+  assert.deepEqual(itemObjectKeys(property(root, "processes")), ["name", "pid", "ppid", "state", "uid"]);
   assert.deepEqual(itemObjectKeys(property(root, "services")), ["enabled", "name", "state"]);
   assert.deepEqual(itemObjectKeys(property(root, "packages")), ["name", "version"]);
   assert.deepEqual(itemObjectKeys(property(root, "scheduledJobs")), ["commandSummary", "schedule", "source"]);
@@ -76,6 +78,7 @@ test("Server Audit JSON schema preserves the same collection bounds as the parse
   const root = loadSchema();
   assert.equal(property(root, "filesystems").maxItems, 5000);
   assert.equal(property(root, "listeningSockets").maxItems, 5000);
+  assert.equal(property(root, "processes").maxItems, 5000);
   assert.equal(property(root, "services").maxItems, 5000);
   assert.equal(property(root, "packages").maxItems, 5000);
   assert.equal(property(root, "scheduledJobs").maxItems, 5000);

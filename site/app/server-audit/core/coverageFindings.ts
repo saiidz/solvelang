@@ -22,6 +22,7 @@ export function createServerAuditCoverageFindings(snapshot: ServerAuditSnapshot)
     { source: "system", present: snapshot.system !== undefined },
     { source: "filesystems", present: snapshot.filesystems !== undefined },
     { source: "listeningSockets", present: snapshot.listeningSockets !== undefined },
+    { source: "processes", present: snapshot.processes !== undefined },
     { source: "services", present: snapshot.services !== undefined },
     { source: "packages", present: snapshot.packages !== undefined },
     { source: "scheduledJobs", present: snapshot.scheduledJobs !== undefined },
