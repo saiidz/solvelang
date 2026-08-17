@@ -44,6 +44,13 @@ export type ServerAuditSnapshot = {
     port: number;
     process?: string;
   }>;
+  processes?: Array<{
+    pid: number;
+    ppid: number;
+    uid: number;
+    state: string;
+    name: string;
+  }>;
   services?: Array<{
     name: string;
     state: string;
