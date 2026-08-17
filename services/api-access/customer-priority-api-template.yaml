@@ -1,0 +1,219 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang customer priority API routes attached to the existing customer API host. Build-only; default OFF.
+
+Parameters:
+  PriorityApiEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  PriorityQueueEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CustomerPriorityEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ProviderExecutionEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ExistingApiId:
+    Type: String
+    AllowedPattern: '^[a-z0-9]{8,32}$'
+  SiteOrigin:
+    Type: String
+    AllowedPattern: '^https://[^ ]+$'
+  CustomerAuthPepper:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+  AccountsTableName:
+    Type: String
+    Default: disabled
+  CustomerAuthTableName:
+    Type: String
+    Default: disabled
+  UsageTableName:
+    Type: String
+    Default: disabled
+  UsageIdempotencyTableName:
+    Type: String
+    Default: disabled
+  PriorityJobsTableName:
+    Type: String
+    Default: disabled
+  PrioritySourceBucketName:
+    Type: String
+    Default: disabled
+
+Rules:
+  CustomerPriorityRequiresFoundation:
+    RuleCondition: !Equals [!Ref CustomerPriorityEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref PriorityApiEnabled, "true"]
+        AssertDescription: Customer priority requires the priority API to be enabled.
+      - Assert: !Equals [!Ref PriorityQueueEnabled, "true"]
+        AssertDescription: Customer priority requires the queue foundation to be enabled.
+      - Assert: !Not [!Equals [!Ref AccountsTableName, disabled]]
+        AssertDescription: Customer priority requires the production accounts table.
+      - Assert: !Not [!Equals [!Ref CustomerAuthTableName, disabled]]
+        AssertDescription: Customer priority requires the customer auth table.
+      - Assert: !Not [!Equals [!Ref UsageTableName, disabled]]
+        AssertDescription: Customer priority requires the usage table.
+      - Assert: !Not [!Equals [!Ref UsageIdempotencyTableName, disabled]]
+        AssertDescription: Customer priority requires the usage idempotency table.
+      - Assert: !Not [!Equals [!Ref PriorityJobsTableName, disabled]]
+        AssertDescription: Customer priority requires a priority jobs table.
+      - Assert: !Not [!Equals [!Ref PrioritySourceBucketName, disabled]]
+        AssertDescription: Customer priority requires a private source bucket.
+  ProviderExecutionRequiresCustomerPriority:
+    RuleCondition: !Equals [!Ref ProviderExecutionEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref CustomerPriorityEnabled, "true"]
+        AssertDescription: Provider execution cannot be enabled before customer priority.
+
+Conditions:
+  PriorityApiFeatureEnabled: !Equals [!Ref PriorityApiEnabled, "true"]
+  CustomerPriorityFeatureEnabled: !Equals [!Ref CustomerPriorityEnabled, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Timeout: 30
+    MemorySize: 512
+    Tracing: Active
+
+Resources:
+  CustomerPriorityFunction:
+    Type: AWS::Serverless::Function
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      Handler: src/customer-priority-runtime-handler.handler
+      CodeUri: .
+      Environment:
+        Variables:
+          PRIORITY_API_ENABLED: !Ref PriorityApiEnabled
+          PRIORITY_QUEUE_ENABLED: !Ref PriorityQueueEnabled
+          CUSTOMER_PRIORITY_ENABLED: !Ref CustomerPriorityEnabled
+          PRIORITY_PROVIDER_EXECUTION_ENABLED: !Ref ProviderExecutionEnabled
+          SITE_ORIGIN: !Ref SiteOrigin
+          CUSTOMER_AUTH_PEPPER: !If [CustomerPriorityFeatureEnabled, !Ref CustomerAuthPepper, disabled]
+          API_ACCOUNTS_TABLE: !Ref AccountsTableName
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+          API_USAGE_TABLE: !Ref UsageTableName
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref UsageIdempotencyTableName
+          PRIORITY_JOBS_TABLE: !Ref PriorityJobsTableName
+          PRIORITY_SOURCE_BUCKET: !Ref PrioritySourceBucketName
+      Policies:
+        - !If
+          - CustomerPriorityFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource:
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${AccountsTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsageTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsageIdempotencyTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${PriorityJobsTableName}
+          - !Ref AWS::NoValue
+        - !If
+          - CustomerPriorityFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${PriorityJobsTableName}
+          - !Ref AWS::NoValue
+        - !If
+          - CustomerPriorityFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsageTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${UsageIdempotencyTableName}
+          - !Ref AWS::NoValue
+        - !If
+          - CustomerPriorityFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub arn:${AWS::Partition}:s3:::${PrioritySourceBucketName}/customer/*
+          - !Ref AWS::NoValue
+
+  PrioritySourceRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/priority/source
+      Target: !Sub integrations/${CustomerPriorityIntegration}
+
+  PriorityQuoteRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/priority/quote
+      Target: !Sub integrations/${CustomerPriorityIntegration}
+
+  PriorityJobsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/priority/jobs
+      Target: !Sub integrations/${CustomerPriorityIntegration}
+
+  PriorityJobStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: GET /customer/priority/jobs/{jobId}
+      Target: !Sub integrations/${CustomerPriorityIntegration}
+
+  CustomerPriorityIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt CustomerPriorityFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  CustomerPriorityInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: PriorityApiFeatureEnabled
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CustomerPriorityFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/customer/priority/*
+
+  CustomerPriorityLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: PriorityApiFeatureEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CustomerPriorityFunction}
+      RetentionInDays: 30
+
+Outputs:
+  PriorityApiEnabledState:
+    Value: !Ref PriorityApiEnabled
+  CustomerPriorityEnabledState:
+    Value: !Ref CustomerPriorityEnabled
+  ProviderExecutionEnabledState:
+    Value: !Ref ProviderExecutionEnabled
+  ExistingApiIdState:
+    Value: !Ref ExistingApiId
