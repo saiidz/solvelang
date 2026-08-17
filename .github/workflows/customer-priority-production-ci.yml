@@ -1,0 +1,58 @@
+name: Customer Priority Production CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/api-access/src/customer-priority-executor.js'
+      - 'services/api-access/src/priority-source-store.js'
+      - 'services/api-access/test/priority-source-store.test.js'
+      - 'services/api-access/customer-priority-production-template.yaml'
+      - 'services/api-access/package.json'
+      - '.github/workflows/customer-priority-production-ci.yml'
+      - 'docs/product/customer-priority-production-foundation.md'
+  push:
+    branches: [main]
+    paths:
+      - 'services/api-access/src/customer-priority-executor.js'
+      - 'services/api-access/src/priority-source-store.js'
+      - 'services/api-access/test/priority-source-store.test.js'
+      - 'services/api-access/customer-priority-production-template.yaml'
+      - 'services/api-access/package.json'
+      - '.github/workflows/customer-priority-production-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-access
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API and priority tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate production-off priority foundation
+        run: sam validate --lint --template customer-priority-production-template.yaml
+      - name: Build production-off priority foundation
+        run: sam build --template customer-priority-production-template.yaml
+      - name: Assert all production launch gates default off and no billing/provider secret exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          template=customer-priority-production-template.yaml
+          [[ "$(grep -c 'Default: \"false\"' "$template")" -ge 3 ]]
+          grep -q 'PriorityQueueEnabled:' "$template"
+          grep -q 'CustomerPriorityEnabled:' "$template"
+          grep -q 'ProviderExecutionEnabled:' "$template"
+          grep -q 'BlockPublicPolicy: true' "$template"
+          grep -q 'ExpirationInDays: 7' "$template"
+          ! grep -E -q 'STRIPE|sk_live|sk_test|PROVIDER_(API_)?KEY|Bearer' "$template"
+          ! grep -E -q 'workflow[_]dispatch|sam[ ]deploy|cloudformation[ ]deploy' ../../.github/workflows/customer-priority-production-ci.yml

@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang customer priority production foundation. Build-only; all launch gates default off.
+
+Parameters:
+  PriorityQueueEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CustomerPriorityEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ProviderExecutionEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+
+Rules:
+  CustomerExposureRequiresQueue:
+    RuleCondition: !Equals [!Ref CustomerPriorityEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref PriorityQueueEnabled, "true"]
+        AssertDescription: Customer priority requires the queue foundation.
+  ProviderExecutionRequiresCustomerExposure:
+    RuleCondition: !Equals [!Ref ProviderExecutionEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref CustomerPriorityEnabled, "true"]
+        AssertDescription: Provider execution cannot be enabled before customer priority exposure.
+
+Conditions:
+  QueueEnabled: !Equals [!Ref PriorityQueueEnabled, "true"]
+
+Resources:
+  PrioritySourceBucket:
+    Type: AWS::S3::Bucket
+    Condition: QueueEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireCustomerPrioritySources
+            Status: Enabled
+            Prefix: customer/
+            ExpirationInDays: 7
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+
+  PrioritySourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: QueueEnabled
+    Properties:
+      Bucket: !Ref PrioritySourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt PrioritySourceBucket.Arn
+              - !Sub '${PrioritySourceBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+Outputs:
+  PriorityQueueEnabledState:
+    Value: !Ref PriorityQueueEnabled
+  CustomerPriorityEnabledState:
+    Value: !Ref CustomerPriorityEnabled
+  ProviderExecutionEnabledState:
+    Value: !Ref ProviderExecutionEnabled
+  PrioritySourceBucketName:
+    Condition: QueueEnabled
+    Value: !Ref PrioritySourceBucket
