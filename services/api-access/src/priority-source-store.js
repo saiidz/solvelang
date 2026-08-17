@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { PriorityJobError } from "./priority-jobs.js";
 
 export const MAX_PRIORITY_SOURCE_BYTES = 5 * 1024 * 1024;
@@ -65,6 +65,23 @@ async function bodyBytes(body) {
   throw new Error("Stored priority source body is unreadable.");
 }
 
+function missingSource(error) {
+  return error?.name === "NotFound" || error?.$metadata?.httpStatusCode === 404;
+}
+
+function validatedStoredSize(response) {
+  const metadataBytes = response.Metadata?.["source-bytes"];
+  const contentLength = response.ContentLength;
+  const sourceBytes = Number(metadataBytes ?? contentLength);
+  if (!Number.isSafeInteger(sourceBytes) || sourceBytes < 4 || sourceBytes > MAX_PRIORITY_SOURCE_BYTES) {
+    throw new Error("Stored priority source metadata is invalid.");
+  }
+  if (metadataBytes !== undefined && Number.isFinite(contentLength) && String(contentLength) !== metadataBytes) {
+    throw new Error("Stored priority source size metadata mismatch.");
+  }
+  return sourceBytes;
+}
+
 export function fingerprintPrioritySource(source) {
   const bytes = bytesOf(source);
   validateArchive(bytes);
@@ -97,12 +114,27 @@ export function createS3PrioritySourceStore(client, { bucketName }) {
       return { fingerprint, bytes: bytes.length };
     },
 
+    async assertSource({ accountId, fingerprint }) {
+      const key = sourceKey(accountId, fingerprint);
+      let response;
+      try {
+        response = await client.send(new HeadObjectCommand({ Bucket: bucketName, Key: key }));
+      } catch (error) {
+        if (missingSource(error)) {
+          throw new PriorityJobError(404, "priority_source_not_found", "Repository source is not available.");
+        }
+        throw error;
+      }
+      const metadataFingerprint = response.Metadata?.["source-sha256"];
+      if (metadataFingerprint !== fingerprint) throw new Error("Stored priority source metadata is invalid.");
+      const sourceBytes = validatedStoredSize(response);
+      return { fingerprint, bytes: sourceBytes };
+    },
+
     async getSource({ accountId, fingerprint }) {
       const key = sourceKey(accountId, fingerprint);
       const response = await client.send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
-      if (Number.isFinite(response.ContentLength) && response.ContentLength > MAX_PRIORITY_SOURCE_BYTES) {
-        throw sourceTooLarge();
-      }
+      if (Number.isFinite(response.ContentLength) && response.ContentLength > MAX_PRIORITY_SOURCE_BYTES) throw sourceTooLarge();
       const bytes = await bodyBytes(response.Body);
       validateArchive(bytes);
       const actual = createHash("sha256").update(bytes).digest("hex");

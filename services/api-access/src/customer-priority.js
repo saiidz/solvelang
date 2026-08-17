@@ -82,6 +82,7 @@ export function createCustomerPriorityService({
   accountAccess,
   apiAccessService,
   jobStore,
+  sourceStore,
   queueEnabled = false,
   customerPriorityEnabled = false,
   providerExecutionEnabled = false,
@@ -90,6 +91,9 @@ export function createCustomerPriorityService({
   if (!accountAccess || typeof accountAccess.assertActive !== "function") throw new Error("Customer account access verifier is required.");
   if (!apiAccessService || typeof apiAccessService.consumeUsage !== "function") throw new Error("API access service is required.");
   if (!jobStore || typeof jobStore.putJob !== "function" || typeof jobStore.getJob !== "function") throw new Error("Priority job store is required.");
+  if (providerExecutionEnabled && (!sourceStore || typeof sourceStore.assertSource !== "function")) {
+    throw new Error("Priority source verifier is required when provider execution is enabled.");
+  }
 
   function assertCustomerFeature() {
     if (!queueEnabled || !customerPriorityEnabled) throw new PriorityJobError(503, "customer_priority_disabled", "Customer priority processing is not enabled.");
@@ -124,6 +128,7 @@ export function createCustomerPriorityService({
       return { ...publicCustomerJob(existing), duplicate: true };
     }
 
+    await sourceStore.assertSource({ accountId, fingerprint: sourceFingerprint });
     const usage = await apiAccessService.consumeUsage({
       accountId,
       credits: quote.weightedCredits,

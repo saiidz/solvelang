@@ -3,22 +3,35 @@ name: Customer Priority Production CI
 on:
   pull_request:
     paths:
+      - 'services/api-access/src/customer-priority.js'
+      - 'services/api-access/src/customer-priority-handler.js'
       - 'services/api-access/src/customer-priority-executor.js'
       - 'services/api-access/src/priority-source-store.js'
+      - 'services/api-access/test/customer-priority.test.js'
+      - 'services/api-access/test/customer-priority-handler.test.js'
       - 'services/api-access/test/priority-source-store.test.js'
       - 'services/api-access/customer-priority-production-template.yaml'
       - 'services/api-access/package.json'
+      - 'site/app/(english)/account/priority/**'
       - '.github/workflows/customer-priority-production-ci.yml'
       - 'docs/product/customer-priority-production-foundation.md'
+      - 'docs/product/customer-priority-upload-and-ui.md'
   push:
     branches: [main]
     paths:
+      - 'services/api-access/src/customer-priority.js'
+      - 'services/api-access/src/customer-priority-handler.js'
       - 'services/api-access/src/customer-priority-executor.js'
       - 'services/api-access/src/priority-source-store.js'
+      - 'services/api-access/test/customer-priority.test.js'
+      - 'services/api-access/test/customer-priority-handler.test.js'
       - 'services/api-access/test/priority-source-store.test.js'
       - 'services/api-access/customer-priority-production-template.yaml'
       - 'services/api-access/package.json'
+      - 'site/app/(english)/account/priority/**'
       - '.github/workflows/customer-priority-production-ci.yml'
+      - 'docs/product/customer-priority-production-foundation.md'
+      - 'docs/product/customer-priority-upload-and-ui.md'
 
 permissions:
   contents: read
@@ -26,24 +39,26 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/api-access
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install pinned dependencies
+      - name: Install pinned API dependencies
+        working-directory: services/api-access
         run: npm install --ignore-scripts --no-audit --no-fund
       - name: Run API and priority tests
+        working-directory: services/api-access
         run: npm test
       - uses: aws-actions/setup-sam@v2
       - name: Validate production-off priority foundation
+        working-directory: services/api-access
         run: sam validate --lint --template customer-priority-production-template.yaml
       - name: Build production-off priority foundation
+        working-directory: services/api-access
         run: sam build --template customer-priority-production-template.yaml
       - name: Assert all production launch gates default off and no billing/provider secret exists
+        working-directory: services/api-access
         shell: bash
         run: |
           set -euo pipefail
@@ -56,3 +71,21 @@ jobs:
           grep -q 'ExpirationInDays: 7' "$template"
           ! grep -E -q 'STRIPE|sk_live|sk_test|PROVIDER_(API_)?KEY|Bearer' "$template"
           ! grep -E -q 'workflow[_]dispatch|sam[ ]deploy|cloudformation[ ]deploy' ../../.github/workflows/customer-priority-production-ci.yml
+      - name: Install site dependencies
+        working-directory: site
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Lint customer priority site surface
+        working-directory: site
+        run: npm run lint
+      - name: Build customer priority site surface with release flag OFF
+        working-directory: site
+        env:
+          NEXT_PUBLIC_CUSTOMER_PRIORITY_ENABLED: "false"
+        run: npm run build
+      - name: Prove customer priority site release defaults OFF
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'NEXT_PUBLIC_CUSTOMER_PRIORITY_ENABLED === "true"' 'site/app/(english)/account/priority/page.tsx'
+          grep -q 'Priority processing is not released yet' 'site/app/(english)/account/priority/page.tsx'
+          grep -q 'index: false' 'site/app/(english)/account/priority/layout.tsx'

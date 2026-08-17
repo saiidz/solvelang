@@ -10,10 +10,14 @@ function zipBytes(body = "fixture") {
 class FakeS3 {
   constructor() { this.calls = []; this.object = null; }
   async send(command) {
-    this.calls.push(command.input);
+    this.calls.push({ type: command.constructor.name, input: command.input });
     if (command.constructor.name === "PutObjectCommand") {
-      this.object = { bytes: Buffer.from(command.input.Body), metadata: command.input.Metadata };
+      this.object = { bytes: Buffer.from(command.input.Body), metadata: { ...command.input.Metadata } };
       return {};
+    }
+    if (command.constructor.name === "HeadObjectCommand") {
+      if (!this.object) throw Object.assign(new Error("missing"), { name: "NotFound", $metadata: { httpStatusCode: 404 } });
+      return { ContentLength: this.object.bytes.length, Metadata: this.object.metadata };
     }
     if (command.constructor.name === "GetObjectCommand") {
       if (!this.object) throw new Error("missing");
@@ -31,21 +35,55 @@ class FakeS3 {
   }
 }
 
-test("source storage is content-addressed, private-by-contract, encrypted, and fingerprint verified", async () => {
+test("source storage is content-addressed, encrypted, fingerprint verified, and existence checked", async () => {
   const client = new FakeS3();
   const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
   const source = zipBytes("repository archive bytes");
   const fingerprint = fingerprintPrioritySource(source);
   const saved = await store.putSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", source });
   assert.equal(saved.fingerprint, fingerprint);
-  assert.equal(client.calls[0].Key, `customer/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${fingerprint}.zip`);
-  assert.equal(client.calls[0].ServerSideEncryption, "AES256");
-  assert.equal(client.calls[0].ContentType, "application/zip");
-  assert.equal(client.calls[0].Metadata["source-sha256"], fingerprint);
+  assert.equal(client.calls[0].input.Key, `customer/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${fingerprint}.zip`);
+  assert.equal(client.calls[0].input.ServerSideEncryption, "AES256");
+  assert.equal(client.calls[0].input.ContentType, "application/zip");
+  assert.equal(client.calls[0].input.Metadata["source-sha256"], fingerprint);
+  assert.deepEqual(
+    await store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }),
+    { fingerprint, bytes: source.length },
+  );
   assert.deepEqual(await store.getSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }), source);
 });
 
-test("source storage rejects non-ZIP, malformed ownership, and oversized source before S3", async () => {
+test("source existence is account-bound and missing source is a public 404 before usage", async () => {
+  const client = new FakeS3();
+  const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
+  await assert.rejects(
+    store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint: "f".repeat(64) }),
+    (error) => error?.statusCode === 404 && error?.code === "priority_source_not_found",
+  );
+  assert.equal(client.calls[0].type, "HeadObjectCommand");
+  assert.match(client.calls[0].input.Key, /^customer\/acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\//);
+});
+
+test("source metadata verification rejects fingerprint and size disagreement", async () => {
+  const client = new FakeS3();
+  const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
+  const source = zipBytes("metadata");
+  const fingerprint = fingerprintPrioritySource(source);
+  await store.putSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", source });
+  client.object.metadata["source-sha256"] = "f".repeat(64);
+  await assert.rejects(
+    store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }),
+    /metadata is invalid/,
+  );
+  client.object.metadata["source-sha256"] = fingerprint;
+  client.object.metadata["source-bytes"] = String(source.length + 1);
+  await assert.rejects(
+    store.assertSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }),
+    /size metadata mismatch/,
+  );
+});
+
+test("source storage rejects non-ZIP, tiny, malformed ownership, and oversized source before S3", async () => {
   const client = new FakeS3();
   const store = createS3PrioritySourceStore(client, { bucketName: "solvelang-priority-source-test" });
   assert.throws(() => fingerprintPrioritySource(Buffer.from("not a zip")), /ZIP archive/);
@@ -65,7 +103,6 @@ test("source retrieval fails closed on digest or stored-size metadata mismatch",
   await store.putSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", source });
   client.object.bytes = zipBytes("tampered");
   await assert.rejects(store.getSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }), /fingerprint mismatch/);
-
   client.object.bytes = source;
   client.object.metadata["source-bytes"] = String(source.length + 1);
   await assert.rejects(store.getSource({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fingerprint }), /size metadata mismatch/);
@@ -77,12 +114,7 @@ test("source retrieval rejects oversized stored objects before or while reading 
     async send() {
       return {
         ContentLength: MAX_PRIORITY_SOURCE_BYTES + 1,
-        Body: {
-          async transformToByteArray() {
-            transformed = true;
-            return zipBytes("should not be read");
-          },
-        },
+        Body: { async transformToByteArray() { transformed = true; return zipBytes("should not be read"); } },
       };
     },
   };
@@ -98,10 +130,7 @@ test("source retrieval rejects oversized stored objects before or while reading 
     async send() {
       return {
         Body: {
-          async transformToByteArray() {
-            streamTransformed = true;
-            return zipBytes("unsafe fallback");
-          },
+          async transformToByteArray() { streamTransformed = true; return zipBytes("unsafe fallback"); },
           async *[Symbol.asyncIterator]() {
             yield Buffer.from([0x50, 0x4b, 0x03, 0x04]);
             yield Buffer.alloc(MAX_PRIORITY_SOURCE_BYTES);
