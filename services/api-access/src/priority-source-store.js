@@ -46,20 +46,23 @@ function validateArchive(bytes) {
 
 async function bodyBytes(body) {
   if (!body) throw new Error("Stored priority source body is missing.");
+  if (typeof body[Symbol.asyncIterator] === "function") {
+    const chunks = [];
+    let total = 0;
+    for await (const chunk of body) {
+      const bytes = Buffer.from(chunk);
+      total += bytes.length;
+      if (total > MAX_PRIORITY_SOURCE_BYTES) throw sourceTooLarge();
+      chunks.push(bytes);
+    }
+    return Buffer.concat(chunks, total);
+  }
   if (typeof body.transformToByteArray === "function") {
     const bytes = Buffer.from(await body.transformToByteArray());
     if (bytes.length > MAX_PRIORITY_SOURCE_BYTES) throw sourceTooLarge();
     return bytes;
   }
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of body) {
-    const bytes = Buffer.from(chunk);
-    total += bytes.length;
-    if (total > MAX_PRIORITY_SOURCE_BYTES) throw sourceTooLarge();
-    chunks.push(bytes);
-  }
-  return Buffer.concat(chunks, total);
+  throw new Error("Stored priority source body is unreadable.");
 }
 
 export function fingerprintPrioritySource(source) {
