@@ -9,13 +9,13 @@ This file records repository/build truth. It must not be used to infer a newer l
 
 ## Current repository baseline
 
-- `main` at the time of this sync: `668187aa8079d4c5610783aac47d80fca94fb759`.
-- That commit merged PR #179, Repository Audit reuse of Solve Graph impact intelligence.
+- `main` at the time of this sync: `a163f84784da6633cbf9b86f61fee7867e5108ca`.
+- That commit merged PR #181, the bounded Repository Audit inventory + Solve Graph + redacted-secret analysis pipeline.
 - Centralized account suspension/termination foundation is merged through PR #147.
 - Admin Gateway rollout machinery is merged through PR #168.
 - Deterministic private Admin console publication preparation is merged through PR #172.
-- Solve Graph has progressed well beyond Phase 0: deterministic inventory extraction, query/impact analysis, JavaScript/TypeScript import relationships, bounded tool contracts, MCP/Codex integration, and a local integrity-verified explorer are merged through PRs #171, #173-#178.
-- Repository Audit already contains bounded archive ingestion/extraction, deterministic inventory/classification, exact duplicate/backup/generated/large-file findings, reference/dependency analysis, HMAC-redacted secret warnings, canonical report integrity, HTML/JSON product reports, and Solve Graph impact reuse. Older text saying the scanner engine is not implemented is stale.
+- Solve Graph has progressed well beyond Phase 0: deterministic inventory extraction, query/impact analysis, JavaScript/TypeScript import relationships, bounded tool contracts, MCP/Codex integration, a local integrity-verified explorer, and Repository Audit reuse are merged through PRs #171, #173-#179.
+- Repository Audit already contains bounded archive ingestion/extraction, deterministic inventory/classification, exact duplicate/backup/generated/large-file findings, reference/dependency analysis, HMAC-redacted secret warnings, canonical report integrity, HTML/JSON product reports, and a bounded composed graph/security analysis pipeline. Older text saying the scanner engine is not implemented is stale.
 
 ## Last separately verified production truth
 
@@ -79,11 +79,11 @@ Merging these PRs still does not authorize workflow dispatch, IAM application, q
 
 ## Active safe Repository Audit buildout
 
-PR #180 introduced a bounded Repository Audit graph pipeline that composes deterministic repository inventory/import extraction with Solve Graph impact intelligence.
+PR #181 is merged. It composes deterministic inventory, bounded Solve Graph dependency/impact analysis, and HMAC-redacted secret scanning in one analyze-only pipeline. Secondary secret scanning is restricted to files accepted by the bounded graph scan so it cannot silently bypass graph file/byte/depth limits. Exact-head general CI and Rust/RustSec passed before merge.
 
-PR #181 supersedes that work with a broader combined analysis pipeline on `main`. It composes inventory, bounded Solve Graph dependency/impact analysis, and HMAC-redacted secret scanning. Secondary secret scanning is restricted to files accepted by the bounded graph scan so it cannot silently bypass graph file/byte/depth limits. It remains analyze-only with network/write access false and exposes no raw secret values.
+PR #183 is the current reporting step on branch `agent/repository-audit-product-intelligence`, head `e04edff659f5a6ab63c75bb952c8ce623f1c2e1c` at this sync. It lets product/HTML reports include graph counts, ranked dependency hotspots, bounded execution metadata, and redacted credential-pattern warnings while deliberately omitting keyed HMAC correlation fingerprints from exported artifacts. Existing inventory-only report callers remain backward-compatible. Do not merge #183 until its exact-head CI and Rust checks finish green and review threads are clean.
 
-At handoff update time, #181 hosted exact-head CI was still running. Do not merge it until its final exact-head general CI and Rust/RustSec checks are green and review threads are clean.
+The next safe Repository Audit step after #183 is to wire the browser-local archive scan to call the composed analysis pipeline and pass that intelligence into the product report, then surface bounded hotspot/security summaries in the UI without exposing raw secret values.
 
 ## Solve Graph current state
 
@@ -120,9 +120,9 @@ Billing/Checkout/webhook/management code exists, but production billing remains 
 
 Continue read-only-first development in this order:
 
-1. finish and verify the combined inventory + Solve Graph + redacted-secret analysis pipeline;
-2. integrate bounded graph hotspots/impact and redacted secret warnings into browser-local product output without exposing raw values;
-3. preserve canonical report integrity and deterministic ordering when graph intelligence is added to a versioned report contract;
+1. finish and verify product/HTML export of bounded graph intelligence and redacted security warnings (#183);
+2. wire browser-local archive scans to the composed analysis pipeline and show bounded dependency/security summaries without exposing raw values;
+3. preserve canonical report integrity and deterministic ordering when graph intelligence is added to a versioned canonical report contract;
 4. expand deterministic code/dependency/reference intelligence where evidence is reliable;
 5. keep remediation/write mode separate, branch-based, reversible, and human-approved.
 
@@ -132,7 +132,7 @@ Server Audit remains read-only-first. Continue the constrained collector, explic
 
 ## Language/runtime and DX
 
-Continue independent correctness work after higher-priority safe build items, including imported-file source provenance, formatter/linter work, stronger semantic/type checks, module/package design, and diagnostics. Preserve deterministic tests and do not introduce network/package execution into analysis paths.
+Imported-file source provenance is already merged. Continue independent correctness work after higher-priority safe build items, including formatter/linter work, stronger semantic/type checks, module/package design, and diagnostics. Preserve deterministic tests and do not introduce network/package execution into analysis paths.
 
 ## Safety boundary for continuing work
 
