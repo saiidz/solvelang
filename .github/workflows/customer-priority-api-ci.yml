@@ -1,0 +1,62 @@
+name: Customer Priority API CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/api-access/src/customer-priority-runtime-handler.js'
+      - 'services/api-access/src/customer-priority-session-auth.js'
+      - 'services/api-access/src/customer-priority-usage.js'
+      - 'services/api-access/test/customer-priority-api-runtime.test.js'
+      - 'services/api-access/customer-priority-api-template.yaml'
+      - '.github/workflows/customer-priority-api-ci.yml'
+      - 'docs/product/customer-priority-api-wiring.md'
+  push:
+    branches: [main]
+    paths:
+      - 'services/api-access/src/customer-priority-runtime-handler.js'
+      - 'services/api-access/src/customer-priority-session-auth.js'
+      - 'services/api-access/src/customer-priority-usage.js'
+      - 'services/api-access/test/customer-priority-api-runtime.test.js'
+      - 'services/api-access/customer-priority-api-template.yaml'
+      - '.github/workflows/customer-priority-api-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-access
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run full API and priority tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate customer priority API attachment template
+        run: sam validate --lint --template customer-priority-api-template.yaml
+      - name: Build customer priority API attachment stack
+        run: sam build --template customer-priority-api-template.yaml
+      - name: Assert same-host, default-off, least-privilege contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          template=customer-priority-api-template.yaml
+          [[ "$(grep -c 'Default: \"false\"' "$template")" -ge 4 ]]
+          grep -q 'ExistingApiId:' "$template"
+          ! grep -q 'AWS::ApiGatewayV2::Api' "$template"
+          for route in \
+            'POST /customer/priority/source' \
+            'POST /customer/priority/quote' \
+            'POST /customer/priority/jobs' \
+            'GET /customer/priority/jobs/{jobId}'; do
+            grep -Fq "$route" "$template"
+          done
+          ! grep -E -q 'SES|STRIPE|Stripe|API_ACCESS_ADMIN_SECRET|PROVIDER_(API_)?KEY|dynamodb:(Scan|Query|DeleteItem|UpdateItem)|s3:(DeleteObject|ListBucket)' "$template"
+          ! grep -E -q 'workflow[_]dispatch|sam[ ]deploy|cloudformation[ ]deploy' ../../.github/workflows/customer-priority-api-ci.yml
