@@ -74,6 +74,129 @@ impl Default for RunOptions {
     }
 }
 
+#[derive(Clone, Debug)]
+struct SourceOrigin {
+    path: String,
+    line: usize,
+    text: String,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedSource {
+    content: String,
+    origins: Vec<SourceOrigin>,
+    entry_path: String,
+}
+
+impl LoadedSource {
+    fn empty(entry_path: String) -> Self {
+        Self {
+            content: String::new(),
+            origins: Vec::new(),
+            entry_path,
+        }
+    }
+
+    fn push_line(&mut self, path: &str, line: usize, text: &str) {
+        self.content.push_str(text);
+        self.content.push('\n');
+        self.origins.push(SourceOrigin {
+            path: path.to_string(),
+            line,
+            text: text.to_string(),
+        });
+    }
+
+    fn append(&mut self, mut other: LoadedSource) {
+        self.content.push_str(&other.content);
+        self.origins.append(&mut other.origins);
+    }
+
+    fn origin(&self, global_line: usize) -> Option<&SourceOrigin> {
+        self.origins.get(global_line.checked_sub(1)?)
+    }
+
+    fn format_diagnostics(&self, diagnostics: Vec<diagnostics::Diagnostic>) -> String {
+        diagnostics
+            .into_iter()
+            .map(|diagnostic| {
+                let Some(origin) = self.origin(diagnostic.line) else {
+                    let source_line = self
+                        .content
+                        .lines()
+                        .nth(diagnostic.line.saturating_sub(1))
+                        .unwrap_or("");
+                    return diagnostic.format(source_line);
+                };
+                let pointer_padding = " ".repeat(diagnostic.column.saturating_sub(1));
+                let location = if origin.path == self.entry_path {
+                    format!(
+                        "SolveLang Error on line {}, column {}:",
+                        origin.line, diagnostic.column
+                    )
+                } else {
+                    format!(
+                        "SolveLang Error on line {}, column {} in {}:",
+                        origin.line, diagnostic.column, origin.path
+                    )
+                };
+                format!(
+                    "{}\n{}\n{}\n{}^\nHint: {}",
+                    location, diagnostic.message, origin.text, pointer_padding, diagnostic.hint
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
+    fn remap_runtime_message(&self, message: &str) -> String {
+        const PREFIX: &str = "SolveLang Runtime Error on line ";
+        let mut lines = message.lines();
+        let Some(first) = lines.next() else {
+            return message.to_string();
+        };
+        let Some(after_prefix) = first.strip_prefix(PREFIX) else {
+            return message.to_string();
+        };
+        let Some((line_text, after_line)) = after_prefix.split_once(", column ") else {
+            return message.to_string();
+        };
+        let Ok(global_line) = line_text.parse::<usize>() else {
+            return message.to_string();
+        };
+        let column_digits = after_line
+            .chars()
+            .take_while(|character| character.is_ascii_digit())
+            .collect::<String>();
+        let Ok(column) = column_digits.parse::<usize>() else {
+            return message.to_string();
+        };
+        let Some(origin) = self.origin(global_line) else {
+            return message.to_string();
+        };
+        let suffix = &after_line[column_digits.len()..];
+        let mapped_suffix = if origin.path == self.entry_path {
+            suffix.to_string()
+        } else {
+            format!(" in {}", origin.path)
+        };
+
+        let mut output = format!(
+            "{}{}, column {}{}",
+            PREFIX, origin.line, column, mapped_suffix
+        );
+        for (index, line) in lines.enumerate() {
+            output.push('\n');
+            if index == 0 && line.contains(" | ") {
+                output.push_str(&format!("{:>3} | {}", origin.line, origin.text));
+            } else {
+                output.push_str(line);
+            }
+        }
+        output
+    }
+}
+
 #[derive(Debug)]
 struct CliFailure {
     code: &'static str,
@@ -181,23 +304,23 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
     match command {
         Command::Run(options) => execute_run(&filename, options),
         Command::Validate => {
-            let content = load_source_with_imports(&filename, false)?;
-            validate_diagnostics(&content)?;
-            parse_source(&content)?;
+            let source = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&source)?;
+            parse_source(&source)?;
             println!("✓ SolveLang validation passed");
             println!("file: {}", filename);
             Ok(())
         }
         Command::Tokens => {
-            let content = load_source_with_imports(&filename, false)?;
-            validate_diagnostics(&content)?;
-            println!("{:#?}", lexer::lex(&content));
+            let source = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&source)?;
+            println!("{:#?}", lexer::lex(&source.content));
             Ok(())
         }
         Command::Ast => {
-            let content = load_source_with_imports(&filename, false)?;
-            validate_diagnostics(&content)?;
-            println!("{:#?}", parse_source(&content)?);
+            let source = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&source)?;
+            println!("{:#?}", parse_source(&source)?);
             Ok(())
         }
         Command::Help => Ok(()),
@@ -212,20 +335,20 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
     let policy = build_execution_policy(&options)
         .map_err(|message| CliFailure::arguments(format!("invalid execution policy: {message}")))?;
     let input = load_explicit_input(options.input_path.as_deref())?;
-    let content = load_source_with_imports(filename, options.hardened())?;
+    let source = load_source_with_imports(filename, options.hardened())?;
 
-    validate_diagnostics(&content)?;
-    let statements = parse_source(&content)?;
+    validate_diagnostics(&source)?;
+    let statements = parse_source(&source)?;
     preflight_workflow(&statements, input.is_some(), options.hardened())?;
 
     let mut runtime =
-        ast_runtime::AstRuntime::with_input(policy, &content, filename, input, options.json);
+        ast_runtime::AstRuntime::with_input(policy, &source.content, filename, input, options.json);
     if options.hardened() && !options.json {
         println!("{}", ADVISORY_LABEL);
     }
     runtime
         .run(&statements)
-        .map_err(|error| CliFailure::runtime(error.to_string()))?;
+        .map_err(|error| CliFailure::runtime(source.remap_runtime_message(&error.to_string())))?;
 
     if options.json {
         let outputs = runtime
@@ -567,36 +690,28 @@ fn load_explicit_input(path: Option<&Path>) -> Result<Option<Value>, CliFailure>
     })
 }
 
-fn validate_diagnostics(content: &str) -> Result<(), CliFailure> {
-    diagnostics::validate_source(content).map_err(|diagnostics| {
-        CliFailure::invalid_workflow(format_diagnostics(content, diagnostics))
-    })
+fn validate_diagnostics(source: &LoadedSource) -> Result<(), CliFailure> {
+    diagnostics::validate_source(&source.content)
+        .map_err(|diagnostics| CliFailure::invalid_workflow(source.format_diagnostics(diagnostics)))
 }
 
-fn parse_source(content: &str) -> Result<Vec<Stmt>, CliFailure> {
-    let tokens = lexer::lex(content);
+fn parse_source(source: &LoadedSource) -> Result<Vec<Stmt>, CliFailure> {
+    let tokens = lexer::lex(&source.content);
     let mut parser = parser::Parser::new(tokens);
-    parser.parse().map_err(|diagnostics| {
-        CliFailure::invalid_workflow(format_diagnostics(content, diagnostics))
-    })
+    parser
+        .parse()
+        .map_err(|diagnostics| CliFailure::invalid_workflow(source.format_diagnostics(diagnostics)))
 }
 
-fn format_diagnostics(content: &str, diagnostics: Vec<diagnostics::Diagnostic>) -> String {
-    let lines: Vec<&str> = content.lines().collect();
-    diagnostics
-        .into_iter()
-        .map(|diagnostic| {
-            let source_line = lines
-                .get(diagnostic.line.saturating_sub(1))
-                .copied()
-                .unwrap_or("");
-            diagnostic.format(source_line)
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
+fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
+    canonical
+        .strip_prefix(source_root)
+        .unwrap_or(canonical)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
-fn load_source_with_imports(filename: &str, hardened: bool) -> Result<String, CliFailure> {
+fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSource, CliFailure> {
     let entry = fs::canonicalize(filename).map_err(|error| {
         CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
     })?;
@@ -617,17 +732,26 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<String, Cl
         .parent()
         .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
         .to_path_buf();
+    let entry_path = relative_source_path(&entry, &source_root);
     let mut visited = HashSet::new();
-    load_file_recursive(&entry, &source_root, hardened, &mut visited, true)
+    load_file_recursive(
+        &entry,
+        &source_root,
+        &entry_path,
+        hardened,
+        &mut visited,
+        true,
+    )
 }
 
 fn load_file_recursive(
     canonical: &Path,
     source_root: &Path,
+    entry_path: &str,
     hardened: bool,
     visited: &mut HashSet<PathBuf>,
     is_entry: bool,
-) -> Result<String, CliFailure> {
+) -> Result<LoadedSource, CliFailure> {
     if !visited.insert(canonical.to_path_buf()) {
         let message = format!("circular import detected for '{}'", canonical.display());
         return Err(if hardened && !is_entry {
@@ -648,21 +772,24 @@ fn load_file_recursive(
     let parent = canonical
         .parent()
         .ok_or_else(|| CliFailure::source("could not determine source parent directory"))?;
-    let mut output = String::new();
+    let display_path = relative_source_path(canonical, source_root);
+    let mut output = LoadedSource::empty(entry_path.to_string());
 
-    for line in content.lines() {
+    for (index, line) in content.lines().enumerate() {
+        let local_line = index + 1;
         let trimmed = line.trim();
         if let Some(import_path) = parse_import_line(trimmed) {
             let imported = resolve_import(parent, source_root, import_path, hardened)?;
-            let imported_content =
-                load_file_recursive(&imported, source_root, hardened, visited, false)?;
-            output.push_str(&imported_content);
-            if !imported_content.ends_with('\n') {
-                output.push('\n');
+            let imported_path = relative_source_path(&imported, source_root);
+            let imported_source =
+                load_file_recursive(&imported, source_root, entry_path, hardened, visited, false)?;
+            if imported_source.content.is_empty() {
+                output.push_line(&imported_path, 1, "");
+            } else {
+                output.append(imported_source);
             }
         } else {
-            output.push_str(line);
-            output.push('\n');
+            output.push_line(&display_path, local_line, line);
         }
     }
 
