@@ -29,6 +29,7 @@ export function createServerAuditCoverageFindings(snapshot: ServerAuditSnapshot)
     { source: "web.servers", present: snapshot.web?.servers !== undefined },
     { source: "web.roots", present: snapshot.web?.roots !== undefined },
     { source: "web.certificates", present: snapshot.web?.certificates !== undefined },
+    { source: "web.publicFileChecks", present: snapshot.web?.publicFileChecks !== undefined },
     { source: "backups", present: snapshot.backups !== undefined },
     { source: "logs", present: snapshot.logs !== undefined },
     { source: "security", present: snapshot.security !== undefined },
