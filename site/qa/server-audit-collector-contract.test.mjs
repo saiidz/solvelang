@@ -12,6 +12,7 @@ const ALLOWED_PROGRAMS = [
   "firewall-cmd",
   "getenforce",
   "openssl",
+  "ps",
   "rpm",
   "ss",
   "systemctl",
@@ -25,6 +26,8 @@ test("server audit collector accepts no user command arguments and contains no m
   assert.doesNotMatch(source, /process\.env(?!\.PATH)/);
   assert.match(source, /redactionsApplied:\s*true/);
   assert.match(source, /command content intentionally not collected/);
+  assert.match(source, /command\("ps", \["-eo", "pid=,ppid=,uid=,stat=,comm="\]\)/);
+  assert.match(source, /Process inventory contains PID, parent PID, numeric uid, state, and executable comm name only/);
   assert.match(source, /Environment variables, file contents, database contents, private keys, credentials, process command lines, and cron command bodies are not collected/);
 });
 
@@ -36,7 +39,7 @@ test("server audit collector command surface stays literal and read-only allowli
 
   assert.ok(commandLines.length > 0);
   for (const line of commandLines) {
-    assert.match(line, /command\("(?:aa-status|df|dpkg-query|firewall-cmd|getenforce|openssl|rpm|ss|systemctl|ufw)"/);
+    assert.match(line, /command\("(?:aa-status|df|dpkg-query|firewall-cmd|getenforce|openssl|ps|rpm|ss|systemctl|ufw)"/);
   }
 
   const invokedPrograms = [...source.matchAll(/\bcommand\("([^"]+)"/g)]
