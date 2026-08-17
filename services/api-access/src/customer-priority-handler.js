@@ -18,13 +18,32 @@ function parseJson(event) {
   return text ? JSON.parse(text) : {};
 }
 
-export function createCustomerPriorityHandler({ customerAuth, priority, siteOrigin, logger = console }) {
+function zipBody(event) {
+  const contentType = String(header(event, "content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "application/zip") {
+    throw new PriorityJobError(415, "invalid_source_content_type", "Repository source must use application/zip.");
+  }
+  if (!event?.isBase64Encoded || typeof event.body !== "string" || !event.body) {
+    throw new PriorityJobError(400, "invalid_source_archive", "Repository source must be a binary ZIP upload.");
+  }
+  return Buffer.from(event.body, "base64");
+}
+
+export function createCustomerPriorityHandler({
+  customerAuth,
+  priority,
+  sourceStore,
+  siteOrigin,
+  enabled = true,
+  logger = console,
+}) {
   if (!customerAuth || typeof customerAuth.authenticate !== "function" || typeof customerAuth.assertCsrf !== "function") {
     throw new Error("Customer authentication service is required.");
   }
   if (!priority || typeof priority.quote !== "function" || typeof priority.submit !== "function" || typeof priority.getJob !== "function") {
     throw new Error("Customer priority service is required.");
   }
+  if (!sourceStore || typeof sourceStore.putSource !== "function") throw new Error("Customer priority source store is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
 
   function response(statusCode, body) {
@@ -55,6 +74,17 @@ export function createCustomerPriorityHandler({ customerAuth, priority, siteOrig
       const method = event?.requestContext?.http?.method ?? "GET";
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
       if (method === "OPTIONS") return response(204, {});
+      if (!enabled) {
+        return response(503, {
+          error: "Customer priority processing is not enabled.",
+          code: "customer_priority_disabled",
+        });
+      }
+      if (method === "POST" && path.endsWith("/customer/priority/source")) {
+        const authenticated = await session(event, true);
+        const stored = await sourceStore.putSource({ accountId: authenticated.accountId, source: zipBody(event) });
+        return response(201, { source: stored });
+      }
       if (method === "POST" && path.endsWith("/customer/priority/quote")) {
         const authenticated = await session(event, true);
         const body = parseJson(event);
