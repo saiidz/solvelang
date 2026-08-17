@@ -56,6 +56,36 @@ test("inventory consistency reports conflicting duplicate evidence without raw i
   assert.ok(serialized.includes("web.roots[0]"));
 });
 
+test("process topology consistency reports conflicting PIDs, self-parenting, and parent cycles without process names", () => {
+  const input = snapshot();
+  input.packages = [];
+  input.services = [];
+  input.filesystems = [];
+  input.web = { roots: [] };
+  input.processes = [
+    { pid: 100, ppid: 1, uid: 1000, state: "S", name: "sensitive-worker" },
+    { pid: 100, ppid: 1, uid: 0, state: "R", name: "sensitive-worker" },
+    { pid: 200, ppid: 201, uid: 1000, state: "S", name: "cycle-a" },
+    { pid: 201, ppid: 200, uid: 1000, state: "S", name: "cycle-b" },
+    { pid: 300, ppid: 300, uid: 1000, state: "S", name: "self-parent" },
+  ];
+
+  const analysis = analyzeServerAuditInventoryConsistency(input);
+  assert.deepEqual(
+    analysis.issues.map((issue) => issue.kind).sort(),
+    ["conflicting-process-identity", "cyclic-process-parentage", "self-parent-process"].sort(),
+  );
+  assert.equal(analysis.summary.processesChecked, 5);
+
+  const serialized = JSON.stringify(analysis.issues);
+  assert.equal(serialized.includes("sensitive-worker"), false);
+  assert.equal(serialized.includes("cycle-a"), false);
+  assert.equal(serialized.includes("self-parent"), false);
+  assert.ok(serialized.includes("processes[0]"));
+  assert.ok(serialized.includes("processes[2]"));
+  assert.ok(serialized.includes("processes[4]"));
+});
+
 test("identical duplicate evidence does not produce false conflict findings", () => {
   const input = snapshot();
   input.packages = [
@@ -76,6 +106,10 @@ test("identical duplicate evidence does not produce false conflict findings", ()
       { path: "/srv/private/app", owner: "deploy", mode: "0755" },
     ],
   };
+  input.processes = [
+    { pid: 55, ppid: 1, uid: 1000, state: "S", name: "worker" },
+    { pid: 55, ppid: 1, uid: 1000, state: "S", name: "worker" },
+  ];
 
   assert.deepEqual(analyzeServerAuditInventoryConsistency(input).issues, []);
 });
