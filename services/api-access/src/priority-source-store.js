@@ -35,13 +35,13 @@ function sourceTooLarge() {
   return new PriorityJobError(413, "source_archive_too_large", "Repository source exceeds the upload limit.");
 }
 
+function invalidArchive() {
+  return new PriorityJobError(400, "invalid_source_archive", "Repository source must be a ZIP archive.");
+}
+
 function validateArchive(bytes) {
-  if (bytes.length < 4 || bytes.length > MAX_PRIORITY_SOURCE_BYTES) {
-    throw sourceTooLarge();
-  }
-  if (!ZIP_SIGNATURES.has(bytes.subarray(0, 4).toString("hex"))) {
-    throw new PriorityJobError(400, "invalid_source_archive", "Repository source must be a ZIP archive.");
-  }
+  if (bytes.length > MAX_PRIORITY_SOURCE_BYTES) throw sourceTooLarge();
+  if (bytes.length < 4 || !ZIP_SIGNATURES.has(bytes.subarray(0, 4).toString("hex"))) throw invalidArchive();
 }
 
 async function bodyBytes(body) {
