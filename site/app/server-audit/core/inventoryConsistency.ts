@@ -4,7 +4,10 @@ export type ServerAuditInventoryIssueKind =
   | "conflicting-package-version"
   | "conflicting-service-state"
   | "conflicting-filesystem-capacity"
-  | "conflicting-web-root-metadata";
+  | "conflicting-web-root-metadata"
+  | "conflicting-process-identity"
+  | "self-parent-process"
+  | "cyclic-process-parentage";
 
 export type ServerAuditInventoryIssue = {
   id: string;
@@ -27,6 +30,7 @@ export type ServerAuditInventoryConsistencyAnalysis = {
     servicesChecked: number;
     filesystemsChecked: number;
     webRootsChecked: number;
+    processesChecked: number;
   };
   execution: {
     networkAccess: false;
@@ -83,6 +87,7 @@ export function analyzeServerAuditInventoryConsistency(
   const services = snapshot.services ?? [];
   const filesystems = snapshot.filesystems ?? [];
   const roots = snapshot.web?.roots ?? [];
+  const processes = snapshot.processes ?? [];
 
   for (const indexes of groupIndexes(packages, (entry) => entry.name).values()) {
     if (indexes.length < 2) continue;
@@ -143,6 +148,82 @@ export function analyzeServerAuditInventoryConsistency(
     });
   }
 
+  const processGroups = groupIndexes(processes, (entry) => String(entry.pid));
+  for (const indexes of processGroups.values()) {
+    if (indexes.length < 2) continue;
+    const identities = indexes.map((index) => {
+      const entry = processes[index];
+      return `${entry.ppid}\u001f${entry.uid}\u001f${entry.state}\u001f${entry.name}`;
+    });
+    if (distinct(identities) < 2) continue;
+    const sources = indexes.map((index) => `processes[${index}]`);
+    issues.push({
+      id: stableId("conflicting-process-identity", sources),
+      kind: "conflicting-process-identity",
+      severity: "low",
+      sources,
+      summary: "Multiple process entries report the same PID with different parent, owner, state, or executable identity; process evidence is internally inconsistent.",
+    });
+  }
+
+  processes.forEach((entry, index) => {
+    if (entry.pid !== entry.ppid) return;
+    const sources = [`processes[${index}]`];
+    issues.push({
+      id: stableId("self-parent-process", sources),
+      kind: "self-parent-process",
+      severity: "low",
+      sources,
+      summary: "A collected process reports itself as its own parent; process topology is internally inconsistent.",
+    });
+  });
+
+  const uniqueProcessIndex = new Map<number, number>();
+  for (const indexes of processGroups.values()) {
+    if (indexes.length !== 1) continue;
+    const index = indexes[0];
+    uniqueProcessIndex.set(processes[index].pid, index);
+  }
+
+  const emittedCycles = new Set<string>();
+  for (const startPid of [...uniqueProcessIndex.keys()].sort((left, right) => left - right)) {
+    const path: number[] = [];
+    const position = new Map<number, number>();
+    let currentPid: number | undefined = startPid;
+
+    while (currentPid !== undefined) {
+      const previous = position.get(currentPid);
+      if (previous !== undefined) {
+        const cycle = path.slice(previous);
+        if (cycle.length > 1) {
+          const cycleKey = [...cycle].sort((left, right) => left - right).join(":");
+          if (!emittedCycles.has(cycleKey)) {
+            emittedCycles.add(cycleKey);
+            const sources = cycle
+              .map((pid) => `processes[${uniqueProcessIndex.get(pid)!}]`)
+              .sort();
+            issues.push({
+              id: stableId("cyclic-process-parentage", sources),
+              kind: "cyclic-process-parentage",
+              severity: "low",
+              sources,
+              summary: "Collected parent-process relationships form a cycle; process topology is internally inconsistent and may reflect collection-time churn or malformed evidence.",
+            });
+          }
+        }
+        break;
+      }
+
+      const index = uniqueProcessIndex.get(currentPid);
+      if (index === undefined) break;
+      position.set(currentPid, path.length);
+      path.push(currentPid);
+      const parentPid = processes[index].ppid;
+      if (parentPid <= 1 || parentPid === currentPid || !uniqueProcessIndex.has(parentPid)) break;
+      currentPid = parentPid;
+    }
+  }
+
   issues.sort(compareIssue);
   return {
     schema: "solvelang.server-audit.inventory-consistency.v0",
@@ -153,6 +234,7 @@ export function analyzeServerAuditInventoryConsistency(
       servicesChecked: services.length,
       filesystemsChecked: filesystems.length,
       webRootsChecked: roots.length,
+      processesChecked: processes.length,
     },
     execution: {
       networkAccess: false,

@@ -151,6 +151,20 @@
               "daysRemaining": { "type": "number", "minimum": -10000, "maximum": 10000 }
             }
           }
+        },
+        "publicFileChecks": {
+          "type": "array",
+          "maxItems": 2000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rootIndex", "marker", "present"],
+            "properties": {
+              "rootIndex": { "type": "integer", "minimum": 0, "maximum": 499 },
+              "marker": { "enum": ["env-file", "git-config", "npmrc", "composer-auth"] },
+              "present": { "type": "boolean" }
+            }
+          }
         }
       }
     },

@@ -15,6 +15,8 @@ export type ServerAuditFinding = {
   evidence: ServerAuditEvidence[];
 };
 
+export type ServerAuditPublicFileMarker = "env-file" | "git-config" | "npmrc" | "composer-auth";
+
 export type ServerAuditSnapshot = {
   schemaVersion: "1";
   collectedAt: string;
@@ -77,6 +79,11 @@ export type ServerAuditSnapshot = {
       name: string;
       notAfter?: string;
       daysRemaining?: number;
+    }>;
+    publicFileChecks?: Array<{
+      rootIndex: number;
+      marker: ServerAuditPublicFileMarker;
+      present: boolean;
     }>;
   };
   backups?: Array<{
