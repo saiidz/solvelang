@@ -70,11 +70,21 @@ Their currently observed branches predate this checkpoint and should be replayed
 
 Live PR refs and workflow/check results are authoritative.
 
-1. **#277 — deterministic Python import relationships / Repository Audit blast-radius reuse.** Head `14ed1f5569607312bc039a0c2c4cbdde3663c46c`, exactly one commit over this checkpoint. It preserves the reviewed four-file #266 implementation on current `main`; #266 is closed unmerged as superseded. Hosted CI/Rust were still running at this sync, and exact-head `trusted-mac-ci=success` had not yet been published. Merge only after exact-head hosted CI, Rust, Trusted Mac, mergeability, and review-thread checks are all green/clean.
-2. **Repository Audit successors #267-#271 and composition #275 are stale stacked work.** They still depend on the closed #266-era stack. Do not merge them out of order or pretend their old validation applies to #277. Rebuild/retarget successors after #277 lands, preserving each reviewed scope without force-pushing or overwriting newer main work.
-3. **Server Audit Windows train:** #251/#252, #272/#273/#274 remain safe read-only/test-only work, but their current heads predate #276 or are stacked on older predecessors. #274 had exact-head hosted CI/Rust green before #276 advanced `main`; no exact-head `trusted-windows-ci=success` is claimed here. Refresh/rebuild on current `main` before merge and require the existing Trusted Windows result where the branch contract calls for it.
-4. **Server Audit Trusted Mac train:** #253 and #254 remain test/parser hardening that explicitly require exact-head Trusted Mac in addition to hosted CI/Rust. Their current heads predate this checkpoint; rebuild rather than overwriting newer main changes.
-5. **New independent Server Audit stages** may continue while self-hosted lanes are queued only when they are bounded, deterministic, redacted, read-only/analyze-only, and do not collide with an active report-composition file surface.
+1. **#277 — deterministic Python import relationships / Repository Audit blast-radius reuse.** Branch `agent/mac-solve-graph-python-imports-v7`, head `14ed1f5569607312bc039a0c2c4cbdde3663c46c`, exactly one commit over current `main`. It preserves the reviewed four-file #266 implementation; #266 is closed unmerged as superseded. Exact-head GitHub-hosted CI and Rust are green. No exact-head `trusted-mac-ci=success` has been published at this sync, so it remains unmerged.
+2. **#280 — dependency consistency**, head `fcaac4b827394691318210869f7c4b8c8a671c8b`, one reviewed four-file commit on #277. It supersedes closed-unmerged #267.
+3. **#281 — direct test/documentation coverage evidence**, head `56486d1df90167cf66d1885d1b538d0682ef5de5`, one reviewed two-file commit on #280. It supersedes closed-unmerged #268.
+4. **#282 — conservative dead-code candidates**, head `640bebc0544e2aba1d60655156db2ded0907f7bd`, one reviewed two-file commit on #281. It supersedes closed-unmerged #269.
+5. **#283 — package/local-action configuration references**, head `520457ae07a9b9055340732f4a6e2aa45bc3e794`, one reviewed two-file commit on #282. It supersedes closed-unmerged #270.
+6. **#284 — bounded workflow path evidence**, head `b0780399080a21dbb1090746972527ea702782d4`, one reviewed two-file commit on #283. It supersedes closed-unmerged #271.
+7. **#285 — Repository Audit analysis composition**, head `28b4dd336f73b3f6d3e7bae98c4561464734675f`, one reviewed two-file commit on #284. It supersedes closed-unmerged #275 and composes the five bounded evidence stages into the single analyze-only snapshot pipeline.
+
+The successor train must merge strictly in dependency order. Do not treat validation of a stacked successor as satisfying a predecessor's exact-head gates. After each predecessor lands, retarget/reconcile the next PR to current `main` without force-pushing or discarding newer work, then require fresh exact-head hosted CI/Rust and Trusted Mac success.
+
+## Parallel safe Server Audit work
+
+- **#279 — bounded listener consistency evidence**, branch `agent/windows-server-audit-listener-consistency-v1`, head `95d9c3e0405461d034bdae6e3b0a9fb560f031fa`. It reports only structural evidence when duplicate endpoint rows disagree on process attribution, never emits address/port/process names in findings, keeps deterministic bounds, and is analyze-only. Exact-head GitHub-hosted CI and Rust are green; no exact-head `trusted-windows-ci=success` is claimed at this sync. Keep it behind #277 if merging it would unnecessarily stale the higher-priority graph head.
+- Existing Windows Server Audit successors #251/#252 and #272/#273/#274 remain safe read-only/test-only work but their heads predate current `main` or are stacked on older predecessors. Rebuild rather than relying on stale validation.
+- Existing Trusted Mac Server Audit #253/#254 remain test/parser hardening and require exact-head Trusted Mac in addition to hosted CI/Rust; rebuild rather than overwriting newer main changes.
 
 All Repository Audit/Solve Graph construction remains deterministic, bounded, analyze-only, and non-executing. All Server Audit work remains constrained/read-only with redacted evidence and no remediation execution.
 
@@ -82,7 +92,7 @@ All Repository Audit/Solve Graph construction remains deterministic, bounded, an
 
 After the active merge train, continue in this order while re-evaluating live state every run:
 
-1. Repository Audit dependency consistency, conservative dead-code evidence, direct test/documentation mapping, framework/deployment/config relationships, deterministic IDs, canonical/browser evidence, and cross-platform tests.
+1. Repository Audit canonical/browser evidence for the rebuilt stages, framework/deployment relationships, deterministic IDs, redaction, and cross-platform tests.
 2. Solve Graph richer language adapters, query/path/impact quality, affected-tests/workflows mapping, architecture/security path summaries, MCP/Codex integration quality, and local visual explorer improvements.
 3. Server Audit read-only ownership/permission/version findings, package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/SSL/public-file evidence, bounded JSON/HTML report quality, and cross-platform tests.
 4. Language/runtime/DX: formatter/linter, semantic/type checks, `for` loops, module/package design, richer diagnostics, editor support, and deterministic cross-platform tests.
