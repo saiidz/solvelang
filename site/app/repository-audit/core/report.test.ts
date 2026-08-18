@@ -96,7 +96,7 @@ test("creates self-contained printable HTML and escapes archive plus evidence te
   assert.ok(!html.includes("https://"));
 });
 
-test("exports bounded graph intelligence and redacted credential warnings without correlation fingerprints", async () => {
+test("exports bounded graph intelligence, evidence completeness, and redacted credential warnings without correlation fingerprints", async () => {
   const source = intelligenceSnapshot();
   const ingestion = await ingestArchiveSnapshotEntries({
     archiveName: "intelligence.zip",
@@ -115,12 +115,17 @@ test("exports bounded graph intelligence and redacted credential warnings withou
   assert.equal(report.intelligence?.schema, "solvelang.repository-audit.product-intelligence.v0");
   assert.ok((report.intelligence?.graph.counts.nodes ?? 0) >= 2);
   assert.ok((report.intelligence?.graph.counts.edges ?? 0) >= 1);
+  assert.equal(report.intelligence?.evidenceCompleteness.schema, "solvelang.repository-audit.evidence-completeness.v0");
+  assert.equal(report.intelligence?.evidenceCompleteness.status, "complete");
+  assert.equal(report.intelligence?.evidenceCompleteness.secretAnalysis.filesScanned, intelligence.execution.secretFilesScanned);
   assert.equal(report.intelligence?.securityWarnings.length, 1);
   assert.equal(report.intelligence?.securityWarnings[0].path, "src/api.ts");
   assert.ok(!("fingerprint" in (report.intelligence?.securityWarnings[0] ?? {})));
 
   const serialized = JSON.stringify(report);
   const html = createRepositoryAuditHtmlReport(report);
+  assert.ok(html.includes("Evidence completeness"));
+  assert.ok(html.includes("No bounded scan limit truncated"));
   assert.ok(html.includes("Dependency intelligence"));
   assert.ok(html.includes("Redacted credential warnings"));
   assert.ok(html.includes("src/api.ts"));
