@@ -1,5 +1,5 @@
 import type { SolveGraphDocument, SolveGraphScanLimits } from "../../solve-graph/core/contracts";
-import { extractRepositoryDependencyGraph } from "../../solve-graph/core/import-extractor";
+import { extractRepositoryMultiLanguageDependencyGraph } from "../../solve-graph/core/dependency-extractor";
 import {
   createRepositoryGraphIntelligence,
   type RepositoryGraphIntelligence,
@@ -31,7 +31,7 @@ export async function analyzeRepositoryGraph(
   snapshot: RepositorySnapshot,
   options: RepositoryAuditGraphPipelineOptions = {},
 ): Promise<RepositoryAuditGraphPipelineResult> {
-  const graph = await extractRepositoryDependencyGraph(snapshot, {
+  const graph = await extractRepositoryMultiLanguageDependencyGraph(snapshot, {
     ...(options.graphLimits ? { limits: options.graphLimits } : {}),
     privateSource: options.privateSource ?? true,
   });
