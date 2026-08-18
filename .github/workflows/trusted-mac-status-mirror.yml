@@ -1,0 +1,56 @@
+name: Trusted Mac Status Mirror
+
+on:
+  workflow_run:
+    workflows:
+      - "Trusted Mac CI"
+    types:
+      - completed
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  publish-status:
+    name: Publish Trusted Mac commit status
+    if: >-
+      github.repository == 'saiidz/solvelang' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'agent/mac-')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror completed Trusted Mac result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const shaPattern = /^[0-9a-f]{40}$/;
+            if (!shaPattern.test(run.head_sha ?? '')) {
+              core.setFailed('Trusted Mac workflow_run head_sha is missing or malformed.');
+              return;
+            }
+            if (!String(run.head_branch ?? '').startsWith('agent/mac-')) {
+              core.setFailed('Trusted Mac workflow_run branch is outside the trusted agent/mac-* namespace.');
+              return;
+            }
+
+            const state = run.conclusion === 'success'
+              ? 'success'
+              : run.conclusion === 'failure'
+                ? 'failure'
+                : 'error';
+
+            const description = run.conclusion === 'success'
+              ? 'Trusted Mac CI passed on the exact pushed commit.'
+              : `Trusted Mac CI completed with ${run.conclusion ?? 'unknown'}.`;
+
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: run.head_sha,
+              state,
+              context: 'trusted-mac-ci',
+              description: description.slice(0, 140),
+              target_url: run.html_url,
+            });
