@@ -1,5 +1,9 @@
 import type { RepositoryArchiveExtractionResult } from "./archiveExtraction";
 import type { RepositoryAuditAnalysisResult } from "./analysisPipeline";
+import {
+  createRepositoryAuditEvidenceCompleteness,
+  type RepositoryAuditEvidenceCompleteness,
+} from "./evidenceCompleteness";
 import type { RepositoryInventoryAnalysis, RepositorySeverity } from "./inventory";
 import type { RepositoryIngestionResult } from "./ingestion";
 import type { RepositorySecretWarning } from "./secretScan";
@@ -9,6 +13,7 @@ export type RepositoryAuditProductSecretWarning = Omit<RepositorySecretWarning, 
 export type RepositoryAuditProductIntelligence = {
   schema: "solvelang.repository-audit.product-intelligence.v0";
   graph: RepositoryAuditAnalysisResult["graph"]["intelligence"];
+  evidenceCompleteness: RepositoryAuditEvidenceCompleteness;
   securityWarnings: RepositoryAuditProductSecretWarning[];
   execution: RepositoryAuditAnalysisResult["execution"];
 };
@@ -92,6 +97,7 @@ function productIntelligence(analysis: RepositoryAuditAnalysisResult): Repositor
       hotspots: graph.hotspots.map((item) => ({ ...item })),
       execution: { ...graph.execution },
     },
+    evidenceCompleteness: createRepositoryAuditEvidenceCompleteness(analysis),
     // Product reports deliberately omit the keyed HMAC fingerprint. The warning ID,
     // path, line, class, exposure, and remediation are sufficient for review while
     // avoiding a portable credential-correlation token in exported artifacts.
@@ -131,6 +137,16 @@ export function createRepositoryAuditProductReport(input: {
   };
 }
 
+function evidenceCompletenessMarkup(report: RepositoryAuditProductReport): string {
+  const evidence = report.intelligence?.evidenceCompleteness;
+  if (!evidence) return "";
+  const limitations = evidence.limitations.length
+    ? `<ul>${evidence.limitations.map((item) => `<li><strong>${safeText(item.scope)}</strong> · <code>${safeText(item.reason)}</code> — ${safeText(item.message)}</li>`).join("")}</ul>`
+    : '<div class="empty">No bounded scan limit truncated the collected inventory or graph evidence.</div>';
+  return `
+<section class="section"><h2>Evidence completeness</h2><p>Status: <strong>${safeText(evidence.status)}</strong>. Inventory: ${safeText(evidence.inventory.filesScanned)} of ${safeText(evidence.inventory.filesSeen)} file(s) scanned, ${safeText(bytesLabel(evidence.inventory.bytesScanned))}. Graph: ${safeText(evidence.graph.fileNodes)} file nodes, ${safeText(evidence.graph.nodes)} total nodes, ${safeText(evidence.graph.edges)} edges. Credential-pattern analysis covered ${safeText(evidence.secretAnalysis.filesScanned)} graph-accepted file(s).</p>${limitations}</section>`;
+}
+
 function intelligenceMarkup(report: RepositoryAuditProductReport): string {
   if (!report.intelligence) return "";
   const graph = report.intelligence.graph;
@@ -141,6 +157,7 @@ function intelligenceMarkup(report: RepositoryAuditProductReport): string {
     ? `<ul>${report.intelligence.securityWarnings.map((warning) => `<li><code>${safeText(warning.path)}:${safeText(warning.lineStart)}</code> — ${safeText(warning.patternClass)} · ${safeText(warning.exposure)} — ${safeText(warning.remediation)}</li>`).join("")}</ul>`
     : '<div class="empty">No credential-pattern warnings were produced inside the bounded scan.</div>';
   return `
+${evidenceCompletenessMarkup(report)}
 <section class="section"><h2>Dependency intelligence</h2><p>${safeText(graph.counts.nodes)} graph nodes · ${safeText(graph.counts.edges)} graph edges · ${safeText(graph.hotspots.length)} ranked hotspots. Impact analysis is bounded to depth ${safeText(graph.execution.maxImpactDepth)} and ${safeText(graph.execution.maxImpactResults)} results per hotspot.</p>${hotspotMarkup}</section>
 <section class="section"><h2>Redacted credential warnings</h2><p>${safeText(report.intelligence.securityWarnings.length)} warning(s). Secret values and HMAC correlation fingerprints are not included in this product report.</p>${warningMarkup}</section>`;
 }
