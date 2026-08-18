@@ -1,8 +1,9 @@
-import type { ServerAuditSnapshot } from "./types";
+import type { ServerAuditPublicFileMarker, ServerAuditSnapshot } from "./types";
 
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
 const MAX_COLLECTION = 5000;
 const SAFE_HOST = /^[A-Za-z0-9._-]{1,253}$/;
+const PUBLIC_FILE_MARKERS = new Set<ServerAuditPublicFileMarker>(["env-file", "git-config", "npmrc", "composer-auth"]);
 
 function array<T>(value: unknown, name: string, max = MAX_COLLECTION): T[] | undefined {
   if (value === undefined) return undefined;
@@ -158,7 +159,7 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
 
   if (input.web !== undefined) {
     assertObject(input.web, "web");
-    knownKeys(input.web, ["servers","roots","certificates"], "web");
+    knownKeys(input.web, ["servers","roots","certificates","publicFileChecks"], "web");
     const servers = array<unknown>(input.web.servers, "web.servers", 50)?.map((entry, index) => text(entry, `web.servers[${index}]`, 100, false)!);
     const roots = array<Record<string, unknown>>(input.web.roots, "web.roots", 500)?.map((entry, index) => {
       assertObject(entry, `web.roots[${index}]`);
@@ -179,7 +180,17 @@ export function parseServerAuditSnapshot(raw: string): ServerAuditSnapshot {
         daysRemaining: number(entry.daysRemaining, `web.certificates[${index}].daysRemaining`, { min: -10000, max: 10000 }),
       };
     });
-    snapshot.web = { servers, roots, certificates };
+    const publicFileChecks = array<Record<string, unknown>>(input.web.publicFileChecks, "web.publicFileChecks", 2000)?.map((entry, index) => {
+      assertObject(entry, `web.publicFileChecks[${index}]`);
+      knownKeys(entry, ["rootIndex","marker","present"], `web.publicFileChecks[${index}]`);
+      const rootIndex = integer(entry.rootIndex, `web.publicFileChecks[${index}].rootIndex`, { min: 0, max: 499 })!;
+      const marker = text(entry.marker, `web.publicFileChecks[${index}].marker`, 50, false)! as ServerAuditPublicFileMarker;
+      if (!PUBLIC_FILE_MARKERS.has(marker)) throw new Error(`web.publicFileChecks[${index}].marker is invalid.`);
+      if (typeof entry.present !== "boolean") throw new Error(`web.publicFileChecks[${index}].present is invalid.`);
+      if (!roots || rootIndex >= roots.length) throw new Error(`web.publicFileChecks[${index}].rootIndex is invalid.`);
+      return { rootIndex, marker, present: entry.present };
+    });
+    snapshot.web = { servers, roots, certificates, publicFileChecks };
   }
 
   const backups = array<Record<string, unknown>>(input.backups, "backups", 1000);

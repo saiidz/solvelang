@@ -69,9 +69,10 @@ test("Server Audit JSON schema pins the parser and collector field surface", () 
   assert.deepEqual(objectKeys(property(root, "metadata")), ["collectorVersion", "notes", "redactionsApplied"]);
 
   const web = property(root, "web");
-  assert.deepEqual(objectKeys(web), ["certificates", "roots", "servers"]);
+  assert.deepEqual(objectKeys(web), ["certificates", "publicFileChecks", "roots", "servers"]);
   assert.deepEqual(itemObjectKeys(property(web, "roots")), ["frameworkHints", "mode", "owner", "path"]);
   assert.deepEqual(itemObjectKeys(property(web, "certificates")), ["daysRemaining", "name", "notAfter"]);
+  assert.deepEqual(itemObjectKeys(property(web, "publicFileChecks")), ["marker", "present", "rootIndex"]);
 });
 
 test("Server Audit JSON schema preserves the same collection bounds as the parser", () => {
@@ -89,4 +90,5 @@ test("Server Audit JSON schema preserves the same collection bounds as the parse
   assert.equal(property(web, "servers").maxItems, 50);
   assert.equal(property(web, "roots").maxItems, 500);
   assert.equal(property(web, "certificates").maxItems, 500);
+  assert.equal(property(web, "publicFileChecks").maxItems, 2000);
 });
