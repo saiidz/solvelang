@@ -1,6 +1,10 @@
 "use client";
 
 import { ChangeEvent, useMemo, useState } from "react";
+import {
+  createServerAuditInventorySummary,
+  type ServerAuditInventorySection,
+} from "./core/inventorySummary";
 import { createServerAuditReport, serverAuditReportHtml, serverAuditReportJson } from "./core/report";
 import { parseServerAuditSnapshot } from "./core/snapshot";
 import type { ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./core/types";
@@ -56,6 +60,12 @@ export default function ServerAuditApp() {
   }
 
   const visible = useMemo(() => report?.findings.filter((finding) => severity === "all" || finding.severity === severity) ?? [], [report, severity]);
+  const inventory = useMemo(() => snapshot ? createServerAuditInventorySummary(snapshot) : null, [snapshot]);
+
+  function inventoryValue(section: ServerAuditInventorySection) {
+    const entry = inventory?.sections.find((item) => item.section === section);
+    return entry?.status === "collected" ? String(entry.count ?? 0) : "not collected";
+  }
 
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "48px 20px 80px" }}>
@@ -89,8 +99,9 @@ export default function ServerAuditApp() {
 
         <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 14, marginBottom: 22 }}>
           <Info title="System" rows={[["OS", snapshot.host.os ?? "—"],["Kernel", snapshot.host.kernel ?? "—"],["Memory available", formatBytes(snapshot.system?.memoryAvailableBytes)],["Uptime", snapshot.system?.uptimeSeconds === undefined ? "—" : `${Math.round(snapshot.system.uptimeSeconds / 3600)}h`]]} />
-          <Info title="Exposure" rows={[["Listening sockets", String(snapshot.listeningSockets?.length ?? 0)],["Firewall", snapshot.security?.firewall ?? "not collected"],["Root SSH", snapshot.security?.rootSshLogin ?? "not collected"],["Password SSH", snapshot.security?.passwordSshLogin ?? "not collected"]]} />
-          <Info title="Operations" rows={[["Services", String(snapshot.services?.length ?? 0)],["Packages", String(snapshot.packages?.length ?? 0)],["Backup artifacts", snapshot.backups === undefined ? "not collected" : String(snapshot.backups.length)],["Log files", String(snapshot.logs?.length ?? 0)]]} />
+          <Info title="Exposure" rows={[["Listening sockets", inventoryValue("listeningSockets")],["Processes", inventoryValue("processes")],["Firewall", snapshot.security?.firewall ?? "not collected"],["Root SSH", snapshot.security?.rootSshLogin ?? "not collected"],["Password SSH", snapshot.security?.passwordSshLogin ?? "not collected"]]} />
+          <Info title="Operations" rows={[["Services", inventoryValue("services")],["Packages", inventoryValue("packages")],["Scheduled jobs", inventoryValue("scheduledJobs")],["Backup artifacts", inventoryValue("backups")],["Log files", inventoryValue("logs")]]} />
+          <Info title="Web evidence" rows={[["Web servers", inventoryValue("webServers")],["Candidate roots", inventoryValue("webRoots")],["Certificates", inventoryValue("certificates")],["Filesystems", inventoryValue("filesystems")]]} />
         </section>
 
         <section style={{ border: "1px solid #d7dbe2", borderRadius: 18, padding: 22, marginBottom: 22, background: "#fff" }}>
