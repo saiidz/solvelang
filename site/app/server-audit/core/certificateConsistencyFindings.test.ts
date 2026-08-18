@@ -54,6 +54,19 @@ test("one explicit value and one absent value is incomplete evidence, not a cont
   assert.deepEqual(findings, []);
 });
 
+test("finding identifiers do not fingerprint certificate identities", () => {
+  const first = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
+    { name: "private-a.example.internal", notAfter: "2026-10-01T00:00:00Z", daysRemaining: 44 },
+    { name: "PRIVATE-A.EXAMPLE.INTERNAL", notAfter: "2026-10-02T00:00:00Z", daysRemaining: 45 },
+  ]));
+  const second = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
+    { name: "different-secret.internal", notAfter: "2026-10-01T00:00:00Z", daysRemaining: 44 },
+    { name: "DIFFERENT-SECRET.INTERNAL", notAfter: "2026-10-02T00:00:00Z", daysRemaining: 45 },
+  ]));
+
+  assert.deepEqual(first.map((finding) => finding.id), second.map((finding) => finding.id));
+});
+
 test("certificate consistency ordering and bounds are deterministic and redact identities", () => {
   const certificates = Array.from({ length: 120 }, (_, index) => [
     {

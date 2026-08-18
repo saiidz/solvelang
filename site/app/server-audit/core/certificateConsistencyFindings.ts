@@ -52,6 +52,10 @@ function firstConflictingPair<T>(
   return undefined;
 }
 
+function structuralPairKey(pair: [IndexedCertificate, IndexedCertificate]): string {
+  return `${pair[0].index}:${pair[1].index}`;
+}
+
 function structuralEvidence(
   pair: [IndexedCertificate, IndexedCertificate],
   field: "notAfter" | "daysRemaining",
@@ -77,13 +81,13 @@ export function createServerAuditCertificateConsistencyFindings(
   });
 
   const candidates: ServerAuditFinding[] = [];
-  for (const [identity, entries] of [...groups.entries()].sort(([left], [right]) => compareText(left, right))) {
+  for (const [, entries] of [...groups.entries()].sort(([left], [right]) => compareText(left, right))) {
     if (entries.length < 2) continue;
 
     const expiryConflict = firstConflictingPair(entries, (entry) => entry.notAfter?.trim());
     if (expiryConflict) {
       candidates.push({
-        id: stableId(["certificate-consistency", "not-after", identity]),
+        id: stableId(["certificate-consistency", "not-after", structuralPairKey(expiryConflict)]),
         severity: "info",
         category: "evidence-integrity",
         title: "Duplicate certificate identity has conflicting expiry evidence",
@@ -96,7 +100,7 @@ export function createServerAuditCertificateConsistencyFindings(
     const daysConflict = firstConflictingPair(entries, (entry) => entry.daysRemaining);
     if (daysConflict) {
       candidates.push({
-        id: stableId(["certificate-consistency", "days-remaining", identity]),
+        id: stableId(["certificate-consistency", "days-remaining", structuralPairKey(daysConflict)]),
         severity: "info",
         category: "evidence-integrity",
         title: "Duplicate certificate identity has conflicting remaining-days evidence",
