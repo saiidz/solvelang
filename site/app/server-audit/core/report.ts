@@ -2,6 +2,7 @@ import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, Server
 import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
+import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 
@@ -54,6 +55,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...analyzeServerSnapshot(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
+    ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditCoverageFindings(snapshot),
   ]);
@@ -83,6 +85,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Coverage-gap findings report structurally absent snapshot sections only; a present section does not prove that collection was complete or authoritative.",
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
+      "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
