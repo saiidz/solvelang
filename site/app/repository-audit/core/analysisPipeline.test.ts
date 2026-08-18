@@ -38,7 +38,7 @@ function fixture(files?: RepositorySnapshot["files"]): RepositorySnapshot {
   };
 }
 
-test("composes inventory, dependency impact, dependency consistency, and redacted secret warnings without exposing secret values", async () => {
+test("composes bounded repository evidence stages and redacted secret warnings without exposing secret values", async () => {
   const result = await analyzeRepositorySnapshot(fixture(), { secretHmacKey: hmacKey });
   assert.equal(result.schema, "solvelang.repository-audit.analysis.v0");
   assert.equal(result.mode, "analyze-only");
@@ -48,9 +48,22 @@ test("composes inventory, dependency impact, dependency consistency, and redacte
   assert.equal(result.graph.graph.source.private, true);
   assert.ok(result.graph.graph.edges.some((edge) => edge.kind === "imports"));
   assert.equal(result.dependencyConsistency.schema, "solvelang.repository-audit.dependency-consistency.v0");
+  assert.equal(result.coverageMap.schema, "solvelang.repository-audit.coverage-map.v0");
+  assert.equal(result.deadCodeCandidates.schema, "solvelang.repository-audit.dead-code-candidates.v0");
+  assert.equal(result.configurationReferences.schema, "solvelang.repository-audit.configuration-references.v0");
+  assert.equal(result.workflowPathEvidence.schema, "solvelang.repository-audit.workflow-path-evidence.v0");
   assert.equal(result.execution.dependencyConsistencyStatus, "complete");
+  assert.equal(result.execution.coverageMapStatus, "complete");
+  assert.equal(result.execution.deadCodeCandidateStatus, "complete");
+  assert.equal(result.execution.configurationReferenceStatus, "complete");
+  assert.equal(result.execution.workflowPathEvidenceStatus, "complete");
   assert.equal(result.execution.dependencyFilesScanned, 2);
   assert.equal(result.execution.undeclaredDependencyFindings, 0);
+  assert.equal(result.execution.directTestMappings, 0);
+  assert.equal(result.execution.documentationMappings, 0);
+  assert.equal(result.execution.deadCodeCandidateCount, 1);
+  assert.equal(result.execution.configurationReferenceCount, 0);
+  assert.equal(result.execution.workflowPathReferenceCount, 0);
   assert.equal(result.execution.secretFilesScanned, 3);
   assert.equal(result.secretWarnings.length, 1);
   assert.equal(result.execution.redactedSecretMatches, 1);
@@ -59,16 +72,32 @@ test("composes inventory, dependency impact, dependency consistency, and redacte
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
-test("surfaces bounded undeclared dependency candidates in the combined analysis", async () => {
+test("surfaces dependency, test, documentation, configuration, and workflow evidence in one bounded analysis", async () => {
+  const workflow = [
+    "jobs:",
+    "  test:",
+    "    defaults:",
+    "      run:",
+    "        working-directory: src",
+  ].join("\n");
   const result = await analyzeRepositorySnapshot(fixture([
-    { path: "package.json", byteSize: 20, text: "{}" },
-    { path: "src/app.ts", byteSize: 48, text: 'import helper from "missing-package";\nvoid helper;\n' },
+    { path: "package.json", byteSize: 80, text: JSON.stringify({ main: "./src/app.ts" }) },
+    { path: "src/lib.ts", byteSize: 24, text: "export const lib = 1;\n" },
+    { path: "src/app.ts", byteSize: 72, text: 'import helper from "missing-package";\nimport { lib } from "./lib";\nvoid helper; void lib;\n' },
+    { path: "tests/app.test.ts", byteSize: 56, text: 'import "../src/app";\n' },
+    { path: "docs/guide.md", byteSize: 48, text: "See [app](../src/app.ts).\n" },
+    { path: ".github/workflows/ci.yml", byteSize: workflow.length, text: workflow },
   ]));
 
   assert.equal(result.execution.status, "complete");
   assert.equal(result.execution.undeclaredDependencyFindings, 1);
   assert.equal(result.dependencyConsistency.undeclaredImports[0].packageName, "missing-package");
-  assert.equal(result.dependencyConsistency.undeclaredImports[0].confidence, "high");
+  assert.equal(result.execution.directTestMappings, 1);
+  assert.equal(result.execution.documentationMappings, 1);
+  assert.equal(result.execution.configurationReferenceCount, 1);
+  assert.equal(result.configurationReferences.references[0].targetPath, "src/app.ts");
+  assert.equal(result.execution.workflowPathReferenceCount, 1);
+  assert.equal(result.workflowPathEvidence.references[0].targetPath, "src");
 });
 
 test("a supplied HMAC key makes redacted warning fingerprints reproducible without storing the secret", async () => {
@@ -92,6 +121,10 @@ test("partial inventory or graph work is surfaced as partial and secondary scann
   assert.ok(result.execution.inventoryTruncationReasons.includes("file-count"));
   assert.ok(result.execution.graphTruncationReasons.includes("file-count"));
   assert.equal(result.dependencyConsistency.execution.findingsSuppressed, true);
+  assert.equal(result.coverageMap.execution.status, "partial");
+  assert.equal(result.deadCodeCandidates.status, "suppressed");
+  assert.equal(result.configurationReferences.status, "partial");
+  assert.equal(result.workflowPathEvidence.status, "partial");
   assert.equal(result.execution.secretFilesScanned, 1);
   assert.equal(result.execution.redactedSecretMatches, 0);
   assert.deepEqual(result.secretWarnings, []);
