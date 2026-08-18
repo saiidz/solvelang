@@ -4,9 +4,15 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 
-const COLLECTOR_VERSION = "0.2.0";
+const COLLECTOR_VERSION = "0.3.0";
 const MAX_OUTPUT = 4 * 1024 * 1024;
 const MAX_ITEMS = 5000;
+const PUBLIC_FILE_MARKERS = [
+  [".env", "env-file"],
+  [".git/config", "git-config"],
+  [".npmrc", "npmrc"],
+  ["auth.json", "composer-auth"],
+];
 
 function command(program, args = []) {
   try {
@@ -173,6 +179,16 @@ function collectWebRoots() {
   return roots;
 }
 
+function collectPublicFileChecks(roots) {
+  const checks = [];
+  roots.forEach((root, rootIndex) => {
+    for (const [relativePath, marker] of PUBLIC_FILE_MARKERS) {
+      checks.push({ rootIndex, marker, present: existsSync(join(root.path, relativePath)) });
+    }
+  });
+  return checks.slice(0, 2000);
+}
+
 function collectCertificates() {
   const results = [];
   const now = Date.now();
@@ -252,6 +268,7 @@ function collectSecurity() {
   };
 }
 
+const webRoots = collectWebRoots();
 const snapshot = {
   schemaVersion: "1",
   collectedAt: new Date().toISOString(),
@@ -275,8 +292,9 @@ const snapshot = {
   scheduledJobs: collectCronEvidence(),
   web: {
     servers: ["nginx", "apache2", "httpd", "caddy"].filter((name) => command("systemctl", ["is-active", name]) === "active"),
-    roots: collectWebRoots(),
+    roots: webRoots,
     certificates: collectCertificates(),
+    publicFileChecks: collectPublicFileChecks(webRoots),
   },
   backups: collectBackups(),
   logs: collectLogs(),
@@ -287,6 +305,7 @@ const snapshot = {
     notes: [
       "Collector runs a fixed read-only command allowlist and accepts no command arguments from user input.",
       "Process inventory contains PID, parent PID, numeric uid, state, and executable comm name only; arguments, command lines, and environment variables are not collected.",
+      "Sensitive public-file checks record only existence booleans for four fixed marker paths under candidate web roots; file contents are never read.",
       "Environment variables, file contents, database contents, private keys, credentials, process command lines, and cron command bodies are not collected.",
       "Web-root ownership is emitted as numeric uid to avoid unrelated account-directory metadata.",
     ],

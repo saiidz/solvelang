@@ -20,6 +20,13 @@ function inconsistentSnapshot(): ServerAuditSnapshot {
       { mount: "/srv/private-volume", sizeBytes: 1000, usedBytes: 400, availableBytes: 500, usagePercent: 40 },
       { mount: "/srv/private-volume", sizeBytes: 1000, usedBytes: 500, availableBytes: 400, usagePercent: 50 },
     ],
+    processes: [
+      { pid: 100, ppid: 1, uid: 1000, state: "S", name: "private-process-a" },
+      { pid: 100, ppid: 1, uid: 0, state: "R", name: "private-process-a" },
+      { pid: 200, ppid: 201, uid: 1000, state: "S", name: "private-process-b" },
+      { pid: 201, ppid: 200, uid: 1000, state: "S", name: "private-process-c" },
+      { pid: 300, ppid: 300, uid: 1000, state: "S", name: "private-process-d" },
+    ],
     web: {
       roots: [
         { path: "/srv/private/customer-a/public", owner: "owner-a", mode: "0755" },
@@ -41,6 +48,9 @@ test("Server Audit report composes inventory consistency evidence without raw na
       "Service inventory reports conflicting state",
       "Filesystem inventory reports conflicting capacity",
       "Web-root inventory reports conflicting metadata",
+      "Process inventory reports conflicting identity",
+      "Process inventory reports impossible self-parenting",
+      "Process inventory reports cyclic parentage",
     ].sort(),
   );
   assert.ok(inventory.every((finding) => /^srv_[a-f0-9]{8}$/.test(finding.id)));
@@ -48,11 +58,16 @@ test("Server Audit report composes inventory consistency evidence without raw na
   const serialized = JSON.stringify(inventory);
   assert.equal(serialized.includes("private-package-name"), false);
   assert.equal(serialized.includes("private-service-name"), false);
+  assert.equal(serialized.includes("private-process-a"), false);
+  assert.equal(serialized.includes("private-process-b"), false);
+  assert.equal(serialized.includes("private-process-c"), false);
+  assert.equal(serialized.includes("private-process-d"), false);
   assert.equal(serialized.includes("/srv/private-volume"), false);
   assert.equal(serialized.includes("/srv/private/customer-a/public"), false);
   assert.ok(serialized.includes("packages[0]"));
   assert.ok(serialized.includes("services[0]"));
   assert.ok(serialized.includes("filesystems[0]"));
+  assert.ok(serialized.includes("processes[0]"));
   assert.ok(serialized.includes("web.roots[0]"));
 });
 
