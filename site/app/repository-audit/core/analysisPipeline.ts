@@ -1,13 +1,28 @@
 import {
-  analyzeRepositoryGraph,
-  type RepositoryAuditGraphPipelineOptions,
-  type RepositoryAuditGraphPipelineResult,
-} from "./graphPipeline";
+  createRepositoryConfigurationReferenceAnalysis,
+  type RepositoryConfigurationReferenceAnalysis,
+  type RepositoryConfigurationReferenceOptions,
+} from "./configurationReferences";
+import {
+  createRepositoryCoverageMap,
+  type RepositoryCoverageMap,
+  type RepositoryCoverageMapOptions,
+} from "./coverageMapping";
+import {
+  createRepositoryDeadCodeCandidateAnalysis,
+  type RepositoryDeadCodeCandidateAnalysis,
+  type RepositoryDeadCodeCandidateOptions,
+} from "./deadCodeCandidates";
 import {
   analyzeRepositoryDependencyConsistency,
   type RepositoryDependencyConsistency,
   type RepositoryDependencyConsistencyOptions,
 } from "./dependencyConsistency";
+import {
+  analyzeRepositoryGraph,
+  type RepositoryAuditGraphPipelineOptions,
+  type RepositoryAuditGraphPipelineResult,
+} from "./graphPipeline";
 import {
   analyzeRepositoryInventory,
   normalizeRepositoryPath,
@@ -19,11 +34,20 @@ import {
   scanRepositorySecrets,
   type RepositorySecretWarning,
 } from "./secretScan";
+import {
+  createRepositoryWorkflowPathEvidence,
+  type RepositoryWorkflowPathEvidenceAnalysis,
+  type RepositoryWorkflowPathEvidenceOptions,
+} from "./workflowPathEvidence";
 
 export type RepositoryAuditAnalysisOptions = {
   inventoryLimits?: Partial<RepositoryScanLimits>;
   graph?: RepositoryAuditGraphPipelineOptions;
   dependencyConsistency?: RepositoryDependencyConsistencyOptions;
+  coverageMap?: RepositoryCoverageMapOptions;
+  deadCodeCandidates?: RepositoryDeadCodeCandidateOptions;
+  configurationReferences?: RepositoryConfigurationReferenceOptions;
+  workflowPathEvidence?: RepositoryWorkflowPathEvidenceOptions;
   secretHmacKey?: Uint8Array;
 };
 
@@ -34,6 +58,10 @@ export type RepositoryAuditAnalysisResult = {
   inventory: RepositoryInventoryAnalysis;
   graph: RepositoryAuditGraphPipelineResult;
   dependencyConsistency: RepositoryDependencyConsistency;
+  coverageMap: RepositoryCoverageMap;
+  deadCodeCandidates: RepositoryDeadCodeCandidateAnalysis;
+  configurationReferences: RepositoryConfigurationReferenceAnalysis;
+  workflowPathEvidence: RepositoryWorkflowPathEvidenceAnalysis;
   secretWarnings: RepositorySecretWarning[];
   execution: {
     status: "complete" | "partial";
@@ -41,8 +69,17 @@ export type RepositoryAuditAnalysisResult = {
     inventoryTruncationReasons: RepositoryInventoryAnalysis["execution"]["truncationReasons"];
     graphTruncationReasons: RepositoryAuditGraphPipelineResult["execution"]["truncationReasons"];
     dependencyConsistencyStatus: RepositoryDependencyConsistency["execution"]["status"];
+    coverageMapStatus: RepositoryCoverageMap["execution"]["status"];
+    deadCodeCandidateStatus: RepositoryDeadCodeCandidateAnalysis["status"];
+    configurationReferenceStatus: RepositoryConfigurationReferenceAnalysis["status"];
+    workflowPathEvidenceStatus: RepositoryWorkflowPathEvidenceAnalysis["status"];
     dependencyFilesScanned: number;
     undeclaredDependencyFindings: number;
+    directTestMappings: number;
+    documentationMappings: number;
+    deadCodeCandidateCount: number;
+    configurationReferenceCount: number;
+    workflowPathReferenceCount: number;
     secretFilesScanned: number;
     redactedSecretMatches: number;
     networkAccess: false;
@@ -105,6 +142,18 @@ export async function analyzeRepositorySnapshot(
     graph.graph,
     options.dependencyConsistency,
   );
+  const coverageMap = createRepositoryCoverageMap(snapshot, graph.graph, options.coverageMap);
+  const deadCodeCandidates = await createRepositoryDeadCodeCandidateAnalysis(graph.graph, options.deadCodeCandidates);
+  const configurationReferences = await createRepositoryConfigurationReferenceAnalysis(
+    snapshot,
+    graph.graph,
+    options.configurationReferences,
+  );
+  const workflowPathEvidence = await createRepositoryWorkflowPathEvidence(
+    snapshot,
+    graph.graph,
+    options.workflowPathEvidence,
+  );
 
   // Secret matching is restricted to files accepted by the bounded graph scan.
   // This prevents a secondary scanner from silently bypassing file/byte/depth limits.
@@ -116,8 +165,18 @@ export async function analyzeRepositorySnapshot(
 
   const truncated = inventory.execution.truncated
     || graph.execution.truncated
-    || dependencyConsistency.execution.findingsTruncated;
-  const partial = truncated || dependencyConsistency.execution.status === "partial";
+    || dependencyConsistency.execution.findingsTruncated
+    || coverageMap.execution.mappingsTruncated
+    || coverageMap.execution.samplesTruncated
+    || deadCodeCandidates.execution.candidatesTruncated
+    || configurationReferences.execution.referencesTruncated
+    || workflowPathEvidence.execution.referencesTruncated;
+  const partial = truncated
+    || dependencyConsistency.execution.status === "partial"
+    || coverageMap.execution.status === "partial"
+    || deadCodeCandidates.status !== "complete"
+    || configurationReferences.status === "partial"
+    || workflowPathEvidence.status === "partial";
   return {
     schema: "solvelang.repository-audit.analysis.v0",
     mode: "analyze-only",
@@ -125,6 +184,10 @@ export async function analyzeRepositorySnapshot(
     inventory,
     graph,
     dependencyConsistency,
+    coverageMap,
+    deadCodeCandidates,
+    configurationReferences,
+    workflowPathEvidence,
     secretWarnings,
     execution: {
       status: partial ? "partial" : "complete",
@@ -132,8 +195,17 @@ export async function analyzeRepositorySnapshot(
       inventoryTruncationReasons: [...inventory.execution.truncationReasons],
       graphTruncationReasons: [...graph.execution.truncationReasons],
       dependencyConsistencyStatus: dependencyConsistency.execution.status,
+      coverageMapStatus: coverageMap.execution.status,
+      deadCodeCandidateStatus: deadCodeCandidates.status,
+      configurationReferenceStatus: configurationReferences.status,
+      workflowPathEvidenceStatus: workflowPathEvidence.status,
       dependencyFilesScanned: dependencyConsistency.execution.filesScanned,
       undeclaredDependencyFindings: dependencyConsistency.undeclaredImports.length,
+      directTestMappings: coverageMap.testMappings.length,
+      documentationMappings: coverageMap.documentationMappings.length,
+      deadCodeCandidateCount: deadCodeCandidates.candidates.length,
+      configurationReferenceCount: configurationReferences.references.length,
+      workflowPathReferenceCount: workflowPathEvidence.references.length,
       secretFilesScanned: secretSnapshot.files.length,
       redactedSecretMatches: secretWarnings.length,
       networkAccess: false,
