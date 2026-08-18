@@ -16,7 +16,7 @@ function completeSnapshot(): ServerAuditSnapshot {
     services: [],
     packages: [],
     scheduledJobs: [],
-    web: { servers: [], roots: [], certificates: [] },
+    web: { servers: [], roots: [], certificates: [], publicFileChecks: [] },
     backups: [],
     logs: [],
     security: {},
@@ -41,6 +41,7 @@ test("coverage findings report only structurally absent snapshot sections", () =
   assert.equal(findings[0]?.category, "coverage");
   assert.ok(findings[0]?.evidence.some((item) => item.source === "snapshot.packages"));
   assert.ok(findings[0]?.evidence.some((item) => item.source === "snapshot.web.certificates"));
+  assert.ok(findings[0]?.evidence.some((item) => item.source === "snapshot.web.publicFileChecks"));
   assert.equal(findings[0]?.evidence.some((item) => item.source === "snapshot.filesystems"), false);
   assert.equal(JSON.stringify(findings).includes("private-hostname"), false);
 });
