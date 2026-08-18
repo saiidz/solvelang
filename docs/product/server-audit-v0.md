@@ -35,11 +35,13 @@ Collected categories include:
 - uptime/load/memory summary;
 - filesystem capacity;
 - listening TCP/UDP sockets with bounded process name only;
+- bounded process inventory containing PID, parent PID, numeric uid, state, and executable `comm` name only;
 - service state inventory;
 - installed package names/versions as inventory (not CVE conclusions);
 - scheduled-job source names with command bodies omitted;
 - web server activity and candidate web-root metadata;
 - framework hints derived only from file existence;
+- fixed existence-only checks for `.env`, `.git/config`, `.npmrc`, and Composer `auth.json` under candidate web roots; contents are never read;
 - Let's Encrypt certificate expiry metadata where readable;
 - backup artifact metadata from conventional backup paths;
 - top-level log file size/mtime metadata;
@@ -57,15 +59,18 @@ v0 checks include:
 - TLS certificates expired or approaching expiry;
 - world/group-writable web roots;
 - framework web roots owned by root as a low-severity review signal;
+- fixed sensitive-file markers present under candidate web roots, without claiming that local presence proves HTTP reachability;
 - explicit absence/staleness of collected backup evidence;
 - very large log files;
 - failed/dead service evidence;
+- contradictory process topology evidence such as conflicting duplicate PIDs, self-parenting, or cyclic parent relationships;
 - collector redaction assurance/coverage gaps.
 
 ## What v0 does not claim
 
 - Package versions are **not** matched against a vulnerability database in this version.
 - Cloud security groups/NACLs/WAF/IAM are not inferred from host firewall evidence.
+- Local presence of a sensitive-file marker under a candidate web root is **not** proof that the file is publicly served.
 - Backup existence is not treated as restore proof.
 - Database integrity/content is not inspected.
 - Application secrets/customer contents are not inspected.
