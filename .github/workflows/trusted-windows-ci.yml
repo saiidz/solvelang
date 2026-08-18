@@ -1,0 +1,66 @@
+name: Trusted Windows CI
+
+on:
+  push:
+    branches:
+      - "agent/windows-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cross-platform:
+    name: SolveLang on Windows
+    if: github.repository == 'saiidz/solvelang'
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Run deterministic Studio and audit tests
+        working-directory: site
+        run: npm run test:studio
+
+      - name: Run site lint
+        working-directory: site
+        run: npm run lint
+
+      - name: Build static site
+        working-directory: site
+        run: npm run build
+
+      - name: Verify exported document languages
+        working-directory: site
+        run: npm run verify:i18n-export
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check Rust formatting
+        working-directory: solvec
+        run: cargo fmt --check
+
+      - name: Run Rust clippy
+        working-directory: solvec
+        run: cargo clippy -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: solvec
+        run: cargo test
