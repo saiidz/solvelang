@@ -1,24 +1,25 @@
 # SolveLang Active Buildout Handoff
 
-**Purpose:** durable repository/build truth for continuing SolveLang without duplicating merged work or treating repository state as production state.  
-**Repository:** `saiidz/solvelang`  
+**Purpose:** durable repository/build truth for continuing `saiidz/solvelang` without duplicating merged work or confusing repository state with production state.  
 **Captured:** 2026-08-18
 
-Before acting, re-read current `main`, open/closed PRs, exact-head CI/checks, review threads, open issues, active branch heads, trusted self-hosted job metadata, `.github/workflows`, `ROADMAP.md`, and `docs/current-production-status-2026-08-13.md`. A merged feature or green workflow is never evidence that a production feature is enabled.
+Before every build run, re-read current `main`, open/closed PRs, exact-head CI/checks, review threads, open issues, active branch heads, Trusted Mac and Trusted Windows workflow/job metadata, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-13.md`. Live GitHub state always wins over hashes recorded here.
 
-## Current main
+## Current repository checkpoint
 
-At this sync `main` is `016d59214fe7676b23c932a7c842ac22e55bde5f`.
+At this sync, `main` is `87ab6a42af3a72cdd36aff8c85d0b7da75610e58`.
 
-Recently merged safe read-only work:
+Recent safe merges relevant to the active train:
 
-- #223 — Repository Audit evidence-completeness contract: complete/partial/unavailable/truncated truth.
-- #226 — evidence completeness composed into deterministic product JSON/HTML reporting.
-- #227 — bounded Server Audit process relationship findings for point-in-time zombie observations, missing parent PIDs, and listener/process-name mismatches, with explicit churn/visibility limitations and no remediation execution.
+- #223 / #226 — Repository Audit evidence-completeness contract and deterministic report composition.
+- #227 — bounded Server Audit process relationship findings.
+- #229 — lockfile-only RustSec h2 advisory remediation; current Rust audit is expected to remain clean before later merges.
+- #230 — hosted mirror for exact-head Trusted Mac results.
+- #231 / #233 — bounded Server Audit backup/log evidence consistency and deterministic/redacted report composition.
+- #232 — push-only Trusted Windows validation for owner-controlled `agent/windows-*` branches plus a hosted exact-head status mirror.
+- #235 — Trusted Mac concurrency now uses `cancel-in-progress: false`, so a newer push cannot cancel a running self-hosted Mac validation.
 
-Repository Audit already includes bounded inventory, archive/GitHub acquisition boundaries, Solve Graph reuse, redacted secret analysis, impact/blast-radius intelligence, canonical evidence export, printable HTML, and browser-local reporting. Server Audit already includes strict bounded snapshot parsing/schema alignment, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security evidence, temporal/inventory/process analysis, explicit coverage gaps, bounded public-file marker checks, deterministic/redacted JSON/HTML reports, and browser-local evidence presentation.
-
-Admin Gateway rollout machinery is merged through #168 and deterministic private Admin console publication preparation through #172. Those merges do not authorize live rollout.
+Repository Audit already has bounded inventory/acquisition, deterministic Solve Graph reuse, redacted secret analysis, evidence completeness, impact/blast-radius intelligence, canonical evidence export, printable HTML, and browser-local reporting. Server Audit already has a strict bounded snapshot/schema parser, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security evidence, temporal/inventory/process/artifact analysis, explicit coverage gaps, bounded public-file marker checks, and deterministic/redacted JSON/HTML reporting.
 
 ## Authoritative production truth
 
@@ -30,89 +31,66 @@ Until a newer live audit exists, `docs/current-production-status-2026-08-13.md` 
 - authenticator-app TOTP: **disabled**;
 - dedicated production TOTP KMS key: **not created**;
 - subscription billing: **disabled**;
-- billing webhook path: **disabled by feature boundary**;
+- production billing webhook path: **disabled by feature boundary**;
 - paid customer priority: **disabled**;
 - real charge authorization: **none**.
 
-## Admin gate
+A merged feature or green CI result is never evidence that a production-sensitive feature has been enabled.
 
-All currently known safe repository preparation for the immediate Admin Gateway step is complete. The next action is a live IAM mutation and remains separately controlled:
+## Immediate Admin boundary
+
+Safe repository preparation for the immediate Admin Gateway step is complete through #168/#172. The next action is a live IAM mutation and is separately gated:
 
 `APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-Later gateway deployment, private HTTPS/DNS/Zero-Trust ingress, Admin publication, and login/session canaries remain separate production gates. Never publish the Admin UI on the public customer origin as a shortcut.
+Gateway deployment, private HTTPS/DNS/Zero-Trust ingress, Admin publication, and login/session canaries remain separate production approvals. Never publish the Admin UI on the public customer origin as a shortcut.
 
 ## Protected production-sensitive PRs
 
-Keep these open, tested, and review-clean, but do not merge them without the exact owner phrase. Their last green heads were based on the pre-#227 main and must be replayed safely before any eventual approved merge:
+Keep these open, tested, review-clean, and safely reconciled with current `main`, but never auto-merge them:
 
-- #161 `agent/preserve-crm-through-totp-rollout` — `7b7aee6c6d06864a9973eb6d86fb94deb905918d`; CI/API Access/Rust green. Gate: `APPROVE PR #161 MERGE`.
-- #164 `agent/customer-priority-production-preflight` — `414cf42d4d75d3c4fb1cbe672e378fec7b1b3669`; CI/API Access/Customer Priority Production CI/Rust green. Gate: `APPROVE PR #164 MERGE`.
-- #169 `agent/customer-priority-queue-foundation-rollout` — `58a7ef1ece2b0821cbb8ce9a613b8151f5b433b0`; CI/API Access/Foundation Rollout CI/Rust green. Gate: `APPROVE PR #169 MERGE`.
+- #161 `agent/preserve-crm-through-totp-rollout` — current observed head `656881bc7b8f894297eef01644cb19a502239540`; gate: `APPROVE PR #161 MERGE`.
+- #164 `agent/customer-priority-production-preflight` — current observed head `121d85beaecdf9d510ec56af37851cce68d5d42c`; gate: `APPROVE PR #164 MERGE`.
+- #169 `agent/customer-priority-queue-foundation-rollout` — current observed head `9f1a0b92a9e9b128a8ae32d95b54e49aace6f003`; gate: `APPROVE PR #169 MERGE`.
 
-Queue/customer/provider launch gates and billing remain OFF. A protected PR merge would still not authorize workflow dispatch, live IAM, provider activation, email, charges, or production-data mutation.
+Their merge approvals would still not authorize workflow dispatch, live IAM/KMS, provider activation, email, charges/refunds, or production-data mutation.
 
-## Trusted Mac policy
+## Self-hosted validation policy
 
-`.github/workflows/trusted-mac-ci.yml` is push-only for trusted `agent/mac-*` branches, read-only for repository permissions, and targets `[self-hosted, macOS, ARM64]`.
+### Trusted Mac
 
-Runner inventory is not directly available through the current connector. The connector can read PR-triggered workflow runs but does not expose enough push-run inventory to prove an exact-head Trusted Mac success. Never infer success from an unobserved/queued job, interrupt another job, change runner registration/services, weaken branch restrictions, or route untrusted code to the Mac.
+`.github/workflows/trusted-mac-ci.yml` is push-only for `agent/mac-*`, has read-only repository permissions, targets `[self-hosted, macOS, ARM64]`, and after #235 does not cancel a running validation. The hosted mirror publishes exact-head `trusted-mac-ci` commit status. Never infer success from a queued/unobserved run, modify runner registration/services, weaken the branch restriction, or substitute Windows for a required Mac result.
 
-No dedicated Windows-targeted repository workflow was found in the latest reconciliation. Use Windows only if an already-configured repository workflow targets it and job metadata shows it is available; never invent routing to bypass queueing.
+### Trusted Windows
 
-## Active Solve Graph / Repository Audit successors
+`.github/workflows/trusted-windows-ci.yml` is push-only for owner-controlled `agent/windows-*`, has read-only repository permissions, uses no repository secrets, targets `[self-hosted, Windows, X64]`, and does not cancel running validation. Its hosted mirror publishes `trusted-windows-ci` only after completion. Use it for material cross-platform validation when available; never interrupt a busy runner or treat it as a substitute for an explicit Trusted Mac gate.
 
-These branches were replayed without force onto `016d59214fe7676b23c932a7c842ac22e55bde5f`; fresh hosted validation was triggered. Require exact-head hosted CI/Rust **and** verifiably green Trusted Mac before merging any of them:
+## Active highest-priority safe train
 
-- #224 `agent/mac-solve-graph-python-imports-v3` — `37f71034f025299e32af7604d70d1e73b6eac632`; deterministic bounded lexical `.py`/`.pyi` import relationships and Repository Audit impact reuse.
-- #206 `agent/mac-repository-audit-dependency-consistency-v2` — `81ac0da72985cfef66cc2c8e2de402cc5959979d`.
-- #207 `agent/mac-repository-audit-coverage-map-v2` — `fcfe38ba4f11abcfd14020440eb165fc4ee318d7`.
-- #208 `agent/mac-repository-audit-dead-code-candidates-v2` — `6c285512a8135f1f7dc408c835178306a5a67b49`.
-- #209 `agent/mac-repository-audit-config-references-v2` — `223f69a0b8eaa5ee44fbaa17db54d3a308277042`.
-- #210 `agent/mac-repository-audit-workflow-path-evidence-v2` — `860afbfa92a6e4b70a366ce3ac0b4891ef0862af`.
+1. **#224 — Python import relationships / Repository Audit blast-radius reuse.** Current observed head `6834cee73d491815d7444071e76934e2d19314c2`; GitHub-hosted CI/Rust are green. Its exact-head Trusted Mac run is queued/retried and must finish green before merge. Because `main` advanced for CI-safety work, re-check mergeability and exact-head ancestry immediately before any merge.
+2. **#206-#210 — Repository Audit successors.** Reconcile in dependency order after #224 so none overwrite newer graph work. Require exact-head hosted CI/Rust and the repository-declared Trusted Mac requirement before merge.
+3. **#211 / #225 — Server Audit trusted-Mac hardening.** #211 pins the collector executable surface; #225 preserves newer parser work while rejecting impossible memory/filesystem snapshots. Reconcile on the then-current main and require the declared Mac gate.
+4. **#234 — bounded Server Audit web-root permission findings.** This read-only stage reports world-writable roots as strong integrity-risk evidence, group-writable roots conservatively as review candidates, redacts path/owner values from findings, and caps output deterministically. It uses an `agent/windows-*` branch for cross-platform validation and should not jump ahead of #224 if doing so would unnecessarily stale the graph merge train.
 
-All graph/audit construction remains deterministic, bounded, analyze-only, and non-executing. Do not run repository code, hooks, package managers, or networked repository logic to construct evidence.
+All Repository Audit/Solve Graph construction remains deterministic, bounded, analyze-only, and non-executing. All Server Audit work remains constrained/read-only with redacted evidence and no remediation execution.
 
-After these land, continue deterministic product/browser composition, framework/deployment/config relationships, affected-tests/workflows reasoning, architecture/security path summaries, MCP/Codex integration quality, local visual explorer improvements, bounded/redacted evidence, stable IDs, and cross-platform tests.
+## Next safe engineering backlog
 
-## Active Server Audit hardening
+After the active merge train, continue in this order while re-evaluating live state every run:
 
-These trusted-Mac branches were also replayed without force onto current main; fresh hosted validation was triggered and Trusted Mac is still required:
-
-- #211 `agent/mac-server-audit-command-surface-contract-v2` — `9e2d2f25ba1a46ea7b98e93d930185bbc2e0c2d8`; pins the reviewed read-only collector executable surface.
-- #225 `agent/mac-server-audit-snapshot-invariants-v3` — `f19085fde3fc991f7f7ce7da04ad946678ed622a`; rejects impossible memory/filesystem capacity snapshots while preserving newer process/public-file parser work.
-- #212 is closed unmerged as superseded by #225 so stale parser history cannot overwrite newer Server Audit work.
-
-Continue Server Audit only with constrained allowlisted read-only collection, bounded/redacted evidence, deterministic findings/reports, and tests. No remote mutation or remediation execution.
-
-## Language/runtime, customer priority, TOTP, billing, security
-
-Imported-file source provenance is already merged. Safe language/DX work may continue on formatter/linter, semantic/type checks, `for` loops, module/package design, richer diagnostics, editor support, deterministic tests, and cross-platform compatibility.
-
-Customer priority may continue only as dormant build preparation: source integrity, retries/leases/DLQs, observability, validation-only preflight, entitlement/account enforcement, and safe browser/API readiness. Do not enable queue/customer/provider gates, call real providers, or consume production credits.
-
-TOTP preparation may continue only as non-live IAM/KMS/preflight/deployment validation code, rollback/state-preservation logic, canary planning, and tests. Do not create live KMS resources or enable TOTP.
-
-Billing preparation may continue on webhook replay/idempotency, checkout ownership, subscription lifecycle, upgrades/downgrades/cancellation, payment-method management, failure recovery, refunds policy/tests, and preflight. Do not use live Stripe keys, create charges/refunds, or enable billing.
-
-Security/account hardening, least privilege, rollback, launch-readiness, operations, stale issue/PR cleanup, and truth documentation remain valid independent safe work.
-
-## Safe build order
-
-1. Finish exact-head hosted + Trusted Mac validation for #224 and merge only when all gates are verifiably green and review-clean.
-2. Validate/reconcile #206-#210 in dependency order; merge only with exact-head hosted + Trusted Mac success.
-3. Validate/reconcile #211/#225; merge only with exact-head Trusted Mac success.
-4. Continue Repository Audit / Solve Graph deterministic read-only intelligence and report/browser composition.
-5. Continue Server Audit read-only evidence/report quality.
-6. Continue language/runtime/DX work.
-7. Keep Admin live actions gated.
-8. Replay but do not merge #161/#164/#169 until exact owner approval.
-9. Continue dormant customer-priority, TOTP, billing, security, and operations readiness while production gates remain OFF.
+1. Repository Audit dependency consistency, conservative dead-code evidence, direct test/documentation mapping, framework/deployment/config relationships, deterministic IDs, canonical/browser evidence, and cross-platform tests.
+2. Solve Graph richer language adapters, query/path/impact quality, affected-tests/workflows mapping, architecture/security path summaries, MCP/Codex integration quality, and local visual explorer improvements.
+3. Server Audit read-only ownership/permission/version findings, package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/SSL/public-file evidence, bounded JSON/HTML report quality, and cross-platform tests.
+4. Language/runtime/DX: formatter/linter, semantic/type checks, `for` loops, module/package design, richer diagnostics, editor support, and deterministic cross-platform tests.
+5. Dormant customer-priority foundations only while queue/customer/provider gates remain OFF: source integrity, retries/leases/DLQs, observability, validation-only preflight, account/entitlement enforcement, and safe browser/API readiness.
+6. TOTP preparation only while production TOTP remains OFF: non-live IAM/KMS/preflight/deployment validation code, rollback/state preservation, canary planning, and tests.
+7. Billing preparation only while production billing remains OFF: webhook replay/idempotency, checkout ownership, subscription lifecycle, upgrades/downgrades/cancellation, payment-method management, failure recovery, refunds policy/tests, and validation-only preflight.
+8. Security/account hardening, least privilege, launch readiness, rollback, operations, and stale issue/PR cleanup remain independent safe work.
 
 ## Hard safety boundary
 
-Safe automation may create/refresh isolated branches, implement code/tests/docs, create/update PRs, fix review findings/CI, rerun hosted CI, close/supersede duplicates with evidence, merge non-production PRs only after exact-head green + mergeable + review-clean validation, and keep truth docs current.
+Safe automation may create/refresh isolated branches, implement code/tests/docs, create/update PRs, fix review findings or CI regressions, rerun safe CI, close/supersede duplicates with evidence, and merge non-production PRs only after exact-head required checks are green, mergeability is confirmed, and review threads are clean.
 
 Do **not** automatically apply live AWS/IAM/KMS changes, deploy production, change DNS/private ingress, publish the production Admin UI, enable TOTP/customer priority/billing, use Stripe live, create charges/refunds, send email, mutate production customer/CRM data, upload/execute customer source in production, or merge explicitly protected production-sensitive work without its exact approval phrase.
 
-If a production gate or queued/unverifiable trusted-runner validation blocks one track, record it and continue another safe engineering task instead of idling.
+If a production gate or queued self-hosted validation blocks one track, record it and immediately continue another safe engineering task rather than idling.
