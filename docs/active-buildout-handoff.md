@@ -3,23 +3,25 @@
 **Purpose:** durable repository/build truth for continuing `saiidz/solvelang` without duplicating merged work or confusing repository state with production state.  
 **Captured:** 2026-08-18
 
-Before every build run, re-read current `main`, open/closed PRs, exact-head CI/checks, review threads, open issues, active branch heads, Trusted Mac and Trusted Windows workflow/job metadata, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-13.md`. Live GitHub state always wins over hashes recorded here.
+Before every build/integration run, re-read current `main`, open/closed PRs, exact-head CI/checks, review threads, open issues, active branch heads, Trusted Mac and Trusted Windows workflow/job metadata, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-13.md`. Live GitHub state always wins over hashes recorded here.
 
 ## Current repository checkpoint
 
-At this sync, `main` is `87ab6a42af3a72cdd36aff8c85d0b7da75610e58`.
+At this sync, `main` is `2bdc24835e08b9816b7100fd7a87c07b21c79c4e`, the merge of #244.
 
 Recent safe merges relevant to the active train:
 
 - #223 / #226 — Repository Audit evidence-completeness contract and deterministic report composition.
 - #227 — bounded Server Audit process relationship findings.
-- #229 — lockfile-only RustSec h2 advisory remediation; current Rust audit is expected to remain clean before later merges.
+- #229 — lockfile-only RustSec h2 advisory remediation; `h2` is at the fixed 0.4.16 line and cargo-audit remains mandatory.
 - #230 — hosted mirror for exact-head Trusted Mac results.
 - #231 / #233 — bounded Server Audit backup/log evidence consistency and deterministic/redacted report composition.
-- #232 — push-only Trusted Windows validation for owner-controlled `agent/windows-*` branches plus a hosted exact-head status mirror.
-- #235 — Trusted Mac concurrency now uses `cancel-in-progress: false`, so a newer push cannot cancel a running self-hosted Mac validation.
+- #232 — push-only Trusted Windows validation for owner-controlled `agent/windows-*` branches plus hosted exact-head status mirroring.
+- #235 — Trusted Mac concurrency uses `cancel-in-progress: false`, so newer pushes do not cancel running self-hosted validation.
+- #236 — prior handoff refresh.
+- #244 — bounded certificate-consistency evidence with certificate identities kept out of finding IDs.
 
-Repository Audit already has bounded inventory/acquisition, deterministic Solve Graph reuse, redacted secret analysis, evidence completeness, impact/blast-radius intelligence, canonical evidence export, printable HTML, and browser-local reporting. Server Audit already has a strict bounded snapshot/schema parser, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security evidence, temporal/inventory/process/artifact analysis, explicit coverage gaps, bounded public-file marker checks, and deterministic/redacted JSON/HTML reporting.
+Repository Audit already has bounded inventory/acquisition, deterministic Solve Graph reuse, redacted secret analysis, evidence completeness, impact/blast-radius intelligence, canonical evidence export, printable HTML, and browser-local reporting. Server Audit already has a strict bounded snapshot/schema parser, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, temporal/inventory/process/artifact analysis, explicit coverage gaps, bounded public-file marker checks, and deterministic/redacted JSON/HTML reporting.
 
 ## Authoritative production truth
 
@@ -49,28 +51,33 @@ Gateway deployment, private HTTPS/DNS/Zero-Trust ingress, Admin publication, and
 
 Keep these open, tested, review-clean, and safely reconciled with current `main`, but never auto-merge them:
 
-- #161 `agent/preserve-crm-through-totp-rollout` — current observed head `656881bc7b8f894297eef01644cb19a502239540`; gate: `APPROVE PR #161 MERGE`.
-- #164 `agent/customer-priority-production-preflight` — current observed head `121d85beaecdf9d510ec56af37851cce68d5d42c`; gate: `APPROVE PR #164 MERGE`.
-- #169 `agent/customer-priority-queue-foundation-rollout` — current observed head `9f1a0b92a9e9b128a8ae32d95b54e49aace6f003`; gate: `APPROVE PR #169 MERGE`.
+- #161 `agent/preserve-crm-through-totp-rollout` — current observed head `1874d071fc47c1957fdcfdc57ea8af0cc884e043`; gate: `APPROVE PR #161 MERGE`.
+- #164 `agent/customer-priority-production-preflight` — current observed head `62c71f475d14608b494b3c9077ec3f713b33c585`; gate: `APPROVE PR #164 MERGE`.
+- #169 `agent/customer-priority-queue-foundation-rollout` — current observed head `b2007c4e0bbcfe20637e50ccc6ba23b21aca351a`; gate: `APPROVE PR #169 MERGE`.
 
-Their merge approvals would still not authorize workflow dispatch, live IAM/KMS, provider activation, email, charges/refunds, or production-data mutation.
+Those heads currently predate `2bdc2483`; refresh them non-destructively when useful, but their approval gates remain mandatory. Their merge approvals would still not authorize workflow dispatch, live IAM/KMS, provider activation, email, charges/refunds, or production-data mutation.
 
 ## Self-hosted validation policy
 
 ### Trusted Mac
 
-`.github/workflows/trusted-mac-ci.yml` is push-only for `agent/mac-*`, has read-only repository permissions, targets `[self-hosted, macOS, ARM64]`, and after #235 does not cancel a running validation. The hosted mirror publishes exact-head `trusted-mac-ci` commit status. Never infer success from a queued/unobserved run, modify runner registration/services, weaken the branch restriction, or substitute Windows for a required Mac result.
+`.github/workflows/trusted-mac-ci.yml` is push-only for `agent/mac-*`, has read-only repository permissions, targets `[self-hosted, macOS, ARM64]`, and does not cancel a running validation. The hosted mirror publishes exact-head `trusted-mac-ci` commit status only after completion. Never infer success from a missing/queued/unobserved status, modify runner registration/services, weaken the branch restriction, or substitute Windows for a required Mac result.
 
 ### Trusted Windows
 
 `.github/workflows/trusted-windows-ci.yml` is push-only for owner-controlled `agent/windows-*`, has read-only repository permissions, uses no repository secrets, targets `[self-hosted, Windows, X64]`, and does not cancel running validation. Its hosted mirror publishes `trusted-windows-ci` only after completion. Use it for material cross-platform validation when available; never interrupt a busy runner or treat it as a substitute for an explicit Trusted Mac gate.
 
-## Active highest-priority safe train
+## Active highest-priority safe merge train
 
-1. **#224 — Python import relationships / Repository Audit blast-radius reuse.** Current observed head `6834cee73d491815d7444071e76934e2d19314c2`; GitHub-hosted CI/Rust are green. Its exact-head Trusted Mac run is queued/retried and must finish green before merge. Because `main` advanced for CI-safety work, re-check mergeability and exact-head ancestry immediately before any merge.
-2. **#206-#210 — Repository Audit successors.** Reconcile in dependency order after #224 so none overwrite newer graph work. Require exact-head hosted CI/Rust and the repository-declared Trusted Mac requirement before merge.
-3. **#211 / #225 — Server Audit trusted-Mac hardening.** #211 pins the collector executable surface; #225 preserves newer parser work while rejecting impossible memory/filesystem snapshots. Reconcile on the then-current main and require the declared Mac gate.
-4. **#234 — bounded Server Audit web-root permission findings.** This read-only stage reports world-writable roots as strong integrity-risk evidence, group-writable roots conservatively as review candidates, redacts path/owner values from findings, and caps output deterministically. It uses an `agent/windows-*` branch for cross-platform validation and should not jump ahead of #224 if doing so would unnecessarily stale the graph merge train.
+Live PR refs and workflow/check results are authoritative. The current dependency order is:
+
+1. **#245 — Python import relationships / Repository Audit blast-radius reuse.** Head `186f7ca3cf410e782375f5188be8bb33fd7b3767`, based directly on current `main`. Hosted CI and Rust are green; merge only after exact-head `trusted-mac-ci=success`, mergeability, and review-thread checks remain clean. It supersedes #238.
+2. **#246 → #247 → #248 → #249 → #250 — Repository Audit stacked successors.** They intentionally stack dependency consistency, coverage evidence, dead-code evidence, configuration references, then workflow-path evidence. Do not merge out of order. After each predecessor lands, retarget/reconcile the next PR to `main`, require fresh exact-head hosted CI/Rust and `trusted-mac-ci=success`, then merge with expected-head protection.
+3. **#251 → #252 — Server Audit web-root permission and report composition.** #251 head `3d8ea96849c98e5e230339fc5fc40ea241d1a300` is directly on current `main`; hosted CI/Rust are green and exact-head `trusted-windows-ci=success` is still required. #252 intentionally depends on #251 and must be retargeted/revalidated after #251 lands. #251 supersedes #237; #252 supersedes #243.
+4. **#253 — collector command-surface contract.** Head `e3f4e3779f2144aeca0835150490b56b3fe6a9a6`, one-file test-only rebuild on current `main`, superseding #211. Require hosted CI/Rust plus exact-head `trusted-mac-ci=success` before merge.
+5. **#254 — snapshot resource invariants.** Head `b4de868e1c5072ec5cb02b4894c999137d756396`, two-file current-main rebuild, superseding stale #225. Require hosted CI/Rust plus exact-head `trusted-mac-ci=success` before merge. Close #225 only after #254 is fully validated as the successor.
+
+Do not recreate #238-#242, #211, or #237; their current successors above preserve their intended scopes. Do not close #225 merely because #254 exists—close it only after the successor is fully validated.
 
 All Repository Audit/Solve Graph construction remains deterministic, bounded, analyze-only, and non-executing. All Server Audit work remains constrained/read-only with redacted evidence and no remediation execution.
 
