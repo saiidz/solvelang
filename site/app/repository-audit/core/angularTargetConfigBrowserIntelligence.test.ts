@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+// Keep this focused integration suite on the current-main PR head so hosted CI proves the retargeted composition.
 import {
   createSolveGraphDocument,
   createSolveGraphEdge,
