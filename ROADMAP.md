@@ -15,10 +15,11 @@ A merged feature is not automatically production-enabled, and production account
 
 - Centralized account suspension/termination foundations are **merged in code** through PR #147. Production-sensitive follow-up remains separately gated.
 - Imported-file source provenance is **merged** through PR #159.
-- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**. Later repository-only IAM/preflight corrections through #308/#312 are also merged, but live IAM, CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, publication, and canaries remain separately gated.
+- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**. Repository-only IAM/preflight corrections through #308/#312 and separately gated static Admin UI publication preparation through #321 are also merged. Live IAM, CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, Admin publication, and canaries remain separately gated.
 - The RustSec `h2` advisory that blocked the safe merge train was remediated through PR #229; `h2` is on the fixed 0.4.16 line and Rust/RustSec CI remains mandatory.
 - Repository Audit is **implemented well beyond a v0 contract**. The deterministic Python-import/dependency/coverage/dead-code/config/workflow train (#288 → #290 → #291 → #298 → #299 → #300 → #301) is merged and must not be recreated.
 - Repository Audit affected-test/workflow mapping and report composition are merged through #311/#313/#314. Canonical baseline reports remain schema `1.0.0`; graph/intelligence reports use `1.1.0`; affected-validation reports use `1.2.0` with a separate strict intelligence schema.
+- Repository Audit architecture/security-boundary path analysis and pipeline composition are merged through #317/#319, with a standalone deterministic integrity-covered architecture-path evidence artifact merged through #322. These surfaces remain analyze-only and bounded.
 - Server Audit is **implemented as a bounded read-only product surface** with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, and cross-platform validation.
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
@@ -83,11 +84,11 @@ These surfaces remain separate because their permissions, blast radius, evidence
 Re-evaluate live state before every run. The current safe order is:
 
 1. keep shared CI/security blockers cleared, including Rust/RustSec;
-2. continue Repository Audit with architecture/security path summaries, remaining framework/deployment relationships, canonical/browser evidence quality, MCP/Codex integration, local visual explorer quality, deterministic IDs/bounds/redaction, and cross-platform tests;
+2. continue Repository Audit with browser/canonical ergonomics for the merged architecture/security-path evidence, remaining framework/deployment relationships, richer query/evidence quality, MCP/Codex integration, local visual explorer quality, deterministic IDs/bounds/redaction, and cross-platform tests;
 3. continue Solve Graph with richer language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
 4. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
 5. continue language/runtime and developer-experience work, especially formatter/linter/type-system/module work, `for` loops, diagnostics, editor support, and deterministic cross-platform tests;
-6. finish safe Admin Panel repository preparation while keeping every live infrastructure gate closed;
+6. finish safe Admin Panel repository preparation while keeping every live infrastructure/publication gate closed;
 7. keep protected production-sensitive PRs refreshed and review-clean without merging them absent exact owner approval;
 8. continue dormant customer-priority preparation while queue/customer/provider gates stay OFF;
 9. continue TOTP preparation while production TOTP stays OFF;
@@ -156,6 +157,8 @@ Repository Audit is an active read-only product, not a future-only concept.
 - direct test/documentation mapping
 - package/configuration/workflow-path relationships
 - affected-test/workflow mapping from changed paths
+- bounded architecture/security-boundary path summaries
+- deterministic integrity-covered standalone architecture-path evidence artifact
 - evidence-completeness/partial-scan truth
 - deterministic finding IDs and ordering
 - canonical baseline `1.0.0`, graph/intelligence `1.1.0`, and affected-validation `1.2.0` report contracts
@@ -165,12 +168,11 @@ Repository Audit is an active read-only product, not a future-only concept.
 
 ### Next read-only intelligence work
 
-- architecture/security path summaries
+- browser/canonical ergonomics for architecture/security-path evidence without breaking historical strict report schemas
 - remaining framework/deployment relationships not already represented by bounded config/workflow evidence
 - richer query/path/impact quality
 - MCP/Codex integration quality
 - local visual explorer improvements
-- canonical/browser evidence ergonomics
 - deterministic cross-platform validation
 
 ### Remediation mode
@@ -210,11 +212,13 @@ Automatic remote remediation execution remains **out of scope**. Future planning
 
 ## Admin Panel boundary
 
-Safe repository preparation is complete through #168/#172, with later repository-only IAM/preflight corrections merged through #308/#312. The exact next live infrastructure gate remains:
+Safe repository preparation is complete through #168/#172, with later repository-only IAM/preflight corrections merged through #308/#312 and separately gated static Admin UI publication preparation merged through #321. Two distinct production gates are currently visible:
 
 `APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-That phrase does not authorize later CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, Admin publication, or canaries; those remain separate protected steps.
+`APPROVE ADMIN STATIC UI PRODUCTION PUBLICATION`
+
+Neither phrase authorizes the other production step. They also do not authorize later CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, or canaries; those remain separate protected steps.
 
 ## Protected production-sensitive backlog
 
