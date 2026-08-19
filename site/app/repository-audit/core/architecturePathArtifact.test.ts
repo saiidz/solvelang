@@ -83,7 +83,7 @@ test("artifact is detached from mutable analysis input and tampering breaks inte
   analysis.paths[0]!.segments[0]!.evidence!.path = "changed-after-export.ts";
 
   assert.equal(artifact.paths[0]?.root.path, "src/api.ts");
-  assert.equal(artifact.paths[0]?.segments[0]!.evidence?.path, "src/api.ts");
+  assert.equal(artifact.paths[0]?.segments[0]?.evidence?.path, "src/api.ts");
 
   const tampered = {
     ...artifact,
