@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
+import { findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
 import {
@@ -93,6 +94,17 @@ const solveGraphShortestPathInputSchema = z.object({
   edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
   maxDepth: z.number().int().min(0).max(64).optional(),
   maxVisited: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphAlternativePathsInputSchema = z.object({
+  ...solveGraphInputFields,
+  sourceId: z.string().regex(/^sgn_[a-f0-9]{32}$/),
+  targetId: z.string().regex(/^sgn_[a-f0-9]{32}$/),
+  direction: z.enum(["dependencies", "dependents"]).optional(),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(32).optional(),
+  maxPaths: z.number().int().min(1).max(32).optional(),
+  maxStates: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
 
 type SolveGraphInput = { path?: string; rawJson?: string };
@@ -257,6 +269,22 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_alternative_paths",
+  {
+    title: "Find alternative Solve Graph paths",
+    description: "Enumerate deterministic bounded simple dependency or dependent paths between stable Solve Graph node IDs, with explicit edge-kind, depth, path-count, and traversal-state bounds.",
+    inputSchema: solveGraphAlternativePathsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, sourceId, targetId, direction, edgeKinds, maxDepth, maxPaths, maxStates }) => textResult(findSolveGraphAlternativePaths(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    sourceId,
+    targetId,
+    { direction, edgeKinds, maxDepth, maxPaths, maxStates },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_impact",
   {
     title: "Analyze Solve Graph impact",
@@ -292,6 +320,7 @@ server.registerTool(
       "solvelang_graph_dependencies",
       "solvelang_graph_dependents",
       "solvelang_graph_shortest_path",
+      "solvelang_graph_alternative_paths",
       "solvelang_graph_impact",
       "solvelang_capabilities",
     ],

@@ -15,6 +15,8 @@ const expectedFiles = [
   "package/dist/src/index.js",
   "package/dist/src/n8n.d.ts",
   "package/dist/src/n8n.js",
+  "package/dist/src/solve-graph-alternative-paths.d.ts",
+  "package/dist/src/solve-graph-alternative-paths.js",
   "package/dist/src/solve-graph-ranked-search.d.ts",
   "package/dist/src/solve-graph-ranked-search.js",
   "package/dist/src/solve-graph-shortest-path.d.ts",
