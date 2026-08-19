@@ -60,6 +60,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.deploymentPathEvidence.schema, "solvelang.repository-audit.deployment-path-evidence.v0");
   assert.equal(result.frameworkPathEvidence.schema, "solvelang.repository-audit.framework-path-evidence.v0");
   assert.equal(result.angularTargetConfigEvidence.schema, "solvelang.repository-audit.angular-target-config-evidence.v0");
+  assert.equal(result.packageScriptPathEvidence.schema, "solvelang.repository-audit.package-script-path-evidence.v0");
   assert.equal(result.affectedValidation, undefined);
   assert.equal(result.execution.affectedValidationStatus, undefined);
   assert.equal(result.execution.dependencyConsistencyStatus, "complete");
@@ -70,6 +71,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.execution.deploymentPathEvidenceStatus, "complete");
   assert.equal(result.execution.frameworkPathEvidenceStatus, "complete");
   assert.equal(result.execution.angularTargetConfigEvidenceStatus, "complete");
+  assert.equal(result.execution.packageScriptPathEvidenceStatus, "complete");
   assert.equal(result.execution.dependencyFilesScanned, 2);
   assert.equal(result.execution.undeclaredDependencyFindings, 0);
   assert.equal(result.execution.directTestMappings, 0);
@@ -80,6 +82,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.execution.deploymentPathReferenceCount, 0);
   assert.equal(result.execution.frameworkPathReferenceCount, 0);
   assert.equal(result.execution.angularTargetConfigReferenceCount, 0);
+  assert.equal(result.execution.packageScriptPathReferenceCount, 0);
   assert.equal(result.execution.secretFilesScanned, 3);
   assert.equal(result.secretWarnings.length, 1);
   assert.equal(result.execution.redactedSecretMatches, 1);
@@ -88,7 +91,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
-test("surfaces dependency, test, documentation, configuration, workflow, deployment, framework, Angular target-config, and affected-validation evidence in one bounded analysis", async () => {
+test("surfaces dependency, test, documentation, configuration, workflow, deployment, framework, Angular target-config, package-script, and affected-validation evidence in one bounded analysis", async () => {
   const workflow = [
     "jobs:",
     "  test:",
@@ -105,8 +108,15 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
       },
     },
   });
+  const packageJson = JSON.stringify({
+    main: "./src/app.ts",
+    scripts: {
+      start: "node ./src/app.ts",
+      typecheck: "tsc -p tsconfig.app.json",
+    },
+  });
   const result = await analyzeRepositorySnapshot(fixture([
-    { path: "package.json", byteSize: 80, text: JSON.stringify({ main: "./src/app.ts" }) },
+    { path: "package.json", byteSize: packageJson.length, text: packageJson },
     { path: "Dockerfile", byteSize: dockerfile.length, text: dockerfile },
     { path: "angular.json", byteSize: angular.length, text: angular },
     { path: "tsconfig.app.json", byteSize: 2, text: "{}" },
@@ -153,6 +163,20 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
       relationship.targetState,
     ]),
     [["app", "build", "tsconfig.app.json", "present"]],
+  );
+  assert.equal(result.execution.packageScriptPathEvidenceStatus, "complete");
+  assert.equal(result.execution.packageScriptPathReferenceCount, 2);
+  assert.deepEqual(
+    result.packageScriptPathEvidence.relationships.map((relationship) => [
+      relationship.scriptName,
+      relationship.kind,
+      relationship.targetPath,
+      relationship.targetState,
+    ]),
+    [
+      ["start", "node-entrypoint", "src/app.ts", "present"],
+      ["typecheck", "tsc-project", "tsconfig.app.json", "present"],
+    ],
   );
   assert.equal(result.execution.affectedValidationStatus, "complete");
   assert.equal(result.execution.affectedTestFiles, 1);
@@ -205,6 +229,8 @@ test("partial inventory or graph work is surfaced as partial and secondary scann
   assert.equal(result.execution.frameworkPathEvidenceStatus, "partial");
   assert.equal(result.angularTargetConfigEvidence.status, "partial");
   assert.equal(result.execution.angularTargetConfigEvidenceStatus, "partial");
+  assert.equal(result.packageScriptPathEvidence.status, "partial");
+  assert.equal(result.execution.packageScriptPathEvidenceStatus, "partial");
   assert.equal(result.execution.secretFilesScanned, 1);
   assert.equal(result.execution.redactedSecretMatches, 0);
   assert.deepEqual(result.secretWarnings, []);

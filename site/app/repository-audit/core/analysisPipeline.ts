@@ -56,6 +56,11 @@ import {
   type RepositorySnapshot,
 } from "./inventory";
 import {
+  createRepositoryPackageScriptPathEvidenceAnalysis,
+  type RepositoryPackageScriptPathEvidenceAnalysis,
+  type RepositoryPackageScriptPathEvidenceOptions,
+} from "./packageScriptPathEvidence";
+import {
   scanRepositorySecrets,
   type RepositorySecretWarning,
 } from "./secretScan";
@@ -81,6 +86,7 @@ export type RepositoryAuditAnalysisOptions = {
   deploymentPathEvidence?: RepositoryDeploymentPathEvidenceOptions;
   frameworkPathEvidence?: RepositoryFrameworkPathEvidenceOptions;
   angularTargetConfigEvidence?: RepositoryAngularTargetConfigEvidenceOptions;
+  packageScriptPathEvidence?: RepositoryPackageScriptPathEvidenceOptions;
   affectedValidation?: RepositoryAffectedValidationRequest;
   secretHmacKey?: Uint8Array;
 };
@@ -100,6 +106,7 @@ export type RepositoryAuditAnalysisResult = {
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceAnalysis;
   frameworkPathEvidence: RepositoryFrameworkPathEvidenceAnalysis;
   angularTargetConfigEvidence: RepositoryAngularTargetConfigEvidenceAnalysis;
+  packageScriptPathEvidence: RepositoryPackageScriptPathEvidenceAnalysis;
   affectedValidation?: RepositoryAffectedValidationMap;
   secretWarnings: RepositorySecretWarning[];
   execution: {
@@ -116,6 +123,7 @@ export type RepositoryAuditAnalysisResult = {
     deploymentPathEvidenceStatus: RepositoryDeploymentPathEvidenceAnalysis["status"];
     frameworkPathEvidenceStatus: RepositoryFrameworkPathEvidenceAnalysis["status"];
     angularTargetConfigEvidenceStatus: RepositoryAngularTargetConfigEvidenceAnalysis["status"];
+    packageScriptPathEvidenceStatus: RepositoryPackageScriptPathEvidenceAnalysis["status"];
     affectedValidationStatus?: RepositoryAffectedValidationMap["status"];
     architecturePathCount: number;
     securityBoundaryPathCount: number;
@@ -129,6 +137,7 @@ export type RepositoryAuditAnalysisResult = {
     deploymentPathReferenceCount: number;
     frameworkPathReferenceCount: number;
     angularTargetConfigReferenceCount: number;
+    packageScriptPathReferenceCount: number;
     affectedTestFiles?: number;
     affectedWorkflowFiles?: number;
     secretFilesScanned: number;
@@ -221,6 +230,11 @@ export async function analyzeRepositorySnapshot(
     graph.graph,
     options.angularTargetConfigEvidence,
   );
+  const packageScriptPathEvidence = await createRepositoryPackageScriptPathEvidenceAnalysis(
+    snapshot,
+    graph.graph,
+    options.packageScriptPathEvidence,
+  );
   const affectedValidation = options.affectedValidation
     ? await createRepositoryAffectedValidationMap(
       graph.graph,
@@ -257,6 +271,7 @@ export async function analyzeRepositorySnapshot(
     || deploymentPathEvidence.execution.relationshipsTruncated
     || frameworkPathEvidence.execution.relationshipsTruncated
     || angularTargetConfigEvidence.execution.relationshipsTruncated
+    || packageScriptPathEvidence.execution.relationshipsTruncated
     || affectedValidationTruncated;
   const partial = truncated
     || architecturePaths.status === "partial"
@@ -268,6 +283,7 @@ export async function analyzeRepositorySnapshot(
     || deploymentPathEvidence.status === "partial"
     || frameworkPathEvidence.status === "partial"
     || angularTargetConfigEvidence.status === "partial"
+    || packageScriptPathEvidence.status === "partial"
     || affectedValidation?.status === "partial";
   return {
     schema: "solvelang.repository-audit.analysis.v0",
@@ -284,6 +300,7 @@ export async function analyzeRepositorySnapshot(
     deploymentPathEvidence,
     frameworkPathEvidence,
     angularTargetConfigEvidence,
+    packageScriptPathEvidence,
     ...(affectedValidation === undefined ? {} : { affectedValidation }),
     secretWarnings,
     execution: {
@@ -300,6 +317,7 @@ export async function analyzeRepositorySnapshot(
       deploymentPathEvidenceStatus: deploymentPathEvidence.status,
       frameworkPathEvidenceStatus: frameworkPathEvidence.status,
       angularTargetConfigEvidenceStatus: angularTargetConfigEvidence.status,
+      packageScriptPathEvidenceStatus: packageScriptPathEvidence.status,
       ...(affectedValidation === undefined ? {} : {
         affectedValidationStatus: affectedValidation.status,
       }),
@@ -315,6 +333,7 @@ export async function analyzeRepositorySnapshot(
       deploymentPathReferenceCount: deploymentPathEvidence.relationships.length,
       frameworkPathReferenceCount: frameworkPathEvidence.relationships.length,
       angularTargetConfigReferenceCount: angularTargetConfigEvidence.relationships.length,
+      packageScriptPathReferenceCount: packageScriptPathEvidence.relationships.length,
       ...(affectedValidation === undefined ? {} : {
         affectedTestFiles: affectedValidation.summary.affectedTestFiles,
         affectedWorkflowFiles: affectedValidation.summary.affectedWorkflowFiles,
