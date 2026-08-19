@@ -1,14 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
-import type { RepositoryDeploymentPathEvidenceAnalysis } from "./core/deploymentPathEvidence";
-import {
-  createRepositoryDeploymentPathPresentation,
-  type RepositoryDeploymentPathPresentationRow,
+import type {
+  RepositoryDeploymentPathPresentation,
+  RepositoryDeploymentPathPresentationRow,
 } from "./core/deploymentPathPresentation";
 
 type RepositoryAuditDeploymentPathPanelProps = {
-  analysis: RepositoryDeploymentPathEvidenceAnalysis;
+  presentation: RepositoryDeploymentPathPresentation;
   className?: string;
 };
 
@@ -30,14 +28,9 @@ function targetStateLabel(state: RepositoryDeploymentPathPresentationRow["target
 }
 
 export function RepositoryAuditDeploymentPathPanel({
-  analysis,
+  presentation,
   className = "",
 }: RepositoryAuditDeploymentPathPanelProps) {
-  const presentation = useMemo(
-    () => createRepositoryDeploymentPathPresentation(analysis, { maxRows: 100 }),
-    [analysis],
-  );
-
   return (
     <section className={`rounded-[2rem] border border-indigo-200 bg-indigo-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
