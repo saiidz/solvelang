@@ -3,6 +3,7 @@ import test from "node:test";
 import type { RepositoryArchitecturePathAnalysis } from "./architecturePaths";
 import {
   createRepositoryArchitecturePathEvidenceArtifact,
+  createRepositoryArchitecturePathEvidenceDownload,
   serializeRepositoryArchitecturePathEvidenceArtifact,
 } from "./architecturePathArtifact";
 import { verifyRepositoryAuditIntegrity } from "./reportIntegrity";
@@ -103,4 +104,25 @@ test("preserves explicit partial and truncation truth without adding capabilitie
   assert.equal(artifact.execution.pathsTruncated, true);
   assert.equal(artifact.execution.networkAccess, false);
   assert.equal(artifact.execution.writeAccess, false);
+});
+
+test("creates a browser-ready architecture evidence download without changing the artifact schema", async () => {
+  const download = await createRepositoryArchitecturePathEvidenceDownload(
+    "My Repository.zip",
+    fixture(),
+  );
+
+  assert.equal(
+    download.filename,
+    "My-Repository-solvelang-repository-audit-architecture-paths.json",
+  );
+  assert.equal(download.mediaType, "application/json;charset=utf-8");
+  assert.ok(download.content.endsWith("\n"));
+  assert.deepEqual(JSON.parse(download.content), download.artifact);
+  assert.equal(download.artifact.schema, "solvelang.repository-audit.architecture-path-evidence.v1");
+  assert.equal(download.artifact.schemaVersion, "1.0.0");
+  assert.equal(download.artifact.mode, "analyze-only");
+  assert.equal(download.artifact.execution.networkAccess, false);
+  assert.equal(download.artifact.execution.writeAccess, false);
+  assert.equal(await verifyRepositoryAuditIntegrity(download.artifact), true);
 });
