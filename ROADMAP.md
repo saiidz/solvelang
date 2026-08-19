@@ -1,6 +1,6 @@
 # SolveLang Roadmap
 
-SolveLang is an early language and workflow-analysis prototype written primarily in Rust, with a production customer-account/API foundation that is further along than the general managed-execution product.
+SolveLang is an early language and workflow-analysis prototype written primarily in Rust, with a production customer-account/API/Admin foundation that is further along than the general managed-execution product.
 
 This roadmap distinguishes four states deliberately:
 
@@ -9,22 +9,24 @@ This roadmap distinguishes four states deliberately:
 - **production deployed but gated/limited**;
 - **planned**.
 
-A merged feature is not automatically production-enabled, and production account infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-13.md` take precedence over stale hashes or historical planning text.
+A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-19.md` take precedence over stale hashes or historical planning text.
 
 ## Current implementation overlay — 2026-08-19
 
 - Centralized account suspension/termination foundations are **merged in code** through PR #147. Production-sensitive follow-up remains separately gated.
 - Imported-file source provenance is **merged** through PR #159.
-- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**. Repository-only IAM/preflight corrections through #308/#312 and separately gated static Admin UI publication preparation through #321 are also merged. Live IAM, CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, Admin publication, and canaries remain separately gated.
+- Admin Gateway deployment machinery (#168), private-ingress/publication preparation (#172/#321), and repository-only IAM/preflight corrections (#308/#312) are merged. Separately approved 2026-08-19 production work deployed the private Admin Gateway, Cloudflare Access/private ingress, static Admin UI, and rotated the Admin application password. Future live changes remain separately approval-gated; prior approval phrases are not reusable authorization.
 - The RustSec `h2` advisory that blocked the safe merge train was remediated through PR #229; `h2` is on the fixed 0.4.16 line and Rust/RustSec CI remains mandatory.
 - Repository Audit is **implemented well beyond a v0 contract**. The deterministic Python-import/dependency/coverage/dead-code/config/workflow train (#288 → #290 → #291 → #298 → #299 → #300 → #301) is merged and must not be recreated.
 - Repository Audit affected-test/workflow mapping and report composition are merged through #311/#313/#314. Canonical baseline reports remain schema `1.0.0`; graph/intelligence reports use `1.1.0`; affected-validation reports use `1.2.0` with a separate strict intelligence schema.
-- Repository Audit architecture/security-boundary path analysis and pipeline composition are merged through #317/#319, with a standalone deterministic integrity-covered architecture-path evidence artifact merged through #322. These surfaces remain analyze-only and bounded.
-- Server Audit is **implemented as a bounded read-only product surface** with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, and cross-platform validation.
+- Repository Audit architecture/security-boundary path analysis and pipeline composition are merged through #317/#319, with a standalone deterministic integrity-covered architecture-path evidence artifact merged through #322 and browser/export presentation through #332.
+- Solve Graph deterministic ranked node search is merged in the core and MCP surfaces through #329/#335, local visual-explorer modeling through #337, and conservative repository-local PHP include/require relationships through #341. These remain bounded and analyze-only.
+- Repository-local TypeScript `extends` / project-reference evidence is merged through #333.
+- Server Audit is **implemented as a bounded read-only product surface** with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, cross-platform validation, and bounded scheduled-job relationships through #340.
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
 - Customer-priority source/upload/API foundations are merged, but production customer priority remains **OFF**. Protected #164/#169 remain preparation only.
-- Production TOTP remains **OFF**, the dedicated production TOTP KMS key has not been created, subscription billing remains **OFF**, paid priority remains **OFF**, and no real-charge authorization exists.
+- Production TOTP remains **OFF**. The 2026-08-19 Admin rollout did not perform the dedicated TOTP KMS rollout. Subscription billing remains **OFF**, paid priority remains **OFF**, and no real-charge authorization exists.
 
 ## Current baseline
 
@@ -50,24 +52,29 @@ A merged feature is not automatically production-enabled, and production account
 - local-first Workflow Intelligence Studio for deterministic workflow analysis, scenario simulation, traces, analytics, versions, and exports
 - browser-local Workflow Preflight for deterministic workflow checks and evidence reports
 
-### Production account/API foundation
+### Production account/API/Admin foundation
 
-Verified production state on 2026-08-13:
+Verified production state recorded on 2026-08-19:
 
 - API access: **enabled**
 - customer accounts: **enabled**
-- username/email + password sign-in: **enabled and owner-canary verified**
+- Admin CRM backend: **enabled**
+- username/email + password sign-in: **enabled**
 - normal password sign-in sends email: **no**
 - magic-link first-sign-in/recovery: **available**
+- private Admin Gateway: **deployed**
+- `admin.solve-lang.com`: **live behind Cloudflare Access/private ingress**
+- static Admin UI: **published through the separately approved production publication stage**
 - optional authenticator-app TOTP implementation: **merged in code**
-- authenticator-app TOTP production feature: **disabled / not rolled out yet**
-- dedicated production TOTP KMS key: **not created yet**
+- authenticator-app TOTP production feature: **disabled / rollout not completed**
+- dedicated production TOTP KMS rollout: **not performed as part of the 2026-08-19 Admin work**
 - subscription billing: **disabled**
 - production billing webhook path: **disabled by feature boundary**
 - paid priority selection: **disabled**
 - real charge authorization: **none**
+- general managed hosted SolveLang workflow execution: **not live**
 
-The authoritative live-state record remains `docs/current-production-status-2026-08-13.md` until a newer production audit is performed.
+The authoritative production-facing record is `docs/current-production-status-2026-08-19.md`. Facts explicitly marked there as carried forward were not silently re-audited by the Admin deployment workflow.
 
 ## Product direction
 
@@ -84,18 +91,19 @@ These surfaces remain separate because their permissions, blast radius, evidence
 Re-evaluate live state before every run. The current safe order is:
 
 1. keep shared CI/security blockers cleared, including Rust/RustSec;
-2. continue Repository Audit with browser/canonical ergonomics for the merged architecture/security-path evidence, remaining framework/deployment relationships, richer query/evidence quality, MCP/Codex integration, local visual explorer quality, deterministic IDs/bounds/redaction, and cross-platform tests;
-3. continue Solve Graph with richer language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
-4. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
-5. continue language/runtime and developer-experience work, especially formatter/linter/type-system/module work, `for` loops, diagnostics, editor support, and deterministic cross-platform tests;
-6. finish safe Admin Panel repository preparation while keeping every live infrastructure/publication gate closed;
-7. keep protected production-sensitive PRs refreshed and review-clean without merging them absent exact owner approval;
-8. continue dormant customer-priority preparation while queue/customer/provider gates stay OFF;
-9. continue TOTP preparation while production TOTP stays OFF;
-10. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
-11. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
+2. drain existing safe non-production PRs before unrelated work whenever the safe queue exceeds six;
+3. continue Repository Audit with browser/canonical ergonomics for architecture/security-path evidence, remaining framework/deployment relationships, richer query/evidence quality, MCP/Codex integration, local visual explorer quality, deterministic IDs/bounds/redaction, and cross-platform tests;
+4. continue Solve Graph with richer bounded language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
+5. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
+6. continue language/runtime and developer-experience work, especially formatter/linter/type-system/module work, `for` loops, diagnostics, editor support, and deterministic cross-platform tests;
+7. continue safe Admin Panel repository preparation while treating every future live production change as a fresh protected action;
+8. keep protected production-sensitive PRs refreshed and review-clean without merging them absent exact owner approval;
+9. continue dormant customer-priority preparation while queue/customer/provider gates stay OFF;
+10. continue TOTP preparation while production TOTP stays OFF;
+11. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
+12. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
 
-Production mutations remain separately gated even when implementation code and workflows already exist.
+Production mutations remain separately gated even when implementation code, workflows, or prior production stages already exist.
 
 ## Account and security hardening
 
@@ -151,14 +159,17 @@ Repository Audit is an active read-only product, not a future-only concept.
 - exact duplicate/backup-copy and generated/vendor evidence
 - bounded/redacted secret-pattern findings
 - deterministic Solve Graph dependency and impact analysis
-- JavaScript/TypeScript and Python import/reference relationships
+- JavaScript/TypeScript, Python, and conservative repository-local PHP import/reference relationships
+- repository-local TypeScript config project-reference evidence
 - dependency consistency evidence
 - conservative dead-code candidates
 - direct test/documentation mapping
 - package/configuration/workflow-path relationships
 - affected-test/workflow mapping from changed paths
 - bounded architecture/security-boundary path summaries
-- deterministic integrity-covered standalone architecture-path evidence artifact
+- deterministic integrity-covered standalone architecture-path evidence artifact and browser/export presentation
+- deterministic ranked Solve Graph search with MCP exposure
+- local visual-explorer modeling
 - evidence-completeness/partial-scan truth
 - deterministic finding IDs and ordering
 - canonical baseline `1.0.0`, graph/intelligence `1.1.0`, and affected-validation `1.2.0` report contracts
@@ -168,9 +179,8 @@ Repository Audit is an active read-only product, not a future-only concept.
 
 ### Next read-only intelligence work
 
-- browser/canonical ergonomics for architecture/security-path evidence without breaking historical strict report schemas
 - remaining framework/deployment relationships not already represented by bounded config/workflow evidence
-- richer query/path/impact quality
+- richer query/path/impact and evidence quality
 - MCP/Codex integration quality
 - local visual explorer improvements
 - deterministic cross-platform validation
@@ -191,7 +201,7 @@ Server Audit remains read-only-first because live infrastructure has a larger bl
 - disk/log/backup posture evidence
 - web roots/framework hints/TLS certificates/public-file marker checks
 - security posture summaries
-- temporal, inventory, process, artifact, certificate, permission, listener, and coverage findings
+- temporal, inventory, process, artifact, certificate, permission, listener, coverage, and scheduled-job relationship findings
 - deterministic/redacted JSON and HTML reports
 - no remediation executor
 
@@ -212,13 +222,9 @@ Automatic remote remediation execution remains **out of scope**. Future planning
 
 ## Admin Panel boundary
 
-Safe repository preparation is complete through #168/#172, with later repository-only IAM/preflight corrections merged through #308/#312 and separately gated static Admin UI publication preparation merged through #321. Two distinct production gates are currently visible:
+The private Admin Gateway, Cloudflare Access/private ingress, static Admin UI, and Admin application password rotation were completed through separately approved production stages on 2026-08-19 and are recorded in `docs/current-production-status-2026-08-19.md`.
 
-`APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
-
-`APPROVE ADMIN STATIC UI PRODUCTION PUBLICATION`
-
-Neither phrase authorizes the other production step. They also do not authorize later CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, or canaries; those remain separate protected steps.
+Those completed approvals are historical evidence, not standing authorization. Any future IAM/KMS change, gateway redeploy, DNS/Access/private-ingress change, Admin publication/update, credential rotation, or production canary with mutation potential requires a fresh explicit owner approval scoped to that action. Repository-only preparation may continue without implying live authorization.
 
 ## Protected production-sensitive backlog
 
@@ -237,7 +243,7 @@ Do not automatically:
 - live-apply AWS/IAM/KMS changes;
 - deploy production;
 - change DNS/private ingress/Zero Trust;
-- publish the production Admin UI;
+- publish or update the production Admin UI;
 - enable TOTP, customer priority, or billing;
 - use Stripe live or create charges/refunds;
 - send email;
