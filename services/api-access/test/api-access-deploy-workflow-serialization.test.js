@@ -16,6 +16,7 @@ const productionWorkflowNames = [
   "deploy-api-access-production-foundation.yml",
   "deploy-api-access-production-totp-kms.yml",
   "deploy-api-access-production-totp.yml",
+  "deploy-customer-priority-production-foundation.yml",
 ];
 
 async function workflow(name) {
@@ -85,6 +86,12 @@ test("test deployment is isolated while every production mutation uses the repos
   assert.ok(
     kmsSource.indexOf("Wait for earlier production deployment requests")
       < kmsSource.indexOf("Verify live customer baseline and TOTP remains disabled"),
+  );
+
+  const priorityFoundationSource = await workflow("deploy-customer-priority-production-foundation.yml");
+  assert.ok(
+    priorityFoundationSource.indexOf("Wait for earlier production deployment requests")
+      < priorityFoundationSource.indexOf("Assume production read-only preflight role"),
   );
 });
 

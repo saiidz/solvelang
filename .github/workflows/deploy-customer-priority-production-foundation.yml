@@ -1,0 +1,216 @@
+name: Deploy Customer Priority Production Foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_priority_foundation:
+        description: Confirm creating/updating only the dormant production priority infrastructure foundation
+        required: true
+        default: false
+        type: boolean
+      confirm_processing_remains_disabled:
+        description: Confirm queue processing, customer exposure, and provider execution must all remain disabled
+        required: true
+        default: false
+        type: boolean
+      confirm_billing_remains_disabled:
+        description: Confirm subscription billing, Stripe, webhooks, and charges must remain disabled
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      API_STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      PRIORITY_STACK_NAME: solvelang-api-access-production-priority
+      OPERATIONS_ALARM_TOPIC_ARN: ${{ vars.OPERATIONS_ALARM_TOPIC_ARN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce dormant production-priority foundation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production priority foundation must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "${{ inputs.confirm_priority_foundation }}" == true ]]
+          [[ "${{ inputs.confirm_processing_remains_disabled }}" == true ]]
+          [[ "${{ inputs.confirm_billing_remains_disabled }}" == true ]]
+          [[ "$PRIORITY_STACK_NAME" == "solvelang-api-access-production-priority" ]]
+          [[ "$API_STACK_NAME" == *prod* || "$API_STACK_NAME" == *production* ]]
+          [[ "$API_STACK_NAME" != *test* ]]
+          test -n "$AWS_REGION"
+          if [[ -n "$OPERATIONS_ALARM_TOPIC_ARN" ]]; then
+            [[ "$OPERATIONS_ALARM_TOPIC_ARN" == arn:aws:sns:${AWS_REGION}:*:* ]] || { echo "Operations alarm topic must be in the production region." >&2; exit 1; }
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Verify customer baseline and refuse an already-active priority stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          api_stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          api_status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$api_stack")"
+          [[ "$api_status" == CREATE_COMPLETE || "$api_status" == UPDATE_COMPLETE ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == false ]]
+
+          set +e
+          aws cloudformation describe-stacks --stack-name "$PRIORITY_STACK_NAME" >/tmp/solvelang-priority-stack.json 2>/tmp/solvelang-priority-stack.err
+          priority_describe_status=$?
+          set -e
+          if (( priority_describe_status == 0 )); then
+            status="$(jq -r '.Stacks[0].StackStatus // empty' /tmp/solvelang-priority-stack.json)"
+            [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Existing priority stack is not stable: $status" >&2; exit 1; }
+            for key in PriorityQueueEnabled CustomerPriorityEnabled ProviderExecutionEnabled; do
+              value="$(jq -r --arg key "$key" '[.Stacks[0].Parameters[]? | select(.ParameterKey == $key) | .ParameterValue] | first // "false"' /tmp/solvelang-priority-stack.json)"
+              [[ "$value" == false ]] || { echo "Existing priority stack has $key=$value; dormant-foundation workflow refuses to disable an active release." >&2; exit 1; }
+            done
+          elif grep -Fqi 'does not exist' /tmp/solvelang-priority-stack.err; then
+            : # First deployment: no existing priority stack is an expected state.
+          else
+            echo "Unable to determine existing priority stack state; refusing deployment." >&2
+            cat /tmp/solvelang-priority-stack.err >&2
+            exit 1
+          fi
+
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Run API and priority tests
+        run: npm test
+
+      - name: Validate dormant production priority stack
+        run: sam validate --lint --template customer-priority-production-stack.yaml
+
+      - name: Build dormant production priority stack
+        run: sam build --template customer-priority-production-stack.yaml
+
+      - name: Assert all customer/processing gates are default OFF and billing is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(grep -c 'Default: "false"' customer-priority-production-stack.yaml)" -ge 3 ]]
+          ! grep -Eqi 'stripe|subscriptionbilling|webhook|charge' customer-priority-production-stack.yaml
+          grep -q 'PointInTimeRecoveryEnabled: true' customer-priority-production-stack.yaml
+          grep -q 'BlockPublicPolicy: true' customer-priority-production-stack.yaml
+          grep -q 'ExpirationInDays: 7' customer-priority-production-stack.yaml
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare production SAM artifact bucket
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy durable priority foundation with processing OFF
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact.outputs.bucket }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            PriorityQueueEnabled=false
+            CustomerPriorityEnabled=false
+            ProviderExecutionEnabled=false
+            CustomerAuthTableName=disabled
+          )
+          [[ -z "$OPERATIONS_ALARM_TOPIC_ARN" ]] || parameters+=(OperationsAlarmTopicArn="$OPERATIONS_ALARM_TOPIC_ARN")
+          sam deploy \
+            --stack-name "$PRIORITY_STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$PRIORITY_STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+          aws cloudformation update-termination-protection --stack-name "$PRIORITY_STACK_NAME" --enable-termination-protection
+
+      - name: Verify durable resources exist while all execution paths remain OFF
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$PRIORITY_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          for key in PriorityQueueEnabled CustomerPriorityEnabled ProviderExecutionEnabled; do
+            [[ "$(jq -r --arg key "$key" '[.Stacks[0].Parameters[]? | select(.ParameterKey == $key) | .ParameterValue] | first // empty' <<<"$stack")" == false ]]
+          done
+          table="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "PriorityJobsTableName") | .OutputValue] | first // empty' <<<"$stack")"
+          bucket="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "PrioritySourceBucketName") | .OutputValue] | first // empty' <<<"$stack")"
+          test -n "$table"; test -n "$bucket"
+          aws dynamodb describe-continuous-backups --table-name "$table" --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' --output text | grep -qx ENABLED
+          aws dynamodb describe-time-to-live --table-name "$table" --query 'TimeToLiveDescription.TimeToLiveStatus' --output text | grep -qx ENABLED
+          aws s3api get-public-access-block --bucket "$bucket" --query 'PublicAccessBlockConfiguration.[BlockPublicAcls,IgnorePublicAcls,BlockPublicPolicy,RestrictPublicBuckets]' --output text | grep -qx $'True\tTrue\tTrue\tTrue'
+          aws s3api get-bucket-versioning --bucket "$bucket" --query Status --output text | grep -qx Enabled
+          aws s3api get-bucket-encryption --bucket "$bucket" --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text | grep -qx AES256
+          for output in StandardQueueUrl ExpressQueueUrl PriorityQueueUrl CriticalQueueUrl; do
+            url="$(jq -r --arg key "$output" '[.Stacks[0].Outputs[]? | select(.OutputKey == $key) | .OutputValue] | first // empty' <<<"$stack")"
+            [[ "$url" == https://sqs.* ]]
+            aws sqs get-queue-attributes --queue-url "$url" --attribute-names QueueArn >/dev/null
+          done
+          function_count="$(aws cloudformation list-stack-resources --stack-name "$PRIORITY_STACK_NAME" --query 'length(StackResourceSummaries[?ResourceType==`AWS::Lambda::Function`])' --output text)"
+          [[ "$function_count" == 0 ]] || { echo "Dormant priority foundation unexpectedly created processing Lambdas." >&2; exit 1; }
+          protection="$(aws cloudformation describe-stacks --stack-name "$PRIORITY_STACK_NAME" --query 'Stacks[0].EnableTerminationProtection' --output text)"
+          [[ "$protection" == True ]]
+          api_stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == false ]]
+          {
+            echo "table=$table"
+            echo "bucket=$bucket"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        env:
+          JOBS_TABLE: ${{ steps.verify.outputs.table }}
+          SOURCE_BUCKET: ${{ steps.verify.outputs.bucket }}
+        shell: bash
+        run: |
+          printf '## SolveLang production customer-priority dormant foundation\n\n- Commit: `%s`\n- Stack: `%s`\n- Jobs table: `%s`\n- Private source bucket: `%s`\n- Queue processing enabled: **false**\n- Customer priority exposed: **false**\n- Provider execution enabled: **false**\n- Processing Lambdas created: **no**\n- Subscription billing enabled: **false**\n- Stripe/webhook used: **no**\n- Customer source uploaded: **no**\n- Customer credits consumed: **no**\n- Customer job submitted: **no**\n- Email sent: **no**\n- Charges performed: **no**\n- Termination protection: **enabled**\n' \
+            "$GITHUB_SHA" "$PRIORITY_STACK_NAME" "$JOBS_TABLE" "$SOURCE_BUCKET" >> "$GITHUB_STEP_SUMMARY"

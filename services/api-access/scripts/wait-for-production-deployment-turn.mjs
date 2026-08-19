@@ -7,6 +7,7 @@ export const PRODUCTION_WORKFLOW_PATHS = Object.freeze([
   ".github/workflows/deploy-api-access-production-foundation.yml",
   ".github/workflows/deploy-api-access-production-totp-kms.yml",
   ".github/workflows/deploy-api-access-production-totp.yml",
+  ".github/workflows/deploy-customer-priority-production-foundation.yml",
 ]);
 
 const ACTIVE_RUN_STATUSES = Object.freeze(["requested", "pending", "waiting", "queued", "in_progress"]);
