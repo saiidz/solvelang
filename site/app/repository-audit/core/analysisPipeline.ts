@@ -4,6 +4,11 @@ import {
   type RepositoryAffectedValidationOptions,
 } from "./affectedValidation";
 import {
+  analyzeRepositoryArchitecturePaths,
+  type RepositoryArchitecturePathAnalysis,
+  type RepositoryArchitecturePathOptions,
+} from "./architecturePaths";
+import {
   createRepositoryConfigurationReferenceAnalysis,
   type RepositoryConfigurationReferenceAnalysis,
   type RepositoryConfigurationReferenceOptions,
@@ -52,6 +57,7 @@ export type RepositoryAffectedValidationRequest = RepositoryAffectedValidationOp
 export type RepositoryAuditAnalysisOptions = {
   inventoryLimits?: Partial<RepositoryScanLimits>;
   graph?: RepositoryAuditGraphPipelineOptions;
+  architecturePaths?: RepositoryArchitecturePathOptions;
   dependencyConsistency?: RepositoryDependencyConsistencyOptions;
   coverageMap?: RepositoryCoverageMapOptions;
   deadCodeCandidates?: RepositoryDeadCodeCandidateOptions;
@@ -67,6 +73,7 @@ export type RepositoryAuditAnalysisResult = {
   source: RepositorySnapshot["source"];
   inventory: RepositoryInventoryAnalysis;
   graph: RepositoryAuditGraphPipelineResult;
+  architecturePaths: RepositoryArchitecturePathAnalysis;
   dependencyConsistency: RepositoryDependencyConsistency;
   coverageMap: RepositoryCoverageMap;
   deadCodeCandidates: RepositoryDeadCodeCandidateAnalysis;
@@ -79,12 +86,15 @@ export type RepositoryAuditAnalysisResult = {
     truncated: boolean;
     inventoryTruncationReasons: RepositoryInventoryAnalysis["execution"]["truncationReasons"];
     graphTruncationReasons: RepositoryAuditGraphPipelineResult["execution"]["truncationReasons"];
+    architecturePathStatus: RepositoryArchitecturePathAnalysis["status"];
     dependencyConsistencyStatus: RepositoryDependencyConsistency["execution"]["status"];
     coverageMapStatus: RepositoryCoverageMap["execution"]["status"];
     deadCodeCandidateStatus: RepositoryDeadCodeCandidateAnalysis["status"];
     configurationReferenceStatus: RepositoryConfigurationReferenceAnalysis["status"];
     workflowPathEvidenceStatus: RepositoryWorkflowPathEvidenceAnalysis["status"];
     affectedValidationStatus?: RepositoryAffectedValidationMap["status"];
+    architecturePathCount: number;
+    securityBoundaryPathCount: number;
     dependencyFilesScanned: number;
     undeclaredDependencyFindings: number;
     directTestMappings: number;
@@ -151,6 +161,7 @@ export async function analyzeRepositorySnapshot(
     throw new Error("Repository Audit graph source does not match the analyzed snapshot.");
   }
 
+  const architecturePaths = await analyzeRepositoryArchitecturePaths(graph.graph, options.architecturePaths);
   const dependencyConsistency = analyzeRepositoryDependencyConsistency(
     snapshot,
     graph.graph,
@@ -185,12 +196,16 @@ export async function analyzeRepositorySnapshot(
     options.secretHmacKey ? { hmacKey: options.secretHmacKey } : {},
   );
 
+  const architecturePathsTruncated = architecturePaths.execution.rootsTruncated
+    || architecturePaths.execution.traversalTruncated
+    || architecturePaths.execution.pathsTruncated;
   const affectedValidationTruncated = affectedValidation !== undefined && (
     affectedValidation.execution.changedPathsTruncated
     || affectedValidation.execution.mappingsTruncated
   );
   const truncated = inventory.execution.truncated
     || graph.execution.truncated
+    || architecturePathsTruncated
     || dependencyConsistency.execution.findingsTruncated
     || coverageMap.execution.mappingsTruncated
     || coverageMap.execution.samplesTruncated
@@ -199,6 +214,7 @@ export async function analyzeRepositorySnapshot(
     || workflowPathEvidence.execution.referencesTruncated
     || affectedValidationTruncated;
   const partial = truncated
+    || architecturePaths.status === "partial"
     || dependencyConsistency.execution.status === "partial"
     || coverageMap.execution.status === "partial"
     || deadCodeCandidates.status !== "complete"
@@ -211,6 +227,7 @@ export async function analyzeRepositorySnapshot(
     source: { ...snapshot.source },
     inventory,
     graph,
+    architecturePaths,
     dependencyConsistency,
     coverageMap,
     deadCodeCandidates,
@@ -223,6 +240,7 @@ export async function analyzeRepositorySnapshot(
       truncated,
       inventoryTruncationReasons: [...inventory.execution.truncationReasons],
       graphTruncationReasons: [...graph.execution.truncationReasons],
+      architecturePathStatus: architecturePaths.status,
       dependencyConsistencyStatus: dependencyConsistency.execution.status,
       coverageMapStatus: coverageMap.execution.status,
       deadCodeCandidateStatus: deadCodeCandidates.status,
@@ -231,6 +249,8 @@ export async function analyzeRepositorySnapshot(
       ...(affectedValidation === undefined ? {} : {
         affectedValidationStatus: affectedValidation.status,
       }),
+      architecturePathCount: architecturePaths.paths.length,
+      securityBoundaryPathCount: architecturePaths.summary.securityBoundaryPaths,
       dependencyFilesScanned: dependencyConsistency.execution.filesScanned,
       undeclaredDependencyFindings: dependencyConsistency.undeclaredImports.length,
       directTestMappings: coverageMap.testMappings.length,
