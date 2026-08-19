@@ -2,6 +2,7 @@
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { RepositoryAuditDeploymentPathPanel } from "./RepositoryAuditDeploymentPathPanel";
+import { RepositoryAuditFrameworkPathPanel } from "./RepositoryAuditFrameworkPathPanel";
 import { RepositoryAuditVisualExplorerPanel } from "./RepositoryAuditVisualExplorerPanel";
 import { analyzeRepositorySnapshot, type RepositoryAuditAnalysisResult } from "./core/analysisPipeline";
 import { createRepositoryArchitecturePathEvidenceDownload, type RepositoryArchitecturePathEvidenceDownload } from "./core/architecturePathArtifact";
@@ -9,6 +10,7 @@ import { extractRepositoryArchive, type RepositoryArchiveExtractionResult } from
 import { createRepositoryAuditBrowserIntelligence, type RepositoryAuditBrowserIntelligence } from "./core/browserIntelligence";
 import { createCanonicalRepositoryAuditArtifact, type CanonicalRepositoryAuditArtifact } from "./core/canonicalArtifact";
 import { createRepositoryDeploymentPathEvidenceDownload, type RepositoryDeploymentPathEvidenceDownload } from "./core/deploymentPathArtifact";
+import { createRepositoryFrameworkPathEvidenceDownload, type RepositoryFrameworkPathEvidenceDownload } from "./core/frameworkPathArtifact";
 import type { RepositoryInventoryAnalysis, RepositorySeverity } from "./core/inventory";
 import { ingestArchiveSnapshotEntries, type RepositoryIngestionResult, type RepositorySnapshotEntry } from "./core/ingestion";
 import { createRepositoryAuditHtmlReport, createRepositoryAuditProductReport, repositoryAuditSafeFilename, type RepositoryAuditProductReport } from "./core/report";
@@ -28,6 +30,7 @@ type ScanResult = {
   canonicalArtifact: CanonicalRepositoryAuditArtifact;
   architecturePathEvidence: RepositoryArchitecturePathEvidenceDownload;
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceDownload;
+  frameworkPathEvidence: RepositoryFrameworkPathEvidenceDownload;
   browserIntelligence: RepositoryAuditBrowserIntelligence;
 };
 
@@ -148,10 +151,18 @@ export function RepositoryAuditApp() {
       archiveName,
       intelligence.deploymentPathEvidence,
     );
+    const frameworkPathEvidence = await createRepositoryFrameworkPathEvidenceDownload(
+      archiveName,
+      intelligence.frameworkPathEvidence,
+    );
     const browserIntelligence = await createRepositoryAuditBrowserIntelligence(
       intelligence.graph.graph,
       intelligence.deploymentPathEvidence,
-      { deploymentPaths: { maxRows: 100 } },
+      {
+        deploymentPaths: { maxRows: 100 },
+        frameworkPaths: { maxRows: 100 },
+      },
+      intelligence.frameworkPathEvidence,
     );
     return {
       extraction,
@@ -162,6 +173,7 @@ export function RepositoryAuditApp() {
       canonicalArtifact,
       architecturePathEvidence,
       deploymentPathEvidence,
+      frameworkPathEvidence,
       browserIntelligence,
     };
   }
@@ -223,22 +235,25 @@ export function RepositoryAuditApp() {
     }
   }
 
-  function exportReport(format: "product-json" | "canonical-json" | "architecture-json" | "deployment-json" | "html"): void {
+  function exportReport(format: "product-json" | "canonical-json" | "architecture-json" | "deployment-json" | "framework-json" | "html"): void {
     if (!result) return;
     const base = `${repositoryAuditSafeFilename(result.report.archive.name)}-solvelang-repository-audit`;
     if (format === "product-json") download(`${base}.json`, `${JSON.stringify(result.report, null, 2)}\n`, "application/json;charset=utf-8");
     else if (format === "canonical-json") download(result.canonicalArtifact.filename, result.canonicalArtifact.content, result.canonicalArtifact.mediaType);
     else if (format === "architecture-json") download(result.architecturePathEvidence.filename, result.architecturePathEvidence.content, result.architecturePathEvidence.mediaType);
     else if (format === "deployment-json") download(result.deploymentPathEvidence.filename, result.deploymentPathEvidence.content, result.deploymentPathEvidence.mediaType);
+    else if (format === "framework-json") download(result.frameworkPathEvidence.filename, result.frameworkPathEvidence.content, result.frameworkPathEvidence.mediaType);
     else download(`${base}.html`, createRepositoryAuditHtmlReport(result.report), "text/html;charset=utf-8");
     recordEvent(
-      format === "deployment-json"
-        ? "repository_audit_deployment_path_evidence_downloaded"
-        : format === "architecture-json"
-          ? "repository_audit_architecture_evidence_downloaded"
-          : format === "canonical-json"
-            ? "repository_audit_canonical_evidence_downloaded"
-            : "repository_audit_report_downloaded",
+      format === "framework-json"
+        ? "repository_audit_framework_path_evidence_downloaded"
+        : format === "deployment-json"
+          ? "repository_audit_deployment_path_evidence_downloaded"
+          : format === "architecture-json"
+            ? "repository_audit_architecture_evidence_downloaded"
+            : format === "canonical-json"
+              ? "repository_audit_canonical_evidence_downloaded"
+              : "repository_audit_report_downloaded",
     );
   }
 
@@ -300,10 +315,10 @@ export function RepositoryAuditApp() {
             <li>✓ Finds exact duplicates, backup candidates, generated output, and large files</li>
             <li>✓ Maps bounded JavaScript/TypeScript dependencies and impact hotspots without executing code</li>
             <li>✓ Summarizes bounded architecture and security-boundary paths as structural evidence</li>
-            <li>✓ Maps explicit repository-local deployment references and local graph topology without executing code</li>
+            <li>✓ Maps explicit repository-local deployment and Angular/Nest framework references without executing code</li>
             <li>✓ Flags credential patterns with values redacted from reports and the UI</li>
             <li>✓ Never executes repository code, scripts, hooks, or package managers</li>
-            <li>✓ Produces product JSON, integrity-covered canonical, architecture, and deployment evidence JSON, and a printable HTML report</li>
+            <li>✓ Produces product JSON, integrity-covered canonical, architecture, deployment, and framework evidence JSON, and a printable HTML report</li>
           </ul>
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-6 text-slate-300">
             No file is deleted, moved, renamed, merged, or rewritten. Cleanup recommendations require a separate branch, validation, rollback planning, and human approval.
@@ -332,13 +347,14 @@ export function RepositoryAuditApp() {
           <section className="rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Evidence export</p>
             <h2 className="mt-2 text-2xl font-semibold">Keep the audit record</h2>
-            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path and deployment-path artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
+            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path, deployment-path, and framework-path artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
             <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:flex-wrap">
               <button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800">Download HTML report</button>
               <button type="button" onClick={() => exportReport("product-json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Download product JSON</button>
               <button type="button" onClick={() => exportReport("canonical-json")} className="rounded-xl border border-blue-300 bg-white px-5 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">Download canonical evidence</button>
               <button type="button" onClick={() => exportReport("architecture-json")} className="rounded-xl border border-violet-300 bg-white px-5 py-3 text-sm font-semibold text-violet-800 hover:bg-violet-100">Download architecture paths</button>
               <button type="button" onClick={() => exportReport("deployment-json")} className="rounded-xl border border-indigo-300 bg-white px-5 py-3 text-sm font-semibold text-indigo-800 hover:bg-indigo-100">Download deployment paths</button>
+              <button type="button" onClick={() => exportReport("framework-json")} className="rounded-xl border border-cyan-300 bg-white px-5 py-3 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Download framework paths</button>
             </div>
             <p className="mt-5 text-sm font-semibold text-slate-700">Canonical schema {result.canonicalArtifact.report.schemaVersion} · report {result.canonicalArtifact.report.reportId}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Integrity SHA-256: {result.canonicalArtifact.report.integrity.canonicalJsonSha256}</p>
@@ -346,6 +362,8 @@ export function RepositoryAuditApp() {
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Architecture SHA-256: {result.architecturePathEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-3 text-sm font-semibold text-slate-700">Deployment evidence {result.deploymentPathEvidence.artifact.schemaVersion} · {result.deploymentPathEvidence.artifact.status}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Deployment SHA-256: {result.deploymentPathEvidence.artifact.integrity.canonicalJsonSha256}</p>
+            <p className="mt-3 text-sm font-semibold text-slate-700">Framework evidence {result.frameworkPathEvidence.artifact.schemaVersion} · {result.frameworkPathEvidence.artifact.status}</p>
+            <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Framework SHA-256: {result.frameworkPathEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Source: {result.analysis.source.fingerprint}</p>
           </section>
         </div>
@@ -398,6 +416,9 @@ export function RepositoryAuditApp() {
 
         <RepositoryAuditVisualExplorerPanel explorer={result.browserIntelligence.visualExplorer} className="mt-8" />
         <RepositoryAuditDeploymentPathPanel presentation={result.browserIntelligence.deploymentPaths} className="mt-8" />
+        {result.browserIntelligence.frameworkPaths ? (
+          <RepositoryAuditFrameworkPathPanel presentation={result.browserIntelligence.frameworkPaths} className="mt-8" />
+        ) : null}
 
         <section className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Deterministic findings</p><h2 className="mt-2 text-2xl font-semibold">What needs review</h2></div><p className="text-sm text-slate-500">Showing {shownFindings.length} of {result.analysis.findings.length}</p></div>
