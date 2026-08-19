@@ -11,14 +11,15 @@ This roadmap distinguishes four states deliberately:
 
 A merged feature is not automatically production-enabled, and production account infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-13.md` take precedence over stale hashes or historical planning text.
 
-## Current implementation overlay — 2026-08-18
+## Current implementation overlay — 2026-08-19
 
 - Centralized account suspension/termination foundations are **merged in code** through PR #147. Production-sensitive follow-up remains separately gated.
 - Imported-file source provenance is **merged** through PR #159.
-- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**, but live IAM, gateway deployment, private ingress/DNS/Zero Trust, publication, and canaries remain separately gated.
+- Admin Gateway deployment machinery (#168) and deterministic private Admin console publication preparation (#172) are **merged**. Later repository-only IAM/preflight corrections through #308/#312 are also merged, but live IAM, CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, publication, and canaries remain separately gated.
 - The RustSec `h2` advisory that blocked the safe merge train was remediated through PR #229; `h2` is on the fixed 0.4.16 line and Rust/RustSec CI remains mandatory.
-- Repository Audit is **implemented well beyond a v0 contract**: bounded acquisition/inventory, deterministic Solve Graph reuse, impact/blast-radius analysis, redacted secret analysis, evidence-completeness tracking, browser reporting, canonical JSON/HTML evidence, and cross-platform validation foundations are merged. The active safe train continues with deterministic Python imports and stacked dependency/coverage/dead-code/config/workflow evidence successors (#245-#250 or their current successors).
-- Server Audit is **implemented as a bounded read-only product surface** with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, and cross-platform validation. Active hardening continues through the current web-root permission/report, collector-contract, snapshot-invariant, and privacy-boundary successors.
+- Repository Audit is **implemented well beyond a v0 contract**. The deterministic Python-import/dependency/coverage/dead-code/config/workflow train (#288 → #290 → #291 → #298 → #299 → #300 → #301) is merged and must not be recreated.
+- Repository Audit affected-test/workflow mapping and report composition are merged through #311/#313/#314. Canonical baseline reports remain schema `1.0.0`; graph/intelligence reports use `1.1.0`; affected-validation reports use `1.2.0` with a separate strict intelligence schema.
+- Server Audit is **implemented as a bounded read-only product surface** with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, and cross-platform validation.
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
 - Customer-priority source/upload/API foundations are merged, but production customer priority remains **OFF**. Protected #164/#169 remain preparation only.
@@ -82,17 +83,16 @@ These surfaces remain separate because their permissions, blast radius, evidence
 Re-evaluate live state before every run. The current safe order is:
 
 1. keep shared CI/security blockers cleared, including Rust/RustSec;
-2. finish deterministic Python import relationships and the stacked Repository Audit merge train in dependency order;
-3. continue Repository Audit dependency consistency, conservative dead-code evidence, direct test/documentation mapping, framework/deployment/config relationships, report/UI evidence, deterministic IDs, bounded scans, redaction, and cross-platform tests;
-4. continue Solve Graph with richer language/reference adapters, path/impact quality, affected-tests/workflows mapping, architecture/security summaries, MCP/Codex integration, and the local visual explorer;
-5. continue Server Audit read-only-first with constrained collector contracts, inventory relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
-6. continue language/runtime and developer-experience work, especially import provenance, formatter/linter/type-system/module work, `for` loops, diagnostics, editor support, and deterministic cross-platform tests;
-7. finish safe Admin Panel preparation while keeping the live infrastructure gate closed;
-8. keep protected production-sensitive PRs refreshed and review-clean without merging them absent exact owner approval;
-9. continue dormant customer-priority preparation while queue/customer/provider gates stay OFF;
-10. continue TOTP preparation while production TOTP stays OFF;
-11. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
-12. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
+2. continue Repository Audit with architecture/security path summaries, remaining framework/deployment relationships, canonical/browser evidence quality, MCP/Codex integration, local visual explorer quality, deterministic IDs/bounds/redaction, and cross-platform tests;
+3. continue Solve Graph with richer language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
+4. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
+5. continue language/runtime and developer-experience work, especially formatter/linter/type-system/module work, `for` loops, diagnostics, editor support, and deterministic cross-platform tests;
+6. finish safe Admin Panel repository preparation while keeping every live infrastructure gate closed;
+7. keep protected production-sensitive PRs refreshed and review-clean without merging them absent exact owner approval;
+8. continue dormant customer-priority preparation while queue/customer/provider gates stay OFF;
+9. continue TOTP preparation while production TOTP stays OFF;
+10. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
+11. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
 
 Production mutations remain separately gated even when implementation code and workflows already exist.
 
@@ -150,22 +150,27 @@ Repository Audit is an active read-only product, not a future-only concept.
 - exact duplicate/backup-copy and generated/vendor evidence
 - bounded/redacted secret-pattern findings
 - deterministic Solve Graph dependency and impact analysis
+- JavaScript/TypeScript and Python import/reference relationships
+- dependency consistency evidence
+- conservative dead-code candidates
+- direct test/documentation mapping
+- package/configuration/workflow-path relationships
+- affected-test/workflow mapping from changed paths
 - evidence-completeness/partial-scan truth
 - deterministic finding IDs and ordering
+- canonical baseline `1.0.0`, graph/intelligence `1.1.0`, and affected-validation `1.2.0` report contracts
 - machine-readable/canonical evidence plus self-contained report surfaces
 - browser-local findings and impact/blast-radius presentation
 - no repository mutation or repository-code execution during analysis
 
-### Active read-only intelligence train
+### Next read-only intelligence work
 
-- Python import/reference relationships
-- dependency consistency
-- conservative dead-code candidates
-- direct test/documentation mapping
-- package/configuration/workflow-path relationships
-- richer affected-tests/workflows and architecture/security path summaries
+- architecture/security path summaries
+- remaining framework/deployment relationships not already represented by bounded config/workflow evidence
+- richer query/path/impact quality
 - MCP/Codex integration quality
 - local visual explorer improvements
+- canonical/browser evidence ergonomics
 - deterministic cross-platform validation
 
 ### Remediation mode
@@ -184,7 +189,7 @@ Server Audit remains read-only-first because live infrastructure has a larger bl
 - disk/log/backup posture evidence
 - web roots/framework hints/TLS certificates/public-file marker checks
 - security posture summaries
-- temporal, inventory, process, artifact, certificate, and coverage findings
+- temporal, inventory, process, artifact, certificate, permission, listener, and coverage findings
 - deterministic/redacted JSON and HTML reports
 - no remediation executor
 
@@ -192,7 +197,6 @@ The collector must not expose credential values, private keys, database/customer
 
 ### Active read-only hardening
 
-- ownership/permission evidence
 - package/service/port/process/scheduled-job relationship quality
 - log/cache/backup consistency
 - domain/TLS/public-file evidence quality
@@ -206,15 +210,15 @@ Automatic remote remediation execution remains **out of scope**. Future planning
 
 ## Admin Panel boundary
 
-Safe repository preparation is complete through #168/#172. The exact next live infrastructure gate is:
+Safe repository preparation is complete through #168/#172, with later repository-only IAM/preflight corrections merged through #308/#312. The exact next live infrastructure gate remains:
 
 `APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-That phrase does not authorize later gateway deployment, private ingress/DNS/Zero Trust, Admin publication, or canaries; those remain separate protected steps.
+That phrase does not authorize later CloudFormation recovery/retry, gateway deployment, private ingress/DNS/Zero Trust, Admin publication, or canaries; those remain separate protected steps.
 
 ## Protected production-sensitive backlog
 
-Keep production-sensitive PRs such as #161, #164, and #169 refreshed, tested, mergeable, and review-clean, but do not auto-merge them. Their exact merge gates are:
+Keep production-sensitive PRs #161, #164, and #169 refreshed, tested, mergeable, and review-clean, but do not auto-merge them. Their exact merge gates are:
 
 - `APPROVE PR #161 MERGE`
 - `APPROVE PR #164 MERGE`

@@ -7,9 +7,9 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this sync, `main` is `8b740a90ac3dc5d02775cfe46ec010dd2a7de8ce`, the repository merge of #308 after #309.
+At the start of this truth sync, `main` is `3190fda7b97c112f702d9c8742873e877979092a`, the safe merge of #314 after #311/#312/#313.
 
-The previous safe queue has been drained. The only open safe non-production PR at this capture is the documentation-only handoff sync itself (#310). Protected production-sensitive/preparation PRs #161, #164, and #169 do not count toward the safe-queue threshold because they are intentionally gated.
+The safe non-production queue was drained to zero before this documentation branch was created. Protected production-sensitive/preparation PRs #161, #164, and #169 do not count toward the safe-queue threshold because they are intentionally gated.
 
 Recent integration milestones:
 
@@ -24,23 +24,49 @@ Recent integration milestones:
 - #301 — bounded Repository Audit evidence composition.
 - #307 — bounded Server Audit listener-consistency evidence rebuilt on current history.
 - #309 — redacts certificate identities from baseline TLS findings and evidence.
-- #308 — Admin Gateway generated-role IAM scope correction was merged into the repository at `8b740a90ac3dc5d02775cfe46ec010dd2a7de8ce`. That repository merge is **not** evidence that revised IAM was live-applied, the failed CloudFormation stack was recovered/retried, the gateway was deployed, DNS/private ingress was changed, the Admin UI was published, or canaries ran.
+- #308 — Admin Gateway generated-role IAM scope correction merged in repository code only; it did not live-apply IAM or deploy anything.
+- #311 — bounded changed-path mapping to affected tests/workflows.
+- #312 — durable read-only Admin Gateway preflight CloudFormation read scope merged in repository code only.
+- #313 — composed affected-validation evidence into the Repository Audit analysis pipeline.
+- #314 — published optional affected-validation evidence in canonical reports. Baseline `1.0.0` reports retain the historical strict schema; graph/intelligence `1.1.0` and affected-validation `1.2.0` reports use the separate strict intelligence schema. The merge is analyze-only and does not enable repository mutation or production actions.
 
 The #288 → #290 → #291 → #298 → #299 → #300 → #301 Repository Audit train is merged. Do not recreate those scopes. The older superseded predecessors remain historical only.
 
-Repository Audit now includes bounded ingestion/inventory, deterministic Solve Graph reuse, Python/JavaScript import/reference evidence, dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow-path relationships, impact/blast-radius analysis, secret redaction, evidence completeness, deterministic IDs/order, canonical JSON/HTML evidence, and browser-local reporting. Construction remains analyze-only and non-executing.
+Repository Audit now includes bounded ingestion/inventory, deterministic Solve Graph reuse, JavaScript/TypeScript and Python import/reference evidence, dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow-path relationships, impact/blast-radius analysis, changed-path affected-test/workflow mapping, secret redaction, evidence completeness, deterministic IDs/order, canonical report contracts, and browser-local reporting. Construction remains analyze-only and non-executing.
 
-Server Audit now includes the bounded snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, permission/ownership/privacy/consistency hardening, deterministic redacted JSON/HTML findings, and no remediation executor.
+Server Audit includes the bounded snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, permission/ownership/privacy/consistency hardening, deterministic redacted JSON/HTML findings, and no remediation executor.
 
-## Current open PRs
+## Current safe work
 
-### Protected production-sensitive preparation
+This documentation branch exists only to synchronize durable repository truth after #314. After it merges, resume safe engineering from the order below; do not recreate already-merged Repository Audit train work.
+
+Current safe engineering order:
+
+1. Repository Audit: architecture/security path summaries, remaining framework/deployment relationships not already represented by bounded config/workflow evidence, canonical/browser evidence quality, MCP/Codex integration, local visual explorer quality, and deterministic cross-platform tests.
+2. Solve Graph: richer language/reference adapters, query/path/impact quality, architecture/security summaries, and affected-test/workflow intelligence.
+3. Server Audit: read-only package/service/port/process/scheduled-job relationship quality, disk/log/cache/backup posture, domain/TLS/public-file consistency, version evidence without unsupported CVE claims, redaction, deterministic IDs, and cross-platform tests.
+4. Language/runtime/DX: formatter/linter, semantic/type checks, `for` loops, module/package design, richer diagnostics, editor support, and deterministic cross-platform tests.
+5. Safe Admin repository preparation only; never live-apply IAM/deploy/publish without the exact production approvals.
+6. Dormant customer-priority preparation only while queue/customer/provider gates remain OFF.
+7. TOTP preparation only while production TOTP remains OFF.
+8. Billing readiness only while production billing remains OFF and no real Stripe activity is authorized.
+9. Security/account hardening, rollback, least privilege, operations, launch readiness, and truth-document maintenance.
+
+## Protected production-sensitive preparation
+
+These PRs remain intentionally unmerged:
 
 - #161 — account/CRM rollback preservation. Exact merge gate: `APPROVE PR #161 MERGE`.
 - #164 — validation-only production customer-priority preflight. Exact merge gate: `APPROVE PR #164 MERGE`.
 - #169 — dormant production customer-priority foundation rollout preparation. Exact merge gate: `APPROVE PR #169 MERGE`.
 
-#308 is no longer open; it was merged by an external owner action during this build run. Continue to treat every live IAM/deployment/recovery step as separately protected.
+Their last recorded heads before this sync were:
+
+- #161 — `324db30b271bc453a3c524848e0d0af9e926a5a8`
+- #164 — `7d69cf82f57009ed53d24ed347e788d596120215`
+- #169 — `203bf2102b3d0cadd511118ef31c52f0b1b828f9`
+
+They were green on their existing hosted validation at that checkpoint. Because `main` has advanced since their last replay, refresh them on the settled post-truth-sync main before treating them as current; never merge them without their exact owner approval phrases.
 
 ## Authoritative production truth
 
@@ -60,11 +86,11 @@ A repository merge or green CI result is never evidence that a production-sensit
 
 ## Admin production boundary
 
-The previously recorded live infrastructure gate remains:
+The exact next live infrastructure gate remains:
 
 `APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-The production Admin rollout exposed a generated-role IAM scope defect, and #308 corrected that scope in repository code. Its repository merge does not authorize or prove live IAM application, failed-stack cleanup/recovery, deployment retry, private ingress/DNS/Zero Trust configuration, Admin publication, or canaries. Those remain separately controlled production actions and require explicit authorization at execution time.
+Repository-only corrections through #308/#312 do not authorize or prove live IAM application, failed-stack cleanup/recovery, deployment retry, private ingress/DNS/Zero Trust configuration, Admin publication, or canaries. Those remain separately controlled production actions and require explicit authorization at execution time.
 
 ## Self-hosted validation policy
 
@@ -78,19 +104,9 @@ The production Admin rollout exposed a generated-role IAM scope defect, and #308
 
 ## Safe queue policy
 
-The safe queue is currently below the queue-drain threshold. New safe non-production work may proceed after the existing documentation sync is reconciled, but every run must first reconcile live GitHub state and avoid recreating merged scopes. Prefer small deterministic stages that can be reviewed and merged independently.
+When more than six safe non-production PRs are open, drain the existing queue before starting unrelated feature work. Refresh stale branches, retarget dependency stacks, fix CI/review findings, close verified superseded predecessors, and merge only exact-head green, mergeable, review-clean, non-production work. Protected #161/#164/#169 are excluded from this threshold because their open state is intentional.
 
-Current safe engineering order:
-
-1. Repository Audit: richer affected-tests/workflows mapping, framework/deployment/config relationships that are not already covered, architecture/security path summaries, canonical/browser evidence quality, MCP/Codex integration, local visual explorer quality, and cross-platform tests.
-2. Solve Graph: richer language/reference adapters, query/path/impact quality, deterministic architecture/security summaries, and affected-test/workflow intelligence.
-3. Server Audit: read-only package/service/port/process/scheduled-job relationship quality, disk/log/cache/backup posture, domain/TLS/public-file consistency, version evidence without unsupported CVE claims, redaction, deterministic IDs, and cross-platform tests.
-4. Language/runtime/DX: formatter/linter, semantic/type checks, `for` loops, module/package design, richer diagnostics, editor support, and deterministic cross-platform tests.
-5. Safe Admin repository preparation only; never live-apply IAM/deploy/publish without the exact production approvals.
-6. Dormant customer-priority preparation only while queue/customer/provider gates remain OFF.
-7. TOTP preparation only while production TOTP remains OFF.
-8. Billing readiness only while production billing remains OFF and no real Stripe activity is authorized.
-9. Security/account hardening, rollback, least privilege, operations, launch readiness, and truth-document maintenance.
+When the safe queue is six or fewer, new safe work may proceed only after live repository state is reconciled and merged scopes are checked to avoid duplication.
 
 ## Hard safety boundary
 
