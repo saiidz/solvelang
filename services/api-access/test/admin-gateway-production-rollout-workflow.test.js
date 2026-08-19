@@ -5,6 +5,7 @@ import test from "node:test";
 const root = new URL("../../../", import.meta.url);
 const workflowUrl = new URL(".github/workflows/deploy-admin-console-gateway-production.yml", root);
 const policyUrl = new URL("ops/aws/production-admin-gateway-deploy-supplemental-policy.json", root);
+const templateUrl = new URL("services/admin-console-gateway/template.yaml", root);
 const queueUrl = new URL("services/api-access/scripts/wait-for-production-deployment-turn.mjs", root);
 
 async function text(url) { return readFile(url, "utf8"); }
@@ -73,6 +74,13 @@ test("admin gateway deploy supplement is bounded to the exact stack and generate
   for (const action of iamActions) assert.match(action, /^iam:/);
   assert.ok(!iamActions.includes("iam:CreatePolicy"));
   assert.ok(!iamActions.includes("iam:PutRolePermissionsBoundary"));
+});
+
+test("gateway log group is retained after normal stack deletion but cleaned up on failed initial create", async () => {
+  const template = await text(templateUrl);
+  assert.match(template, /AdminGatewayLogGroup:[\s\S]*DeletionPolicy: RetainExceptOnCreate/);
+  assert.match(template, /AdminGatewayLogGroup:[\s\S]*UpdateReplacePolicy: Retain/);
+  assert.match(template, /LogGroupName: !Sub \/aws\/lambda\/\$\{AWS::StackName\}-admin-gateway/);
 });
 
 test("admin gateway rollout participates in the attempt-aware production queue", async () => {
