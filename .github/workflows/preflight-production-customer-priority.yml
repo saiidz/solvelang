@@ -1,0 +1,100 @@
+name: Preflight Production Customer Priority
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_customer_priority_preflight:
+        description: Confirm validation-only customer priority readiness; do not deploy, enable customer priority, use providers, or charge
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce validation-only priority boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]]
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]]
+          [[ "${{ inputs.confirm_production_customer_priority_preflight }}" == "true" ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]]
+          [[ "$STACK_NAME" != *test* ]]
+          test -n "$AWS_REGION"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/setup-sam@v2
+      - name: Verify live customer baseline and billing remains disabled
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$api_enabled" == true ]]
+          [[ "$accounts" == true ]]
+          [[ "$billing" == false ]]
+          test -n "$api_base"
+          health="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+          echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
+      - name: Install pinned dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API and priority tests
+        run: npm test
+      - name: Validate production-off priority foundation
+        run: sam validate --lint --template customer-priority-production-template.yaml
+      - name: Build production-off priority foundation
+        run: sam build --template customer-priority-production-template.yaml
+      - name: Verify all launch gates remain OFF in the candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          template=customer-priority-production-template.yaml
+          [[ "$(grep -c 'Default: \"false\"' "$template")" -ge 3 ]]
+          grep -q 'PriorityQueueEnabled:' "$template"
+          grep -q 'CustomerPriorityEnabled:' "$template"
+          grep -q 'ProviderExecutionEnabled:' "$template"
+          grep -q 'BlockPublicPolicy: true' "$template"
+          grep -q 'ExpirationInDays: 7' "$template"
+          ! grep -E -q 'STRIPE|sk_live|sk_test|PROVIDER_(API_)?KEY|Bearer' "$template"
+          ! grep -E -q 'sam[ ]deploy|cloudformation[ ]deploy|workflow[_]dispatch.*deploy' ../../.github/workflows/preflight-production-customer-priority.yml
+      - name: Verify source/executor fail-closed contracts are present
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'MAX_PRIORITY_SOURCE_BYTES' src/priority-source-store.js
+          grep -q 'source fingerprint mismatch' src/priority-source-store.js
+          grep -q 'AbortController' src/customer-priority-executor.js
+          grep -q 'Priority processing timed out' src/customer-priority-executor.js
+          grep -q 'customerPriorityEnabled' src/customer-priority.js
+          grep -q 'providerExecutionEnabled' src/customer-priority.js
+      - name: Write readiness summary
+        env:
+          API_BASE: ${{ steps.live.outputs.api_base }}
+        run: |
+          printf '## SolveLang customer priority production preflight\n\n- Commit: `%s`\n- API base: `%s`\n- Customer accounts enabled: **true**\n- Subscription billing enabled: **false**\n- Queue gate in candidate: **false**\n- Customer priority gate in candidate: **false**\n- Provider execution gate in candidate: **false**\n- Private source storage/SHA-256 contract: verified\n- API tests/SAM validate/build: passed\n- Deployment performed: **no**\n- Source uploaded: **no**\n- Credits consumed: **no**\n- Provider called: **no**\n- Stripe/charges: **no**\n' "$GITHUB_SHA" "$API_BASE" >> "$GITHUB_STEP_SUMMARY"
