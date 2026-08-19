@@ -57,6 +57,11 @@ test("canonical report includes bounded affected-validation evidence inside the 
   assert.equal(report.affectedValidation.execution.writeAccess, false);
   assert.equal(await verifyRepositoryAuditIntegrity(report), true);
 
+  const tampered = structuredClone(report);
+  assert.ok(tampered.affectedValidation);
+  tampered.affectedValidation.entries[0].changedPath = "src/tampered.ts";
+  assert.equal(await verifyRepositoryAuditIntegrity(tampered), false);
+
   const serialized = serializeCanonicalRepositoryAuditReport(report);
   assert.ok(serialized.includes('"affectedValidation"'));
   assert.ok(serialized.includes('"src/core.ts"'));
