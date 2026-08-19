@@ -50,7 +50,8 @@ export async function createRepositoryAuditBrowserIntelligence(
     throw new Error("Repository Audit browser intelligence graph identity changed during composition.");
   }
 
-  const deploymentPathPartial = deploymentPaths.status === "partial";
+  const deploymentPathPartial = deploymentPaths.status === "partial"
+    || deploymentPaths.execution.rowsTruncated;
   const visualExplorerPartial = visualExplorer.status === "partial";
 
   return {
