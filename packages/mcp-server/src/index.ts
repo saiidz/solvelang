@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
+import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import {
   MAX_SOLVE_GRAPH_BYTES,
   executeSolveGraphTool,
@@ -58,6 +59,13 @@ const solveGraphFindInputSchema = z.object({
   text: z.string().min(1).max(2_048).optional(),
   evidencePath: z.string().min(1).max(2_048).optional(),
   limit: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphRankedSearchInputSchema = z.object({
+  ...solveGraphInputFields,
+  query: z.string().min(1).max(512),
+  kinds: z.array(z.enum(solveGraphNodeKinds)).max(solveGraphNodeKinds.length).optional(),
+  limit: z.number().int().min(1).max(1_000).optional(),
 }).superRefine(requireExactlyOneInput);
 
 const solveGraphTraversalInputSchema = z.object({
@@ -179,6 +187,21 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_search_nodes",
+  {
+    title: "Rank Solve Graph node matches",
+    description: "Rank bounded node matches in an integrity-valid analyze-only Solve Graph using deterministic label, identity, evidence-path, and string-metadata evidence. Returns safe node summaries plus explicit match reasons.",
+    inputSchema: solveGraphRankedSearchInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, query, kinds, limit }) => textResult(searchSolveGraphNodesRanked(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    query,
+    { kinds, limit },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_dependencies",
   {
     title: "Traverse Solve Graph dependencies",
@@ -238,6 +261,7 @@ server.registerTool(
       "solvelang_validate_solve",
       "solvelang_generate_n8n_report",
       "solvelang_graph_find_nodes",
+      "solvelang_graph_search_nodes",
       "solvelang_graph_dependencies",
       "solvelang_graph_dependents",
       "solvelang_graph_impact",
