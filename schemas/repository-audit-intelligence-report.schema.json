@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.solve-lang.com/schemas/repository-audit-intelligence-report.schema.json",
+  "title": "SolveLang Repository Audit Intelligence Report",
+  "description": "Strict schema for canonical Repository Audit 1.1 graph intelligence and 1.2 affected-validation reports. Baseline 1.0 reports continue to use repository-audit-report.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "reportId", "generatedAt", "mode", "engine", "source", "limits", "execution", "summary", "inventory", "detections", "graph", "findings", "redaction", "integrity"],
+  "properties": {
+    "schemaVersion": { "enum": ["1.1.0", "1.2.0"] },
+    "reportId": { "$ref": "repository-audit-report.schema.json#/properties/reportId" },
+    "generatedAt": { "$ref": "repository-audit-report.schema.json#/properties/generatedAt" },
+    "mode": { "$ref": "repository-audit-report.schema.json#/properties/mode" },
+    "engine": { "$ref": "repository-audit-report.schema.json#/properties/engine" },
+    "source": { "$ref": "repository-audit-report.schema.json#/properties/source" },
+    "limits": { "$ref": "repository-audit-report.schema.json#/properties/limits" },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "finishedAt", "status", "truncated", "truncationReasons", "networkAccess", "writeAccess", "errors"],
+      "properties": {
+        "startedAt": { "type": "string", "format": "date-time" },
+        "finishedAt": { "type": "string", "format": "date-time" },
+        "status": { "enum": ["complete", "partial", "failed"] },
+        "truncated": { "type": "boolean" },
+        "truncationReasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "file-count", "total-bytes", "file-size", "archive-entries", "depth", "finding-count", "timeout",
+              "inventory:file-count", "inventory:total-bytes", "inventory:file-size", "inventory:archive-entries", "inventory:depth", "inventory:finding-count", "inventory:timeout",
+              "graph:file-count", "graph:total-bytes", "graph:file-size", "graph:depth", "graph:node-count", "graph:edge-count", "graph:evidence-count", "graph:metadata-count",
+              "dependency-consistency:finding-count", "coverage-map:mapping-count", "coverage-map:sample-count", "dead-code:candidate-count", "configuration:reference-count", "workflow-path:reference-count",
+              "affected-validation:changed-path-count", "affected-validation:mapping-count"
+            ]
+          }
+        },
+        "networkAccess": { "const": false },
+        "writeAccess": { "const": false },
+        "errors": { "type": "array", "items": { "$ref": "repository-audit-report.schema.json#/$defs/scanError" } }
+      },
+      "allOf": [
+        { "if": { "properties": { "truncated": { "const": true } }, "required": ["truncated"] }, "then": { "properties": { "status": { "const": "partial" }, "truncationReasons": { "minItems": 1 } } } },
+        { "if": { "properties": { "truncated": { "const": false } }, "required": ["truncated"] }, "then": { "properties": { "truncationReasons": { "maxItems": 0 } } } }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filesScanned", "filesSkipped", "bytesScanned", "directoriesSeen", "findingsBySeverity", "actionsByType", "graphNodes", "graphEdges", "graphHotspots", "redactedSecretMatches"],
+      "properties": {
+        "filesScanned": { "type": "integer", "minimum": 0 },
+        "filesSkipped": { "type": "integer", "minimum": 0 },
+        "bytesScanned": { "type": "integer", "minimum": 0 },
+        "directoriesSeen": { "type": "integer", "minimum": 0 },
+        "findingsBySeverity": { "$ref": "repository-audit-report.schema.json#/$defs/severityCounts" },
+        "actionsByType": { "$ref": "repository-audit-report.schema.json#/$defs/actionCounts" },
+        "graphNodes": { "type": "integer", "minimum": 0 },
+        "graphEdges": { "type": "integer", "minimum": 0 },
+        "graphHotspots": { "type": "integer", "minimum": 0 },
+        "redactedSecretMatches": { "type": "integer", "minimum": 0 },
+        "affectedTestFiles": { "type": "integer", "minimum": 0 },
+        "affectedWorkflowFiles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "inventory": { "$ref": "repository-audit-report.schema.json#/properties/inventory" },
+    "detections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duplicates", "backupCandidates", "generatedCandidates", "secretExposureWarnings"],
+      "properties": {
+        "duplicates": { "type": "array", "items": { "$ref": "repository-audit-report.schema.json#/$defs/duplicateGroup" } },
+        "backupCandidates": { "type": "array", "items": { "$ref": "repository-audit-report.schema.json#/$defs/fileEvidence" } },
+        "generatedCandidates": { "type": "array", "items": { "$ref": "repository-audit-report.schema.json#/$defs/fileEvidence" } },
+        "secretExposureWarnings": { "type": "array", "items": { "$ref": "#/$defs/redactedSecretWarning" } }
+      }
+    },
+    "graph": { "$ref": "#/$defs/graphIntelligence" },
+    "affectedValidation": { "$ref": "#/$defs/affectedValidation" },
+    "findings": { "type": "array", "items": { "$ref": "repository-audit-report.schema.json#/$defs/finding" } },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policyVersion", "secretValuesIncluded", "secretCorrelationFingerprintsIncluded", "pathNormalization", "contentExcerptPolicy", "redactedMatchCount"],
+      "properties": {
+        "policyVersion": { "const": "1.0.0" },
+        "secretValuesIncluded": { "const": false },
+        "secretCorrelationFingerprintsIncluded": { "const": false },
+        "pathNormalization": { "const": "repository-relative-posix" },
+        "contentExcerptPolicy": { "const": "none" },
+        "redactedMatchCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "integrity": { "$ref": "repository-audit-report.schema.json#/properties/integrity" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "schemaVersion": { "const": "1.1.0" } }, "required": ["schemaVersion"] },
+      "then": {
+        "not": { "required": ["affectedValidation"] },
+        "properties": { "summary": { "not": { "anyOf": [{ "required": ["affectedTestFiles"] }, { "required": ["affectedWorkflowFiles"] }] } } }
+      }
+    },
+    {
+      "if": { "properties": { "schemaVersion": { "const": "1.2.0" } }, "required": ["schemaVersion"] },
+      "then": {
+        "required": ["affectedValidation"],
+        "properties": { "summary": { "required": ["affectedTestFiles", "affectedWorkflowFiles"] } }
+      }
+    }
+  ],
+  "$defs": {
+    "redactedSecretWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warningId", "path", "patternClass", "exposure", "redacted", "remediation"],
+      "properties": {
+        "warningId": { "$ref": "repository-audit-report.schema.json#/$defs/redactedSecretWarning/properties/warningId" },
+        "path": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "lineStart": { "type": "integer", "minimum": 1 },
+        "lineEnd": { "type": "integer", "minimum": 1 },
+        "patternClass": { "$ref": "repository-audit-report.schema.json#/$defs/redactedSecretWarning/properties/patternClass" },
+        "exposure": { "$ref": "repository-audit-report.schema.json#/$defs/redactedSecretWarning/properties/exposure" },
+        "redacted": { "const": true },
+        "remediation": { "type": "string", "minLength": 1, "maxLength": 2000 }
+      }
+    },
+    "graphHotspot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeId", "kind", "label", "directDependencies", "directDependents", "transitiveImpact", "impactTruncated"],
+      "properties": {
+        "nodeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "kind": { "enum": ["repository", "directory", "file", "module", "symbol", "function", "class", "type", "route", "test", "dependency", "workflow", "job", "resource", "permission", "document"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "path": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "directDependencies": { "type": "integer", "minimum": 0 },
+        "directDependents": { "type": "integer", "minimum": 0 },
+        "transitiveImpact": { "type": "integer", "minimum": 0 },
+        "impactTruncated": { "type": "boolean" }
+      }
+    },
+    "graphIntelligence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "graphId", "counts", "hotspots", "execution"],
+      "properties": {
+        "schema": { "const": "solvelang.repository-audit.graph-intelligence.v0" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodes", "edges", "nodesByKind", "edgesByKind"],
+          "properties": {
+            "nodes": { "type": "integer", "minimum": 0 },
+            "edges": { "type": "integer", "minimum": 0 },
+            "nodesByKind": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["repository", "directory", "file", "module", "symbol", "function", "class", "type", "route", "test", "dependency", "workflow", "job", "resource", "permission", "document"] }, "count": { "type": "integer", "minimum": 0 } } } },
+            "edgesByKind": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["kind", "count"], "properties": { "kind": { "enum": ["contains", "imports", "calls", "references", "reads", "writes", "exposes", "deploys", "grants", "tests", "depends-on", "triggers"] }, "count": { "type": "integer", "minimum": 0 } } } }
+          }
+        },
+        "hotspots": { "type": "array", "items": { "$ref": "#/$defs/graphHotspot" } },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["networkAccess", "writeAccess", "maxHotspots", "maxImpactDepth", "maxImpactResults", "hotspotCandidatesTruncated", "graphStatus", "graphTruncated", "graphTruncationReasons"],
+          "properties": {
+            "networkAccess": { "const": false },
+            "writeAccess": { "const": false },
+            "maxHotspots": { "type": "integer", "minimum": 1, "maximum": 100 },
+            "maxImpactDepth": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "maxImpactResults": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "hotspotCandidatesTruncated": { "type": "boolean" },
+            "graphStatus": { "enum": ["complete", "partial"] },
+            "graphTruncated": { "type": "boolean" },
+            "graphTruncationReasons": { "type": "array", "uniqueItems": true, "items": { "enum": ["file-count", "total-bytes", "file-size", "depth", "node-count", "edge-count", "evidence-count", "metadata-count"] } }
+          }
+        }
+      }
+    },
+    "affectedTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["testPath", "nodeId", "depth"],
+      "properties": {
+        "testPath": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "nodeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "depth": { "type": "integer", "minimum": 1, "maximum": 16 }
+      }
+    },
+    "affectedWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowPath", "kind", "targetPath", "evidence"],
+      "properties": {
+        "workflowPath": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "kind": { "enum": ["working-directory", "cache-dependency-path"] },
+        "targetPath": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "evidence": { "type": "object", "additionalProperties": false, "required": ["path", "line"], "properties": { "path": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" }, "line": { "type": "integer", "minimum": 1 } } }
+      }
+    },
+    "affectedValidationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changedPath", "graphState", "tests", "workflows", "traversalTruncated", "testsTruncated", "workflowsTruncated"],
+      "properties": {
+        "changedPath": { "$ref": "repository-audit-report.schema.json#/$defs/repoPath" },
+        "graphState": { "enum": ["present", "unresolved"] },
+        "tests": { "type": "array", "items": { "$ref": "#/$defs/affectedTest" } },
+        "workflows": { "type": "array", "items": { "$ref": "#/$defs/affectedWorkflow" } },
+        "traversalTruncated": { "type": "boolean" },
+        "testsTruncated": { "type": "boolean" },
+        "workflowsTruncated": { "type": "boolean" }
+      }
+    },
+    "affectedValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "mode", "graphId", "status", "summary", "entries", "execution"],
+      "properties": {
+        "schema": { "const": "solvelang.repository-audit.affected-validation.v0" },
+        "mode": { "const": "analyze-only" },
+        "graphId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "status": { "enum": ["complete", "partial"] },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["changedPathsRequested", "changedPathsAnalyzed", "unresolvedChangedPaths", "affectedTestFiles", "affectedWorkflowFiles"],
+          "properties": {
+            "changedPathsRequested": { "type": "integer", "minimum": 1 },
+            "changedPathsAnalyzed": { "type": "integer", "minimum": 0 },
+            "unresolvedChangedPaths": { "type": "integer", "minimum": 0 },
+            "affectedTestFiles": { "type": "integer", "minimum": 0 },
+            "affectedWorkflowFiles": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/affectedValidationEntry" } },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["networkAccess", "writeAccess", "maxChangedPaths", "maxTestsPerPath", "maxWorkflowsPerPath", "maxDepth", "maxTraversalResults", "changedPathsTruncated", "graphTruncated", "workflowEvidencePartial", "mappingsTruncated"],
+          "properties": {
+            "networkAccess": { "const": false },
+            "writeAccess": { "const": false },
+            "maxChangedPaths": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "maxTestsPerPath": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "maxWorkflowsPerPath": { "type": "integer", "minimum": 1, "maximum": 1000 },
+            "maxDepth": { "type": "integer", "minimum": 0, "maximum": 16 },
+            "maxTraversalResults": { "type": "integer", "minimum": 1, "maximum": 5000 },
+            "changedPathsTruncated": { "type": "boolean" },
+            "graphTruncated": { "type": "boolean" },
+            "workflowEvidencePartial": { "type": "boolean" },
+            "mappingsTruncated": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  }
+}
