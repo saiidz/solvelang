@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import test from "node:test";
 
-const schemaUrl = new URL("../../../../../schemas/repository-audit-report.schema.json", import.meta.url);
+const schemaPath = resolve(process.cwd(), "../schemas/repository-audit-report.schema.json");
 
 type JsonObject = Record<string, unknown>;
 
@@ -17,7 +18,7 @@ function strings(value: unknown, label: string): string[] {
 }
 
 async function schema() {
-  return JSON.parse(await readFile(schemaUrl, "utf8")) as JsonObject;
+  return JSON.parse(await readFile(schemaPath, "utf8")) as JsonObject;
 }
 
 test("published Repository Audit schema pins versioned strict report extensions", async () => {
@@ -44,7 +45,8 @@ test("published Repository Audit schema pins versioned strict report extensions"
     return object(conditionProperties.schemaVersion, "version condition schemaVersion").const === "1.2.0";
   });
   assert.ok(v12);
-  assert.deepEqual(strings(object(v12, "v1.2 variant").then && object(object(v12, "v1.2 variant").then, "v1.2 then").required, "v1.2 required"), ["graph", "affectedValidation"]);
+  const v12Then = object(object(v12, "v1.2 variant").then, "v1.2 then");
+  assert.deepEqual(strings(v12Then.required, "v1.2 required"), ["graph", "affectedValidation"]);
 });
 
 test("published schema preserves redaction and bounded-stage truncation truth", async () => {
