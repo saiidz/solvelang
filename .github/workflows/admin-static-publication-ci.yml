@@ -1,0 +1,119 @@
+name: Admin Static Publication CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/admin-console-edge/**'
+      - 'admin-console-static/**'
+      - 'docs/production-admin-console-publication.md'
+      - '.github/workflows/admin-static-publication-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/admin-console-edge/**'
+      - 'admin-console-static/**'
+      - 'docs/production-admin-console-publication.md'
+      - '.github/workflows/admin-static-publication-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  publication-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test ingress and publication behavior
+        working-directory: services/admin-console-edge
+        run: npm test
+
+      - name: Verify ingress-only and publication configs remain separated
+        working-directory: services/admin-console-edge
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+
+          const ingress = JSON.parse(await readFile('wrangler.jsonc', 'utf8'));
+          const publication = JSON.parse(await readFile('wrangler.publication.jsonc', 'utf8'));
+
+          const verifyShared = (config, label) => {
+            if (config.name !== 'solvelang-admin-private-ingress') throw new Error(`${label}: unexpected worker name`);
+            if (config.main !== 'src/index.js') throw new Error(`${label}: unexpected Worker entrypoint`);
+            if (config.workers_dev !== false) throw new Error(`${label}: workers.dev must remain disabled`);
+            if (config.vars?.ADMIN_ORIGIN !== 'https://admin.solve-lang.com') throw new Error(`${label}: unexpected admin origin`);
+            if (config.vars?.ADMIN_GATEWAY_UPSTREAM !== 'https://ru2uokfkge.execute-api.us-east-2.amazonaws.com/admin-gateway') {
+              throw new Error(`${label}: unexpected gateway upstream`);
+            }
+            const routes = config.routes || [];
+            if (routes.length !== 1 || routes[0]?.pattern !== 'admin.solve-lang.com' || routes[0]?.custom_domain !== true) {
+              throw new Error(`${label}: custom domain must remain exact and singular`);
+            }
+          };
+
+          verifyShared(ingress, 'ingress');
+          verifyShared(publication, 'publication');
+
+          if ('assets' in ingress) throw new Error('ingress-only config must never publish static assets');
+
+          const assets = publication.assets;
+          if (!assets || assets.directory !== '../../admin-console-static') throw new Error('publication: unexpected assets directory');
+          if (assets.binding !== 'ASSETS') throw new Error('publication: assets binding must be ASSETS');
+          if (assets.run_worker_first !== true) throw new Error('publication: Worker must run before every asset request');
+          if ('not_found_handling' in assets) throw new Error('publication: unknown routes must not receive an automatic asset fallback');
+          NODE
+
+      - name: Verify browser asset allowlist and secret boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile, readdir } from 'node:fs/promises';
+
+          const directory = 'admin-console-static';
+          const names = (await readdir(directory)).sort();
+          const expected = ['.assetsignore', 'app.js', 'build-release.mjs', 'config.js', 'index.html', 'styles.css'];
+          if (JSON.stringify(names) !== JSON.stringify(expected)) {
+            throw new Error(`unexpected files in browser source directory: ${names.join(', ')}`);
+          }
+
+          const ignored = (await readFile(`${directory}/.assetsignore`, 'utf8')).trim().split(/\r?\n/).filter(Boolean);
+          if (JSON.stringify(ignored) !== JSON.stringify(['build-release.mjs'])) {
+            throw new Error('build-release.mjs must be the only explicit asset exclusion');
+          }
+          NODE
+
+          ! grep -n -E 'API_ACCESS_ADMIN_SECRET|SOLVELANG_ADMIN_UPSTREAM_SECRET|ADMIN_PASSWORD_SCRYPT|ADMIN_SESSION_SECRET|STRIPE_SECRET_KEY' \
+            admin-console-static/index.html \
+            admin-console-static/styles.css \
+            admin-console-static/config.js \
+            admin-console-static/app.js
+
+      - name: Build deterministic reviewed release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/admin-console-release"
+          node admin-console-static/build-release.mjs "$release_dir"
+          test -f "$release_dir/index.html"
+          test -f "$release_dir/styles.css"
+          test -f "$release_dir/config.js"
+          test -f "$release_dir/app.js"
+          test -f "$release_dir/manifest.json"
+          test "$(find "$release_dir" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "5"
+
+      - name: Wrangler dry-run publication package
+        working-directory: services/admin-console-edge
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.124.0 deploy \
+            --config wrangler.publication.jsonc \
+            --dry-run \
+            --outdir "$RUNNER_TEMP/admin-static-publication-dryrun"
