@@ -1,10 +1,12 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import { RepositoryAuditAngularTargetConfigPanel } from "./RepositoryAuditAngularTargetConfigPanel";
 import { RepositoryAuditDeploymentPathPanel } from "./RepositoryAuditDeploymentPathPanel";
 import { RepositoryAuditFrameworkPathPanel } from "./RepositoryAuditFrameworkPathPanel";
 import { RepositoryAuditVisualExplorerPanel } from "./RepositoryAuditVisualExplorerPanel";
 import { analyzeRepositorySnapshot, type RepositoryAuditAnalysisResult } from "./core/analysisPipeline";
+import { createRepositoryAngularTargetConfigEvidenceDownload, type RepositoryAngularTargetConfigEvidenceDownload } from "./core/angularTargetConfigArtifact";
 import { createRepositoryArchitecturePathEvidenceDownload, type RepositoryArchitecturePathEvidenceDownload } from "./core/architecturePathArtifact";
 import { extractRepositoryArchive, type RepositoryArchiveExtractionResult } from "./core/archiveExtraction";
 import { createRepositoryAuditBrowserIntelligence, type RepositoryAuditBrowserIntelligence } from "./core/browserIntelligence";
@@ -28,6 +30,7 @@ type ScanResult = {
   intelligence: RepositoryAuditAnalysisResult;
   report: RepositoryAuditProductReport;
   canonicalArtifact: CanonicalRepositoryAuditArtifact;
+  angularTargetConfigEvidence: RepositoryAngularTargetConfigEvidenceDownload;
   architecturePathEvidence: RepositoryArchitecturePathEvidenceDownload;
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceDownload;
   frameworkPathEvidence: RepositoryFrameworkPathEvidenceDownload;
@@ -143,6 +146,10 @@ export function RepositoryAuditApp() {
       maxArchiveEntries: MAX_ENTRIES,
       now,
     });
+    const angularTargetConfigEvidence = await createRepositoryAngularTargetConfigEvidenceDownload(
+      archiveName,
+      intelligence.angularTargetConfigEvidence,
+    );
     const architecturePathEvidence = await createRepositoryArchitecturePathEvidenceDownload(
       archiveName,
       intelligence.architecturePaths,
@@ -159,10 +166,12 @@ export function RepositoryAuditApp() {
       intelligence.graph.graph,
       intelligence.deploymentPathEvidence,
       {
+        angularTargetConfigs: { maxRows: 100 },
         deploymentPaths: { maxRows: 100 },
         frameworkPaths: { maxRows: 100 },
       },
       intelligence.frameworkPathEvidence,
+      intelligence.angularTargetConfigEvidence,
     );
     return {
       extraction,
@@ -171,6 +180,7 @@ export function RepositoryAuditApp() {
       intelligence,
       report,
       canonicalArtifact,
+      angularTargetConfigEvidence,
       architecturePathEvidence,
       deploymentPathEvidence,
       frameworkPathEvidence,
@@ -235,25 +245,28 @@ export function RepositoryAuditApp() {
     }
   }
 
-  function exportReport(format: "product-json" | "canonical-json" | "architecture-json" | "deployment-json" | "framework-json" | "html"): void {
+  function exportReport(format: "product-json" | "canonical-json" | "angular-target-json" | "architecture-json" | "deployment-json" | "framework-json" | "html"): void {
     if (!result) return;
     const base = `${repositoryAuditSafeFilename(result.report.archive.name)}-solvelang-repository-audit`;
     if (format === "product-json") download(`${base}.json`, `${JSON.stringify(result.report, null, 2)}\n`, "application/json;charset=utf-8");
     else if (format === "canonical-json") download(result.canonicalArtifact.filename, result.canonicalArtifact.content, result.canonicalArtifact.mediaType);
+    else if (format === "angular-target-json") download(result.angularTargetConfigEvidence.filename, result.angularTargetConfigEvidence.content, result.angularTargetConfigEvidence.mediaType);
     else if (format === "architecture-json") download(result.architecturePathEvidence.filename, result.architecturePathEvidence.content, result.architecturePathEvidence.mediaType);
     else if (format === "deployment-json") download(result.deploymentPathEvidence.filename, result.deploymentPathEvidence.content, result.deploymentPathEvidence.mediaType);
     else if (format === "framework-json") download(result.frameworkPathEvidence.filename, result.frameworkPathEvidence.content, result.frameworkPathEvidence.mediaType);
     else download(`${base}.html`, createRepositoryAuditHtmlReport(result.report), "text/html;charset=utf-8");
     recordEvent(
-      format === "framework-json"
-        ? "repository_audit_framework_path_evidence_downloaded"
-        : format === "deployment-json"
-          ? "repository_audit_deployment_path_evidence_downloaded"
-          : format === "architecture-json"
-            ? "repository_audit_architecture_evidence_downloaded"
-            : format === "canonical-json"
-              ? "repository_audit_canonical_evidence_downloaded"
-              : "repository_audit_report_downloaded",
+      format === "angular-target-json"
+        ? "repository_audit_angular_target_config_evidence_downloaded"
+        : format === "framework-json"
+          ? "repository_audit_framework_path_evidence_downloaded"
+          : format === "deployment-json"
+            ? "repository_audit_deployment_path_evidence_downloaded"
+            : format === "architecture-json"
+              ? "repository_audit_architecture_evidence_downloaded"
+              : format === "canonical-json"
+                ? "repository_audit_canonical_evidence_downloaded"
+                : "repository_audit_report_downloaded",
     );
   }
 
@@ -315,10 +328,10 @@ export function RepositoryAuditApp() {
             <li>✓ Finds exact duplicates, backup candidates, generated output, and large files</li>
             <li>✓ Maps bounded JavaScript/TypeScript dependencies and impact hotspots without executing code</li>
             <li>✓ Summarizes bounded architecture and security-boundary paths as structural evidence</li>
-            <li>✓ Maps explicit repository-local deployment and Angular/Nest framework references without executing code</li>
+            <li>✓ Maps explicit repository-local deployment, Angular/Nest framework, and Angular target tsConfig references without executing code</li>
             <li>✓ Flags credential patterns with values redacted from reports and the UI</li>
             <li>✓ Never executes repository code, scripts, hooks, or package managers</li>
-            <li>✓ Produces product JSON, integrity-covered canonical, architecture, deployment, and framework evidence JSON, and a printable HTML report</li>
+            <li>✓ Produces product JSON, integrity-covered canonical, architecture, deployment, framework, and Angular target-config evidence JSON, and a printable HTML report</li>
           </ul>
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-6 text-slate-300">
             No file is deleted, moved, renamed, merged, or rewritten. Cleanup recommendations require a separate branch, validation, rollback planning, and human approval.
@@ -347,17 +360,20 @@ export function RepositoryAuditApp() {
           <section className="rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Evidence export</p>
             <h2 className="mt-2 text-2xl font-semibold">Keep the audit record</h2>
-            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path, deployment-path, and framework-path artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
+            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path, deployment-path, framework-path, and Angular target-config artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
             <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:flex-wrap">
               <button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800">Download HTML report</button>
               <button type="button" onClick={() => exportReport("product-json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Download product JSON</button>
               <button type="button" onClick={() => exportReport("canonical-json")} className="rounded-xl border border-blue-300 bg-white px-5 py-3 text-sm font-semibold text-blue-800 hover:bg-blue-100">Download canonical evidence</button>
+              <button type="button" onClick={() => exportReport("angular-target-json")} className="rounded-xl border border-violet-300 bg-white px-5 py-3 text-sm font-semibold text-violet-800 hover:bg-violet-100">Download Angular target configs</button>
               <button type="button" onClick={() => exportReport("architecture-json")} className="rounded-xl border border-violet-300 bg-white px-5 py-3 text-sm font-semibold text-violet-800 hover:bg-violet-100">Download architecture paths</button>
               <button type="button" onClick={() => exportReport("deployment-json")} className="rounded-xl border border-indigo-300 bg-white px-5 py-3 text-sm font-semibold text-indigo-800 hover:bg-indigo-100">Download deployment paths</button>
               <button type="button" onClick={() => exportReport("framework-json")} className="rounded-xl border border-cyan-300 bg-white px-5 py-3 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Download framework paths</button>
             </div>
             <p className="mt-5 text-sm font-semibold text-slate-700">Canonical schema {result.canonicalArtifact.report.schemaVersion} · report {result.canonicalArtifact.report.reportId}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Integrity SHA-256: {result.canonicalArtifact.report.integrity.canonicalJsonSha256}</p>
+            <p className="mt-3 text-sm font-semibold text-slate-700">Angular target config evidence {result.angularTargetConfigEvidence.artifact.schemaVersion} · {result.angularTargetConfigEvidence.artifact.status}</p>
+            <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Angular target config SHA-256: {result.angularTargetConfigEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-3 text-sm font-semibold text-slate-700">Architecture evidence {result.architecturePathEvidence.artifact.schemaVersion} · {result.architecturePathEvidence.artifact.status}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Architecture SHA-256: {result.architecturePathEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-3 text-sm font-semibold text-slate-700">Deployment evidence {result.deploymentPathEvidence.artifact.schemaVersion} · {result.deploymentPathEvidence.artifact.status}</p>
@@ -418,6 +434,9 @@ export function RepositoryAuditApp() {
         <RepositoryAuditDeploymentPathPanel presentation={result.browserIntelligence.deploymentPaths} className="mt-8" />
         {result.browserIntelligence.frameworkPaths ? (
           <RepositoryAuditFrameworkPathPanel presentation={result.browserIntelligence.frameworkPaths} className="mt-8" />
+        ) : null}
+        {result.browserIntelligence.angularTargetConfigs ? (
+          <RepositoryAuditAngularTargetConfigPanel presentation={result.browserIntelligence.angularTargetConfigs} className="mt-8" />
         ) : null}
 
         <section className="mt-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">

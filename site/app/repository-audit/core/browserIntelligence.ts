@@ -1,4 +1,10 @@
 import type { SolveGraphDocument } from "../../solve-graph/core/contracts";
+import type { RepositoryAngularTargetConfigEvidenceAnalysis } from "./angularTargetConfigEvidence";
+import {
+  createRepositoryAngularTargetConfigPresentation,
+  type RepositoryAngularTargetConfigPresentation,
+  type RepositoryAngularTargetConfigPresentationOptions,
+} from "./angularTargetConfigPresentation";
 import type { RepositoryDeploymentPathEvidenceAnalysis } from "./deploymentPathEvidence";
 import {
   createRepositoryDeploymentPathPresentation,
@@ -18,6 +24,7 @@ import {
 } from "./visualExplorer";
 
 export type RepositoryAuditBrowserIntelligenceOptions = {
+  angularTargetConfigs?: RepositoryAngularTargetConfigPresentationOptions;
   deploymentPaths?: RepositoryDeploymentPathPresentationOptions;
   frameworkPaths?: RepositoryFrameworkPathPresentationOptions;
   visualExplorer?: RepositoryAuditVisualExplorerOptions;
@@ -28,12 +35,14 @@ export type RepositoryAuditBrowserIntelligence = {
   mode: "analyze-only";
   graphId: string;
   status: "complete" | "partial";
+  angularTargetConfigs?: RepositoryAngularTargetConfigPresentation;
   deploymentPaths: RepositoryDeploymentPathPresentation;
   frameworkPaths?: RepositoryFrameworkPathPresentation;
   visualExplorer: RepositoryAuditVisualExplorer;
   execution: {
     networkAccess: false;
     writeAccess: false;
+    angularTargetConfigPartial?: boolean;
     deploymentPathPartial: boolean;
     frameworkPathPartial?: boolean;
     visualExplorerPartial: boolean;
@@ -45,12 +54,16 @@ export async function createRepositoryAuditBrowserIntelligence(
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceAnalysis,
   options: RepositoryAuditBrowserIntelligenceOptions = {},
   frameworkPathEvidence?: RepositoryFrameworkPathEvidenceAnalysis,
+  angularTargetConfigEvidence?: RepositoryAngularTargetConfigEvidenceAnalysis,
 ): Promise<RepositoryAuditBrowserIntelligence> {
   if (graph.graphId !== deploymentPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires deployment evidence from the same Solve Graph document.");
   }
   if (frameworkPathEvidence && graph.graphId !== frameworkPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires framework evidence from the same Solve Graph document.");
+  }
+  if (angularTargetConfigEvidence && graph.graphId !== angularTargetConfigEvidence.graphId) {
+    throw new Error("Repository Audit browser intelligence requires Angular target-config evidence from the same Solve Graph document.");
   }
 
   const visualExplorer = await createRepositoryAuditVisualExplorer(graph, options.visualExplorer);
@@ -61,12 +74,20 @@ export async function createRepositoryAuditBrowserIntelligence(
   const frameworkPaths = frameworkPathEvidence
     ? createRepositoryFrameworkPathPresentation(frameworkPathEvidence, options.frameworkPaths)
     : undefined;
+  const angularTargetConfigs = angularTargetConfigEvidence
+    ? createRepositoryAngularTargetConfigPresentation(angularTargetConfigEvidence, options.angularTargetConfigs)
+    : undefined;
 
   if (visualExplorer.graphId !== deploymentPaths.graphId
-    || (frameworkPaths && frameworkPaths.graphId !== deploymentPaths.graphId)) {
+    || (frameworkPaths && frameworkPaths.graphId !== deploymentPaths.graphId)
+    || (angularTargetConfigs && angularTargetConfigs.graphId !== deploymentPaths.graphId)) {
     throw new Error("Repository Audit browser intelligence graph identity changed during composition.");
   }
 
+  const angularTargetConfigPartial = angularTargetConfigs !== undefined && (
+    angularTargetConfigs.status === "partial"
+    || angularTargetConfigs.execution.rowsTruncated
+  );
   const deploymentPathPartial = deploymentPaths.status === "partial"
     || deploymentPaths.execution.rowsTruncated;
   const frameworkPathPartial = frameworkPaths !== undefined && (
@@ -79,13 +100,17 @@ export async function createRepositoryAuditBrowserIntelligence(
     schema: "solvelang.repository-audit.browser-intelligence.v0",
     mode: "analyze-only",
     graphId: graph.graphId,
-    status: deploymentPathPartial || frameworkPathPartial || visualExplorerPartial ? "partial" : "complete",
+    status: angularTargetConfigPartial || deploymentPathPartial || frameworkPathPartial || visualExplorerPartial
+      ? "partial"
+      : "complete",
+    ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigs }),
     deploymentPaths,
     ...(frameworkPaths === undefined ? {} : { frameworkPaths }),
     visualExplorer,
     execution: {
       networkAccess: false,
       writeAccess: false,
+      ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigPartial }),
       deploymentPathPartial,
       ...(frameworkPaths === undefined ? {} : { frameworkPathPartial }),
       visualExplorerPartial,
