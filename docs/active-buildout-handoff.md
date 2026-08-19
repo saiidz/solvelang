@@ -7,11 +7,11 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this sync, `main` is `eb5e3c618c8547a017771f36e718769ad368bfdb`, the safe non-production merge of #309.
+At this sync, `main` is `8b740a90ac3dc5d02775cfe46ec010dd2a7de8ce`, the repository merge of #308 after #309.
 
-The previous safe queue has been drained. There are currently **zero open safe non-production PRs**. Open production-sensitive/preparation PRs are #161, #164, #169, and #308; they do not count toward the safe-queue threshold because they are intentionally gated.
+The previous safe queue has been drained. The only open safe non-production PR at this capture is the documentation-only handoff sync itself (#310). Protected production-sensitive/preparation PRs #161, #164, and #169 do not count toward the safe-queue threshold because they are intentionally gated.
 
-Recent safe integration milestones:
+Recent integration milestones:
 
 - #229 — RustSec `h2` advisory remediation; `h2` is on the fixed 0.4.16 line and Rust/RustSec CI remains mandatory.
 - #230/#232/#235 — Trusted Mac/Windows status mirroring and non-cancelling Trusted Mac concurrency foundations.
@@ -24,6 +24,7 @@ Recent safe integration milestones:
 - #301 — bounded Repository Audit evidence composition.
 - #307 — bounded Server Audit listener-consistency evidence rebuilt on current history.
 - #309 — redacts certificate identities from baseline TLS findings and evidence.
+- #308 — Admin Gateway generated-role IAM scope correction was merged into the repository at `8b740a90ac3dc5d02775cfe46ec010dd2a7de8ce`. That repository merge is **not** evidence that revised IAM was live-applied, the failed CloudFormation stack was recovered/retried, the gateway was deployed, DNS/private ingress was changed, the Admin UI was published, or canaries ran.
 
 The #288 → #290 → #291 → #298 → #299 → #300 → #301 Repository Audit train is merged. Do not recreate those scopes. The older superseded predecessors remain historical only.
 
@@ -38,7 +39,8 @@ Server Audit now includes the bounded snapshot/schema parser, fixed collector su
 - #161 — account/CRM rollback preservation. Exact merge gate: `APPROVE PR #161 MERGE`.
 - #164 — validation-only production customer-priority preflight. Exact merge gate: `APPROVE PR #164 MERGE`.
 - #169 — dormant production customer-priority foundation rollout preparation. Exact merge gate: `APPROVE PR #169 MERGE`.
-- #308 — Admin Gateway generated-role IAM scope correction after a failed production rollout/rollback attempt. Current observed head at this sync is `cc545e4b7f2c121dc56639ea453fe695f45a9ebe`, based on current `main`, mergeable, review-thread clean, with fresh API Access/Admin Gateway/general CI/Rust still running. This PR changes production rollout IAM policy scope and therefore must not auto-merge. Require exact owner approval `APPROVE PR #308 MERGE` before repository merge. That merge approval would still not authorize live IAM application, stack cleanup/retry, gateway deployment, DNS/private ingress, Admin publication, or canaries.
+
+#308 is no longer open; it was merged by an external owner action during this build run. Continue to treat every live IAM/deployment/recovery step as separately protected.
 
 ## Authoritative production truth
 
@@ -54,7 +56,7 @@ Until a newer live audit exists, `docs/current-production-status-2026-08-13.md` 
 - paid customer priority: **disabled**;
 - real charge authorization: **none**.
 
-A merged feature or green CI result is never evidence that a production-sensitive feature has been enabled.
+A repository merge or green CI result is never evidence that a production-sensitive feature has been enabled or a production rollout has completed.
 
 ## Admin production boundary
 
@@ -62,7 +64,7 @@ The previously recorded live infrastructure gate remains:
 
 `APPROVE ADMIN GATEWAY DEPLOY-ROLE IAM SUPPLEMENT LIVE APPLY`
 
-The production Admin rollout has since exposed a generated-role IAM scope defect, now represented by protected #308. Do not infer that the original live-apply approval phrase authorizes merging #308, applying the revised IAM supplement, recovering the failed stack, retrying deployment, configuring private ingress/DNS/Zero Trust, publishing the Admin UI, or running canaries. Each production action remains separately controlled.
+The production Admin rollout exposed a generated-role IAM scope defect, and #308 corrected that scope in repository code. Its repository merge does not authorize or prove live IAM application, failed-stack cleanup/recovery, deployment retry, private ingress/DNS/Zero Trust configuration, Admin publication, or canaries. Those remain separately controlled production actions and require explicit authorization at execution time.
 
 ## Self-hosted validation policy
 
@@ -76,7 +78,7 @@ The production Admin rollout has since exposed a generated-role IAM scope defect
 
 ## Safe queue policy
 
-The safe queue is currently below the queue-drain threshold. New safe non-production work may proceed, but every run must first reconcile live GitHub state and avoid recreating merged scopes. Prefer small deterministic stages that can be reviewed and merged independently.
+The safe queue is currently below the queue-drain threshold. New safe non-production work may proceed after the existing documentation sync is reconciled, but every run must first reconcile live GitHub state and avoid recreating merged scopes. Prefer small deterministic stages that can be reviewed and merged independently.
 
 Current safe engineering order:
 
