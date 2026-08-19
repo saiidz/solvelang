@@ -15,6 +15,19 @@ done
   exit 1
 }
 
+if [[ -z "${INITIAL_ADMIN_CRM_ENABLED:-}" ]]; then
+  current_stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+  INITIAL_ADMIN_CRM_ENABLED="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // empty' <<<"$current_stack")"
+fi
+[[ "$INITIAL_ADMIN_CRM_ENABLED" == true || "$INITIAL_ADMIN_CRM_ENABLED" == false ]] || {
+  echo "Rollback Admin CRM feature state must be true or false." >&2
+  exit 1
+}
+[[ "$INITIAL_ADMIN_CRM_ENABLED" == false || "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" == true ]] || {
+  echo "Rollback cannot enable Admin CRM while customer accounts are disabled." >&2
+  exit 1
+}
+
 INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN="${INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN:-$DISABLED_TOTP_KMS_ARN}"
 [[ "$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN" =~ ^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$ ]] || {
   echo "Rollback authenticator KMS key ARN is malformed." >&2
@@ -31,6 +44,7 @@ parameter_overrides=(
   CustomerAccountsEnabled="$INITIAL_CUSTOMER_ACCOUNTS_ENABLED"
   CustomerTotpEnabled="$INITIAL_CUSTOMER_TOTP_ENABLED"
   CustomerTotpKmsKeyArn="$INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN"
+  AdminCrmEnabled="$INITIAL_ADMIN_CRM_ENABLED"
   SubscriptionBillingEnabled="false"
   SiteOrigin="$SITE_ORIGIN"
   ApiKeyPepper="$API_KEY_PEPPER"
@@ -48,6 +62,13 @@ sam deploy \
   --no-confirm-changeset \
   --no-fail-on-empty-changeset \
   --parameter-overrides "${parameter_overrides[@]}"
+
+stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+current_admin_crm="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+[[ "$current_admin_crm" == "$INITIAL_ADMIN_CRM_ENABLED" ]] || {
+  echo "Rollback did not restore the exact Admin CRM feature state." >&2
+  exit 1
+}
 
 response="$(curl --fail --silent --show-error "$API_BASE/health")"
 jq -e \
