@@ -1,6 +1,8 @@
 import type { ServerAuditSnapshot } from "./types";
 
 const MAX_SOURCES_PER_RELATIONSHIP = 32;
+const MAX_ATTRIBUTION_LABEL_BYTES = 128;
+const encoder = new TextEncoder();
 
 export type ServerAuditProcessRelationshipKind = "parent-process" | "listener-process" | "ambiguous-listener-process";
 
@@ -27,6 +29,8 @@ export type ServerAuditProcessRelationshipAnalysis = {
     ambiguousListenerAttributions: number;
     unresolvedListenerAttributions: number;
     duplicateProcessIdsSkipped: number;
+    invalidProcessLabelsSkipped: number;
+    invalidListenerLabelsSkipped: number;
     relationshipsWithTruncatedSources: number;
   };
   execution: {
@@ -34,6 +38,7 @@ export type ServerAuditProcessRelationshipAnalysis = {
     writeAccess: false;
     maxRelationships: number;
     maxSourcesPerRelationship: number;
+    maxAttributionLabelBytes: number;
     relationshipsTruncated: boolean;
   };
 };
@@ -44,6 +49,20 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
     throw new Error(`${label} must be an integer from ${minimum} through ${maximum}.`);
   }
   return resolved;
+}
+
+function normalizedAttributionLabel(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.normalize("NFC");
+  if (/[\u0000-\u001f\u007f]/.test(normalized)) return undefined;
+  const trimmed = normalized.trim();
+  if (!trimmed) return undefined;
+  if (encoder.encode(trimmed).byteLength > MAX_ATTRIBUTION_LABEL_BYTES) return undefined;
+  return trimmed;
+}
+
+function hasNonBlankLabel(value: string | undefined): boolean {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 function stableId(kind: ServerAuditProcessRelationshipKind, sources: string[]): string {
@@ -81,14 +100,20 @@ export function analyzeServerAuditProcessRelationships(
 
   const indexesByPid = new Map<number, number[]>();
   const indexesByName = new Map<string, number[]>();
+  let invalidProcessLabelsSkipped = 0;
   processes.forEach((process, index) => {
     const pidIndexes = indexesByPid.get(process.pid) ?? [];
     pidIndexes.push(index);
     indexesByPid.set(process.pid, pidIndexes);
 
-    const nameIndexes = indexesByName.get(process.name) ?? [];
+    const processName = normalizedAttributionLabel(process.name);
+    if (!processName) {
+      invalidProcessLabelsSkipped += 1;
+      return;
+    }
+    const nameIndexes = indexesByName.get(processName) ?? [];
     nameIndexes.push(index);
-    indexesByName.set(process.name, nameIndexes);
+    indexesByName.set(processName, nameIndexes);
   });
 
   const uniqueIndexByPid = new Map<number, number>();
@@ -111,9 +136,13 @@ export function analyzeServerAuditProcessRelationships(
   let listenerRelationshipsFound = 0;
   let ambiguousListenerAttributions = 0;
   let unresolvedListenerAttributions = 0;
+  let invalidListenerLabelsSkipped = 0;
   listeners.forEach((listener, listenerIndex) => {
-    const processName = listener.process?.trim();
-    if (!processName) return;
+    const processName = normalizedAttributionLabel(listener.process);
+    if (!processName) {
+      if (hasNonBlankLabel(listener.process)) invalidListenerLabelsSkipped += 1;
+      return;
+    }
     const processIndexes = indexesByName.get(processName) ?? [];
     if (processIndexes.length === 0) {
       unresolvedListenerAttributions += 1;
@@ -147,6 +176,8 @@ export function analyzeServerAuditProcessRelationships(
       ambiguousListenerAttributions,
       unresolvedListenerAttributions,
       duplicateProcessIdsSkipped,
+      invalidProcessLabelsSkipped,
+      invalidListenerLabelsSkipped,
       relationshipsWithTruncatedSources: boundedRelationships.filter((entry) => entry.sourcesTruncated).length,
     },
     execution: {
@@ -154,6 +185,7 @@ export function analyzeServerAuditProcessRelationships(
       writeAccess: false,
       maxRelationships,
       maxSourcesPerRelationship: MAX_SOURCES_PER_RELATIONSHIP,
+      maxAttributionLabelBytes: MAX_ATTRIBUTION_LABEL_BYTES,
       relationshipsTruncated: relationships.length > maxRelationships,
     },
   };
