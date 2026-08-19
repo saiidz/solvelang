@@ -16,7 +16,7 @@ async function fixture() {
     evidence: [{ kind: "configuration", path: "src/routes.ts", line: 8 }],
     metadata: { path: "src/routes.ts" },
   });
-  const module = await createSolveGraphNode({
+  const projectsModule = await createSolveGraphNode({
     kind: "module",
     identity: "module:src/projects.ts",
     label: "src/projects.ts",
@@ -61,12 +61,12 @@ async function fixture() {
     createSolveGraphEdge({
       kind: "imports",
       from: route.id,
-      to: module.id,
+      to: projectsModule.id,
       evidence: [{ kind: "parser", path: "src/routes.ts", line: 2 }],
     }),
     createSolveGraphEdge({
       kind: "depends-on",
-      from: module.id,
+      from: projectsModule.id,
       to: dependency.id,
       evidence: [{ kind: "manifest", path: "package.json", line: 14 }],
     }),
@@ -93,7 +93,7 @@ async function fixture() {
   const document = await createSolveGraphDocument({
     source: { ...solveGraphFixtureSource, displayName: "architecture-paths" },
     extractors: [{ id: "fixture", version: "1", deterministic: true }],
-    nodes: [route, module, dependency, workflow, job, resource, permission],
+    nodes: [route, projectsModule, dependency, workflow, job, resource, permission],
     edges,
   });
 
