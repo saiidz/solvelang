@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "solvelang-admin-private-ingress",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-19",
+  "workers_dev": false,
+  "vars": {
+    "ADMIN_ORIGIN": "https://admin.solve-lang.com",
+    "ADMIN_GATEWAY_UPSTREAM": "https://ru2uokfkge.execute-api.us-east-2.amazonaws.com/admin-gateway"
+  },
+  "routes": [
+    {
+      "pattern": "admin.solve-lang.com",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "directory": "../../admin-console-static",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
+}
