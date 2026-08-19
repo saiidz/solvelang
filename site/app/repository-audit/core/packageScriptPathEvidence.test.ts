@@ -127,14 +127,14 @@ test("skips shell-heavy, oversized, malformed, and invalid local evidence as par
       text: JSON.stringify({ scripts: {
         dynamic: "node ./scripts/run.js && echo done",
         invalid: "node ../outside.js",
-        huge: "x".repeat(20),
+        huge: "x".repeat(100),
       } }),
     },
   ]);
   const analysis = await createRepositoryPackageScriptPathEvidenceAnalysis(
     input,
     await graph(["package.json"]),
-    { maxScriptTextBytes: 10 },
+    { maxScriptTextBytes: 64 },
   );
 
   assert.equal(analysis.relationships.length, 0);
