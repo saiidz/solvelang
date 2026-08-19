@@ -34,6 +34,11 @@ import {
   type RepositoryDeploymentPathEvidenceOptions,
 } from "./deploymentPathEvidence";
 import {
+  createRepositoryFrameworkPathEvidenceAnalysis,
+  type RepositoryFrameworkPathEvidenceAnalysis,
+  type RepositoryFrameworkPathEvidenceOptions,
+} from "./frameworkPathEvidence";
+import {
   analyzeRepositoryGraph,
   type RepositoryAuditGraphPipelineOptions,
   type RepositoryAuditGraphPipelineResult,
@@ -69,6 +74,7 @@ export type RepositoryAuditAnalysisOptions = {
   configurationReferences?: RepositoryConfigurationReferenceOptions;
   workflowPathEvidence?: RepositoryWorkflowPathEvidenceOptions;
   deploymentPathEvidence?: RepositoryDeploymentPathEvidenceOptions;
+  frameworkPathEvidence?: RepositoryFrameworkPathEvidenceOptions;
   affectedValidation?: RepositoryAffectedValidationRequest;
   secretHmacKey?: Uint8Array;
 };
@@ -86,6 +92,7 @@ export type RepositoryAuditAnalysisResult = {
   configurationReferences: RepositoryConfigurationReferenceAnalysis;
   workflowPathEvidence: RepositoryWorkflowPathEvidenceAnalysis;
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceAnalysis;
+  frameworkPathEvidence: RepositoryFrameworkPathEvidenceAnalysis;
   affectedValidation?: RepositoryAffectedValidationMap;
   secretWarnings: RepositorySecretWarning[];
   execution: {
@@ -100,6 +107,7 @@ export type RepositoryAuditAnalysisResult = {
     configurationReferenceStatus: RepositoryConfigurationReferenceAnalysis["status"];
     workflowPathEvidenceStatus: RepositoryWorkflowPathEvidenceAnalysis["status"];
     deploymentPathEvidenceStatus: RepositoryDeploymentPathEvidenceAnalysis["status"];
+    frameworkPathEvidenceStatus: RepositoryFrameworkPathEvidenceAnalysis["status"];
     affectedValidationStatus?: RepositoryAffectedValidationMap["status"];
     architecturePathCount: number;
     securityBoundaryPathCount: number;
@@ -111,6 +119,7 @@ export type RepositoryAuditAnalysisResult = {
     configurationReferenceCount: number;
     workflowPathReferenceCount: number;
     deploymentPathReferenceCount: number;
+    frameworkPathReferenceCount: number;
     affectedTestFiles?: number;
     affectedWorkflowFiles?: number;
     secretFilesScanned: number;
@@ -193,6 +202,11 @@ export async function analyzeRepositorySnapshot(
     graph.graph,
     options.deploymentPathEvidence,
   );
+  const frameworkPathEvidence = await createRepositoryFrameworkPathEvidenceAnalysis(
+    snapshot,
+    graph.graph,
+    options.frameworkPathEvidence,
+  );
   const affectedValidation = options.affectedValidation
     ? await createRepositoryAffectedValidationMap(
       graph.graph,
@@ -227,6 +241,7 @@ export async function analyzeRepositorySnapshot(
     || configurationReferences.execution.referencesTruncated
     || workflowPathEvidence.execution.referencesTruncated
     || deploymentPathEvidence.execution.relationshipsTruncated
+    || frameworkPathEvidence.execution.relationshipsTruncated
     || affectedValidationTruncated;
   const partial = truncated
     || architecturePaths.status === "partial"
@@ -236,6 +251,7 @@ export async function analyzeRepositorySnapshot(
     || configurationReferences.status === "partial"
     || workflowPathEvidence.status === "partial"
     || deploymentPathEvidence.status === "partial"
+    || frameworkPathEvidence.status === "partial"
     || affectedValidation?.status === "partial";
   return {
     schema: "solvelang.repository-audit.analysis.v0",
@@ -250,6 +266,7 @@ export async function analyzeRepositorySnapshot(
     configurationReferences,
     workflowPathEvidence,
     deploymentPathEvidence,
+    frameworkPathEvidence,
     ...(affectedValidation === undefined ? {} : { affectedValidation }),
     secretWarnings,
     execution: {
@@ -264,6 +281,7 @@ export async function analyzeRepositorySnapshot(
       configurationReferenceStatus: configurationReferences.status,
       workflowPathEvidenceStatus: workflowPathEvidence.status,
       deploymentPathEvidenceStatus: deploymentPathEvidence.status,
+      frameworkPathEvidenceStatus: frameworkPathEvidence.status,
       ...(affectedValidation === undefined ? {} : {
         affectedValidationStatus: affectedValidation.status,
       }),
@@ -277,6 +295,7 @@ export async function analyzeRepositorySnapshot(
       configurationReferenceCount: configurationReferences.references.length,
       workflowPathReferenceCount: workflowPathEvidence.references.length,
       deploymentPathReferenceCount: deploymentPathEvidence.relationships.length,
+      frameworkPathReferenceCount: frameworkPathEvidence.relationships.length,
       ...(affectedValidation === undefined ? {} : {
         affectedTestFiles: affectedValidation.summary.affectedTestFiles,
         affectedWorkflowFiles: affectedValidation.summary.affectedWorkflowFiles,
