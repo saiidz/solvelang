@@ -108,7 +108,7 @@ test("preserves explicit partial and truncation truth without adding capabilitie
 
 test("creates a browser-ready architecture evidence download without changing the artifact schema", async () => {
   const download = await createRepositoryArchitecturePathEvidenceDownload(
-    "../My Repository.tar.gz",
+    "My Repository.zip",
     fixture(),
   );
 
