@@ -1,6 +1,8 @@
 const GATEWAY_PREFIX = "/admin-gateway";
+const STATIC_ASSET_PATHS = new Set(["/", "/index.html", "/styles.css", "/config.js", "/app.js"]);
+const STATIC_CSP = "default-src 'self'; connect-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
-function json(status, payload) {
+function json(status, payload, extraHeaders = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
@@ -10,6 +12,7 @@ function json(status, payload) {
       "referrer-policy": "no-referrer",
       "x-content-type-options": "nosniff",
       "x-robots-tag": "noindex, nofollow, noarchive",
+      ...extraHeaders,
     },
   });
 }
@@ -36,6 +39,58 @@ function upstreamTarget(requestUrl, upstreamBase) {
   return upstream;
 }
 
+function hardenStaticResponse(response) {
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "no-cache");
+  headers.set("content-security-policy", STATIC_CSP);
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("x-frame-options", "DENY");
+  headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+  headers.set("x-robots-tag", "noindex, nofollow, noarchive");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function serveReviewedStaticAsset(request, env) {
+  if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") {
+    return json(404, { error: "Admin UI is not published.", code: "admin_static_not_published" });
+  }
+
+  const incoming = new URL(request.url);
+  if (!STATIC_ASSET_PATHS.has(incoming.pathname)) {
+    return json(404, { error: "Not found.", code: "not_found" });
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return json(405, { error: "Method not allowed.", code: "method_not_allowed" }, { allow: "GET, HEAD" });
+  }
+
+  const assetUrl = new URL(request.url);
+  assetUrl.pathname = incoming.pathname === "/" ? "/index.html" : incoming.pathname;
+  assetUrl.search = "";
+  assetUrl.hash = "";
+
+  const headers = new Headers(request.headers);
+  headers.delete("authorization");
+  headers.delete("cookie");
+  headers.delete("cf-access-jwt-assertion");
+
+  const assetResponse = await env.ASSETS.fetch(new Request(assetUrl.toString(), {
+    method: request.method,
+    headers,
+  }));
+
+  if (assetResponse.status !== 200) {
+    return json(503, { error: "Admin UI asset unavailable.", code: "admin_static_unavailable" });
+  }
+
+  return hardenStaticResponse(assetResponse);
+}
+
 export async function handleAdminIngress(request, env, fetchImpl = fetch) {
   const adminOrigin = String(env.ADMIN_ORIGIN || "");
   const gatewayUpstream = String(env.ADMIN_GATEWAY_UPSTREAM || "");
@@ -51,7 +106,7 @@ export async function handleAdminIngress(request, env, fetchImpl = fetch) {
 
   const isGatewayPath = incoming.pathname === GATEWAY_PREFIX || incoming.pathname.startsWith(`${GATEWAY_PREFIX}/`);
   if (!isGatewayPath) {
-    return json(404, { error: "Admin UI is not published.", code: "admin_static_not_published" });
+    return serveReviewedStaticAsset(request, env);
   }
 
   const presentedOrigin = request.headers.get("origin");
