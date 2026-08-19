@@ -27,11 +27,15 @@ export function ServerAuditProcessRelationshipPanel({
   className = "",
 }: ServerAuditProcessRelationshipPanelProps) {
   return (
-    <section className={`rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8 ${className}`.trim()}>
+    <section
+      aria-labelledby="server-audit-process-relationships-heading"
+      aria-live="polite"
+      className={`rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8 ${className}`.trim()}
+    >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Process relationships</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Bounded structural attribution</h2>
+          <h2 id="server-audit-process-relationships-heading" className="mt-2 text-2xl font-semibold text-slate-950">Bounded structural attribution</h2>
         </div>
         <p className="text-sm text-slate-600">
           {presentation.summary.shownRows} shown · {presentation.summary.relationships} analyzed
