@@ -98,14 +98,17 @@ test("source partial state is preserved independently from presentation bounds",
 });
 
 test("fails closed when runtime input claims mutable capabilities", async () => {
-  const analysis = fixture() as unknown as {
+  const runtimeAnalysis = structuredClone(fixture()) as unknown as {
     mode: string;
-    execution: { networkAccess: boolean; writeAccess: boolean };
-  } & RepositoryPackageScriptPathEvidenceAnalysis;
-  analysis.execution.networkAccess = true;
+    execution: { networkAccess: boolean; writeAccess: boolean } & Record<string, unknown>;
+  };
+  runtimeAnalysis.execution.networkAccess = true;
 
   await assert.rejects(
-    createRepositoryPackageScriptPathProductBundle("repo.zip", analysis),
+    createRepositoryPackageScriptPathProductBundle(
+      "repo.zip",
+      runtimeAnalysis as unknown as RepositoryPackageScriptPathEvidenceAnalysis,
+    ),
     /requires analyze-only input/,
   );
 });
