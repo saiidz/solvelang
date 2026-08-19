@@ -1,0 +1,485 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang customer-priority production infrastructure. Durable foundation is provisioned while all processing/exposure gates default OFF.
+
+Parameters:
+  PriorityQueueEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CustomerPriorityEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ProviderExecutionEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  CustomerAuthTableName:
+    Type: String
+    Default: disabled
+    AllowedPattern: '^disabled$|[A-Za-z0-9_.-]{3,255}$'
+  OperationsAlarmTopicArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|arn:[a-z0-9-]+:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_.-]+$'
+
+Rules:
+  CustomerPriorityRequiresQueue:
+    RuleCondition: !Equals [!Ref CustomerPriorityEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref PriorityQueueEnabled, "true"]
+        AssertDescription: Customer priority requires queue processing.
+  ProviderExecutionRequiresCustomerPriority:
+    RuleCondition: !Equals [!Ref ProviderExecutionEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref CustomerPriorityEnabled, "true"]
+        AssertDescription: Provider execution requires customer priority exposure.
+
+Conditions:
+  QueueEnabled: !Equals [!Ref PriorityQueueEnabled, "true"]
+  CustomerVerificationConfigured: !Not [!Equals [!Ref CustomerAuthTableName, disabled]]
+  AlertsConfigured: !Not [!Equals [!Ref OperationsAlarmTopicArn, ""]]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    CodeUri: .
+    Architectures: [arm64]
+    Tracing: Active
+
+Resources:
+  PriorityJobsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: solvelang-api-access-production-priority-jobs
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  PrioritySourceBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub solvelang-priority-prod-source-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireCustomerPrioritySources
+            Status: Enabled
+            Prefix: customer/
+            ExpirationInDays: 7
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+
+  PrioritySourceBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PrioritySourceBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt PrioritySourceBucket.Arn
+              - !Sub '${PrioritySourceBucket.Arn}/*'
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  DispatchFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-dispatch-failure
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  StandardDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-standard-dlq.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+  ExpressDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-express-dlq.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+  PriorityDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-priority-dlq.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+  CriticalDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-critical-dlq.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  StandardQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-standard.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt StandardDeadLetterQueue.Arn
+        maxReceiveCount: 3
+  ExpressQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-express.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ExpressDeadLetterQueue.Arn
+        maxReceiveCount: 3
+  PriorityQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-priority.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PriorityDeadLetterQueue.Arn
+        maxReceiveCount: 3
+  CriticalQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: solvelang-priority-prod-critical.fifo
+      FifoQueue: true
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 90
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CriticalDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  PriorityDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Condition: QueueEnabled
+    Properties:
+      Handler: src/priority-dispatcher-handler.handler
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_STANDARD_QUEUE_URL: !Ref StandardQueue
+          API_PRIORITY_EXPRESS_QUEUE_URL: !Ref ExpressQueue
+          API_PRIORITY_PRIORITY_QUEUE_URL: !Ref PriorityQueue
+          API_PRIORITY_CRITICAL_QUEUE_URL: !Ref CriticalQueue
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt StandardQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ExpressQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt PriorityQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt CriticalQueue.QueueName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt DispatchFailureQueue.QueueName
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:DescribeStream
+              - dynamodb:GetRecords
+              - dynamodb:GetShardIterator
+              - dynamodb:ListStreams
+            Resource: !GetAtt PriorityJobsTable.StreamArn
+      Events:
+        JobStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt PriorityJobsTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 1
+            BisectBatchOnFunctionError: true
+            MaximumRetryAttempts: 3
+            MaximumRecordAgeInSeconds: 3600
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt DispatchFailureQueue.Arn
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName":["INSERT"],"dynamodb":{"NewImage":{"status":{"S":["queued"]}}}}'
+
+  StandardWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: QueueEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: standard
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action: [dynamodb:GetItem]
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt StandardQueue.QueueName
+      Events:
+        Lane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt StandardQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
+  ExpressWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: QueueEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 2
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: express
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action: [dynamodb:GetItem]
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ExpressQueue.QueueName
+      Events:
+        Lane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ExpressQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 2
+
+  PriorityWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: QueueEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: priority
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action: [dynamodb:GetItem]
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt PriorityQueue.QueueName
+      Events:
+        Lane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt PriorityQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 5
+
+  CriticalWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: QueueEnabled
+    Properties:
+      Handler: src/priority-worker-handler.handler
+      MemorySize: 512
+      Timeout: 30
+      ReservedConcurrentExecutions: 10
+      Environment:
+        Variables:
+          API_PRIORITY_JOBS_TABLE: !Ref PriorityJobsTable
+          API_PRIORITY_LANE: critical
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PriorityJobsTable
+        - !If
+          - CustomerVerificationConfigured
+          - Statement:
+              Effect: Allow
+              Action: [dynamodb:GetItem]
+              Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+          - !Ref AWS::NoValue
+        - SQSPollerPolicy:
+            QueueName: !GetAtt CriticalQueue.QueueName
+      Events:
+        Lane:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CriticalQueue.Arn
+            BatchSize: 1
+            FunctionResponseTypes: [ReportBatchItemFailures]
+            ScalingConfig:
+              MaximumConcurrency: 10
+
+  StandardDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production standard priority DLQ is non-empty.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt StandardDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  ExpressDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production express priority DLQ is non-empty.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ExpressDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  PriorityDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production priority DLQ is non-empty.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PriorityDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  CriticalDlqAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production critical priority DLQ is non-empty.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt CriticalDeadLetterQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+Outputs:
+  PriorityQueueEnabledState:
+    Value: !Ref PriorityQueueEnabled
+  CustomerPriorityEnabledState:
+    Value: !Ref CustomerPriorityEnabled
+  ProviderExecutionEnabledState:
+    Value: !Ref ProviderExecutionEnabled
+  PriorityJobsTableName:
+    Value: !Ref PriorityJobsTable
+  PrioritySourceBucketName:
+    Value: !Ref PrioritySourceBucket
+  StandardQueueUrl:
+    Value: !Ref StandardQueue
+  ExpressQueueUrl:
+    Value: !Ref ExpressQueue
+  PriorityQueueUrl:
+    Value: !Ref PriorityQueue
+  CriticalQueueUrl:
+    Value: !Ref CriticalQueue

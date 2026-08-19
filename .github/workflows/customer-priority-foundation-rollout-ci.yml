@@ -1,0 +1,50 @@
+name: Customer Priority Foundation Rollout CI
+
+on:
+  pull_request:
+    paths:
+      - "services/api-access/customer-priority-production-stack.yaml"
+      - ".github/workflows/deploy-customer-priority-production-foundation.yml"
+      - ".github/workflows/customer-priority-foundation-rollout-ci.yml"
+      - "ops/aws/production-priority-foundation-deploy-supplemental-policy.json"
+      - "services/api-access/test/customer-priority-production-foundation-rollout.test.js"
+  push:
+    branches: [main]
+    paths:
+      - "services/api-access/customer-priority-production-stack.yaml"
+      - ".github/workflows/deploy-customer-priority-production-foundation.yml"
+      - ".github/workflows/customer-priority-foundation-rollout-ci.yml"
+      - "ops/aws/production-priority-foundation-deploy-supplemental-policy.json"
+      - "services/api-access/test/customer-priority-production-foundation-rollout.test.js"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-access
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run API/priority tests
+        run: npm test
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate dormant production priority foundation
+        run: sam validate --lint --template customer-priority-production-stack.yaml
+      - name: Build dormant production priority foundation
+        run: sam build --template customer-priority-production-stack.yaml
+      - name: Parse scoped deployment supplement
+        run: node -e 'JSON.parse(require("node:fs").readFileSync("../../ops/aws/production-priority-foundation-deploy-supplemental-policy.json", "utf8"))'
+      - name: Assert CI cannot deploy or activate processing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -Eq 's[a]m deploy|cloudformation d[e]ploy|aws s3 c[p]' ../../.github/workflows/customer-priority-foundation-rollout-ci.yml
+          ! grep -Eq 'PriorityQueueEnabled=t[r]ue|CustomerPriorityEnabled=t[r]ue|ProviderExecutionEnabled=t[r]ue' ../../.github/workflows/customer-priority-foundation-rollout-ci.yml
