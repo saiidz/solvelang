@@ -1,4 +1,9 @@
 import {
+  createRepositoryAffectedValidationMap,
+  type RepositoryAffectedValidationMap,
+  type RepositoryAffectedValidationOptions,
+} from "./affectedValidation";
+import {
   createRepositoryConfigurationReferenceAnalysis,
   type RepositoryConfigurationReferenceAnalysis,
   type RepositoryConfigurationReferenceOptions,
@@ -40,6 +45,10 @@ import {
   type RepositoryWorkflowPathEvidenceOptions,
 } from "./workflowPathEvidence";
 
+export type RepositoryAffectedValidationRequest = RepositoryAffectedValidationOptions & {
+  changedPaths: readonly string[];
+};
+
 export type RepositoryAuditAnalysisOptions = {
   inventoryLimits?: Partial<RepositoryScanLimits>;
   graph?: RepositoryAuditGraphPipelineOptions;
@@ -48,6 +57,7 @@ export type RepositoryAuditAnalysisOptions = {
   deadCodeCandidates?: RepositoryDeadCodeCandidateOptions;
   configurationReferences?: RepositoryConfigurationReferenceOptions;
   workflowPathEvidence?: RepositoryWorkflowPathEvidenceOptions;
+  affectedValidation?: RepositoryAffectedValidationRequest;
   secretHmacKey?: Uint8Array;
 };
 
@@ -62,6 +72,7 @@ export type RepositoryAuditAnalysisResult = {
   deadCodeCandidates: RepositoryDeadCodeCandidateAnalysis;
   configurationReferences: RepositoryConfigurationReferenceAnalysis;
   workflowPathEvidence: RepositoryWorkflowPathEvidenceAnalysis;
+  affectedValidation?: RepositoryAffectedValidationMap;
   secretWarnings: RepositorySecretWarning[];
   execution: {
     status: "complete" | "partial";
@@ -73,6 +84,7 @@ export type RepositoryAuditAnalysisResult = {
     deadCodeCandidateStatus: RepositoryDeadCodeCandidateAnalysis["status"];
     configurationReferenceStatus: RepositoryConfigurationReferenceAnalysis["status"];
     workflowPathEvidenceStatus: RepositoryWorkflowPathEvidenceAnalysis["status"];
+    affectedValidationStatus?: RepositoryAffectedValidationMap["status"];
     dependencyFilesScanned: number;
     undeclaredDependencyFindings: number;
     directTestMappings: number;
@@ -80,6 +92,8 @@ export type RepositoryAuditAnalysisResult = {
     deadCodeCandidateCount: number;
     configurationReferenceCount: number;
     workflowPathReferenceCount: number;
+    affectedTestFiles?: number;
+    affectedWorkflowFiles?: number;
     secretFilesScanned: number;
     redactedSecretMatches: number;
     networkAccess: false;
@@ -154,6 +168,14 @@ export async function analyzeRepositorySnapshot(
     graph.graph,
     options.workflowPathEvidence,
   );
+  const affectedValidation = options.affectedValidation
+    ? await createRepositoryAffectedValidationMap(
+      graph.graph,
+      workflowPathEvidence,
+      options.affectedValidation.changedPaths,
+      options.affectedValidation,
+    )
+    : undefined;
 
   // Secret matching is restricted to files accepted by the bounded graph scan.
   // This prevents a secondary scanner from silently bypassing file/byte/depth limits.
@@ -163,6 +185,10 @@ export async function analyzeRepositorySnapshot(
     options.secretHmacKey ? { hmacKey: options.secretHmacKey } : {},
   );
 
+  const affectedValidationTruncated = affectedValidation !== undefined && (
+    affectedValidation.execution.changedPathsTruncated
+    || affectedValidation.execution.mappingsTruncated
+  );
   const truncated = inventory.execution.truncated
     || graph.execution.truncated
     || dependencyConsistency.execution.findingsTruncated
@@ -170,13 +196,15 @@ export async function analyzeRepositorySnapshot(
     || coverageMap.execution.samplesTruncated
     || deadCodeCandidates.execution.candidatesTruncated
     || configurationReferences.execution.referencesTruncated
-    || workflowPathEvidence.execution.referencesTruncated;
+    || workflowPathEvidence.execution.referencesTruncated
+    || affectedValidationTruncated;
   const partial = truncated
     || dependencyConsistency.execution.status === "partial"
     || coverageMap.execution.status === "partial"
     || deadCodeCandidates.status !== "complete"
     || configurationReferences.status === "partial"
-    || workflowPathEvidence.status === "partial";
+    || workflowPathEvidence.status === "partial"
+    || affectedValidation?.status === "partial";
   return {
     schema: "solvelang.repository-audit.analysis.v0",
     mode: "analyze-only",
@@ -188,6 +216,7 @@ export async function analyzeRepositorySnapshot(
     deadCodeCandidates,
     configurationReferences,
     workflowPathEvidence,
+    ...(affectedValidation === undefined ? {} : { affectedValidation }),
     secretWarnings,
     execution: {
       status: partial ? "partial" : "complete",
@@ -199,6 +228,9 @@ export async function analyzeRepositorySnapshot(
       deadCodeCandidateStatus: deadCodeCandidates.status,
       configurationReferenceStatus: configurationReferences.status,
       workflowPathEvidenceStatus: workflowPathEvidence.status,
+      ...(affectedValidation === undefined ? {} : {
+        affectedValidationStatus: affectedValidation.status,
+      }),
       dependencyFilesScanned: dependencyConsistency.execution.filesScanned,
       undeclaredDependencyFindings: dependencyConsistency.undeclaredImports.length,
       directTestMappings: coverageMap.testMappings.length,
@@ -206,6 +238,10 @@ export async function analyzeRepositorySnapshot(
       deadCodeCandidateCount: deadCodeCandidates.candidates.length,
       configurationReferenceCount: configurationReferences.references.length,
       workflowPathReferenceCount: workflowPathEvidence.references.length,
+      ...(affectedValidation === undefined ? {} : {
+        affectedTestFiles: affectedValidation.summary.affectedTestFiles,
+        affectedWorkflowFiles: affectedValidation.summary.affectedWorkflowFiles,
+      }),
       secretFilesScanned: secretSnapshot.files.length,
       redactedSecretMatches: secretWarnings.length,
       networkAccess: false,
