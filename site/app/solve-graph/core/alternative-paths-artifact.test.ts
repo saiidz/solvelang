@@ -76,6 +76,16 @@ test("fails closed for malformed path, edge, direction, and truncation contracts
   const malformedDirection = { ...structuredClone(result), direction: "sideways" as never };
   await assert.rejects(createSolveGraphAlternativePathsArtifact(index, malformedDirection), /direction is invalid/);
 
+  const malformedReason = {
+    ...structuredClone(result),
+    truncated: true,
+    truncationReason: "unknown" as never,
+  };
+  await assert.rejects(
+    createSolveGraphAlternativePathsArtifact(index, malformedReason),
+    /truncation reason is invalid/,
+  );
+
   const malformedTruncation = { ...structuredClone(result), truncated: false, truncationReason: "depth" as const };
   await assert.rejects(createSolveGraphAlternativePathsArtifact(index, malformedTruncation), /truncation metadata/);
 });
