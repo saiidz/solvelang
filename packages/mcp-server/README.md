@@ -19,8 +19,10 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_validate_solve` — validates a `.solve` file through the local `solvec` executable.
 - `solvelang_generate_n8n_report` — returns Markdown or CI-friendly JSON evidence without writing files.
 - `solvelang_graph_find_nodes` — searches a canonical Solve Graph by node kind, text, or exact evidence path.
+- `solvelang_graph_search_nodes` — ranks bounded node matches by deterministic label, identity, evidence-path, and string-metadata evidence.
 - `solvelang_graph_dependencies` — traverses outbound dependency relationships from stable Solve Graph node IDs.
 - `solvelang_graph_dependents` — traverses inbound dependency relationships from stable Solve Graph node IDs.
+- `solvelang_graph_shortest_path` — finds one deterministic bounded shortest dependency or dependent path between stable node IDs and returns safe node summaries plus relationship/traversal hops.
 - `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
 
@@ -36,14 +38,16 @@ For Solve Graph tools, provide exactly one of:
 - `path`: a workspace-relative canonical `solvelang.graph.v0` JSON document; or
 - `rawJson`: canonical graph JSON supplied directly to the MCP tool.
 
-Solve Graph input is accepted only when it is analyze-only, declares `networkAccess=false` and `writeAccess=false`, has stable canonical node/edge IDs, and passes its SHA-256 integrity check. The MCP transport returns only bounded node summaries and traversal evidence; it never executes repository code or mutates the graph or workspace. The MCP-facing tool names use underscore-safe identifiers, while responses preserve the Solve Graph tool API names (`solve_graph.find_nodes`, `solve_graph.dependencies`, `solve_graph.dependents`, and `solve_graph.impact`) for deterministic downstream handling.
+Solve Graph input is accepted only when it is analyze-only, declares `networkAccess=false` and `writeAccess=false`, has stable canonical node/edge IDs, and passes its SHA-256 integrity check. The MCP transport returns only bounded node summaries and traversal evidence; it never executes repository code or mutates the graph or workspace. The MCP-facing tool names use underscore-safe identifiers, while responses preserve deterministic Solve Graph API names such as `solve_graph.find_nodes`, `solve_graph.search_nodes`, `solve_graph.dependencies`, `solve_graph.dependents`, `solve_graph.shortest_path`, and `solve_graph.impact` for downstream handling.
+
+Shortest-path queries are breadth-first and deterministic. They can be limited by edge kind, direction, depth, and visited-node count. A no-path response distinguishes complete absence from a bounded search that stopped at a depth or visited-node boundary. For dependent-direction paths, each hop reports both the underlying graph-edge orientation and the traversal orientation so callers do not have to infer reversal semantics.
 
 ## Security boundaries
 
 - Workspace-relative paths only; traversal outside the configured root is rejected.
 - Maximum input size: 2 MB for files and raw JSON, including Solve Graph documents.
 - Maximum n8n node count: 5,000.
-- Solve Graph traversal roots: at most 128; depth: at most 64; result count: at most 10,000.
+- Solve Graph traversal roots: at most 128; depth: at most 64; result count or shortest-path visited-node count: at most 10,000.
 - No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
 - Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
 - Malformed input errors do not echo supplied workflow or graph content.
