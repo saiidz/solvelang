@@ -47,6 +47,11 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.execution.writeAccess, false);
   assert.equal(result.graph.graph.source.private, true);
   assert.ok(result.graph.graph.edges.some((edge) => edge.kind === "imports"));
+  assert.equal(result.architecturePaths.schema, "solvelang.repository-audit.architecture-paths.v0");
+  assert.equal(result.architecturePaths.status, "complete");
+  assert.equal(result.execution.architecturePathStatus, "complete");
+  assert.equal(result.execution.architecturePathCount, 0);
+  assert.equal(result.execution.securityBoundaryPathCount, 0);
   assert.equal(result.dependencyConsistency.schema, "solvelang.repository-audit.dependency-consistency.v0");
   assert.equal(result.coverageMap.schema, "solvelang.repository-audit.coverage-map.v0");
   assert.equal(result.deadCodeCandidates.schema, "solvelang.repository-audit.dead-code-candidates.v0");
@@ -94,6 +99,7 @@ test("surfaces dependency, test, documentation, configuration, workflow, and aff
   });
 
   assert.equal(result.execution.status, "complete");
+  assert.equal(result.execution.architecturePathStatus, "complete");
   assert.equal(result.execution.undeclaredDependencyFindings, 1);
   assert.equal(result.dependencyConsistency.undeclaredImports[0].packageName, "missing-package");
   assert.equal(result.execution.directTestMappings, 1);
@@ -140,6 +146,8 @@ test("partial inventory or graph work is surfaced as partial and secondary scann
   assert.equal(result.execution.truncated, true);
   assert.ok(result.execution.inventoryTruncationReasons.includes("file-count"));
   assert.ok(result.execution.graphTruncationReasons.includes("file-count"));
+  assert.equal(result.execution.architecturePathStatus, "partial");
+  assert.equal(result.architecturePaths.execution.graphTruncated, true);
   assert.equal(result.dependencyConsistency.execution.findingsSuppressed, true);
   assert.equal(result.coverageMap.execution.status, "partial");
   assert.equal(result.deadCodeCandidates.status, "suppressed");
