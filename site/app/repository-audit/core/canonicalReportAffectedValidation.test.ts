@@ -26,7 +26,7 @@ function fixture(): RepositorySnapshot {
     },
     files: [
       { path: "src/core.ts", byteSize: 23, text: "export const core = 1;\n" },
-      { path: "tests/core.test.ts", byteSize: 29, text: 'import "../src/core";\n' },
+      { path: "tests/core.test.ts", byteSize: 22, text: 'import "../src/core";\n' },
       { path: ".github/workflows/ci.yml", byteSize: workflow.length, text: workflow },
     ],
   };
