@@ -47,6 +47,7 @@ export async function createServerAuditProcessRelationshipProductBundle(
   }
   if (download.artifact.summary.processesChecked !== analysis.summary.processesChecked
     || download.artifact.summary.listenersChecked !== analysis.summary.listenersChecked
+    || download.artifact.relationships.length !== analysis.relationships.length
     || presentation.summary.relationships !== analysis.relationships.length) {
     throw new Error("Server Audit process relationship product bundle source identity changed during composition.");
   }
