@@ -34,10 +34,11 @@ export async function createSolveGraphAlternativePathsProductBundle(
   result: SolveGraphAlternativePathsResult,
   presentationOptions: SolveGraphAlternativePathsPresentationOptions = {},
 ): Promise<SolveGraphAlternativePathsProductBundle> {
-  const [download, presentation] = await Promise.all([
-    createSolveGraphAlternativePathsDownload(sourceName, index, result),
-    Promise.resolve(createSolveGraphAlternativePathsPresentation(index, result, presentationOptions)),
-  ]);
+  // Run the synchronous presentation validator before starting asynchronous
+  // artifact work. Malformed query results therefore fail once, without
+  // creating an unobserved artifact promise that could reject later.
+  const presentation = createSolveGraphAlternativePathsPresentation(index, result, presentationOptions);
+  const download = await createSolveGraphAlternativePathsDownload(sourceName, index, result);
 
   if (download.artifact.execution.networkAccess !== false
     || download.artifact.execution.writeAccess !== false
