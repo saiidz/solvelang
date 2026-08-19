@@ -1,11 +1,13 @@
 import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditArtifactFindings } from "./artifactFindings";
+import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
+import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -22,6 +24,12 @@ const SEVERITY_ORDER: Record<ServerAuditSeverity, number> = {
   low: 3,
   info: 4,
 };
+
+const LEGACY_WEB_ROOT_PERMISSION_TITLES = new Set([
+  "Web root is world-writable",
+  "Web root is group-writable",
+  "Application web root owned by root",
+]);
 
 function stableHash(input: string) {
   let hash = 2166136261;
@@ -51,14 +59,20 @@ function sortFindings(findings: ServerAuditFinding[]): ServerAuditFinding[] {
   );
 }
 
+function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
+  return analyzeServerSnapshot(snapshot).filter((finding) => !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title));
+}
+
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
   const findings = sortFindings([
-    ...analyzeServerSnapshot(snapshot),
+    ...createBaselineFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditArtifactFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
+    ...createServerAuditCertificateConsistencyFindings(snapshot),
+    ...createServerAuditWebRootPermissionFindings(snapshot),
     ...createServerAuditCoverageFindings(snapshot),
   ]);
   const canonical = JSON.stringify({
@@ -90,6 +104,8 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Backup/log consistency findings identify only contradictory duplicate artifact evidence; collection-time churn can explain some log differences and the stage does not determine which value is authoritative.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
+      "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
+      "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
       "Restore testing, external firewall rules, cloud IAM, database contents, application secrets, and customer data are outside the v0 snapshot contract unless represented by safe summary evidence.",
