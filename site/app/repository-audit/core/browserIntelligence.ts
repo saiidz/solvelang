@@ -17,6 +17,12 @@ import {
   type RepositoryFrameworkPathPresentation,
   type RepositoryFrameworkPathPresentationOptions,
 } from "./frameworkPathPresentation";
+import type { RepositoryPackageScriptPathEvidenceAnalysis } from "./packageScriptPathEvidence";
+import {
+  createRepositoryPackageScriptPathPresentation,
+  type RepositoryPackageScriptPathPresentation,
+  type RepositoryPackageScriptPathPresentationOptions,
+} from "./packageScriptPathPresentation";
 import {
   createRepositoryAuditVisualExplorer,
   type RepositoryAuditVisualExplorer,
@@ -27,6 +33,7 @@ export type RepositoryAuditBrowserIntelligenceOptions = {
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentationOptions;
   deploymentPaths?: RepositoryDeploymentPathPresentationOptions;
   frameworkPaths?: RepositoryFrameworkPathPresentationOptions;
+  packageScriptPaths?: RepositoryPackageScriptPathPresentationOptions;
   visualExplorer?: RepositoryAuditVisualExplorerOptions;
 };
 
@@ -38,6 +45,7 @@ export type RepositoryAuditBrowserIntelligence = {
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentation;
   deploymentPaths: RepositoryDeploymentPathPresentation;
   frameworkPaths?: RepositoryFrameworkPathPresentation;
+  packageScriptPaths?: RepositoryPackageScriptPathPresentation;
   visualExplorer: RepositoryAuditVisualExplorer;
   execution: {
     networkAccess: false;
@@ -45,6 +53,7 @@ export type RepositoryAuditBrowserIntelligence = {
     angularTargetConfigPartial?: boolean;
     deploymentPathPartial: boolean;
     frameworkPathPartial?: boolean;
+    packageScriptPathPartial?: boolean;
     visualExplorerPartial: boolean;
   };
 };
@@ -55,6 +64,7 @@ export async function createRepositoryAuditBrowserIntelligence(
   options: RepositoryAuditBrowserIntelligenceOptions = {},
   frameworkPathEvidence?: RepositoryFrameworkPathEvidenceAnalysis,
   angularTargetConfigEvidence?: RepositoryAngularTargetConfigEvidenceAnalysis,
+  packageScriptPathEvidence?: RepositoryPackageScriptPathEvidenceAnalysis,
 ): Promise<RepositoryAuditBrowserIntelligence> {
   if (graph.graphId !== deploymentPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires deployment evidence from the same Solve Graph document.");
@@ -64,6 +74,9 @@ export async function createRepositoryAuditBrowserIntelligence(
   }
   if (angularTargetConfigEvidence && graph.graphId !== angularTargetConfigEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires Angular target-config evidence from the same Solve Graph document.");
+  }
+  if (packageScriptPathEvidence && graph.graphId !== packageScriptPathEvidence.graphId) {
+    throw new Error("Repository Audit browser intelligence requires package-script path evidence from the same Solve Graph document.");
   }
 
   const visualExplorer = await createRepositoryAuditVisualExplorer(graph, options.visualExplorer);
@@ -77,10 +90,14 @@ export async function createRepositoryAuditBrowserIntelligence(
   const angularTargetConfigs = angularTargetConfigEvidence
     ? createRepositoryAngularTargetConfigPresentation(angularTargetConfigEvidence, options.angularTargetConfigs)
     : undefined;
+  const packageScriptPaths = packageScriptPathEvidence
+    ? createRepositoryPackageScriptPathPresentation(packageScriptPathEvidence, options.packageScriptPaths)
+    : undefined;
 
   if (visualExplorer.graphId !== deploymentPaths.graphId
     || (frameworkPaths && frameworkPaths.graphId !== deploymentPaths.graphId)
-    || (angularTargetConfigs && angularTargetConfigs.graphId !== deploymentPaths.graphId)) {
+    || (angularTargetConfigs && angularTargetConfigs.graphId !== deploymentPaths.graphId)
+    || (packageScriptPaths && packageScriptPaths.graphId !== deploymentPaths.graphId)) {
     throw new Error("Repository Audit browser intelligence graph identity changed during composition.");
   }
 
@@ -94,18 +111,27 @@ export async function createRepositoryAuditBrowserIntelligence(
     frameworkPaths.status === "partial"
     || frameworkPaths.execution.rowsTruncated
   );
+  const packageScriptPathPartial = packageScriptPaths !== undefined && (
+    packageScriptPaths.status === "partial"
+    || packageScriptPaths.execution.rowsTruncated
+  );
   const visualExplorerPartial = visualExplorer.status === "partial";
 
   return {
     schema: "solvelang.repository-audit.browser-intelligence.v0",
     mode: "analyze-only",
     graphId: graph.graphId,
-    status: angularTargetConfigPartial || deploymentPathPartial || frameworkPathPartial || visualExplorerPartial
+    status: angularTargetConfigPartial
+      || deploymentPathPartial
+      || frameworkPathPartial
+      || packageScriptPathPartial
+      || visualExplorerPartial
       ? "partial"
       : "complete",
     ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigs }),
     deploymentPaths,
     ...(frameworkPaths === undefined ? {} : { frameworkPaths }),
+    ...(packageScriptPaths === undefined ? {} : { packageScriptPaths }),
     visualExplorer,
     execution: {
       networkAccess: false,
@@ -113,6 +139,7 @@ export async function createRepositoryAuditBrowserIntelligence(
       ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigPartial }),
       deploymentPathPartial,
       ...(frameworkPaths === undefined ? {} : { frameworkPathPartial }),
+      ...(packageScriptPaths === undefined ? {} : { packageScriptPathPartial }),
       visualExplorerPartial,
     },
   };
