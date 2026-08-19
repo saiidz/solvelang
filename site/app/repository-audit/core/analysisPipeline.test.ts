@@ -52,6 +52,8 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.deadCodeCandidates.schema, "solvelang.repository-audit.dead-code-candidates.v0");
   assert.equal(result.configurationReferences.schema, "solvelang.repository-audit.configuration-references.v0");
   assert.equal(result.workflowPathEvidence.schema, "solvelang.repository-audit.workflow-path-evidence.v0");
+  assert.equal(result.affectedValidation, undefined);
+  assert.equal(result.execution.affectedValidationStatus, undefined);
   assert.equal(result.execution.dependencyConsistencyStatus, "complete");
   assert.equal(result.execution.coverageMapStatus, "complete");
   assert.equal(result.execution.deadCodeCandidateStatus, "complete");
@@ -72,7 +74,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
-test("surfaces dependency, test, documentation, configuration, and workflow evidence in one bounded analysis", async () => {
+test("surfaces dependency, test, documentation, configuration, workflow, and affected-validation evidence in one bounded analysis", async () => {
   const workflow = [
     "jobs:",
     "  test:",
@@ -87,7 +89,9 @@ test("surfaces dependency, test, documentation, configuration, and workflow evid
     { path: "tests/app.test.ts", byteSize: 56, text: 'import "../src/app";\n' },
     { path: "docs/guide.md", byteSize: 48, text: "See [app](../src/app.ts).\n" },
     { path: ".github/workflows/ci.yml", byteSize: workflow.length, text: workflow },
-  ]));
+  ]), {
+    affectedValidation: { changedPaths: ["src/app.ts"] },
+  });
 
   assert.equal(result.execution.status, "complete");
   assert.equal(result.execution.undeclaredDependencyFindings, 1);
@@ -98,6 +102,22 @@ test("surfaces dependency, test, documentation, configuration, and workflow evid
   assert.equal(result.configurationReferences.references[0].targetPath, "src/app.ts");
   assert.equal(result.execution.workflowPathReferenceCount, 1);
   assert.equal(result.workflowPathEvidence.references[0].targetPath, "src");
+  assert.equal(result.execution.affectedValidationStatus, "complete");
+  assert.equal(result.execution.affectedTestFiles, 1);
+  assert.equal(result.execution.affectedWorkflowFiles, 1);
+  assert.ok(result.affectedValidation);
+  assert.deepEqual(result.affectedValidation.entries[0].tests.map((item) => item.testPath), ["tests/app.test.ts"]);
+  assert.deepEqual(result.affectedValidation.entries[0].workflows.map((item) => item.workflowPath), [".github/workflows/ci.yml"]);
+});
+
+test("affected-validation incompleteness participates in overall partial truth", async () => {
+  const result = await analyzeRepositorySnapshot(fixture(), {
+    affectedValidation: { changedPaths: ["missing.ts"] },
+  });
+  assert.equal(result.execution.status, "partial");
+  assert.equal(result.execution.truncated, false);
+  assert.equal(result.execution.affectedValidationStatus, "partial");
+  assert.equal(result.affectedValidation?.summary.unresolvedChangedPaths, 1);
 });
 
 test("a supplied HMAC key makes redacted warning fingerprints reproducible without storing the secret", async () => {
