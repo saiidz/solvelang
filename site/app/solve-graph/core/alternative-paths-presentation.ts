@@ -62,6 +62,12 @@ function assertResult(index: SolveGraphQueryIndex, result: SolveGraphAlternative
   if (result.direction !== "dependencies" && result.direction !== "dependents") {
     throw new Error("Solve Graph alternative-path presentation direction is invalid.");
   }
+  if (result.truncationReason !== undefined
+    && result.truncationReason !== "depth"
+    && result.truncationReason !== "path-count"
+    && result.truncationReason !== "state-count") {
+    throw new Error("Solve Graph alternative-path presentation truncation reason is invalid.");
+  }
   if (result.truncated !== (result.truncationReason !== undefined)) {
     throw new Error("Solve Graph alternative-path presentation truncation metadata is inconsistent.");
   }
