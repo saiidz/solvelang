@@ -1,0 +1,53 @@
+name: Admin Private Ingress CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/admin-console-edge/**'
+      - '.github/workflows/admin-private-ingress-ci.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/admin-console-edge/**'
+      - '.github/workflows/admin-private-ingress-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/admin-console-edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test ingress behavior
+        run: npm test
+      - name: Verify production custom-domain contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const config = JSON.parse(await readFile('wrangler.jsonc', 'utf8'));
+          if (config.name !== 'solvelang-admin-private-ingress') throw new Error('unexpected worker name');
+          if (config.workers_dev !== false) throw new Error('workers.dev must remain disabled');
+          if (config.vars?.ADMIN_ORIGIN !== 'https://admin.solve-lang.com') throw new Error('unexpected admin origin');
+          if (config.vars?.ADMIN_GATEWAY_UPSTREAM !== 'https://ru2uokfkge.execute-api.us-east-2.amazonaws.com/admin-gateway') throw new Error('unexpected gateway upstream');
+          const routes = config.routes || [];
+          if (routes.length !== 1 || routes[0]?.pattern !== 'admin.solve-lang.com' || routes[0]?.custom_domain !== true) {
+            throw new Error('custom domain must remain exact and singular');
+          }
+          if ('assets' in config) throw new Error('static Admin UI publication is outside this ingress gate');
+          NODE
+      - name: Assert no privileged secret or static publication path
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -R -n -E 'API_ACCESS_ADMIN_SECRET|SOLVELANG_ADMIN_UPSTREAM_SECRET|ADMIN_PASSWORD_SCRYPT|ADMIN_SESSION_SECRET|STRIPE_SECRET_KEY' .
+          ! grep -R -n -E 'admin-console-static|assets[[:space:]]*:' wrangler.jsonc src test
