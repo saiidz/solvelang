@@ -123,7 +123,7 @@ test("PHP import relationships honor the shared edge bound and fail closed as pa
       maxFileBytes: 1_000_000,
       maxDepth: 8,
       maxNodes: 10,
-      maxEdges: 3,
+      maxEdges: 2,
       maxEvidencePerElement: 16,
       maxMetadataEntries: 16,
       maxMetadataStringBytes: 4_096,
