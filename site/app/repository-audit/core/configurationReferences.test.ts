@@ -56,6 +56,41 @@ test("records only explicit repository-local GitHub Action references", async ()
   ]);
 });
 
+test("maps repository-local TypeScript extends and project references conservatively", async () => {
+  const input = snapshot([
+    {
+      path: "tsconfig.json",
+      text: JSON.stringify({
+        extends: "./configs/base",
+        references: [
+          { path: "./packages/app" },
+          { path: "@company/shared" },
+          { path: "./packages/missing" },
+        ],
+      }),
+    },
+    { path: "configs/base.json", text: "{}" },
+    { path: "packages/app/tsconfig.json", text: "{}" },
+  ]);
+  const analysis = await createRepositoryConfigurationReferenceAnalysis(
+    input,
+    await graph(["tsconfig.json", "configs/base.json"]),
+  );
+  const typescript = analysis.references.filter((reference) => reference.kind.startsWith("typescript-"));
+
+  assert.deepEqual(
+    typescript.map((reference) => [reference.kind, reference.rawReference, reference.targetPath, reference.targetState]),
+    [
+      ["typescript-extends", "./configs/base", "configs/base.json", "present"],
+      ["typescript-project-reference", "./packages/app", "packages/app/tsconfig.json", "outside-bounded-scan"],
+      ["typescript-project-reference", "./packages/missing", "packages/missing.json", "missing"],
+    ],
+  );
+  assert.equal(analysis.execution.configurationFilesExamined, 1);
+  assert.equal(analysis.execution.networkAccess, false);
+  assert.equal(analysis.execution.writeAccess, false);
+});
+
 test("keeps bounded partial truth and fails closed on source or integrity mismatch", async () => {
   const input = snapshot([
     { path: "package.json", text: JSON.stringify({ main: "./dist/index.js" }) },
