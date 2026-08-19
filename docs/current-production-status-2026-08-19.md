@@ -2,6 +2,8 @@
 
 This is the newest production-facing status record for SolveLang account/API/Admin infrastructure. It supersedes `docs/current-production-status-2026-08-13.md` for facts explicitly re-verified below. Items carried forward from the older record are labeled as such rather than silently re-audited.
 
+Repository merges are recorded separately from live production state. A merged preparation PR is not evidence that its deployment or activation occurred.
+
 ## Product maturity
 
 SolveLang remains an early beta / engineering prototype. A working production account/Admin foundation does not imply that general managed SolveLang workflow execution is live.
@@ -70,31 +72,32 @@ Production username/email + password authentication remains enabled. Ordinary pa
 
 The owner account read-only Admin lookup on 2026-08-19 confirmed password authentication is enabled and TOTP is disabled for that account.
 
+## Repository preparation merge state
+
+The following formerly approval-gated preparation PRs are now merged in repository history:
+
+- PR #161 — account/CRM rollback preservation, merged as `fdc68a0b7aea9aecb1d6921e3c258df3d53c74f9`;
+- PR #164 — validation-only production customer-priority preflight, merged as `16d04e32f7b1be18bf7f887a320bfcc716d32c13`;
+- PR #169 — dormant production customer-priority foundation rollout preparation, merged as `27b143d1a7b547e9337b1b1b1a0a3055c82ab93c`.
+
+These are **repository-state facts only**. Their merges do not prove or authorize any live IAM/KMS change, CloudFormation deployment, queue/customer/provider activation, source upload/execution, billing, Stripe activity, email, charge/refund, or production customer/CRM mutation. Any such live action still requires fresh owner authorization scoped to that action and must re-verify the then-current production state.
+
 ## Production features still disabled / not authorized
 
-The following remain OFF or unauthorized. No Admin rollout action changed these boundaries:
+The following remain OFF or unauthorized. No repository merge by itself changes these boundaries:
 
 - authenticator-app TOTP production rollout: **not completed**
-- dedicated production TOTP KMS rollout: **not performed in this Admin work**
+- dedicated production TOTP KMS rollout: **not performed in the verified Admin work**
 - subscription billing: **disabled**
 - production billing webhook path: **disabled by feature boundary**
 - paid customer priority: **disabled**
+- queue/customer/provider activation: **not established by the #164/#169 repository merges**
 - real charge authorization: **none**
 - general managed hosted SolveLang workflow execution: **not live**
 - Repository Audit write/remediation mode: **disabled**
 - Server Audit mutation/remediation mode: **disabled**
 
-The TOTP/KMS statements above carry forward the 2026-08-13 record because no TOTP/KMS production rollout was authorized or executed during the 2026-08-19 Admin work; they were not independently re-audited by the Admin deployment workflow.
-
-## Protected production-sensitive backlog
-
-Repository preparation may continue, but these protected PRs remain separately approval-gated and must not be auto-merged solely because CI is green:
-
-- PR #161 — account/CRM rollback preservation; exact merge gate: `APPROVE PR #161 MERGE`
-- PR #164 — validation-only production customer-priority preflight; exact merge gate: `APPROVE PR #164 MERGE`
-- PR #169 — dormant production customer-priority foundation rollout; exact merge gate: `APPROVE PR #169 MERGE`
-
-Their merge approvals do not authorize deployment, live IAM/KMS changes, provider activation, billing, email, charges/refunds, or production customer/CRM mutation.
+The TOTP/KMS statements above carry forward the 2026-08-13 record because no TOTP/KMS production rollout was authorized or executed during the verified 2026-08-19 Admin work; they were not independently re-audited by that Admin deployment workflow.
 
 ## Truthfulness rule
 
@@ -105,4 +108,4 @@ Repository and product documentation must continue to distinguish:
 - **production deployed but gated/limited**;
 - **planned**.
 
-A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general managed workflow execution is live.
+A merged feature or rollout-preparation workflow is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general managed workflow execution is live.
