@@ -137,8 +137,7 @@ export function createRepositoryAuditVisualExplorerPresentation(
     return nodeMatchesQuery(node, query);
   });
 
-  const selectedMatches = selectedSource !== undefined && matchingNodes.some((node) => node.id === selectedSource.id);
-  const orderedNodes = selectedMatches
+  const orderedNodes = selectedSource !== undefined && matchingNodes.some((node) => node.id === selectedSource.id)
     ? [selectedSource, ...matchingNodes.filter((node) => node.id !== selectedSource.id)]
     : matchingNodes;
   const shownSourceNodes = orderedNodes.slice(0, maxNodes);
