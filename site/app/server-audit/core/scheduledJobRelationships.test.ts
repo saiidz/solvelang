@@ -73,7 +73,7 @@ test("propagates bounded and oversized-summary limitations as partial truth", ()
     maxJobs: 2,
     maxTargets: 1,
     maxRelationships: 1,
-    maxCommandSummaryCharacters: 10,
+    maxCommandSummaryCharacters: 15,
   });
 
   assert.equal(result.status, "partial");
