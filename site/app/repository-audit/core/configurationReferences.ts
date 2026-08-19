@@ -8,7 +8,9 @@ import {
 
 export type RepositoryConfigurationReferenceKind =
   | "package-entrypoint"
-  | "github-local-action";
+  | "github-local-action"
+  | "typescript-extends"
+  | "typescript-project-reference";
 
 export type RepositoryConfigurationTargetState =
   | "present"
@@ -90,6 +92,10 @@ function basename(path: string): string {
 function isWorkflowPath(path: string): boolean {
   const lower = path.toLowerCase();
   return lower.startsWith(".github/workflows/") && (lower.endsWith(".yml") || lower.endsWith(".yaml"));
+}
+
+function isTypescriptConfigPath(path: string): boolean {
+  return /^tsconfig(?:\.[a-z0-9_-]+)*\.json$/i.test(basename(path));
 }
 
 function resolveRelativePath(baseDirectory: string, rawReference: string): string | undefined {
@@ -203,6 +209,67 @@ function workflowReferences(
   return references;
 }
 
+function resolveTypescriptReference(
+  baseDirectory: string,
+  rawReference: string,
+  snapshotPaths: ReadonlySet<string>,
+): string | undefined {
+  if (!rawReference.startsWith(".")) return undefined;
+  const resolved = resolveRelativePath(baseDirectory, rawReference);
+  if (!resolved) return undefined;
+  const candidates = resolved.toLowerCase().endsWith(".json")
+    ? [resolved]
+    : [resolved, `${resolved}.json`, `${resolved}/tsconfig.json`];
+  return candidates.find((candidate) => snapshotPaths.has(candidate))
+    ?? (resolved.toLowerCase().endsWith(".json") ? resolved : `${resolved}.json`);
+}
+
+function typescriptConfigReferences(
+  path: string,
+  file: RepositoryFileInput,
+  snapshotPaths: ReadonlySet<string>,
+  acceptedPaths: ReadonlySet<string>,
+): { references: RepositoryConfigurationReference[]; invalidJson: boolean } {
+  let parsed: unknown;
+  try { parsed = JSON.parse(file.text ?? ""); } catch { return { references: [], invalidJson: true }; }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { references: [], invalidJson: true };
+  const record = parsed as Record<string, unknown>;
+  const values: Array<{
+    kind: "typescript-extends" | "typescript-project-reference";
+    field: string;
+    value: string;
+  }> = [];
+  if (typeof record.extends === "string" && record.extends.length > 0) {
+    values.push({ kind: "typescript-extends", field: "extends", value: record.extends });
+  }
+  if (Array.isArray(record.references)) {
+    record.references.forEach((entry, index) => {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+      const value = (entry as Record<string, unknown>).path;
+      if (typeof value === "string" && value.length > 0) {
+        values.push({ kind: "typescript-project-reference", field: `references.${index}.path`, value });
+      }
+    });
+  }
+  const baseDirectory = dirname(path);
+  return {
+    invalidJson: false,
+    references: values.flatMap(({ kind, field, value }) => {
+      const targetPath = resolveTypescriptReference(baseDirectory, value, snapshotPaths);
+      if (!targetPath) return [];
+      return [{
+        referenceId: makeReferenceId(kind, path, value, field),
+        kind,
+        fromPath: path,
+        rawReference: value,
+        targetPath,
+        targetState: targetState(targetPath, snapshotPaths, acceptedPaths),
+        evidence: { path, field },
+      }];
+    }),
+  };
+}
+
 export async function createRepositoryConfigurationReferenceAnalysis(
   snapshot: RepositorySnapshot,
   graph: SolveGraphDocument,
@@ -229,17 +296,26 @@ export async function createRepositoryConfigurationReferenceAnalysis(
   const allReferences: RepositoryConfigurationReference[] = [];
 
   for (const path of [...acceptedPaths].sort(compareText)) {
-    if (basename(path).toLowerCase() !== "package.json" && !isWorkflowPath(path)) continue;
+    const isPackage = basename(path).toLowerCase() === "package.json";
+    const isWorkflow = isWorkflowPath(path);
+    const isTypescript = isTypescriptConfigPath(path);
+    if (!isPackage && !isWorkflow && !isTypescript) continue;
     configurationFilesExamined += 1;
     const file = filesByPath.get(path);
     if (!file) throw new Error(`Bounded Solve Graph references an unavailable repository file: ${path}`);
     if (typeof file.text !== "string") { missingText += 1; continue; }
     if (textBytes(file.text) > maxConfigTextBytes) { oversizedText += 1; continue; }
-    if (basename(path).toLowerCase() === "package.json") {
+    if (isPackage) {
       const result = packageReferences(path, file, snapshotPaths, acceptedPaths);
       if (result.invalidJson) invalidJson += 1;
       allReferences.push(...result.references);
-    } else allReferences.push(...workflowReferences(path, file, snapshotPaths, acceptedPaths));
+    } else if (isWorkflow) {
+      allReferences.push(...workflowReferences(path, file, snapshotPaths, acceptedPaths));
+    } else {
+      const result = typescriptConfigReferences(path, file, snapshotPaths, acceptedPaths);
+      if (result.invalidJson) invalidJson += 1;
+      allReferences.push(...result.references);
+    }
   }
 
   allReferences.sort((left, right) => compareText(left.fromPath, right.fromPath) || compareText(left.kind, right.kind) || compareText(left.rawReference, right.rawReference) || compareText(left.referenceId, right.referenceId));
