@@ -1,3 +1,4 @@
+import type { RepositoryAffectedValidationMap } from "./affectedValidation";
 import type { RepositoryAuditAnalysisResult } from "./analysisPipeline";
 import type {
   RepositoryDetection,
@@ -135,6 +136,31 @@ function graphExtension(intelligence: RepositoryAuditAnalysisResult) {
   };
 }
 
+function affectedValidationExtension(analysis: RepositoryAffectedValidationMap) {
+  return {
+    schema: analysis.schema,
+    mode: analysis.mode,
+    graphId: analysis.graphId,
+    status: analysis.status,
+    summary: { ...analysis.summary },
+    entries: analysis.entries.map((entry) => ({
+      changedPath: entry.changedPath,
+      graphState: entry.graphState,
+      tests: entry.tests.map((item) => ({ ...item })),
+      workflows: entry.workflows.map((item) => ({
+        workflowPath: item.workflowPath,
+        kind: item.kind,
+        targetPath: item.targetPath,
+        evidence: { ...item.evidence },
+      })),
+      traversalTruncated: entry.traversalTruncated,
+      testsTruncated: entry.testsTruncated,
+      workflowsTruncated: entry.workflowsTruncated,
+    })),
+    execution: { ...analysis.execution },
+  };
+}
+
 export type CanonicalReportOptions = {
   generatedAt?: Date;
   startedAt?: Date;
@@ -162,7 +188,11 @@ export async function createCanonicalRepositoryAuditReport(
     throw new Error("Repository Audit canonical intelligence source does not match the inventory analysis.");
   }
 
-  const schemaVersion = options.intelligence ? "1.1.0" as const : "1.0.0" as const;
+  const schemaVersion = options.intelligence?.affectedValidation
+    ? "1.2.0" as const
+    : options.intelligence
+      ? "1.1.0" as const
+      : "1.0.0" as const;
   const engineVersion = options.engineVersion ?? "0.1.0";
   const rulesetVersion = options.rulesetVersion ?? "2026-08-13";
   const maxArchiveEntries = options.maxArchiveEntries ?? 100_000;
@@ -244,6 +274,10 @@ export async function createCanonicalRepositoryAuditReport(
         graphHotspots: options.intelligence.graph.intelligence.hotspots.length,
         redactedSecretMatches: secretWarnings.length,
       } : {}),
+      ...(options.intelligence?.affectedValidation ? {
+        affectedTestFiles: options.intelligence.affectedValidation.summary.affectedTestFiles,
+        affectedWorkflowFiles: options.intelligence.affectedValidation.summary.affectedWorkflowFiles,
+      } : {}),
     },
     inventory: {
       languages: analysis.inventory.languages.map(detection),
@@ -265,6 +299,9 @@ export async function createCanonicalRepositoryAuditReport(
       secretExposureWarnings: secretWarnings,
     },
     ...(options.intelligence ? { graph: graphExtension(options.intelligence) } : {}),
+    ...(options.intelligence?.affectedValidation ? {
+      affectedValidation: affectedValidationExtension(options.intelligence.affectedValidation),
+    } : {}),
     findings,
     redaction: {
       policyVersion: "1.0.0" as const,
