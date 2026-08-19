@@ -116,6 +116,26 @@ test("propagates bounded partial truth independently from each browser surface",
   assert.equal(deploymentPartial.execution.visualExplorerPartial, false);
   assert.match(deploymentPartial.deploymentPaths.notices.join(" "), /relationship limit/i);
 
+  const { graph: rowGraph, deploymentPathEvidence: rowEvidence } = await fixture();
+  rowEvidence.relationships.push({
+    evidenceId: "deployment-path:vercel-output-directory:vercel.json:dist",
+    kind: "vercel-output-directory",
+    fromPath: "vercel.json",
+    rawReference: "dist",
+    targetPath: "dist",
+    targetType: "directory",
+    targetState: "outside-bounded-scan",
+    evidence: { path: "vercel.json", field: "outputDirectory" },
+  });
+  const rowPartial = await createRepositoryAuditBrowserIntelligence(
+    rowGraph,
+    rowEvidence,
+    { deploymentPaths: { maxRows: 1 } },
+  );
+  assert.equal(rowPartial.status, "partial");
+  assert.equal(rowPartial.execution.deploymentPathPartial, true);
+  assert.equal(rowPartial.deploymentPaths.execution.rowsTruncated, true);
+
   const { graph: secondGraph, deploymentPathEvidence: secondEvidence } = await fixture();
   const explorerPartial = await createRepositoryAuditBrowserIntelligence(
     secondGraph,
