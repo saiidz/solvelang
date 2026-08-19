@@ -161,6 +161,37 @@ function affectedValidationExtension(analysis: RepositoryAffectedValidationMap) 
   };
 }
 
+function intelligenceTruncationReasons(intelligence: RepositoryAuditAnalysisResult) {
+  return [
+    ...intelligence.execution.inventoryTruncationReasons.map((reason) => `inventory:${reason}`),
+    ...intelligence.execution.graphTruncationReasons.map((reason) => `graph:${reason}`),
+    ...(intelligence.dependencyConsistency.execution.findingsTruncated
+      ? ["dependency-consistency:finding-count" as const]
+      : []),
+    ...(intelligence.coverageMap.execution.mappingsTruncated
+      ? ["coverage-map:mapping-count" as const]
+      : []),
+    ...(intelligence.coverageMap.execution.samplesTruncated
+      ? ["coverage-map:sample-count" as const]
+      : []),
+    ...(intelligence.deadCodeCandidates.execution.candidatesTruncated
+      ? ["dead-code:candidate-count" as const]
+      : []),
+    ...(intelligence.configurationReferences.execution.referencesTruncated
+      ? ["configuration:reference-count" as const]
+      : []),
+    ...(intelligence.workflowPathEvidence.execution.referencesTruncated
+      ? ["workflow-path:reference-count" as const]
+      : []),
+    ...(intelligence.affectedValidation?.execution.changedPathsTruncated
+      ? ["affected-validation:changed-path-count" as const]
+      : []),
+    ...(intelligence.affectedValidation?.execution.mappingsTruncated
+      ? ["affected-validation:mapping-count" as const]
+      : []),
+  ];
+}
+
 export type CanonicalReportOptions = {
   generatedAt?: Date;
   startedAt?: Date;
@@ -233,10 +264,7 @@ export async function createCanonicalRepositoryAuditReport(
   });
 
   const executionTruncationReasons = options.intelligence
-    ? [
-        ...options.intelligence.execution.inventoryTruncationReasons.map((reason) => `inventory:${reason}`),
-        ...options.intelligence.execution.graphTruncationReasons.map((reason) => `graph:${reason}`),
-      ]
+    ? intelligenceTruncationReasons(options.intelligence)
     : [...analysis.execution.truncationReasons];
   const reportWithoutIntegrity = {
     schemaVersion,
