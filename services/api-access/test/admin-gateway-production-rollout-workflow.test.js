@@ -5,6 +5,7 @@ import test from "node:test";
 const root = new URL("../../../", import.meta.url);
 const workflowUrl = new URL(".github/workflows/deploy-admin-console-gateway-production.yml", root);
 const policyUrl = new URL("ops/aws/production-admin-gateway-deploy-supplemental-policy.json", root);
+const preflightPolicyUrl = new URL("ops/aws/production-preflight-policy.json", root);
 const templateUrl = new URL("services/admin-console-gateway/template.yaml", root);
 const queueUrl = new URL("services/api-access/scripts/wait-for-production-deployment-turn.mjs", root);
 
@@ -42,6 +43,20 @@ test("private admin gateway rollout is manual, protected, serialized, and billin
   assert.match(source, /Charges performed: \*\*no\*\*/);
   assert.doesNotMatch(source, /secrets\.STRIPE_|StripeSecretKey=|StripeSubscriptionWebhookSecret=/);
   assert.doesNotMatch(source, /send-email|sesv2 send/i);
+});
+
+test("admin gateway preflight role can read the exact gateway stack without write authority", async () => {
+  const policy = JSON.parse(await text(preflightPolicyUrl));
+  const statement = policy.Statement.find((item) => item.Sid === "ReadSolveLangProductionStacks");
+  assert.ok(statement);
+  const resources = Array.isArray(statement.Resource) ? statement.Resource : [statement.Resource];
+  assert.ok(resources.includes("arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-admin-console/*"));
+  const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
+  assert.ok(actions.includes("cloudformation:DescribeStacks"));
+  for (const action of actions) assert.match(action, /^cloudformation:(Describe|Get|List)/);
+  assert.ok(!actions.includes("cloudformation:CreateStack"));
+  assert.ok(!actions.includes("cloudformation:UpdateStack"));
+  assert.ok(!actions.includes("cloudformation:DeleteStack"));
 });
 
 test("admin gateway deploy supplement is bounded to the exact stack and generated function-role family", async () => {

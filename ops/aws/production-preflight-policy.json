@@ -14,7 +14,8 @@
       ],
       "Resource": [
         "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production/*",
-        "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*"
+        "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-totp-kms/*",
+        "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-admin-console/*"
       ]
     },
     {
