@@ -90,7 +90,7 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
     "      run:",
     "        working-directory: src",
   ].join("\n");
-  const dockerfile = "FROM node:24\nCOPY src /app/src\n";
+  const dockerfile = "FROM node:24\nCOPY src/app.ts /app/app.ts\n";
   const result = await analyzeRepositorySnapshot(fixture([
     { path: "package.json", byteSize: 80, text: JSON.stringify({ main: "./src/app.ts" }) },
     { path: "Dockerfile", byteSize: dockerfile.length, text: dockerfile },
@@ -116,7 +116,7 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
   assert.equal(result.execution.deploymentPathEvidenceStatus, "complete");
   assert.equal(result.execution.deploymentPathReferenceCount, 1);
   assert.equal(result.deploymentPathEvidence.relationships[0].kind, "docker-copy-source");
-  assert.equal(result.deploymentPathEvidence.relationships[0].targetPath, "src");
+  assert.equal(result.deploymentPathEvidence.relationships[0].targetPath, "src/app.ts");
   assert.equal(result.deploymentPathEvidence.relationships[0].targetState, "present");
   assert.equal(result.execution.affectedValidationStatus, "complete");
   assert.equal(result.execution.affectedTestFiles, 1);
