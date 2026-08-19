@@ -83,7 +83,6 @@ function neighborForDirection(edge: SolveGraphEdge, direction: SolveGraphTravers
 function reconstructPath(
   sourceId: string,
   targetId: string,
-  direction: SolveGraphTraversalDirection,
   parents: ReadonlyMap<string, ParentEntry>,
 ): { nodeIds: string[]; hops: SolveGraphShortestPathHop[] } {
   const reversedNodes = [targetId];
@@ -105,7 +104,7 @@ function reconstructPath(
 
   return {
     nodeIds: reversedNodes.reverse(),
-    hops: reversedHops.reverse().map((hop) => direction === "dependencies" ? hop : hop),
+    hops: reversedHops.reverse(),
   };
 }
 
@@ -177,7 +176,7 @@ export function findSolveGraphShortestPath(
       visited.add(neighborId);
       parents.set(neighborId, { parentId: current.id, edge });
       if (neighborId === targetId) {
-        const path = reconstructPath(sourceId, targetId, direction, parents);
+        const path = reconstructPath(sourceId, targetId, parents);
         return {
           direction,
           sourceId,
