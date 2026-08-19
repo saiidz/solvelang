@@ -67,6 +67,28 @@ test("canonical report includes bounded affected-validation evidence inside the 
   assert.ok(serialized.includes('"src/core.ts"'));
 });
 
+test("canonical report emits an explicit reason when affected-validation bounds truncate analysis", async () => {
+  const intelligence = await analyzeRepositorySnapshot(fixture(), {
+    affectedValidation: {
+      changedPaths: ["src/core.ts", "tests/core.test.ts"],
+      maxChangedPaths: 1,
+    },
+  });
+  const timestamp = new Date("2026-08-19T02:00:00.000Z");
+  const report = await createCanonicalRepositoryAuditReport(intelligence.inventory, {
+    generatedAt: timestamp,
+    startedAt: timestamp,
+    finishedAt: timestamp,
+    archiveName: "affected-validation.zip",
+    intelligence,
+  });
+
+  assert.equal(report.execution.status, "partial");
+  assert.equal(report.execution.truncated, true);
+  assert.ok(report.execution.truncationReasons.includes("affected-validation:changed-path-count"));
+  assert.equal(await verifyRepositoryAuditIntegrity(report), true);
+});
+
 test("canonical intelligence without a changed-path request keeps the existing 1.1 shape", async () => {
   const intelligence = await analyzeRepositorySnapshot(fixture());
   const timestamp = new Date("2026-08-19T02:00:00.000Z");
