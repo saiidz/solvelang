@@ -48,6 +48,24 @@ test("analysis surfaces high-signal risks without treating private listeners as 
   assert.ok(findings.every((finding) => /^srv_[a-f0-9]{8}$/.test(finding.id)));
 });
 
+test("TLS baseline findings use structural certificate evidence without exporting certificate identities", () => {
+  const privateName = "private-admin.example.internal";
+  const findings = analyzeServerSnapshot({
+    schemaVersion: "1",
+    collectedAt: "2026-08-18T17:00:00.000Z",
+    host: { hostname: "audit-host" },
+    web: { certificates: [{ name: privateName, daysRemaining: 4 }] },
+    metadata: { redactionsApplied: true },
+  });
+
+  const tls = findings.find((finding) => finding.title === "TLS certificate expires within seven days");
+  assert.ok(tls);
+  assert.equal(JSON.stringify(tls).includes(privateName), false);
+  assert.deepEqual(tls.evidence, [
+    { source: "web.certificates[0].daysRemaining", summary: "4 days remaining" },
+  ]);
+});
+
 test("report generation is deterministic for the same snapshot regardless of generation time", () => {
   const first = createServerAuditReport(risky(), "2026-08-15T06:00:00.000Z");
   const second = createServerAuditReport(risky(), "2026-08-15T07:00:00.000Z");

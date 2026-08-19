@@ -95,16 +95,17 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
     findings.push(finding("medium", "patching", "Automatic security updates not confirmed", `Automatic update posture was reported as ${snapshot.security.automaticUpdates}.`, "Define a tested patch cadence or enable controlled automatic security updates with maintenance and rollback procedures.", [{ source: "updates", summary: snapshot.security.automaticUpdates }]));
   }
 
-  for (const certificate of snapshot.web?.certificates ?? []) {
-    if (certificate.daysRemaining === undefined) continue;
+  (snapshot.web?.certificates ?? []).forEach((certificate, index) => {
+    if (certificate.daysRemaining === undefined) return;
+    const source = `web.certificates[${index}].daysRemaining`;
     if (certificate.daysRemaining < 0) {
-      findings.push(finding("critical", "tls", "TLS certificate expired", `${certificate.name} expired ${Math.abs(certificate.daysRemaining)} day(s) ago.`, "Replace or renew the certificate immediately and verify the served chain from the public endpoint.", [{ source: certificate.name, summary: `${certificate.daysRemaining} days remaining` }]));
+      findings.push(finding("critical", "tls", "TLS certificate expired", `Certificate evidence at web.certificates[${index}] reports expiry ${Math.abs(certificate.daysRemaining)} day(s) ago.`, "Replace or renew the certificate immediately and verify the served chain from the public endpoint.", [{ source, summary: `${certificate.daysRemaining} days remaining` }]));
     } else if (certificate.daysRemaining <= 7) {
-      findings.push(finding("high", "tls", "TLS certificate expires within seven days", `${certificate.name} has ${certificate.daysRemaining} day(s) remaining.`, "Renew now and verify automated renewal plus alerting.", [{ source: certificate.name, summary: `${certificate.daysRemaining} days remaining` }]));
+      findings.push(finding("high", "tls", "TLS certificate expires within seven days", `Certificate evidence at web.certificates[${index}] has ${certificate.daysRemaining} day(s) remaining.`, "Renew now and verify automated renewal plus alerting.", [{ source, summary: `${certificate.daysRemaining} days remaining` }]));
     } else if (certificate.daysRemaining <= 30) {
-      findings.push(finding("medium", "tls", "TLS certificate approaching expiry", `${certificate.name} has ${certificate.daysRemaining} day(s) remaining.`, "Verify renewal automation and monitoring before the certificate enters the critical window.", [{ source: certificate.name, summary: `${certificate.daysRemaining} days remaining` }]));
+      findings.push(finding("medium", "tls", "TLS certificate approaching expiry", `Certificate evidence at web.certificates[${index}] has ${certificate.daysRemaining} day(s) remaining.`, "Verify renewal automation and monitoring before the certificate enters the critical window.", [{ source, summary: `${certificate.daysRemaining} days remaining` }]));
     }
-  }
+  });
 
   for (const root of snapshot.web?.roots ?? []) {
     const mode = root.mode ?? "";
