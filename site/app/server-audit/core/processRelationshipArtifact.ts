@@ -14,7 +14,7 @@ export type ServerAuditProcessRelationshipArtifact = {
     sources: string[];
     sourcesTruncated?: true;
   }>;
-  summary: { ...ServerAuditProcessRelationshipAnalysis["summary"] };
+  summary: ServerAuditProcessRelationshipAnalysis["summary"];
   execution: {
     maxRelationships: number;
     maxSourcesPerRelationship: number;
