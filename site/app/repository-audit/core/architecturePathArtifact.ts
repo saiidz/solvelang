@@ -1,4 +1,5 @@
 import type { RepositoryArchitecturePathAnalysis } from "./architecturePaths";
+import { repositoryAuditSafeFilename } from "./report";
 import { repositoryAuditIntegrityDigest } from "./reportIntegrity";
 
 export type RepositoryArchitecturePathEvidenceArtifact = {
@@ -13,6 +14,13 @@ export type RepositoryArchitecturePathEvidenceArtifact = {
   integrity: {
     canonicalJsonSha256: string;
   };
+};
+
+export type RepositoryArchitecturePathEvidenceDownload = {
+  filename: string;
+  mediaType: "application/json;charset=utf-8";
+  content: string;
+  artifact: RepositoryArchitecturePathEvidenceArtifact;
 };
 
 function cloneArchitecturePathAnalysis(analysis: RepositoryArchitecturePathAnalysis) {
@@ -62,4 +70,17 @@ export function serializeRepositoryArchitecturePathEvidenceArtifact(
   artifact: RepositoryArchitecturePathEvidenceArtifact,
 ): string {
   return `${JSON.stringify(artifact, null, 2)}\n`;
+}
+
+export async function createRepositoryArchitecturePathEvidenceDownload(
+  archiveName: string,
+  analysis: RepositoryArchitecturePathAnalysis,
+): Promise<RepositoryArchitecturePathEvidenceDownload> {
+  const artifact = await createRepositoryArchitecturePathEvidenceArtifact(analysis);
+  return {
+    filename: `${repositoryAuditSafeFilename(archiveName)}-solvelang-repository-audit-architecture-paths.json`,
+    mediaType: "application/json;charset=utf-8",
+    content: serializeRepositoryArchitecturePathEvidenceArtifact(artifact),
+    artifact,
+  };
 }
