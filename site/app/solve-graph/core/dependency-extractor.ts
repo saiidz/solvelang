@@ -3,6 +3,7 @@ import {
   extractRepositoryDependencyGraph as extractJavaScriptDependencyGraph,
   type ExtractRepositoryDependencyGraphOptions,
 } from "./import-extractor";
+import { augmentSolveGraphWithPhpLocalImports } from "./php-import-extractor";
 import { augmentSolveGraphWithPythonImports } from "./python-import-extractor";
 import type { SolveGraphDocument } from "./contracts";
 
@@ -13,5 +14,6 @@ export async function extractRepositoryMultiLanguageDependencyGraph(
   options: ExtractRepositoryMultiLanguageDependencyGraphOptions = {},
 ): Promise<SolveGraphDocument> {
   const javaScriptGraph = await extractJavaScriptDependencyGraph(snapshot, options);
-  return augmentSolveGraphWithPythonImports(javaScriptGraph, snapshot);
+  const pythonGraph = await augmentSolveGraphWithPythonImports(javaScriptGraph, snapshot);
+  return augmentSolveGraphWithPhpLocalImports(pythonGraph, snapshot);
 }
