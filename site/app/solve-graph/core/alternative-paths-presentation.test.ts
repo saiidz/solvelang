@@ -81,6 +81,17 @@ test("malformed result contracts and invalid presentation bounds fail closed", a
   const malformed = structuredClone(result);
   malformed.paths[0]!.hops[0]!.edgeId = "sge_missing";
   assert.throws(() => createSolveGraphAlternativePathsPresentation(index, malformed), /missing or mismatched edge/);
+
+  const malformedReason = {
+    ...structuredClone(result),
+    truncated: true,
+    truncationReason: "unknown" as never,
+  };
+  assert.throws(
+    () => createSolveGraphAlternativePathsPresentation(index, malformedReason),
+    /truncation reason is invalid/,
+  );
+
   assert.throws(() => createSolveGraphAlternativePathsPresentation(index, result, { maxPaths: 0 }), /maxPaths/);
   assert.throws(() => createSolveGraphAlternativePathsPresentation(index, result, { maxPaths: 65 }), /maxPaths/);
 });
