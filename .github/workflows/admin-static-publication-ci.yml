@@ -66,6 +66,7 @@ jobs:
           if (!assets || assets.directory !== '../../admin-console-static') throw new Error('publication: unexpected assets directory');
           if (assets.binding !== 'ASSETS') throw new Error('publication: assets binding must be ASSETS');
           if (assets.run_worker_first !== true) throw new Error('publication: Worker must run before every asset request');
+          if (assets.html_handling !== 'none') throw new Error('publication: HTML canonical redirects must remain disabled');
           if ('not_found_handling' in assets) throw new Error('publication: unknown routes must not receive an automatic asset fallback');
           NODE
 
