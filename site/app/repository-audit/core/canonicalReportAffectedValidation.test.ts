@@ -15,7 +15,7 @@ function fixture(): RepositorySnapshot {
     "    defaults:",
     "      run:",
     "        working-directory: src",
-    "" ,
+    "",
   ].join("\n");
   return {
     source: {
