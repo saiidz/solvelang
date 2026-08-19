@@ -58,6 +58,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.configurationReferences.schema, "solvelang.repository-audit.configuration-references.v0");
   assert.equal(result.workflowPathEvidence.schema, "solvelang.repository-audit.workflow-path-evidence.v0");
   assert.equal(result.deploymentPathEvidence.schema, "solvelang.repository-audit.deployment-path-evidence.v0");
+  assert.equal(result.frameworkPathEvidence.schema, "solvelang.repository-audit.framework-path-evidence.v0");
   assert.equal(result.affectedValidation, undefined);
   assert.equal(result.execution.affectedValidationStatus, undefined);
   assert.equal(result.execution.dependencyConsistencyStatus, "complete");
@@ -66,6 +67,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.execution.configurationReferenceStatus, "complete");
   assert.equal(result.execution.workflowPathEvidenceStatus, "complete");
   assert.equal(result.execution.deploymentPathEvidenceStatus, "complete");
+  assert.equal(result.execution.frameworkPathEvidenceStatus, "complete");
   assert.equal(result.execution.dependencyFilesScanned, 2);
   assert.equal(result.execution.undeclaredDependencyFindings, 0);
   assert.equal(result.execution.directTestMappings, 0);
@@ -74,6 +76,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.equal(result.execution.configurationReferenceCount, 0);
   assert.equal(result.execution.workflowPathReferenceCount, 0);
   assert.equal(result.execution.deploymentPathReferenceCount, 0);
+  assert.equal(result.execution.frameworkPathReferenceCount, 0);
   assert.equal(result.execution.secretFilesScanned, 3);
   assert.equal(result.secretWarnings.length, 1);
   assert.equal(result.execution.redactedSecretMatches, 1);
@@ -82,7 +85,7 @@ test("composes bounded repository evidence stages and redacted secret warnings w
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
-test("surfaces dependency, test, documentation, configuration, workflow, deployment, and affected-validation evidence in one bounded analysis", async () => {
+test("surfaces dependency, test, documentation, configuration, workflow, deployment, framework, and affected-validation evidence in one bounded analysis", async () => {
   const workflow = [
     "jobs:",
     "  test:",
@@ -91,9 +94,18 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
     "        working-directory: src",
   ].join("\n");
   const dockerfile = "FROM node:24\nCOPY src/app.ts /app/app.ts\n";
+  const angular = JSON.stringify({
+    projects: {
+      app: {
+        sourceRoot: "src",
+        architect: { build: { options: { main: "src/app.ts" } } },
+      },
+    },
+  });
   const result = await analyzeRepositorySnapshot(fixture([
     { path: "package.json", byteSize: 80, text: JSON.stringify({ main: "./src/app.ts" }) },
     { path: "Dockerfile", byteSize: dockerfile.length, text: dockerfile },
+    { path: "angular.json", byteSize: angular.length, text: angular },
     { path: "src/lib.ts", byteSize: 24, text: "export const lib = 1;\n" },
     { path: "src/app.ts", byteSize: 72, text: 'import helper from "missing-package";\nimport { lib } from "./lib";\nvoid helper; void lib;\n' },
     { path: "tests/app.test.ts", byteSize: 56, text: 'import "../src/app";\n' },
@@ -118,6 +130,15 @@ test("surfaces dependency, test, documentation, configuration, workflow, deploym
   assert.equal(result.deploymentPathEvidence.relationships[0].kind, "docker-copy-source");
   assert.equal(result.deploymentPathEvidence.relationships[0].targetPath, "src/app.ts");
   assert.equal(result.deploymentPathEvidence.relationships[0].targetState, "present");
+  assert.equal(result.execution.frameworkPathEvidenceStatus, "complete");
+  assert.equal(result.execution.frameworkPathReferenceCount, 2);
+  assert.deepEqual(
+    result.frameworkPathEvidence.relationships.map((relationship) => [relationship.kind, relationship.targetPath]),
+    [
+      ["angular-build-entrypoint", "src/app.ts"],
+      ["angular-source-root", "src"],
+    ],
+  );
   assert.equal(result.execution.affectedValidationStatus, "complete");
   assert.equal(result.execution.affectedTestFiles, 1);
   assert.equal(result.execution.affectedWorkflowFiles, 1);
@@ -165,6 +186,8 @@ test("partial inventory or graph work is surfaced as partial and secondary scann
   assert.equal(result.workflowPathEvidence.status, "partial");
   assert.equal(result.deploymentPathEvidence.status, "partial");
   assert.equal(result.execution.deploymentPathEvidenceStatus, "partial");
+  assert.equal(result.frameworkPathEvidence.status, "partial");
+  assert.equal(result.execution.frameworkPathEvidenceStatus, "partial");
   assert.equal(result.execution.secretFilesScanned, 1);
   assert.equal(result.execution.redactedSecretMatches, 0);
   assert.deepEqual(result.secretWarnings, []);
