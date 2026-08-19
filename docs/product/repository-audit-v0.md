@@ -8,7 +8,7 @@ The v0 scanner is **Analyze only**. It has no repository write token, does not m
 
 ## 2. Report contract
 
-The canonical report format is defined by `schemas/repository-audit-report.schema.json`.
+Canonical baseline `1.0.0` reports are defined by `schemas/repository-audit-report.schema.json`. Canonical graph/intelligence `1.1.0` and affected-validation `1.2.0` reports are defined by `schemas/repository-audit-intelligence-report.schema.json`. Consumers must select the schema that matches `schemaVersion`; the strict `1.0.0` baseline remains unchanged for backward compatibility.
 
 Every report includes:
 
@@ -88,10 +88,10 @@ For each secret-shaped match:
 2. record repository-relative path and bounded location
 3. classify exposure, such as tracked, public path, generated output, archive, or unknown
 4. replace the value with a fixed redaction marker
-5. calculate an HMAC-SHA-256 fingerprint using an ephemeral scan key
+5. calculate an HMAC-SHA-256 fingerprint using an ephemeral scan key for in-scan correlation only
 6. discard the raw matched value before report assembly
 
-The ephemeral HMAC key is not included in reports or logs and is destroyed at scan completion. A report may correlate repeated matches within one scan but cannot be used to recover or compare secret values across scans.
+The ephemeral HMAC key is not included in reports or logs and is destroyed at scan completion. Canonical intelligence reports (`1.1.0` and later) omit correlation fingerprints entirely; the baseline `1.0.0` schema preserves its historical report contract. No canonical report can be used to recover or compare secret values across scans.
 
 Logs, errors, HTML, JSON, telemetry, and test fixtures must follow the same redaction policy. Network calls, provider validation, and automatic credential rotation are outside v0.
 
@@ -189,7 +189,7 @@ The HTML must be self-contained, printable, accessible without color-only meanin
 
 Repository Audit v0 is not ready until:
 
-- the JSON Schema validates the example fixture and all generated reports
+- the JSON Schema matching each report's `schemaVersion` validates the example fixture and all generated reports
 - identical normalized snapshots produce identical ordered findings and stable IDs
 - archive traversal and symlink escape tests pass
 - limit and truncation behavior is deterministic
