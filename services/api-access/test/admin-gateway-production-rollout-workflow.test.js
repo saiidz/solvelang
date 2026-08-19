@@ -5,6 +5,7 @@ import test from "node:test";
 const root = new URL("../../../", import.meta.url);
 const workflowUrl = new URL(".github/workflows/deploy-admin-console-gateway-production.yml", root);
 const policyUrl = new URL("ops/aws/production-admin-gateway-deploy-supplemental-policy.json", root);
+const templateUrl = new URL("services/admin-console-gateway/template.yaml", root);
 const queueUrl = new URL("services/api-access/scripts/wait-for-production-deployment-turn.mjs", root);
 
 async function text(url) { return readFile(url, "utf8"); }
@@ -43,16 +44,43 @@ test("private admin gateway rollout is manual, protected, serialized, and billin
   assert.doesNotMatch(source, /send-email|sesv2 send/i);
 });
 
-test("admin gateway deploy supplement grants only CloudFormation authority for the exact gateway stack", async () => {
+test("admin gateway deploy supplement is bounded to the exact stack and generated function-role family", async () => {
   const policy = JSON.parse(await text(policyUrl));
-  assert.equal(policy.Statement.length, 1);
-  const statement = policy.Statement[0];
-  assert.equal(statement.Effect, "Allow");
-  assert.equal(statement.Resource, "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-admin-console/*");
-  const actions = Array.isArray(statement.Action) ? statement.Action : [statement.Action];
-  assert.ok(actions.includes("cloudformation:ExecuteChangeSet"));
-  assert.ok(actions.includes("cloudformation:UpdateTerminationProtection"));
-  for (const action of actions) assert.match(action, /^cloudformation:/);
+  assert.equal(policy.Statement.length, 2);
+
+  const cloudFormation = policy.Statement.find((statement) => statement.Sid === "AdminConsoleGatewayCloudFormation");
+  assert.ok(cloudFormation);
+  assert.equal(cloudFormation.Effect, "Allow");
+  assert.equal(cloudFormation.Resource, "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-admin-console/*");
+  const cloudFormationActions = Array.isArray(cloudFormation.Action) ? cloudFormation.Action : [cloudFormation.Action];
+  assert.ok(cloudFormationActions.includes("cloudformation:ExecuteChangeSet"));
+  assert.ok(cloudFormationActions.includes("cloudformation:UpdateTerminationProtection"));
+  for (const action of cloudFormationActions) assert.match(action, /^cloudformation:/);
+
+  const generatedRole = policy.Statement.find((statement) => statement.Sid === "AdminConsoleGatewayGeneratedFunctionRole");
+  assert.ok(generatedRole);
+  assert.equal(generatedRole.Effect, "Allow");
+  assert.equal(generatedRole.Resource, "arn:aws:iam::*:role/solvelang-api-access-produ-AdminGatewayFunctionRole-*");
+  const iamActions = Array.isArray(generatedRole.Action) ? generatedRole.Action : [generatedRole.Action];
+  for (const required of [
+    "iam:CreateRole",
+    "iam:AttachRolePolicy",
+    "iam:DetachRolePolicy",
+    "iam:DeleteRole",
+    "iam:PassRole",
+  ]) {
+    assert.ok(iamActions.includes(required), `missing ${required}`);
+  }
+  for (const action of iamActions) assert.match(action, /^iam:/);
+  assert.ok(!iamActions.includes("iam:CreatePolicy"));
+  assert.ok(!iamActions.includes("iam:PutRolePermissionsBoundary"));
+});
+
+test("gateway log group is retained after normal stack deletion but cleaned up on failed initial create", async () => {
+  const template = await text(templateUrl);
+  assert.match(template, /AdminGatewayLogGroup:[\s\S]*DeletionPolicy: RetainExceptOnCreate/);
+  assert.match(template, /AdminGatewayLogGroup:[\s\S]*UpdateReplacePolicy: Retain/);
+  assert.match(template, /LogGroupName: !Sub \/aws\/lambda\/\$\{AWS::StackName\}-admin-gateway/);
 });
 
 test("admin gateway rollout participates in the attempt-aware production queue", async () => {

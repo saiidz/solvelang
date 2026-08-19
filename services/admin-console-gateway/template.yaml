@@ -98,7 +98,7 @@ Resources:
   AdminGatewayLogGroup:
     Type: AWS::Logs::LogGroup
     Condition: GatewayEnabled
-    DeletionPolicy: Retain
+    DeletionPolicy: RetainExceptOnCreate
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub /aws/lambda/${AWS::StackName}-admin-gateway

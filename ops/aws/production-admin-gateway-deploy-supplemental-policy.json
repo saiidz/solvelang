@@ -22,6 +22,26 @@
         "cloudformation:ValidateTemplate"
       ],
       "Resource": "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-admin-console/*"
+    },
+    {
+      "Sid": "AdminConsoleGatewayGeneratedFunctionRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:PassRole",
+        "iam:PutRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/solvelang-api-access-produ-AdminGatewayFunctionRole-*"
     }
   ]
 }
