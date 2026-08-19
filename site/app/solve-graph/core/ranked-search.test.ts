@@ -28,7 +28,7 @@ async function fixtureIndex() {
     kind: "file",
     identity: "file:src/customer-view.tsx",
     label: "Customer view",
-    evidence: [{ kind: "parser", path: "src/customer-view.tsx", line: 1 }],
+    evidence: [{ kind: "parser", path: "src/customers/customer-view.tsx", line: 1 }],
     metadata: { language: "typescript" },
   });
   const metadataMatch = await createSolveGraphNode({
