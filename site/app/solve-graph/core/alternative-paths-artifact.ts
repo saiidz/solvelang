@@ -49,6 +49,12 @@ function assertResult(index: SolveGraphQueryIndex, result: SolveGraphAlternative
   if (result.paths.length > 64) {
     throw new Error("Solve Graph alternative-path artifact exceeds the query path bound.");
   }
+  if (result.truncationReason !== undefined
+    && result.truncationReason !== "depth"
+    && result.truncationReason !== "path-count"
+    && result.truncationReason !== "state-count") {
+    throw new Error("Solve Graph alternative-path artifact truncation reason is invalid.");
+  }
   if (result.truncated !== (result.truncationReason !== undefined)) {
     throw new Error("Solve Graph alternative-path artifact truncation metadata is inconsistent.");
   }
