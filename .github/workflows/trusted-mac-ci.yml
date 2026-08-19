@@ -7,15 +7,36 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: trusted-mac-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  publish-pending:
+    name: Publish Trusted Mac pending status
+    if: github.repository == 'saiidz/solvelang'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark exact pushed commit pending
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'pending',
+              context: 'trusted-mac-ci',
+              description: 'Trusted Mac CI queued for the exact pushed commit.',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            });
+
   repository-audit-site:
     name: Repository Audit on Mac
     if: github.repository == 'saiidz/solvelang'
+    needs: publish-pending
     runs-on: [self-hosted, macOS, ARM64]
     defaults:
       run:
