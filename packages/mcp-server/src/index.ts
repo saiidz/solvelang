@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
+import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
 import {
   MAX_SOLVE_GRAPH_BYTES,
   executeSolveGraphTool,
@@ -82,6 +83,16 @@ const solveGraphImpactInputSchema = z.object({
   edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
   maxDepth: z.number().int().min(0).max(64).optional(),
   maxResults: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphShortestPathInputSchema = z.object({
+  ...solveGraphInputFields,
+  sourceId: z.string().regex(/^sgn_[a-f0-9]{32}$/),
+  targetId: z.string().regex(/^sgn_[a-f0-9]{32}$/),
+  direction: z.enum(["dependencies", "dependents"]).optional(),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(64).optional(),
+  maxVisited: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
 
 type SolveGraphInput = { path?: string; rawJson?: string };
@@ -230,6 +241,22 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_shortest_path",
+  {
+    title: "Find shortest Solve Graph path",
+    description: "Find one deterministic bounded shortest dependency or dependent path between stable Solve Graph node IDs, with explicit edge-kind, depth, and visited-node bounds.",
+    inputSchema: solveGraphShortestPathInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, sourceId, targetId, direction, edgeKinds, maxDepth, maxVisited }) => textResult(findSolveGraphShortestPath(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    sourceId,
+    targetId,
+    { direction, edgeKinds, maxDepth, maxVisited },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_impact",
   {
     title: "Analyze Solve Graph impact",
@@ -264,6 +291,7 @@ server.registerTool(
       "solvelang_graph_search_nodes",
       "solvelang_graph_dependencies",
       "solvelang_graph_dependents",
+      "solvelang_graph_shortest_path",
       "solvelang_graph_impact",
       "solvelang_capabilities",
     ],
