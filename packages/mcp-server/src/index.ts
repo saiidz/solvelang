@@ -10,6 +10,7 @@ import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { findSolveGraphAffectedValidations } from "./solve-graph-affected-validations.js";
 import { findSolveGraphCycles } from "./solve-graph-cycles.js";
 import { findSolveGraphHotspots } from "./solve-graph-hotspots.js";
+import { findSolveGraphEntrypointCandidates } from "./solve-graph-entrypoints.js";
 import { summarizeSolveGraphSecurity } from "./solve-graph-security-summary.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
@@ -124,6 +125,7 @@ const solveGraphHotspotsInputSchema = z.object({
   maxImpactDepth: z.number().int().min(0).max(64).optional(),
   maxImpactResults: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
+const solveGraphEntrypointsInputSchema = z.object({ ...solveGraphInputFields, maxCandidates: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
 const solveGraphSecuritySummaryInputSchema = z.object({ ...solveGraphInputFields, maxNodes: z.number().int().min(1).max(100).optional(), maxRelationships: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
@@ -427,6 +429,7 @@ server.registerTool(
     { edgeKinds, maxHotspots, maxImpactDepth, maxImpactResults },
   )),
 );
+server.registerTool("solvelang_graph_entrypoint_candidates", { title: "Find Solve Graph entrypoint candidates", description: "Return bounded structural route, workflow, job, and exposes-related entrypoint candidates from an integrity-valid analyze-only graph. This does not establish runtime reachability or public exposure.", inputSchema: solveGraphEntrypointsInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, maxCandidates }) => textResult(findSolveGraphEntrypointCandidates(await readSolveGraphInput({ path: inputPath, rawJson }), { maxCandidates })));
 server.registerTool("solvelang_graph_security_summary", { title: "Summarize Solve Graph security candidates", description: "Return bounded structural permission, resource, route, and security-relevant relationship candidates from an integrity-valid analyze-only graph. This is not a security audit.", inputSchema: solveGraphSecuritySummaryInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, maxNodes, maxRelationships }) => textResult(summarizeSolveGraphSecurity(await readSolveGraphInput({ path: inputPath, rawJson }), { maxNodes, maxRelationships })));
 
 server.registerTool(
@@ -459,6 +462,7 @@ server.registerTool(
       "solvelang_graph_affected_validations",
       "solvelang_graph_cycles",
       "solvelang_graph_hotspots",
+      "solvelang_graph_entrypoint_candidates",
       "solvelang_graph_security_summary",
       "solvelang_capabilities",
     ],
