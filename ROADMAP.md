@@ -38,6 +38,7 @@ A merged feature is not automatically production-enabled, and production account
 - Server Audit is implemented as a bounded read-only product surface with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, cross-platform validation, and bounded scheduled-job relationships through #340.
 - Server Audit backup/log consistency evidence and redacted findings are merged through #575/#576. #579 composes them into canonical JSON/HTML reports while deduplicating exact overlap with legacy artifact findings by category/title/structural evidence identity; the initial duplicate-count regression was fixed before exact-head CI/Rust green merge.
 - Server Audit certificate-expiry fallback is merged through #581. Public-file evidence is hardened through #582/#583 so unavailable or sparse web-root references fail closed instead of becoming exposure/coverage claims, and #584 composes public-file coverage/integrity into canonical JSON/HTML reports. #584 also fixed a legacy baseline sparse-root crash found by Hosted CI before exact-head green merge.
+- Server Audit relationship and coverage truth is hardened through #617→#637: bounded service→process→listener, service→process, and scheduled-job→service/process findings/report composition; relationship construction/index/fanout bounds; certificate/web/service/process/package identity coverage; and canonical service/process/package identity report composition. Evidence remains structural/redacted and no collector/remediation capability is added.
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
 - Customer-priority source/upload/API foundations, validation-only production preflight (#164), and dormant production queue-foundation rollout preparation (#169) are merged in repository history. **Production customer priority remains OFF.** Those merges do not establish a live deployment or activation.
@@ -139,14 +140,14 @@ Repository Audit write/remediation mode is **not enabled**.
 
 Server Audit remains read-only-first because live infrastructure has a larger blast radius.
 
-Implemented read-only capabilities include a fixed collector command surface with no user-supplied command execution; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process inventory; disk/log/backup posture; web roots/framework hints/TLS/public-file evidence; security posture summaries; temporal/inventory/process/artifact/certificate/permission/listener/coverage/relationship findings; certificate-expiry fallback; fail-closed public-file root-reference and fixed-marker coverage integrity; bounded backup/log consistency findings composed into deterministic/redacted JSON and HTML reports without duplicate score/count inflation; and no remediation executor.
+Implemented read-only capabilities include a fixed collector command surface with no user-supplied command execution; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process inventory; disk/log/backup posture; web roots/framework hints/TLS/public-file evidence; security posture summaries; temporal/inventory/process/artifact/certificate/permission/listener/coverage/relationship findings; certificate-expiry fallback; fail-closed public-file root-reference and fixed-marker coverage integrity; bounded service→process, service→process→listener, and scheduled-job→service/process relationship findings with canonical report coverage; bounded relationship construction/indexing/fanout truth; backup/log consistency findings composed into deterministic/redacted JSON and HTML reports without duplicate score/count inflation; blank certificate/web/service/process/package identity coverage with canonical report composition; and no remediation executor.
 
 Active hardening priorities:
 
 - package/service/port/process/scheduled-job relationship quality;
 - log/cache/backup consistency;
 - domain/TLS/public-file evidence quality;
-- version evidence without pretending a CVE database was consulted;
+- ownership/permission/version evidence without pretending a CVE database was consulted;
 - bounded/redacted evidence and deterministic IDs;
 - cross-platform parser/report tests.
 
