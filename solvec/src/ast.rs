@@ -113,6 +113,12 @@ pub enum Stmt {
         body: Vec<Stmt>,
         location: SourceLocation,
     },
+    For {
+        name: String,
+        iterable: Expr,
+        body: Vec<Stmt>,
+        location: SourceLocation,
+    },
     Agent {
         name: String,
         instruction: String,
