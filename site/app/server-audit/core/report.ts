@@ -5,6 +5,7 @@ import { createServerAuditCertificateConsistencyFindings } from "./certificateCo
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
+import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
@@ -71,6 +72,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditArtifactFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
+    ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),

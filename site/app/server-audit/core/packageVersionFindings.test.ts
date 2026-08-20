@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
+import { createServerAuditReport } from "./report";
 import type { ServerAuditSnapshot } from "./types";
 
 function snapshot(packages: NonNullable<ServerAuditSnapshot["packages"]>): ServerAuditSnapshot {
@@ -63,4 +64,18 @@ test("package-version option bounds fail closed", () => {
   const input = snapshot([]);
   assert.throws(() => createServerAuditPackageVersionFindings(input, { maxFindings: 0 }), /maxFindings/);
   assert.throws(() => createServerAuditPackageVersionFindings(input, { maxFindings: 1001 }), /maxFindings/);
+});
+
+test("canonical reports compose redacted package-version evidence without vulnerability claims", () => {
+  const report = createServerAuditReport(snapshot([
+    { name: "private-customer-agent", version: "" },
+    { name: "private-internal-tool", version: "LATEST" },
+  ]), "2026-08-20T06:00:00.000Z");
+
+  assert.equal(report.findings.filter((finding) => finding.category === "version-evidence").length, 2);
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes("private-customer-agent"), false);
+  assert.equal(serialized.includes("private-internal-tool"), false);
+  assert.equal(serialized.includes("LATEST"), false);
+  assert.match(serialized, /no advisory or CVE database was consulted/i);
 });
