@@ -11,6 +11,7 @@ import { createServerAuditLargeLogFindings } from "./largeLogFindings";
 import { createServerAuditStaleLogFindings } from "./staleLogFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
+import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
@@ -104,6 +105,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditLargeLogFindings(snapshot),
     ...createServerAuditStaleLogFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
+    ...createServerAuditPublicFileCoverageFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditCertificateExpiryFallbackFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
@@ -143,6 +145,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
+      "Public-file coverage findings compare only the fixed reviewed marker checks for available candidate web roots; missing or contradictory marker evidence is a completeness/integrity signal and does not prove exposure or safety.",
       "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
       "Certificate-expiry fallback findings derive an alert window only from a supplied notAfter timestamp when daysRemaining is absent; they do not identify the actively served certificate or perform endpoint validation.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
