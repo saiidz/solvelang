@@ -429,7 +429,7 @@ fn merge_types(left: Type, right: Type) -> Type {
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-            "length"
+        "length"
             | "contains"
             | "get"
             | "keys"

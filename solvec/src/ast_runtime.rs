@@ -1447,10 +1447,7 @@ print(keys(ticket))
                 "print(get([1], \"0\"))",
                 "get expects a number index for an array",
             ),
-            (
-                "print(keys([1]))",
-                "keys expects an object value",
-            ),
+            ("print(keys([1]))", "keys expects an object value"),
             (
                 "print(length(\"one\", \"two\"))",
                 "length expects 1 argument but received 2",
