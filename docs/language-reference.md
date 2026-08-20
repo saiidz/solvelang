@@ -11,11 +11,13 @@ From `solvec/`:
 ```bash
 cargo run -- validate ../examples/support_triage.solve
 cargo run -- check ../examples/support_triage.solve
+cargo run -- fmt --check ../examples/support_triage.solve
 cargo run -- run ../examples/support_triage.solve
 ```
 
 - `validate` lexes and parses a script, then exits without running it.
 - `check` performs `validate` plus conservative source-only semantic checks. It never runs a workflow or selects a runtime policy.
+- `fmt` validates and canonically rewrites one source file without running it. `fmt --check` is read-only and exits nonzero when formatting would change the file. Formatting is deterministic and idempotent; it preserves line comments and the original spelling of string escapes while normalizing line endings to LF.
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
 - `ast` prints the parsed AST.

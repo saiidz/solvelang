@@ -2,6 +2,7 @@ mod ai;
 mod ast;
 mod ast_runtime;
 mod diagnostics;
+mod formatter;
 mod lexer;
 mod parser;
 mod semantic;
@@ -26,6 +27,7 @@ enum Command {
     Run(RunOptions),
     Validate,
     Check,
+    Format { check: bool },
     Tokens,
     Ast,
     Help,
@@ -96,6 +98,22 @@ impl LoadedSource {
             content: String::new(),
             origins: Vec::new(),
             entry_path,
+        }
+    }
+
+    fn from_raw(entry_path: &str, content: &str) -> Self {
+        Self {
+            content: content.to_string(),
+            origins: content
+                .lines()
+                .enumerate()
+                .map(|(index, text)| SourceOrigin {
+                    path: entry_path.to_string(),
+                    line: index + 1,
+                    text: text.trim_end_matches('\r').to_string(),
+                })
+                .collect(),
+            entry_path: entry_path.to_string(),
         }
     }
 
@@ -324,6 +342,7 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
             println!("file: {}", filename);
             Ok(())
         }
+        Command::Format { check } => execute_format(&filename, check),
         Command::Tokens => {
             let source = load_source_with_imports(&filename, false)?;
             validate_diagnostics(&source)?;
@@ -417,6 +436,7 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
         "run" => parse_run_args(&args[1..]),
         "validate" => parse_file_command(Command::Validate, &args[1..]),
         "check" => parse_file_command(Command::Check, &args[1..]),
+        "fmt" => parse_format_command(&args[1..]),
         "tokens" => parse_file_command(Command::Tokens, &args[1..]),
         "ast" => parse_file_command(Command::Ast, &args[1..]),
         "legacy" => Err(
@@ -444,6 +464,19 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
     }
 }
 
+fn parse_format_command(args: &[String]) -> Result<(Command, Option<String>), String> {
+    match args {
+        [filename] if !filename.starts_with('-') => {
+            Ok((Command::Format { check: false }, Some(filename.clone())))
+        }
+        [flag, filename] if flag == "--check" && !filename.starts_with('-') => {
+            Ok((Command::Format { check: true }, Some(filename.clone())))
+        }
+        [] => Ok((Command::Format { check: false }, None)),
+        _ => Err("fmt accepts one SolveLang file, optionally preceded by --check".to_string()),
+    }
+}
+
 fn parse_file_command(
     command: Command,
     args: &[String],
@@ -453,6 +486,39 @@ fn parse_file_command(
         [] => Ok((command, None)),
         _ => Err("command accepts exactly one SolveLang file".to_string()),
     }
+}
+
+fn execute_format(filename: &str, check: bool) -> Result<(), CliFailure> {
+    let source = fs::read_to_string(filename).map_err(|error| {
+        CliFailure::source(format!(
+            "failed to read source file '{}': {}",
+            filename, error
+        ))
+    })?;
+    let raw_source = LoadedSource::from_raw(filename, &source);
+    validate_diagnostics(&raw_source)?;
+    parse_source(&raw_source)?;
+    let formatted = formatter::format_source(&source);
+
+    if check {
+        if source != formatted {
+            return Err(CliFailure::invalid_workflow(format!(
+                "{} is not formatted; run 'solvec fmt {}'",
+                filename, filename
+            )));
+        }
+        println!("✓ SolveLang formatting check passed");
+    } else {
+        fs::write(filename, formatted).map_err(|error| {
+            CliFailure::source(format!(
+                "failed to write source file '{}': {}",
+                filename, error
+            ))
+        })?;
+        println!("✓ SolveLang formatting passed");
+    }
+    println!("file: {}", filename);
+    Ok(())
 }
 
 fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> {
@@ -1099,6 +1165,7 @@ fn print_usage() {
     println!(
         "  solvec check <file.solve>          Check conservative static semantics without running"
     );
+    println!("  solvec fmt [--check] <file.solve>  Format source without changing meaning");
     println!("  solvec tokens <file.solve>         Print lexer tokens");
     println!("  solvec ast <file.solve>            Print parsed AST");
     println!();

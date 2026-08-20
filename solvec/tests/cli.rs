@@ -211,6 +211,30 @@ print(names[0])
 }
 
 #[test]
+fn fmt_writes_a_lossless_canonical_source_and_check_reports_drift() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_fmt.solve",
+        "// preserve this comment\r\nfn add(a,b){\r\nif a>=b{print(\"a\\\\b\\\\n\"..a)}else{print(b)}\r\n}\r\n",
+    );
+
+    let before = run_solvec_error(&["fmt", "--check", &file]);
+    assert!(before.contains("is not formatted"));
+
+    let output = run_solvec(&["fmt", &file]);
+    assert!(output.contains("✓ SolveLang formatting passed"));
+    let formatted = fs::read_to_string(&file).expect("formatted source should be readable");
+    assert_eq!(
+        formatted,
+        "// preserve this comment\nfn add(a, b) {\n    if a >= b {\n        print(\"a\\\\b\\\\n\"..a)\n    } else {\n        print(b)\n    }\n}\n"
+    );
+    assert!(!formatted.contains('\r'));
+
+    let check = run_solvec(&["fmt", "--check", &file]);
+    assert!(check.contains("✓ SolveLang formatting check passed"));
+    run_solvec(&["validate", &file]);
+}
+
+#[test]
 fn legacy_command_and_flag_are_removed_from_public_cli() {
     let file = write_temp_solve_file("solvelang_cli_legacy_removed.solve", "print(\"Hello\")\n");
 
