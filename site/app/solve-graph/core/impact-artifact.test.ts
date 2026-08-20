@@ -82,6 +82,55 @@ test("rejects self-consistent impact artifacts whose traversal evidence is inval
   );
 });
 
+test("rejects traversal edges outside the default impact scope", async () => {
+  const root = await createSolveGraphNode({
+    kind: "file",
+    identity: "file:src/root.ts",
+    label: "root.ts",
+    evidence: [{ kind: "parser", path: "src/root.ts" }],
+  });
+  const container = await createSolveGraphNode({
+    kind: "directory",
+    identity: "directory:src",
+    label: "src",
+    evidence: [{ kind: "parser", path: "src" }],
+  });
+  const contains = await createSolveGraphEdge({
+    kind: "contains",
+    from: container.id,
+    to: root.id,
+    evidence: [{ kind: "parser", path: "src" }],
+  });
+  const document = await createSolveGraphDocument({
+    source: solveGraphFixtureSource,
+    engineVersion: "0.2.0",
+    extractors: [{ id: "impact-artifact-edge-scope-fixture", version: "1", deterministic: true }],
+    nodes: [container, root],
+    edges: [contains],
+  });
+  const index = await createSolveGraphQueryIndex(document);
+  const forged = {
+    direction: "dependents" as const,
+    roots: [root.id],
+    entries: [
+      { id: root.id, depth: 0, rootId: root.id },
+      {
+        id: container.id,
+        depth: 1,
+        rootId: root.id,
+        parentId: root.id,
+        viaEdgeId: contains.id,
+      },
+    ],
+    truncated: false,
+  };
+
+  await assert.rejects(
+    createSolveGraphImpactDownload("fixture repo", index, forged),
+    /outside the default impact scope/,
+  );
+});
+
 test("binds impact artifacts to the verified query graph", async () => {
   const { index, root } = await fixture();
   const query = analyzeSolveGraphImpact(index, [root.id]);
