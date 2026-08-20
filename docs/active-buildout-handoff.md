@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this refresh, `main` before this documentation-only PR is `19115da27cd93443d4186117b5233dce4f2c7ed2`, the merge of safe API availability-copy PR #508. The safe non-production PR queue is **one**: this documentation-sync PR #509.
+At this refresh, `main` before this documentation-only PR is `f82980a563ecd211da2883bfcaff84563487a48f`, the merge of safe LSP formatting PR #548. The safe non-production PR queue is **zero**. This documentation sync is intentionally repository-only and does not change the authoritative production record.
 
 The historical #288→#301 Repository Audit dependency train is merged and must not be recreated. PRs #161/#164/#169 are also merged repository-history facts only; their historical merge approvals are not standing authorization for deployment or live activation.
 
@@ -39,6 +39,23 @@ The 2026-08-20 queue drain reconciled safe branches prepared across several fast
 - #510 — parser-backed `textDocument/documentSymbol` support for documents opened through the minimal stdio LSP. Full-document diagnostics remain supported; incremental edits, workspace access, execution, and editor packaging remain unsupported.
 - #511 — bounded analyze-only Solve Graph impact artifact/download/product bundle with canonical digest verification and no network or write capability.
 - #508 — public API pricing now labels subscription plans as preview-only/unavailable while recurring billing is disabled, removes purchase-implying CTA wording, and records that cancellation/refund/invoice/support terms must exist before launch. No live Stripe action, billing activation, or production deployment occurred.
+- #512/#518/#521/#526/#529 — parser-backed local `solvelsp` go-to-definition, hover, document highlights, completion, and semantic tokens. They operate only on didOpen-cached documents; incremental sync, workspace indexing, execution, and network access remain unsupported.
+- #513/#519 — bounded read-only MCP entrypoint and unreachable-from-known-entrypoint candidates. Both explicitly report structural candidates rather than runtime reachability claims.
+- #514/#522 — impact artifacts now bind their graph/edge scope into canonical integrity verification; tampering fails rather than being presented as evidence.
+- #515/#516 — opt-in VS Code `.solve` registration, syntax support, and explicitly disabled-by-default local `solvelsp`/saved-document formatter launch. It bundles no executable and never invokes `solvec run`.
+- #517/#520/#523/#525/#527/#543 — deterministic pure object/collection helpers: `keys`, `values`, `entries`, and `is_empty`; all are semantic- and hardened-preflight-recognized without widening capability gates.
+- #530/#534/#542 — bounded local Solve Graph unreached-candidate presentation, preservation of source/traversal/presentation partiality, and accessible node-kind filtering.
+- #531 — restore-drill documentation/contract gate that records a UTC recovery point and aborts unsafe same-target, active-route, alias, or traffic-switch drills. It performs no restore or routing action.
+- #533 — deterministic root-relative imported `.solve` cycle chains while imports remain compatibility includes, not a package registry or export system.
+- #535/#539 — deterministic bounded Node workspace metadata and snapshot evidence, including manifest-text and skipped-evidence bounds with absent/partial/complete truth.
+- #536 — bounded local structural cycle presentation; it does not claim a cycle is defective.
+- #537 — browser/WASM parity ADR records the pure-core extraction prerequisite; the existing shared library still exposes host adapters and is not a safe WASM boundary.
+- #538 — provider-neutral monitoring-readiness contract for future auth, billing, and priority signals. It creates no provider/resource/credential configuration and authorizes no deployment.
+- #541 — public CLI truth sync for the implemented `fmt` and `lint` commands.
+- #544 — receipt-time retention for delayed Stripe subscription-event replay records; subscription billing remains disabled and no live Stripe action occurred.
+- #545 — nested imported `.solve` `check` diagnostics retain root-relative provenance and never leak an absolute source root.
+- #546 — test-backed operations logging contract that allows only sanitized codes and allowlisted correlation fields; raw request/response bodies and caught exception messages/stacks are prohibited. It does not change live logging configuration.
+- #548 — parser-gated `textDocument/formatting` for didOpen-cached documents using the canonical formatter. It returns no edit for unchanged text and has no execution, workspace, or incremental-sync capability.
 
 All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
@@ -74,7 +91,7 @@ Do not recreate merged generations merely because historical issues, branches, o
 
 Repository Audit and Solve Graph remain deterministic, bounded, local/analyze-only surfaces. Merged capabilities include repository ingestion/inventory; JavaScript/TypeScript, Python, conservative local PHP, TypeScript config, Angular/Nest and deployment/config relationships; dependency consistency; conservative dead-code evidence; test/documentation and workflow mapping; architecture/security-boundary summaries; ranked, shortest-path, alternative-path and dependent-impact queries; deterministic path/impact explanations; selected-node affected-validation intelligence; integrity-covered artifacts; local browser exploration; redaction; explicit complete/partial/truncation truth; read-only MCP query/explanation surfaces; affected-validation candidates; hotspot candidates; and the bounded impact artifact/product bundle merged through #511.
 
-Repository source is not executed to improve graph coverage. Prefer conservative parser/config evidence and explicit unknown/partial states over guessed relationships. Repository Audit write/remediation mode remains disabled.
+Repository source is not executed to improve graph coverage. The local explorer also presents bounded unreached candidates and node-kind filtering; MCP adds entrypoint/unreachable candidates, affected validations, cycles, hotspots, and security summaries. Prefer conservative parser/config evidence and explicit unknown/partial states over guessed relationships. Repository Audit write/remediation mode remains disabled.
 
 ## Server Audit state
 
@@ -84,7 +101,7 @@ Continue package/service/port/process/scheduled-job relationship quality, log/ca
 
 ## Language/runtime and DX state
 
-The Rust language/runtime includes lexer/parser/AST/runtime values and control flow, functions, arrays/objects, relative `.solve` imports, source locations/structured diagnostics, conservative semantic checking, merged `break`/`continue` loop control, pure collection helpers, deterministic formatter/linter commands, and a shared language library. The `solvelsp` surface is intentionally local and stdio-only: initialize/shutdown, full-document didOpen parser diagnostics, and parser-backed document symbols. Incremental edits, workspace access, execution, network access, and editor packaging remain unsupported.
+The Rust language/runtime includes lexer/parser/AST/runtime values and control flow, functions, arrays/objects, relative `.solve` imports, source locations/structured diagnostics, conservative semantic checking, merged `break`/`continue` loop control, pure collection helpers (`length`, `contains`, `get`, `keys`, `values`, `entries`, `is_empty`), deterministic formatter/linter commands, and a shared language library. The `solvelsp` surface is intentionally local and stdio-only: initialize/shutdown, full-document didOpen parser diagnostics, document symbols, go-to-definition, hover, document highlights, completion, and semantic tokens. Incremental edits, workspace access, execution, and network access remain unsupported. The opt-in VS Code package only registers syntax/commands and defaults its executable launch settings to false.
 
 ## Self-hosted validation policy
 
