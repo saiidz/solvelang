@@ -37,6 +37,10 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function hasAvailableRoot(roots: readonly unknown[], rootIndex: number): boolean {
+  return Number.isInteger(rootIndex) && rootIndex >= 0 && rootIndex < roots.length && roots[rootIndex] !== undefined;
+}
+
 export function createServerAuditPublicFileCoverageFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditPublicFileCoverageOptions = {},
@@ -50,6 +54,7 @@ export function createServerAuditPublicFileCoverageFindings(
   const grouped = new Map<string, Array<{ index: number; present: boolean }>>();
 
   checks.forEach((check, index) => {
+    if (!hasAvailableRoot(roots, check.rootIndex)) return;
     const key = `${check.rootIndex}\u001f${check.marker}`;
     const entries = grouped.get(key) ?? [];
     entries.push({ index, present: check.present });
@@ -57,6 +62,7 @@ export function createServerAuditPublicFileCoverageFindings(
   });
 
   for (let rootIndex = 0; rootIndex < roots.length; rootIndex += 1) {
+    if (!hasAvailableRoot(roots, rootIndex)) continue;
     const missing = EXPECTED_MARKERS.filter((marker) => !grouped.has(`${rootIndex}\u001f${marker}`));
     if (missing.length === 0) continue;
     candidates.push({
