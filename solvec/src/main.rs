@@ -1136,7 +1136,13 @@ fn preflight_expr(
                 }
                 let allowed = matches!(
                     name.as_str(),
-                    "length" | "contains" | "get" | "json_parse" | "json_stringify"
+                    "length"
+                        | "contains"
+                        | "get"
+                        | "keys"
+                        | "values"
+                        | "json_parse"
+                        | "json_stringify"
                 ) || (function_names.contains(name.as_str())
                     && !is_explicitly_unsafe_name(name));
                 if !allowed {
