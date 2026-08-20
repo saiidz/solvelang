@@ -24,7 +24,8 @@ A merged feature is not automatically production-enabled, and production account
 - Angular/Nest framework-path evidence/artifact/presentation/browser integration is merged through #358→#364.
 - Angular target `options.tsConfig` evidence/artifact/presentation/browser integration is merged through #365→#371.
 - Solve Graph deterministic ranked node search is merged in the core and MCP surfaces through #329/#335, local visual-explorer modeling through #337/#348/#349, conservative repository-local PHP include/require relationships through #341, bounded shortest-path queries through #372, and read-only MCP shortest-path exposure through #373. These remain bounded and analyze-only.
-- The bounded shortest-path product train is now merged through verifier/product/query-product/browser work #432/#436/#439/#441/#442/#443. It keeps query bounds and complete-vs-partial truth explicit, uses integrity-covered product bundles, and exposes only local browser composition/export with network/write capability disabled.
+- The bounded shortest-path product train is merged through verifier/product/query-product/browser work #432/#436/#439/#441/#442/#443. It keeps query bounds and complete-vs-partial truth explicit, uses integrity-covered product bundles, and exposes only local browser composition/export with network/write capability disabled.
+- Deterministic shortest-path explanations and MCP explanation exposure are merged through #445/#446/#447/#448: core explanation quality, Repository Audit/browser wiring, a capability-free MCP explanation contract, and the additive `solvelang_graph_explain_shortest_path` tool with packed-consumer validation. The explanation layer reuses the bounded shortest-path implementation and does not execute repository code.
 - Repository-local TypeScript `extends` / project-reference evidence is merged through #333.
 - Server Audit is implemented as a bounded read-only product surface with a strict snapshot/schema parser, fixed collector surface, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, cross-platform validation, and bounded scheduled-job relationships through #340.
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
@@ -103,12 +104,12 @@ Production mutations remain separately gated even when implementation code, work
 
 Repository Audit is an active bounded read-only product, not a future-only concept.
 
-Implemented capabilities include bounded repository ingestion and classification; deterministic Solve Graph dependency/impact analysis; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript config, Angular/Nest framework and Angular target-config relationship evidence; dependency consistency; conservative dead-code candidates; direct test/documentation mapping; package/configuration/workflow/deployment relationships; affected-test/workflow mapping; architecture/security-boundary summaries; ranked and shortest-path graph queries; read-only MCP exposure; integrity-covered artifacts; local visual-explorer/browser presentation; evidence-completeness truth; deterministic IDs/order; redaction; strict report contracts; and no repository mutation or repository-code execution during analysis.
+Implemented capabilities include bounded repository ingestion and classification; deterministic Solve Graph dependency/impact analysis; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript config, Angular/Nest framework and Angular target-config relationship evidence; dependency consistency; conservative dead-code candidates; direct test/documentation mapping; package/configuration/workflow/deployment relationships; affected-test/workflow mapping; architecture/security-boundary summaries; ranked and shortest-path graph queries; deterministic shortest-path explanations; read-only MCP query/explanation exposure; integrity-covered artifacts; local visual-explorer/browser presentation; evidence-completeness truth; deterministic IDs/order; redaction; strict report contracts; and no repository mutation or repository-code execution during analysis.
 
 Next read-only intelligence work:
 
-- richer query/path/impact and evidence explanations;
-- MCP/Codex integration quality;
+- richer impact and alternative-path evidence explanations while preserving bounded-search truth;
+- MCP/Codex integration quality over the merged query/explanation contracts;
 - conservative remaining framework/deployment/reference adapters;
 - visual-explorer ergonomics;
 - deterministic cross-platform validation.
