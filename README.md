@@ -141,6 +141,8 @@ cargo run -- run ../examples/support_triage.solve
 solvec run <file.solve>       Run a SolveLang workflow
 solvec validate <file.solve>  Parse and validate without executing
 solvec check <file.solve>     Check conservative static semantics without executing
+solvec lint <file.solve>      Report conservative warnings without executing
+solvec fmt [--check] <file.solve>  Format source without changing meaning
 solvec tokens <file.solve>    Print lexer tokens
 solvec ast <file.solve>       Print the parsed AST
 solvec help                   Show CLI help
