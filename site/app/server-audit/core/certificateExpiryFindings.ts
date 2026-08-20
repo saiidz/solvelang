@@ -79,10 +79,9 @@ export function createServerAuditCertificateExpiryFallbackFindings(
   if (collectedAt === undefined) return [];
 
   const candidates = (snapshot.web?.certificates ?? [])
-    .map((certificate, index) => ({ certificate, index }))
-    .filter(({ certificate }) => certificate.daysRemaining === undefined && certificate.notAfter !== undefined)
-    .map(({ certificate, index }) => {
-      const notAfter = parseTimestamp(certificate.notAfter!);
+    .map((certificate, index) => {
+      if (certificate.daysRemaining !== undefined || certificate.notAfter === undefined) return undefined;
+      const notAfter = parseTimestamp(certificate.notAfter);
       return notAfter === undefined ? undefined : derivedFinding(index, notAfter - collectedAt);
     })
     .filter((finding): finding is ServerAuditFinding => finding !== undefined)
