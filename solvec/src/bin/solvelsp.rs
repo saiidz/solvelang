@@ -102,11 +102,33 @@ fn hover(text: &str, line: usize, character: usize) -> Value {
     json!({"contents":{"kind":"markdown","value":format!("`{name}`\n\nTop-level SolveLang {kind}.")}})
 }
 
+fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> {
+    let Some(name) = identifier_at_position(text, line, character) else {
+        return Vec::new();
+    };
+    if top_level_symbol(text, &name).is_none() {
+        return Vec::new();
+    }
+    lexer::lex(text)
+        .into_iter()
+        .filter_map(|located| match located.token {
+            lexer::Token::Identifier(candidate) if candidate == name => Some(json!({
+                "range": {
+                    "start": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1)},
+                    "end": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1) + candidate.len()}
+                },
+                "kind": 1
+            })),
+            _ => None,
+        })
+        .collect()
+}
+
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -165,6 +187,25 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                     )
                 })
                 .unwrap_or(Value::Null);
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
+            ]
+        }
+        Some("textDocument/documentHighlight") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let position = &message["params"]["position"];
+            let result = documents
+                .get(uri)
+                .map(|text| {
+                    document_highlights(
+                        text,
+                        position["line"].as_u64().unwrap_or(0) as usize,
+                        position["character"].as_u64().unwrap_or(0) as usize,
+                    )
+                })
+                .unwrap_or_default();
             vec![
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
@@ -229,6 +270,10 @@ mod tests {
         );
         assert_eq!(output[0]["result"]["capabilities"]["textDocumentSync"], 1);
         assert_eq!(output[0]["result"]["capabilities"]["hoverProvider"], true);
+        assert_eq!(
+            output[0]["result"]["capabilities"]["documentHighlightProvider"],
+            true
+        );
     }
 
     #[test]
@@ -292,5 +337,28 @@ mod tests {
             &mut documents,
         );
         assert!(unopened[0]["result"].is_null());
+    }
+
+    #[test]
+    fn highlights_same_name_spans_for_open_document_top_level_symbols() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":6,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
+            &mut documents,
+        );
+        let highlights = output[0]["result"].as_array().expect("highlight list");
+        assert_eq!(highlights.len(), 2);
+        assert_eq!(highlights[0]["range"]["start"]["line"], 0);
+        assert_eq!(highlights[1]["range"]["start"]["line"], 1);
+
+        let unknown = process_message(
+            json!({"id":7,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":0,"character":0}}}),
+            &mut documents,
+        );
+        assert!(unknown[0]["result"].as_array().unwrap().is_empty());
     }
 }
