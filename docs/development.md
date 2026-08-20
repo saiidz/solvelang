@@ -68,7 +68,7 @@ The support-triage example is intentionally deterministic. It demonstrates reada
 
 The `solvec` package also exposes the canonical lexer, parser, diagnostics, formatter, semantic checker, and runtime modules as a shared Rust library. The CLI consumes those same APIs; future editor tooling must use this library rather than duplicate language behavior.
 
-The experimental `solvelsp` stdio binary currently supports full-document open diagnostics and parser-backed document symbols only. Incremental changes, workspace access, execution, and editor-extension packaging are intentionally not implemented.
+The experimental `solvelsp` stdio binary currently supports full-document open diagnostics plus parser-backed document symbols, top-level go-to-definition, and hover for documents opened in the current session. Incremental changes, workspace access, and execution are intentionally not implemented.
 
 Useful CLI inspection commands:
 
