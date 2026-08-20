@@ -148,6 +148,26 @@ test("normalizes the successful checkout card when an active subscription is pro
   assert.deepEqual(normalized, [{ customerId: "cus_1", subscriptionId: "sub_1", eventId: "evt_1" }]);
 });
 
+test("does not normalize a payment method after a stale active event is rejected", async () => {
+  const normalized = [];
+  const lifecycle = createSubscriptionLifecycleService({
+    apiAccessService: lifecycleApiService({
+      provision: async () => ({
+        accountId: "acct_1",
+        stripeSubscriptionId: "sub_1",
+        subscriptionStatus: "canceled",
+        subscriptionEventOrder: stripeEvent().created * 1_000 + 92,
+      }),
+    }),
+    eventStore: lifecycleEventStore(),
+    gateway: { normalizeSuccessfulSubscriptionPaymentMethod: async (input) => { normalized.push(input); return true; } },
+    priceIds,
+  });
+
+  await lifecycle.processEvent(stripeEvent());
+  assert.deepEqual(normalized, []);
+});
+
 test("uses the Stripe event timestamp for a bounded past-due grace period", async () => {
   let account;
   const lifecycle = createSubscriptionLifecycleService({

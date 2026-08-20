@@ -37,7 +37,7 @@ The protected test deployment verifies that configured Stripe Prices are active,
 - Per-address and per-source magic-link throttling.
 - Customer-owned key listing, issuance, revocation, subscription Checkout, and credit display.
 - Disabled-by-default Stripe subscription Checkout creation.
-- Signed subscription lifecycle webhook processing.
+- Signed subscription lifecycle webhook processing with replay claims and ordered projections; stale events do not trigger payment-method normalization.
 
 No Stripe customers or subscriptions are created by repository code. No AWS resource is deployed automatically. `ApiAccessEnabled`, `CustomerAccountsEnabled`, and `SubscriptionBillingEnabled` default to `false`, and customer accounts and billing remain test-only.
 

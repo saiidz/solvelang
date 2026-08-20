@@ -190,6 +190,7 @@ export function createSubscriptionLifecycleService({
         throw new ApiAccessError(400, "invalid_subscription_status", "Subscription status is invalid.");
       }
       const createdAtMs = event.created * 1_000;
+      const subscriptionEventOrder = eventOrder(event.created, rawStatus, plan);
       const fingerprint = payloadFingerprint([
         eventId,
         eventType,
@@ -255,10 +256,13 @@ export function createSubscriptionLifecycleService({
           subscriptionStatus: rawStatus,
           currentPeriodEnd: item.currentPeriodEnd * 1_000,
           subscriptionEventCreatedAt: createdAtMs,
-          subscriptionEventOrder: eventOrder(event.created, rawStatus, plan),
+          subscriptionEventOrder,
           ...(rawStatus === "past_due" ? { graceUntil: createdAtMs + gracePeriodMs } : {}),
         });
-        if ((rawStatus === "active" || rawStatus === "trialing") && gateway) {
+        if ((rawStatus === "active" || rawStatus === "trialing")
+          && gateway
+          && account?.stripeSubscriptionId === subscriptionId
+          && account.subscriptionEventOrder === subscriptionEventOrder) {
           await gateway.normalizeSuccessfulSubscriptionPaymentMethod({ customerId, subscriptionId, eventId });
         }
         const completion = await eventStore.completeEvent({
