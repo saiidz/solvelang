@@ -40,8 +40,10 @@ export function createServerAuditScheduledJobRelationshipFindings(
     relationshipsByJob.set(relationship.jobIndex, relationships);
   }
 
+  let emittedMultiTargetJobs = 0;
   for (const [jobIndex, relationships] of relationshipsByJob) {
     if (relationships.length < 2) continue;
+    emittedMultiTargetJobs += 1;
 
     const sources = new Set<string>([`scheduledJobs[${jobIndex}]`]);
     for (const relationship of relationships) {
@@ -71,6 +73,32 @@ export function createServerAuditScheduledJobRelationshipFindings(
           source: `scheduledJobRelationships.jobs[${jobIndex}]`,
           summary: `structural source fanout truncated at ${MAX_FINDING_SOURCES} entries`,
         }] : []),
+      ],
+    });
+  }
+
+  if (analysis.summary.jobsWithMultipleRelationships > emittedMultiTargetJobs) {
+    findings.push({
+      id: stableId([
+        "scheduled-job",
+        "multi-target-output-truncated",
+        String(analysis.summary.jobsWithMultipleRelationships),
+        String(emittedMultiTargetJobs),
+      ]),
+      severity: "info",
+      category: "coverage",
+      title: "Some multi-target scheduled-job mappings are not fully materialized",
+      summary: `${analysis.summary.jobsWithMultipleRelationships} analyzed scheduled-job record(s) had more than one exact-name-token match in the bounded supplied targets, while only ${emittedMultiTargetJobs} record(s) had at least two relationships materialized in the bounded output. Per-job fanout details can therefore be incomplete even though the observed multi-target count remains exact for the analyzed snapshot.`,
+      recommendation: "Treat per-job scheduled-job fanout as partial when the relationship output is truncated; narrow or split the read-only snapshot rather than executing scheduled-job commands or guessing aliases.",
+      evidence: [
+        {
+          source: "scheduledJobRelationships.summary.jobsWithMultipleRelationships",
+          summary: String(analysis.summary.jobsWithMultipleRelationships),
+        },
+        {
+          source: "scheduledJobRelationships.output.emittedMultiTargetJobs",
+          summary: String(emittedMultiTargetJobs),
+        },
       ],
     });
   }
