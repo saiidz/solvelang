@@ -313,7 +313,7 @@ Parser recovery uses statement boundaries so one malformed statement generally y
 
 ### Pure standard-library helpers
 
-`length`, `contains`, `get`, `keys`, `values`, and `entries` are deterministic pure helpers. They do not read
+`length`, `is_empty`, `contains`, `get`, `keys`, `values`, and `entries` are deterministic pure helpers. They do not read
 files, environment variables, or the network, so hardened runs allow them.
 
 `length(value)` returns the number of Unicode scalar values in text, the number
@@ -324,6 +324,15 @@ types.
 print(length("hé")) // 2
 print(length(["support", "sales"])) // 2
 print(length({ status: "open", urgent: true })) // 2
+```
+
+`is_empty(value)` returns whether text, an array, or an object has no contents.
+It rejects all other types.
+
+```solve
+print(is_empty("")) // true
+print(is_empty(["support"])) // false
+print(is_empty({})) // true
 ```
 
 `contains(collection, value)` returns whether text contains a text substring,

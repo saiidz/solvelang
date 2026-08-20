@@ -584,12 +584,13 @@ print(get(ticket, "missing", "not-set"))
 print(keys(ticket))
 print(values(ticket))
 print(entries(ticket))
+print(is_empty([]))
 "#,
     );
 
     let output = run_solvec(&["run", "--safe", &file]);
     assert!(output.contains(ADVISORY_LABEL));
-    assert!(output.contains("2\ntrue\nnot-set\n[count, labels, status]\n[2, [new, urgent], open]\n[[count, 2], [labels, [new, urgent]], [status, open]]"));
+    assert!(output.contains("2\ntrue\nnot-set\n[count, labels, status]\n[2, [new, urgent], open]\n[[count, 2], [labels, [new, urgent]], [status, open]]\ntrue"));
 }
 
 #[test]

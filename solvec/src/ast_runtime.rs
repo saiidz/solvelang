@@ -712,6 +712,7 @@ impl AstRuntime {
     ) -> Option<Result<Value, RuntimeError>> {
         match name {
             "length" => Some(self.length(args, location)),
+            "is_empty" => Some(self.is_empty(args, location)),
             "contains" => Some(self.contains(args, location)),
             "get" => Some(self.get(args, location)),
             "keys" => Some(self.keys(args, location)),
@@ -896,6 +897,26 @@ impl AstRuntime {
             )
         })?;
         Ok(Value::Number(length))
+    }
+
+    fn is_empty(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
+        let values = self.evaluate_builtin_arguments("is_empty", args, 1, 1, location)?;
+        let is_empty = match &values[0] {
+            Value::Text(value) => value.is_empty(),
+            Value::Array(values) => values.is_empty(),
+            Value::Object(entries) => entries.is_empty(),
+            value => {
+                return Err(self.error_at(
+                    location,
+                    format!(
+                        "is_empty expects a text, array, or object value, got {}",
+                        value.type_name()
+                    ),
+                    None,
+                ));
+            }
+        };
+        Ok(Value::Bool(is_empty))
     }
 
     fn contains(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
@@ -1418,6 +1439,9 @@ let ticket = { status: "open", count: 2 }
 print(length(owners))
 print(length("hé"))
 print(length(ticket))
+print(is_empty(""))
+print(is_empty(owners))
+print(is_empty({}))
 print(contains(owners, "Bea"))
 print(contains("SolveLang", "Lang"))
 print(contains(ticket, "status"))
@@ -1443,6 +1467,9 @@ print(entries(ticket))
                 Value::Number(2),
                 Value::Number(2),
                 Value::Number(2),
+                Value::Bool(true),
+                Value::Bool(false),
+                Value::Bool(true),
                 Value::Bool(true),
                 Value::Bool(true),
                 Value::Bool(true),
@@ -1473,6 +1500,10 @@ print(entries(ticket))
                 "length expects a text, array, or object value",
             ),
             (
+                "print(is_empty(1))",
+                "is_empty expects a text, array, or object value",
+            ),
+            (
                 "print(contains(\"1\", 1))",
                 "contains expects a text search value for text",
             ),
@@ -1494,6 +1525,10 @@ print(entries(ticket))
             (
                 "print(length(\"one\", \"two\"))",
                 "length expects 1 argument but received 2",
+            ),
+            (
+                "print(is_empty(\"one\", \"two\"))",
+                "is_empty expects 1 argument but received 2",
             ),
             (
                 "print(keys({ one: 1 }, { two: 2 }))",
