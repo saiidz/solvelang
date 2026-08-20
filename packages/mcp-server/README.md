@@ -27,6 +27,7 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_graph_alternative_paths` — enumerates bounded deterministic simple dependency or dependent paths between stable node IDs.
 - `solvelang_graph_explain_alternative_paths` — runs the bounded alternative-path query and returns deterministic path explanations with explicit depth, path-count, and traversal-state truncation truth.
 - `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
+- `solvelang_graph_explain_impact` — runs the same bounded dependent-impact traversal and returns deterministic structural explanations with explicit query-versus-presentation truncation truth.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
 
 For n8n analysis and reports, provide exactly one of:
@@ -49,12 +50,14 @@ The shortest-path explanation tool reuses that exact bounded implementation and 
 
 Alternative-path queries enumerate deterministic simple paths and are bounded independently by depth, returned path count, and traversal-state count. The alternative-path explanation tool reuses that exact query contract. It distinguishes a complete result set from bounded partial evidence, reports when additional paths may exist, preserves dependency-versus-dependent edge orientation, and returns only safe structural node summaries. Its schema is `solvelang.mcp.solve-graph.alternative-paths-explanation.v0`.
 
+Impact queries traverse inbound dependency relationships from one or more changed node IDs, excluding containment-only noise unless callers explicitly choose different edge kinds. The impact explanation tool validates parent chains and underlying dependent-edge orientation against the canonical graph, reconstructs bounded root-to-dependent paths, and distinguishes traversal truncation from explanation-row truncation. It states no-impact absence only after a complete configured traversal. Its schema is `solvelang.mcp.solve-graph.impact-explanation.v0`.
+
 ## Security boundaries
 
 - Workspace-relative paths only; traversal outside the configured root is rejected.
 - Maximum input size: 2 MB for files and raw JSON, including Solve Graph documents.
 - Maximum n8n node count: 5,000.
-- Solve Graph traversal roots: at most 128; dependency/dependent and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable.
+- Solve Graph traversal roots: at most 128; dependency/dependent, impact, and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable; impact explanation rows: at most 256.
 - No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
 - Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
 - Malformed input errors do not echo supplied workflow or graph content.
