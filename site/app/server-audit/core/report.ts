@@ -1,6 +1,7 @@
 import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditArtifactFindings } from "./artifactFindings";
+import { createServerAuditBackupLogConsistencyFindings } from "./backupLogConsistencyFindings";
 import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
@@ -77,6 +78,7 @@ function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFindi
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
   const findings = sortFindings([
     ...createBaselineFindings(snapshot),
+    ...createServerAuditBackupLogConsistencyFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditArtifactFindings(snapshot),
