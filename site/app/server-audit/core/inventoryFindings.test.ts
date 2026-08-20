@@ -32,6 +32,10 @@ function inconsistentSnapshot(): ServerAuditSnapshot {
         { path: "/srv/private/customer-a/public", owner: "owner-a", mode: "0755" },
         { path: "/srv/private/customer-a/public", owner: "owner-b", mode: "0750" },
       ],
+      certificates: [
+        { name: "private-cert.example", notAfter: "2026-09-01T00:00:00.000Z", daysRemaining: 17 },
+        { name: "private-cert.example", notAfter: "2026-09-08T00:00:00.000Z", daysRemaining: 24 },
+      ],
     },
     metadata: { redactionsApplied: true },
   };
@@ -48,6 +52,7 @@ test("Server Audit report composes inventory consistency evidence without raw na
       "Service inventory reports conflicting state",
       "Filesystem inventory reports conflicting capacity",
       "Web-root inventory reports conflicting metadata",
+      "Certificate inventory reports conflicting expiry metadata",
       "Process inventory reports conflicting identity",
       "Process inventory reports impossible self-parenting",
       "Process inventory reports cyclic parentage",
@@ -62,6 +67,7 @@ test("Server Audit report composes inventory consistency evidence without raw na
   assert.equal(serialized.includes("private-process-b"), false);
   assert.equal(serialized.includes("private-process-c"), false);
   assert.equal(serialized.includes("private-process-d"), false);
+  assert.equal(serialized.includes("private-cert.example"), false);
   assert.equal(serialized.includes("/srv/private-volume"), false);
   assert.equal(serialized.includes("/srv/private/customer-a/public"), false);
   assert.ok(serialized.includes("packages[0]"));
@@ -69,6 +75,7 @@ test("Server Audit report composes inventory consistency evidence without raw na
   assert.ok(serialized.includes("filesystems[0]"));
   assert.ok(serialized.includes("processes[0]"));
   assert.ok(serialized.includes("web.roots[0]"));
+  assert.ok(serialized.includes("web.certificates[0]"));
 });
 
 test("inventory report integration stays deterministic across generation timestamps", () => {
