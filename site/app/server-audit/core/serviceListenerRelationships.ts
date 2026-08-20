@@ -151,6 +151,7 @@ export function analyzeServerAuditServiceListenerRelationships(
   let ambiguousListenerAttributions = 0;
   let unresolvedListenerAttributions = 0;
   let invalidListenerLabelsSkipped = 0;
+  let totalRelationshipCandidates = 0;
   listeners.forEach((listener, listenerIndex) => {
     const label = normalizedAttributionLabel(listener.process);
     if (!label) {
@@ -164,27 +165,34 @@ export function analyzeServerAuditServiceListenerRelationships(
       unresolvedListenerAttributions += 1;
       return;
     }
-    const sortedProcessIndexes = [...processIndexes].sort((left, right) => left - right);
-    const kind: ServerAuditServiceListenerRelationshipKind = sortedProcessIndexes.length === 1
+
+    // Both index lists are populated in ascending snapshot order. Count every candidate
+    // relationship exactly, but only materialize the configured bounded prefix so a
+    // repeated label cannot create an O(services * listeners) object explosion.
+    const kind: ServerAuditServiceListenerRelationshipKind = processIndexes.length === 1
       ? "service-listener"
       : "ambiguous-service-listener";
-    serviceIndexes.sort((left, right) => left - right).forEach((serviceIndex) => {
-      if (kind === "service-listener") listenerRelationshipsFound += 1;
-      else ambiguousListenerAttributions += 1;
+    totalRelationshipCandidates += serviceIndexes.length;
+    if (kind === "service-listener") listenerRelationshipsFound += serviceIndexes.length;
+    else ambiguousListenerAttributions += serviceIndexes.length;
+
+    const remaining = maxRelationships - relationships.length;
+    if (remaining <= 0) return;
+    for (let offset = 0; offset < Math.min(remaining, serviceIndexes.length); offset += 1) {
+      const serviceIndex = serviceIndexes[offset];
       relationships.push(relationship(kind, [
         `services[${serviceIndex}]`,
         `listeningSockets[${listenerIndex}]`,
-        ...sortedProcessIndexes.map((index) => `processes[${index}]`),
+        ...processIndexes.map((index) => `processes[${index}]`),
       ]));
-    });
+    }
   });
 
   relationships.sort((left, right) => left.id.localeCompare(right.id));
-  const boundedRelationships = relationships.slice(0, maxRelationships);
   return {
     schema: "solvelang.server-audit.service-listener-relationships.v0",
     mode: "analyze-only",
-    relationships: boundedRelationships,
+    relationships,
     summary: {
       servicesChecked: services.length,
       processesChecked: processes.length,
@@ -197,7 +205,7 @@ export function analyzeServerAuditServiceListenerRelationships(
       skippedServiceNames,
       invalidProcessLabelsSkipped,
       invalidListenerLabelsSkipped,
-      relationshipsWithTruncatedSources: boundedRelationships.filter((entry) => entry.sourcesTruncated).length,
+      relationshipsWithTruncatedSources: relationships.filter((entry) => entry.sourcesTruncated).length,
     },
     execution: {
       networkAccess: false,
@@ -205,7 +213,7 @@ export function analyzeServerAuditServiceListenerRelationships(
       maxRelationships,
       maxSourcesPerRelationship: MAX_SOURCES_PER_RELATIONSHIP,
       maxAttributionLabelBytes: MAX_ATTRIBUTION_LABEL_BYTES,
-      relationshipsTruncated: relationships.length > maxRelationships,
+      relationshipsTruncated: totalRelationshipCandidates > maxRelationships,
     },
   };
 }

@@ -22,6 +22,7 @@ import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverag
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
+import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditWebInventoryCoverageFindings } from "./webInventoryCoverageFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
@@ -125,6 +126,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditServiceCoverageFindings(snapshot),
     ...createServerAuditScheduledJobCoverageFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
+    ...createServerAuditServiceListenerRelationshipFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLogCoverageFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
@@ -178,6 +180,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
       "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
+      "Service-listener relationship findings use only conservative exact static-label matches across supplied service, process, and listener records; ambiguous, unresolved, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, exposure, runtime health, or collector authority.",
       "Package-version evidence findings report explicit empty inventories plus missing or non-specific supplied versions; they do not prove package discovery completeness, collector authority, or vulnerability status.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
