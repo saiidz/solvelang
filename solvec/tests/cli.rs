@@ -165,6 +165,26 @@ ask SupportBot("Help")
 }
 
 #[test]
+fn safe_mode_executes_array_for_loops() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_for_loop.solve",
+        r#"
+let values = [2, 3, 5]
+let total = 0
+for value in values {
+    total = total + value
+}
+print(total)
+"#,
+    );
+
+    let output = run_solvec(&["run", "--safe", &file]);
+
+    assert!(output.starts_with(ADVISORY_LABEL));
+    assert!(output.contains("10"));
+}
+
+#[test]
 fn tokens_command_prints_lexer_tokens() {
     let file = write_temp_solve_file("solvelang_cli_tokens.solve", "let name = \"Saiid\"\n");
     let output = run_solvec(&["tokens", &file]);

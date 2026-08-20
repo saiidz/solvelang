@@ -368,6 +368,40 @@ impl AstRuntime {
 
                 Ok(None)
             }
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                location,
+            } => {
+                let values = match self.eval(iterable)? {
+                    Value::Array(values) => values,
+                    _ => {
+                        return Err(self.error_at(
+                            iterable.location,
+                            "for loops require an array iterable",
+                            Some(
+                                "Use an array value after 'in', such as: for item in items { ... }"
+                                    .to_string(),
+                            ),
+                        ));
+                    }
+                };
+                if values.len() > 10_000 {
+                    return Err(self.error_at(
+                        *location,
+                        "loop stopped after 10000 iterations",
+                        Some("Iterate over an array with at most 10000 items.".to_string()),
+                    ));
+                }
+                for value in values {
+                    self.vars.insert(name.clone(), value);
+                    if let Some(value) = self.execute_block(body)? {
+                        return Ok(Some(value));
+                    }
+                }
+                Ok(None)
+            }
             Stmt::Agent {
                 name,
                 instruction,
@@ -1153,6 +1187,9 @@ let count = 0
 while count < 2 {
     count = count + 1
 }
+for value in values {
+    count = count + value
+}
 let parsed = json_parse("{\"name\":\"SolveLang\",\"count\":2}")
 let encoded = json_stringify({ name: parsed.name, count: count })
 if user.active {
@@ -1165,6 +1202,62 @@ if user.active {
         let mut runtime = AstRuntime::default();
 
         runtime.run(&statements).expect("runtime succeeds");
+    }
+
+    #[test]
+    fn iterates_arrays_in_nested_loops_and_propagates_returns() {
+        let statements = parse(
+            r#"
+fn first_match(groups) {
+    for group in groups {
+        for value in group {
+            if value == 3 {
+                return value
+            }
+        }
+    }
+    return 0
+}
+let result = first_match([[1, 2], [3, 4]])
+print(result)
+"#,
+        );
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::unrestricted(),
+            "",
+            "test.solve",
+            None,
+            true,
+        );
+
+        runtime.run(&statements).expect("runtime succeeds");
+        assert_eq!(runtime.outputs(), &[Value::Number(3)]);
+    }
+
+    #[test]
+    fn reports_a_source_located_error_for_non_array_for_iterables() {
+        let source = "for item in 42 { print(item) }\n";
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::unrestricted(),
+            source,
+            "for.solve",
+            None,
+            false,
+        );
+        let error = runtime
+            .run(&parse(source))
+            .expect_err("non-array iterables should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("for loops require an array iterable")
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("on line 1, column 13 in for.solve")
+        );
     }
 
     #[test]

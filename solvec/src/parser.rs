@@ -55,6 +55,7 @@ impl Parser {
             Token::Fn => self.function_statement(),
             Token::If => self.if_statement(),
             Token::While => self.while_statement(),
+            Token::For => self.for_statement(),
             Token::Agent => self.agent_statement(),
             Token::Ask => self.ask_statement(),
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
@@ -164,6 +165,26 @@ impl Parser {
         let body = self.block()?;
         Some(Stmt::While {
             condition,
+            body,
+            location,
+        })
+    }
+
+    fn for_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let name = self.consume_identifier("Expected loop variable name after 'for'.")?;
+        if !self.consume(
+            &Token::In,
+            "Invalid for loop: expected 'in' after loop variable.",
+            "Use syntax like: for item in items { ... }",
+        ) {
+            return None;
+        }
+        let iterable = self.expression();
+        let body = self.block()?;
+        Some(Stmt::For {
+            name,
+            iterable,
             body,
             location,
         })
@@ -693,6 +714,7 @@ let count = 0
 count = count + 1
 fn first(values) { return values[0] }
 while count < 2 { count = count + 1 }
+for score in user.scores { print(score) }
 print(user.name)
 "#,
         )
@@ -701,7 +723,18 @@ print(user.name)
         assert!(matches!(ast[2], Stmt::Assign { .. }));
         assert!(matches!(ast[3], Stmt::Function { .. }));
         assert!(matches!(ast[4], Stmt::While { .. }));
-        assert!(matches!(ast[5], Stmt::Print { .. }));
+        assert!(matches!(ast[5], Stmt::For { .. }));
+        assert!(matches!(ast[6], Stmt::Print { .. }));
+    }
+
+    #[test]
+    fn reports_a_source_located_error_for_malformed_for_loops() {
+        let errors = parse("for item items { print(item) }\n")
+            .expect_err("for loops require the in keyword");
+
+        assert!(errors.iter().any(|error| {
+            error.line == 1 && error.column == 10 && error.message.contains("expected 'in'")
+        }));
     }
 
     #[test]

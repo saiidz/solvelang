@@ -898,7 +898,9 @@ fn collect_function_names<'a>(statements: &'a [Stmt], names: &mut HashSet<&'a st
                 collect_function_names(then_branch, names);
                 collect_function_names(else_branch, names);
             }
-            Stmt::While { body, .. } => collect_function_names(body, names),
+            Stmt::While { body, .. } | Stmt::For { body, .. } => {
+                collect_function_names(body, names)
+            }
             _ => {}
         }
     }
@@ -950,6 +952,10 @@ fn preflight_statements(
                 condition, body, ..
             } => {
                 preflight_expr(condition, hardened, function_names)?;
+                preflight_statements(body, input_injected, hardened, function_names)?;
+            }
+            Stmt::For { iterable, body, .. } => {
+                preflight_expr(iterable, hardened, function_names)?;
                 preflight_statements(body, input_injected, hardened, function_names)?;
             }
             Stmt::Agent { .. } if hardened => {

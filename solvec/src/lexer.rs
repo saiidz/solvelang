@@ -6,6 +6,8 @@ pub enum Token {
     If,
     Else,
     While,
+    For,
+    In,
     Agent,
     Tool,
     Instruction,
@@ -281,6 +283,8 @@ fn keyword_or_identifier(word: &str) -> Token {
         "if" => Token::If,
         "else" => Token::Else,
         "while" => Token::While,
+        "for" => Token::For,
+        "in" => Token::In,
         "agent" => Token::Agent,
         "tool" => Token::Tool,
         "instruction" => Token::Instruction,
@@ -318,6 +322,17 @@ print("ok" .. "!")
         assert!(kinds.contains(&Token::Print));
         assert!(kinds.contains(&Token::Join));
         assert!(kinds.contains(&Token::Text("ok".to_string())));
+    }
+
+    #[test]
+    fn tokenizes_for_in_keywords() {
+        let kinds = lex("for item in items {}")
+            .into_iter()
+            .map(|located| located.token)
+            .collect::<Vec<_>>();
+
+        assert!(kinds.contains(&Token::For));
+        assert!(kinds.contains(&Token::In));
     }
 
     #[test]

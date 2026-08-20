@@ -218,7 +218,7 @@ Conditions use truthiness. `false` and `null` are falsey; other values are truth
 
 ## Loops
 
-`while` loops are supported.
+`while` loops and array iteration are supported.
 
 ```solve
 let count = 0
@@ -230,6 +230,16 @@ while count < 3 {
 ```
 
 The runtime stops a loop after 10,000 iterations as a safety guard.
+
+Use `for item in items` to visit every value in an array. The loop variable is assigned for each iteration, including within nested loops. A non-array iterable is a source-located runtime error, and arrays longer than 10,000 items are rejected before the loop body runs.
+
+```solve
+let owners = ["Ari", "Bea"]
+
+for owner in owners {
+  print(owner)
+}
+```
 
 ## Functions
 
