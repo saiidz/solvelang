@@ -26,12 +26,14 @@ test("keeps local LSP and formatting inert until explicitly enabled", async () =
   assert.equal(settings["solvelang.languageServer.enabled"].default, false);
   assert.equal(settings["solvelang.languageServer.command"].default, "solvelsp");
   assert.equal(settings["solvelang.formatter.enabled"].default, false);
-  assert.deepEqual(settings["solvelang.formatter.args"].default, ["fmt"]);
+  assert.equal(settings["solvelang.formatter.command"].default, "solvec");
+  assert.equal(settings["solvelang.formatter.args"], undefined);
 
   const extension = await readFile(path.join(root, "extension.js"), "utf8");
   assert.match(extension, /languageServer\.enabled/);
   assert.match(extension, /formatter\.enabled/);
   assert.match(extension, /LanguageClient/);
-  assert.match(extension, /execFileAsync\(command, \[\.\.\.args, document\.uri\.fsPath\]/);
+  assert.match(extension, /execFileAsync\(command, \["fmt", document\.uri\.fsPath\]/);
+  assert.doesNotMatch(extension, /formatter\.args/);
   assert.doesNotMatch(extension, /solvec run/);
 });
