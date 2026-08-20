@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { SolveGraphQueryIndex } from "../solve-graph/core/query-impact";
+import { createSolveGraphImpactQueryProduct } from "../solve-graph/core/impact-query-product";
+import { RepositoryAuditImpactExplanationPanel } from "./RepositoryAuditImpactExplanationPanel";
 import type {
   RepositoryAuditVisualExplorer,
   RepositoryAuditVisualExplorerNode,
@@ -9,6 +12,7 @@ import { createRepositoryAuditVisualExplorerPresentation } from "./core/visualEx
 
 type RepositoryAuditVisualExplorerPanelProps = {
   explorer: RepositoryAuditVisualExplorer;
+  impactIndex?: SolveGraphQueryIndex;
   className?: string;
 };
 
@@ -20,6 +24,7 @@ function visibleNodeLabel(node: RepositoryAuditVisualExplorerNode): string {
 
 export function RepositoryAuditVisualExplorerPanel({
   explorer,
+  impactIndex,
   className = "",
 }: RepositoryAuditVisualExplorerPanelProps) {
   const [query, setQuery] = useState("");
@@ -44,6 +49,22 @@ export function RepositoryAuditVisualExplorerPanel({
     () => new Map(presentation.nodes.map((node) => [node.id, node] as const)),
     [presentation.nodes],
   );
+  const impactProduct = useMemo(() => {
+    if (!impactIndex || !selectedNodeId) return undefined;
+    if (impactIndex.document.graphId !== explorer.graphId) {
+      throw new Error("Repository Audit visual explorer impact index must match the explorer graph.");
+    }
+    return createSolveGraphImpactQueryProduct(impactIndex, {
+      changedNodeIds: [selectedNodeId],
+      query: {
+        maxDepth: 6,
+        maxResults: 200,
+      },
+      presentation: {
+        maxRows: 40,
+      },
+    });
+  }, [explorer.graphId, impactIndex, selectedNodeId]);
 
   return (
     <section className={`rounded-[2rem] border border-cyan-200 bg-cyan-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
@@ -176,6 +197,23 @@ export function RepositoryAuditVisualExplorerPanel({
           </div>
         </div>
       </div>
+
+      {impactProduct && impactIndex ? (
+        <div className="mt-8">
+          <p className="mb-3 text-xs font-semibold text-slate-600">
+            Selected-node impact uses the canonical bounded graph, not the currently filtered explorer rows. Query cap: {impactProduct.request.maxResults ?? 200} result(s), depth {impactProduct.request.maxDepth ?? 6}; explanation cap: {impactProduct.request.presentationMaxRows ?? 40} row(s).
+          </p>
+          <RepositoryAuditImpactExplanationPanel
+            index={impactIndex}
+            result={impactProduct.query}
+            options={{ maxRows: impactProduct.request.presentationMaxRows ?? 40 }}
+          />
+        </div>
+      ) : impactIndex ? (
+        <p className="mt-8 rounded-2xl border border-dashed border-violet-200 bg-white p-5 text-sm text-slate-600">
+          Select a visible node to explain its bounded dependent impact across the canonical analyzed graph.
+        </p>
+      ) : null}
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
         Graph {presentation.graphId} · schema {presentation.schema} · network access disabled · write access disabled
