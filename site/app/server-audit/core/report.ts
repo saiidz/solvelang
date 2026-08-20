@@ -3,6 +3,7 @@ import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditArtifactFindings } from "./artifactFindings";
 import { createServerAuditBackupLogConsistencyFindings } from "./backupLogConsistencyFindings";
 import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
+import { createServerAuditCertificateCoverageFindings } from "./certificateCoverageFindings";
 import { createServerAuditCertificateExpiryFallbackFindings } from "./certificateExpiryFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
@@ -107,6 +108,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditPublicFileCoverageFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
+    ...createServerAuditCertificateCoverageFindings(snapshot),
     ...createServerAuditCertificateExpiryFallbackFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
     ...createServerAuditWebListenerFindings(snapshot),
@@ -147,6 +149,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
       "Public-file coverage findings compare only the fixed reviewed marker checks for available candidate web roots; missing or contradictory marker evidence is a completeness/integrity signal and does not prove exposure or safety.",
       "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
+      "Certificate-coverage findings report only supplied certificate records that lack both notAfter and daysRemaining evidence; they do not prove endpoint absence, certificate invalidity, collector authority, or which certificate is actively served.",
       "Certificate-expiry fallback findings derive an alert window only from a supplied notAfter timestamp when daysRemaining is absent; they do not identify the actively served certificate or perform endpoint validation.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
       "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
