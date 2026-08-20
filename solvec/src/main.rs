@@ -1,16 +1,6 @@
-mod ai;
-mod ast;
-mod ast_runtime;
-mod diagnostics;
-mod formatter;
-mod lexer;
-mod lint;
-mod parser;
-mod semantic;
-mod value;
-
-use ast::{Expr, ExprKind, Stmt};
-use ast_runtime::ExecutionPolicy;
+use solvec::ast::{Expr, ExprKind, Stmt};
+use solvec::ast_runtime::ExecutionPolicy;
+use solvec::{ast_runtime, diagnostics, formatter, lexer, lint, parser, semantic, value};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
