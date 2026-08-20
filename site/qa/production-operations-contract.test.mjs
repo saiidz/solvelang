@@ -15,3 +15,14 @@ test("production operations runbook requires a sanitized incident record and ver
   assert.match(runbook, /verified recovery, a completed state-preserving rollback, or an explicit handoff/);
   assert.match(runbook, /Do not mark recovery solely because an alert stopped firing/);
 });
+
+test("restore drills require an isolated target and preserve active application routing", async () => {
+  const runbook = await readFile(operationsUrl, "utf8");
+
+  assert.match(runbook, /intended UTC recovery point/);
+  assert.match(runbook, /recovery table name differs from the source/);
+  assert.match(runbook, /not referenced by active application configuration, aliases, or traffic routes/);
+  assert.match(runbook, /abort the drill if that cannot be established/);
+  assert.match(runbook, /do not switch application configuration as part of the drill/);
+  assert.match(runbook, /Never overwrite a healthy production table during a drill/);
+});

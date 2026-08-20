@@ -61,12 +61,13 @@ TTL-based ephemeral data can still use PITR, but restoration must not be treated
 
 Before public production availability:
 
-1. document each production table name and retention setting;
-2. restore a table to a new recovery table name;
-3. verify encryption and access controls;
-4. validate representative records without exposing secret material;
-5. document how application configuration would be switched to restored data if required;
-6. delete the drill recovery table only after evidence is retained.
+1. document each production table name, retention setting, and intended UTC recovery point;
+2. before requesting a restore, verify that the recovery table name differs from the source and is not referenced by active application configuration, aliases, or traffic routes; abort the drill if that cannot be established from the approved operational record;
+3. restore the source table only to that new recovery table name;
+4. verify encryption and access controls;
+5. validate representative records without exposing secret material;
+6. document a separately approved configuration-switch and rollback path; do not switch application configuration as part of the drill;
+7. delete the drill recovery table only after evidence is retained.
 
 Never overwrite a healthy production table during a drill.
 
