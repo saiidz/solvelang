@@ -56,6 +56,42 @@ test("records only explicit repository-local GitHub Action references", async ()
   ]);
 });
 
+test("distinguishes static repository-local reusable workflow calls from local actions", async () => {
+  const workflowText = [
+    "jobs:",
+    "  verify:",
+    "    uses: ./.github/workflows/reusable.yml",
+    "  missing:",
+    "    uses: './.github/workflows/missing.yaml'",
+    "  action:",
+    "    steps:",
+    "      - uses: ./.github/actions/setup",
+    "  external:",
+    "    uses: octo-org/reusable/.github/workflows/check.yml@v1",
+  ].join("\n");
+  const input = snapshot([
+    { path: ".github/workflows/verify.yml", text: workflowText },
+    { path: ".github/workflows/reusable.yml", text: "on: workflow_call" },
+    { path: ".github/actions/setup/action.yml", text: "name: setup" },
+  ]);
+  const analysis = await createRepositoryConfigurationReferenceAnalysis(input, await graph([
+    ".github/workflows/verify.yml",
+    ".github/workflows/reusable.yml",
+    ".github/actions/setup/action.yml",
+  ]));
+
+  assert.deepEqual(
+    analysis.references.map((reference) => [reference.kind, reference.rawReference, reference.targetPath, reference.targetState]),
+    [
+      ["github-local-action", "./.github/actions/setup", ".github/actions/setup/action.yml", "present"],
+      ["github-reusable-workflow", "./.github/workflows/missing.yaml", ".github/workflows/missing.yaml", "missing"],
+      ["github-reusable-workflow", "./.github/workflows/reusable.yml", ".github/workflows/reusable.yml", "present"],
+    ],
+  );
+  assert.equal(analysis.execution.networkAccess, false);
+  assert.equal(analysis.execution.writeAccess, false);
+});
+
 test("maps repository-local TypeScript extends and project references conservatively", async () => {
   const input = snapshot([
     {
