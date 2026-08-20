@@ -60,7 +60,7 @@ export function createServerAuditScheduledJobRelationshipFindings(
       severity: "info",
       category: "evidence-integrity",
       title: "Scheduled job maps to multiple collected targets",
-      summary: `A collected scheduled-job record has ${relationships.length} exact-name-token relationship(s) to supplied service/process records.${sourcesTruncated ? " Structural source evidence was truncated." : ""} Multiple targets can be intentional and do not by themselves prove duplicate execution or incorrect ownership.`,
+      summary: `A collected scheduled-job record has ${relationships.length} emitted exact-name-token relationship(s) to supplied service/process records.${sourcesTruncated ? " Structural source evidence was truncated." : ""} Multiple targets can be intentional and do not by themselves prove duplicate execution or incorrect ownership.`,
       recommendation: "Review the same-snapshot scheduled-job and target records before using this static relationship evidence for ownership or execution conclusions.",
       evidence: [
         ...boundedSources.map((source) => ({
@@ -121,10 +121,10 @@ export function createServerAuditScheduledJobRelationshipFindings(
       id: stableId([
         "scheduled-job",
         "partial",
-        analysis.execution.jobsTruncated ? "jobs" : "",
-        analysis.execution.targetsTruncated ? "targets" : "",
-        analysis.execution.relationshipsTruncated ? "relationships" : "",
-        String(analysis.execution.oversizedCommandSummariesSkipped),
+        analysis.execution.jobsTruncated ? `jobs:${analysis.execution.maxJobs}` : "",
+        analysis.execution.targetsTruncated ? `targets:${analysis.execution.maxTargets}` : "",
+        analysis.execution.relationshipsTruncated ? `relationships:${analysis.execution.maxRelationships}` : "",
+        `oversized:${analysis.execution.oversizedCommandSummariesSkipped}`,
       ]),
       severity: "info",
       category: "coverage",
