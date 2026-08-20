@@ -28,6 +28,7 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_graph_explain_alternative_paths` — runs the bounded alternative-path query and returns deterministic path explanations with explicit depth, path-count, and traversal-state truncation truth.
 - `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
 - `solvelang_graph_explain_impact` — runs the same bounded dependent-impact traversal and returns deterministic structural explanations with explicit query-versus-presentation truncation truth.
+- `solvelang_graph_affected_validations` — finds bounded structural test, workflow, and job candidates among a changed node's transitive dependents, with query-versus-presentation truncation truth.
 - `solvelang_graph_cycles` — finds bounded deterministic strongly connected components and representative directed cycles; a cycle is structural evidence, not automatically a defect.
 - `solvelang_graph_hotspots` — ranks bounded structural hotspot candidates by direct and transitive dependents without claiming runtime criticality.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
@@ -54,6 +55,8 @@ Alternative-path queries enumerate deterministic simple paths and are bounded in
 
 Impact queries traverse inbound dependency relationships from one or more changed node IDs, excluding containment-only noise unless callers explicitly choose different edge kinds. The impact explanation tool validates parent chains and underlying dependent-edge orientation against the canonical graph, reconstructs bounded root-to-dependent paths, and distinguishes traversal truncation from explanation-row truncation. It states no-impact absence only after a complete configured traversal. Its schema is `solvelang.mcp.solve-graph.impact-explanation.v0`.
 
+Affected-validation queries reuse the bounded impact traversal and return only `test`, `workflow`, and `job` nodes found in that structural evidence. They preserve each candidate's root, depth, and graph-edge evidence, while separately reporting traversal truncation and validation-output truncation. They do not execute validations or assert that graph extraction captures all validation selection conditions.
+
 Cycle queries scan the selected graph edges deterministically for strongly connected components, return stable component IDs and one representative directed cycle per component, and keep component-count and per-component-node output truncation explicit. They do not interpret a structural cycle as an error, runtime loop, or defect.
 
 Hotspot queries score eligible structural candidates from explicit selected edge kinds, first by bounded transitive dependents and then direct dependents. They exclude containment noise by default, state candidate-count and per-hotspot impact truncation separately, and do not claim that a candidate is runtime-critical or defective.
@@ -66,6 +69,7 @@ Hotspot queries score eligible structural candidates from explicit selected edge
 - Solve Graph traversal roots: at most 128; dependency/dependent, impact, and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable; impact explanation rows: at most 256.
 - Cycle output: at most 100 components and 100 nodes per returned component; the full selected graph is analyzed before output bounds are applied.
 - Hotspot output: at most 100 candidates; each candidate's bounded dependent traversal is limited by the same depth/result limits as impact analysis.
+- Affected-validation output: at most 100 structural candidates; each query uses the same maximum depth and result limits as impact analysis.
 - No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
 - Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
 - Malformed input errors do not echo supplied workflow or graph content.

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
+import { findSolveGraphAffectedValidations } from "./solve-graph-affected-validations.js";
 import { findSolveGraphCycles } from "./solve-graph-cycles.js";
 import { findSolveGraphHotspots } from "./solve-graph-hotspots.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
@@ -97,6 +98,15 @@ const solveGraphImpactExplanationInputSchema = z.object({
   maxDepth: z.number().int().min(0).max(64).optional(),
   maxResults: z.number().int().min(1).max(10_000).optional(),
   maxRows: z.number().int().min(1).max(256).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphAffectedValidationsInputSchema = z.object({
+  ...solveGraphInputFields,
+  changedNodeIds: z.array(z.string().regex(/^sgn_[a-f0-9]{32}$/)).min(1).max(128),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(64).optional(),
+  maxResults: z.number().int().min(1).max(10_000).optional(),
+  maxValidations: z.number().int().min(1).max(100).optional(),
 }).superRefine(requireExactlyOneInput);
 
 const solveGraphCyclesInputSchema = z.object({
@@ -374,6 +384,21 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_affected_validations",
+  {
+    title: "Find affected Solve Graph validation candidates",
+    description: "Find bounded structural test, workflow, and job candidates among transitive dependents of changed stable node IDs. Results are graph evidence only and do not establish runtime test selection or completeness.",
+    inputSchema: solveGraphAffectedValidationsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, changedNodeIds, edgeKinds, maxDepth, maxResults, maxValidations }) => textResult(findSolveGraphAffectedValidations(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    changedNodeIds,
+    { edgeKinds, maxDepth, maxResults, maxValidations },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_cycles",
   {
     title: "Find Solve Graph cycles",
@@ -428,6 +453,7 @@ server.registerTool(
       "solvelang_graph_explain_alternative_paths",
       "solvelang_graph_impact",
       "solvelang_graph_explain_impact",
+      "solvelang_graph_affected_validations",
       "solvelang_graph_cycles",
       "solvelang_graph_hotspots",
       "solvelang_capabilities",
