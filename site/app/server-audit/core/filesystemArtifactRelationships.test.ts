@@ -112,7 +112,7 @@ test("filesystem-artifact output is deterministic and relationship-bounded", () 
   );
 });
 
-test("relationship sources are capped while preserving truncation truth", () => {
+test("relationship sources are capped while retaining the artifact source and truncation truth", () => {
   const input = snapshot();
   input.filesystems = Array.from({ length: 40 }, () => ({ mount: "/var" }));
   input.logs = [{ path: "/var/log/app.log" }];
@@ -122,6 +122,7 @@ test("relationship sources are capped while preserving truncation truth", () => 
   assert.equal(analysis.relationships.length, 1);
   assert.equal(analysis.relationships[0].kind, "ambiguous-filesystem-log");
   assert.equal(analysis.relationships[0].sources.length, analysis.execution.maxSourcesPerRelationship);
+  assert.equal(analysis.relationships[0].sources.at(-1), "logs[0]");
   assert.equal(analysis.relationships[0].sourcesTruncated, true);
   assert.equal(analysis.summary.relationshipsWithTruncatedSources, 1);
 });
