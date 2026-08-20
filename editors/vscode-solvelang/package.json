@@ -54,13 +54,7 @@
         "solvelang.formatter.command": {
           "type": "string",
           "default": "solvec",
-          "description": "Local solvec executable used for formatting."
-        },
-        "solvelang.formatter.args": {
-          "type": "array",
-          "default": ["fmt"],
-          "items": { "type": "string" },
-          "description": "Arguments before the document path, normally [\"fmt\"]."
+          "description": "Local solvec executable used for the fixed fmt subcommand."
         }
       }
     }
