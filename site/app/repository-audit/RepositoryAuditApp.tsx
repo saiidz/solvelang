@@ -434,7 +434,12 @@ export function RepositoryAuditApp() {
           {result.intelligence.architecturePaths.status === "partial" ? <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Architecture-path evidence is partial because one or more graph or traversal bounds were reached.</p> : null}
         </section>
 
-        <RepositoryAuditVisualExplorerPanel explorer={result.browserIntelligence.visualExplorer} impactIndex={result.impactIndex} className="mt-8" />
+        <RepositoryAuditVisualExplorerPanel
+          explorer={result.browserIntelligence.visualExplorer}
+          impactIndex={result.impactIndex}
+          workflowEvidence={result.intelligence.workflowPathEvidence}
+          className="mt-8"
+        />
         <RepositoryAuditDeploymentPathPanel presentation={result.browserIntelligence.deploymentPaths} className="mt-8" />
         {result.browserIntelligence.frameworkPaths ? (
           <RepositoryAuditFrameworkPathPanel presentation={result.browserIntelligence.frameworkPaths} className="mt-8" />
