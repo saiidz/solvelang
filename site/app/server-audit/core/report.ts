@@ -11,6 +11,7 @@ import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
+import { createServerAuditListenerCoverageFindings } from "./listenerCoverageFindings";
 import { createServerAuditLogCoverageFindings } from "./logCoverageFindings";
 import { createServerAuditStaleLogFindings } from "./staleLogFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
@@ -116,6 +117,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
+    ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLogCoverageFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
@@ -164,6 +166,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
+      "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Package-version evidence findings report explicit empty inventories plus missing or non-specific supplied versions; they do not prove package discovery completeness, collector authority, or vulnerability status.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
