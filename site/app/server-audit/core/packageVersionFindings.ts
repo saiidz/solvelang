@@ -48,6 +48,18 @@ export function createServerAuditPackageVersionFindings(
   if (packages === undefined) return [];
 
   const candidates: ServerAuditFinding[] = [];
+  if (packages.length === 0) {
+    candidates.push({
+      id: stableId(["package-version-evidence", "empty-inventory"]),
+      severity: "info",
+      category: "coverage",
+      title: "No package records supplied",
+      summary: "The snapshot contains an explicit empty package inventory, so installed-package and version posture cannot be evaluated from this evidence.",
+      recommendation: "Re-collect the bounded package inventory with the reviewed read-only collector before relying on package or version posture. Do not infer vulnerability status from this finding; no advisory or CVE database was consulted.",
+      evidence: [{ source: "packages", summary: "0 package records" }],
+    });
+  }
+
   packages.forEach((entry, index) => {
     const normalized = entry.version.trim().toLowerCase();
     const missing = normalized.length === 0;
