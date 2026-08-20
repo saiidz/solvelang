@@ -29,6 +29,7 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
 - `solvelang_graph_explain_impact` — runs the same bounded dependent-impact traversal and returns deterministic structural explanations with explicit query-versus-presentation truncation truth.
 - `solvelang_graph_cycles` — finds bounded deterministic strongly connected components and representative directed cycles; a cycle is structural evidence, not automatically a defect.
+- `solvelang_graph_hotspots` — ranks bounded structural hotspot candidates by direct and transitive dependents without claiming runtime criticality.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
 
 For n8n analysis and reports, provide exactly one of:
@@ -55,6 +56,8 @@ Impact queries traverse inbound dependency relationships from one or more change
 
 Cycle queries scan the selected graph edges deterministically for strongly connected components, return stable component IDs and one representative directed cycle per component, and keep component-count and per-component-node output truncation explicit. They do not interpret a structural cycle as an error, runtime loop, or defect.
 
+Hotspot queries score eligible structural candidates from explicit selected edge kinds, first by bounded transitive dependents and then direct dependents. They exclude containment noise by default, state candidate-count and per-hotspot impact truncation separately, and do not claim that a candidate is runtime-critical or defective.
+
 ## Security boundaries
 
 - Workspace-relative paths only; traversal outside the configured root is rejected.
@@ -62,6 +65,7 @@ Cycle queries scan the selected graph edges deterministically for strongly conne
 - Maximum n8n node count: 5,000.
 - Solve Graph traversal roots: at most 128; dependency/dependent, impact, and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable; impact explanation rows: at most 256.
 - Cycle output: at most 100 components and 100 nodes per returned component; the full selected graph is analyzed before output bounds are applied.
+- Hotspot output: at most 100 candidates; each candidate's bounded dependent traversal is limited by the same depth/result limits as impact analysis.
 - No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
 - Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
 - Malformed input errors do not echo supplied workflow or graph content.

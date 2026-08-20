@@ -19,6 +19,8 @@ const expectedFiles = [
   "package/dist/src/solve-graph-alternative-paths.js",
   "package/dist/src/solve-graph-cycles.d.ts",
   "package/dist/src/solve-graph-cycles.js",
+  "package/dist/src/solve-graph-hotspots.d.ts",
+  "package/dist/src/solve-graph-hotspots.js",
   "package/dist/src/solve-graph-impact-explanation.d.ts",
   "package/dist/src/solve-graph-impact-explanation.js",
   "package/dist/src/solve-graph-ranked-search.d.ts",
@@ -101,6 +103,8 @@ try {
   );
   assert.match(installedEntrypoint, /solvelang_graph_cycles/, "packed consumer must include the cycle MCP tool registration");
   assert.match(installedEntrypoint, /findSolveGraphCycles/, "packed consumer must compose the registered cycle tool through the reviewed cycle contract");
+  assert.match(installedEntrypoint, /solvelang_graph_hotspots/, "packed consumer must include the hotspot MCP tool registration");
+  assert.match(installedEntrypoint, /findSolveGraphHotspots/, "packed consumer must compose the registered hotspot tool through the reviewed hotspot contract");
 
   const workspaceRoot = path.join(temporaryRoot, "workspace");
   await mkdir(workspaceRoot);
