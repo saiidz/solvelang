@@ -81,6 +81,7 @@ function eventRecord({
   accountId,
   createdAtMs,
   payloadFingerprint: fingerprint,
+  expiresAt,
 }) {
   return {
     eventId,
@@ -89,7 +90,7 @@ function eventRecord({
     accountId,
     payloadFingerprint: fingerprint,
     createdAt: new Date(createdAtMs).toISOString(),
-    expiresAt: Math.floor(createdAtMs / 1_000) + 60 * 60 * 24 * 400,
+    expiresAt,
   };
 }
 
@@ -191,6 +192,8 @@ export function createSubscriptionLifecycleService({
       }
       const createdAtMs = event.created * 1_000;
       const subscriptionEventOrder = eventOrder(event.created, rawStatus, plan);
+      const processingStartedAt = now();
+      if (!Number.isSafeInteger(processingStartedAt) || processingStartedAt <= 0) throw new Error("Subscription event clock is invalid.");
       const fingerprint = payloadFingerprint([
         eventId,
         eventType,
@@ -210,9 +213,8 @@ export function createSubscriptionLifecycleService({
         accountId,
         createdAtMs,
         payloadFingerprint: fingerprint,
+        expiresAt: Math.floor(processingStartedAt / 1_000) + 60 * 60 * 24 * 400,
       });
-      const processingStartedAt = now();
-      if (!Number.isSafeInteger(processingStartedAt) || processingStartedAt <= 0) throw new Error("Subscription event clock is invalid.");
       const token = claimToken();
       if (typeof token !== "string" || !token || token.length > 200) throw new Error("Subscription event claim token is invalid.");
       const claim = await eventStore.claimEvent(record, {

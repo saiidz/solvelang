@@ -136,6 +136,24 @@ test("maps signed subscription item periods into deterministic API account order
   assert.match(events[0].payloadFingerprint, /^[a-f0-9]{64}$/);
 });
 
+test("delayed lifecycle events retain their replay record from receipt time", async () => {
+  const events = [];
+  const receivedAt = 1_820_000_000_000;
+  const lifecycle = createSubscriptionLifecycleService({
+    apiAccessService: lifecycleApiService(),
+    eventStore: lifecycleEventStore({ onClaim: async (record) => { events.push(record); return "claimed"; } }),
+    priceIds,
+    now: () => receivedAt,
+    claimToken: () => "claim_1",
+  });
+  const delayed = stripeEvent({ id: "evt_delayed", created: 1_700_000_000 });
+
+  await lifecycle.processEvent(delayed);
+
+  assert.equal(events[0].createdAt, "2023-11-14T22:13:20.000Z");
+  assert.equal(events[0].expiresAt, Math.floor(receivedAt / 1_000) + 60 * 60 * 24 * 400);
+});
+
 test("normalizes the successful checkout card when an active subscription is provisioned", async () => {
   const normalized = [];
   const lifecycle = createSubscriptionLifecycleService({
