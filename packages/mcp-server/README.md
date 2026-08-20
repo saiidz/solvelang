@@ -25,6 +25,7 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_graph_shortest_path` — finds one deterministic bounded shortest dependency or dependent path between stable node IDs and returns safe node summaries plus relationship/traversal hops.
 - `solvelang_graph_explain_shortest_path` — runs the same bounded shortest-path query and returns a deterministic human-readable explanation with explicit complete-versus-partial search truth.
 - `solvelang_graph_alternative_paths` — enumerates bounded deterministic simple dependency or dependent paths between stable node IDs.
+- `solvelang_graph_explain_alternative_paths` — runs the bounded alternative-path query and returns deterministic path explanations with explicit depth, path-count, and traversal-state truncation truth.
 - `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
 
@@ -40,18 +41,20 @@ For Solve Graph tools, provide exactly one of:
 - `path`: a workspace-relative canonical `solvelang.graph.v0` JSON document; or
 - `rawJson`: canonical graph JSON supplied directly to the MCP tool.
 
-Solve Graph input is accepted only when it is analyze-only, declares `networkAccess=false` and `writeAccess=false`, has stable canonical node/edge IDs, and passes its SHA-256 integrity check. The MCP transport returns only bounded node summaries and traversal evidence; it never executes repository code or mutates the graph or workspace. The MCP-facing tool names use underscore-safe identifiers, while responses preserve deterministic Solve Graph contracts such as `solve_graph.find_nodes`, `solve_graph.search_nodes`, `solve_graph.dependencies`, `solve_graph.dependents`, `solve_graph.shortest_path`, and the `solvelang.mcp.solve-graph.shortest-path-explanation.v0` explanation schema for downstream handling.
+Solve Graph input is accepted only when it is analyze-only, declares `networkAccess=false` and `writeAccess=false`, has stable canonical node/edge IDs, and passes its SHA-256 integrity check. The MCP transport returns only bounded node summaries and traversal evidence; it never executes repository code or mutates the graph or workspace. The MCP-facing tool names use underscore-safe identifiers, while responses preserve deterministic Solve Graph query contracts and explicit explanation schemas for downstream handling.
 
 Shortest-path queries are breadth-first and deterministic. They can be limited by edge kind, direction, depth, and visited-node count. A no-path response distinguishes complete absence from a bounded search that stopped at a depth or visited-node boundary. For dependent-direction paths, each hop reports both the underlying graph-edge orientation and the traversal orientation so callers do not have to infer reversal semantics.
 
-The explanation tool reuses that exact bounded shortest-path implementation and then applies the reviewed explanation contract. Found paths become ordered safe structural steps; complete no-path searches state absence only within the configured graph scope; bounded searches explicitly state that absence is not proven. Explanation output remains analyze-only with network and write access fixed to false.
+The shortest-path explanation tool reuses that exact bounded implementation and then applies the reviewed explanation contract. Found paths become ordered safe structural steps; complete no-path searches state absence only within the configured graph scope; bounded searches explicitly state that absence is not proven. Explanation output remains analyze-only with network and write access fixed to false.
+
+Alternative-path queries enumerate deterministic simple paths and are bounded independently by depth, returned path count, and traversal-state count. The alternative-path explanation tool reuses that exact query contract. It distinguishes a complete result set from bounded partial evidence, reports when additional paths may exist, preserves dependency-versus-dependent edge orientation, and returns only safe structural node summaries. Its schema is `solvelang.mcp.solve-graph.alternative-paths-explanation.v0`.
 
 ## Security boundaries
 
 - Workspace-relative paths only; traversal outside the configured root is rejected.
 - Maximum input size: 2 MB for files and raw JSON, including Solve Graph documents.
 - Maximum n8n node count: 5,000.
-- Solve Graph traversal roots: at most 128; depth: at most 64; result count or shortest-path visited-node count: at most 10,000.
+- Solve Graph traversal roots: at most 128; dependency/dependent and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable.
 - No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
 - Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
 - Malformed input errors do not echo supplied workflow or graph content.
