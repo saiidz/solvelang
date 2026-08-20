@@ -7,6 +7,7 @@ const templateUrl = new URL("services/api-access/customer-priority-production-st
 const workflowUrl = new URL(".github/workflows/deploy-customer-priority-production-foundation.yml", root);
 const policyUrl = new URL("ops/aws/production-priority-foundation-deploy-supplemental-policy.json", root);
 const preflightPolicyUrl = new URL("ops/aws/production-preflight-policy.json", root);
+const preflightSupplementUrl = new URL("ops/aws/production-priority-preflight-supplemental-policy.json", root);
 const queueUrl = new URL("services/api-access/scripts/wait-for-production-deployment-turn.mjs", root);
 
 async function text(url) { return readFile(url, "utf8"); }
@@ -85,6 +86,20 @@ test("production preflight role can read the priority stack without mutation aut
     assert.match(action, /^cloudformation:(Describe|Get|List)/);
     assert.doesNotMatch(action, /Create|Update|Delete|Execute/);
   }
+});
+
+test("priority preflight supplement grants only DescribeStacks on the exact priority stack", async () => {
+  const policy = JSON.parse(await text(preflightSupplementUrl));
+  assert.equal(policy.Version, "2012-10-17");
+  assert.equal(policy.Statement.length, 1);
+  const [statement] = policy.Statement;
+  assert.equal(statement.Sid, "ReadProductionPriorityStack");
+  assert.equal(statement.Effect, "Allow");
+  assert.equal(statement.Action, "cloudformation:DescribeStacks");
+  assert.equal(
+    statement.Resource,
+    "arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-priority/*",
+  );
 });
 
 test("priority foundation deployment supplement cannot mutate IAM, KMS, SES, Stripe, or unrelated S3/SQS resources", async () => {
