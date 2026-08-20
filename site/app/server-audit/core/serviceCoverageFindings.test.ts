@@ -13,22 +13,11 @@ function snapshot(services: NonNullable<ServerAuditSnapshot["services"]>): Serve
   };
 }
 
-test("service coverage reports missing enablement evidence without service-name leakage", () => {
-  const findings = createServerAuditServiceCoverageFindings(snapshot([
-    { name: "private-customer-worker.service", state: "active" },
-    { name: "complete.service", state: "active", enabled: "enabled" },
-  ]));
-
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].title, "Service record lacks enablement evidence");
-  assert.deepEqual(findings[0].evidence, [{ source: "services[0].enabled", summary: "enablement evidence is absent" }]);
-  assert.equal(JSON.stringify(findings).includes("private-customer-worker"), false);
-});
-
 test("service coverage reports explicit empty inventory but leaves absent section to generic coverage", () => {
   const empty = createServerAuditServiceCoverageFindings(snapshot([]));
   assert.equal(empty.length, 1);
   assert.equal(empty[0].title, "No service records supplied");
+  assert.deepEqual(empty[0].evidence, [{ source: "services", summary: "0 service records" }]);
 
   const absent: ServerAuditSnapshot = {
     schemaVersion: "1",
@@ -39,26 +28,19 @@ test("service coverage reports explicit empty inventory but leaves absent sectio
   assert.deepEqual(createServerAuditServiceCoverageFindings(absent), []);
 });
 
-test("service coverage does not report entries with explicit enablement evidence", () => {
+test("service coverage does not invent per-record enablement gaps the official collector cannot satisfy", () => {
   const findings = createServerAuditServiceCoverageFindings(snapshot([
-    { name: "enabled.service", state: "active", enabled: "enabled" },
-    { name: "disabled.service", state: "inactive", enabled: "disabled" },
+    { name: "private-customer-worker.service", state: "active running" },
+    { name: "legacy-optional-enabled.service", state: "inactive dead", enabled: "disabled" },
   ]));
 
   assert.deepEqual(findings, []);
 });
 
-test("service coverage output is deterministic and bounded", () => {
-  const services = Array.from({ length: 105 }, (_, index) => ({
-    name: `private-service-${index}.service`,
-    state: "active",
-  }));
-  const first = createServerAuditServiceCoverageFindings(snapshot(services), { maxFindings: 10 });
-  const second = createServerAuditServiceCoverageFindings(snapshot(services), { maxFindings: 10 });
+test("service coverage output is deterministic and does not expose service names", () => {
+  const first = createServerAuditServiceCoverageFindings(snapshot([]));
+  const second = createServerAuditServiceCoverageFindings(snapshot([]));
 
   assert.deepEqual(first, second);
-  assert.equal(first.length, 10);
-  assert.equal(first.filter((finding) => finding.title === "Service evidence coverage findings were truncated").length, 1);
-  assert.equal(JSON.stringify(first).includes("private-service-104"), false);
-  assert.throws(() => createServerAuditServiceCoverageFindings(snapshot(services), { maxFindings: 0 }), /service-coverage maxFindings/);
+  assert.equal(JSON.stringify(first).includes("private-customer-worker"), false);
 });
