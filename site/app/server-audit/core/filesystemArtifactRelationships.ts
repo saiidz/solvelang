@@ -92,12 +92,15 @@ function relationship(
   kind: ServerAuditFilesystemArtifactRelationshipKind,
   allSources: string[],
 ): ServerAuditFilesystemArtifactRelationship {
-  const sources = allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP);
+  const truncated = allSources.length > MAX_SOURCES_PER_RELATIONSHIP;
+  const sources = truncated
+    ? [...allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP - 1), allSources[allSources.length - 1]]
+    : allSources;
   return {
     id: stableId(kind, allSources),
     kind,
     sources,
-    ...(allSources.length > sources.length ? { sourcesTruncated: true as const } : {}),
+    ...(truncated ? { sourcesTruncated: true as const } : {}),
   };
 }
 
