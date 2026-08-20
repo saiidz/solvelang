@@ -7,9 +7,9 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-Immediately before this handoff refresh branch was created, `main` was `27b143d1a7b547e9337b1b1b1a0a3055c82ab93c`, the merge of PR #169. The safe non-production PR queue was **zero**.
+Immediately before this handoff refresh branch was created, `main` was `ef1f809cfe073cae6d2aa57df772e2225fafa1a0`, the merge of PR #443. The safe non-production PR queue was **zero**.
 
-The previously protected repository-preparation PRs are now merged in repository history:
+The previously protected repository-preparation PRs are merged in repository history:
 
 - #161 — account/CRM rollback preservation, merged as `fdc68a0b7aea9aecb1d6921e3c258df3d53c74f9`;
 - #164 — validation-only production customer-priority preflight, merged as `16d04e32f7b1be18bf7f887a320bfcc716d32c13`;
@@ -31,7 +31,8 @@ Recent safe milestones that must not be recreated include:
 - #358→#364 — bounded Angular/Nest framework-path evidence/artifact/presentation/browser integration;
 - #365→#371 — bounded Angular target `options.tsConfig` evidence/artifact/presentation/browser integration;
 - #372 — bounded deterministic Solve Graph shortest-path query;
-- #373 — read-only MCP exposure for bounded Solve Graph shortest paths.
+- #373 — read-only MCP exposure for bounded Solve Graph shortest paths;
+- #432/#436/#439/#441/#442/#443 — bounded shortest-path product bundle verification, browser visualization/export, query-product composition, and the final one-file product explorer. #437/#438/#440 are closed superseded predecessors and must not be revived.
 
 Older foundational work remains in history, including deterministic ingestion, graph integrity, JavaScript/TypeScript and Python relationships, Server Audit privacy/consistency/process/package/certificate evidence, Trusted Mac/Windows controls, RustSec remediation, account/API/Admin foundations, and production deployment serialization hardening. Do not rebuild merged generations merely because older handoffs mention predecessor PR numbers.
 
@@ -62,7 +63,7 @@ The #161/#164/#169 repository merges do not change those live-state facts by the
 
 ## Repository Audit state
 
-Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary path analysis; bounded visual-explorer/browser presentation; deterministic ranked search and shortest-path MCP exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
+Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary path analysis; bounded visual-explorer/browser presentation; deterministic ranked search and shortest-path query/product/browser flows; read-only MCP exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
 
 Current safe priorities:
 
@@ -76,7 +77,7 @@ Repository Audit write/remediation mode remains disabled.
 
 ## Solve Graph state
 
-Solve Graph remains deterministic and analyze-only. Current merged query/reference work includes JavaScript/TypeScript imports/references, Python local imports, explicit local PHP literal include/require relationships, local TypeScript/Angular configuration references, ranked node search, bounded dependency/dependent traversal, bounded shortest-path queries, impact analysis, architecture/security summaries, affected-validation mapping, and read-only MCP exposure.
+Solve Graph remains deterministic and analyze-only. Current merged query/reference work includes JavaScript/TypeScript imports/references, Python local imports, explicit local PHP literal include/require relationships, local TypeScript/Angular configuration references, ranked node search, bounded dependency/dependent traversal, bounded shortest-path queries, integrity-covered shortest-path product composition, impact analysis, architecture/security summaries, affected-validation mapping, and read-only MCP exposure.
 
 Do not execute repository source to improve graph coverage. Prefer conservative parser/config evidence and explicit partial/unknown states over guessed relationships.
 
