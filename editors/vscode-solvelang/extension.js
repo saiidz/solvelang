@@ -45,12 +45,11 @@ async function formatDocument() {
     return;
   }
   const command = setting("formatter.command");
-  const args = setting("formatter.args");
   try {
-    await execFileAsync(command, [...args, document.uri.fsPath], { windowsHide: true });
+    await execFileAsync(command, ["fmt", document.uri.fsPath], { windowsHide: true });
     await vscode.commands.executeCommand("workbench.action.files.revert");
   } catch {
-    vscode.window.showErrorMessage("SolveLang formatting failed. Check the configured solvec command and formatter arguments.");
+    vscode.window.showErrorMessage("SolveLang formatting failed. Check the configured solvec command.");
   }
 }
 
