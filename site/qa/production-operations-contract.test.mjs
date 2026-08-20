@@ -17,6 +17,13 @@ test("production operations runbook requires a sanitized incident record and ver
   assert.match(runbook, /Do not mark recovery solely because an alert stopped firing/);
 });
 
+test("production operations log policy excludes raw request and exception material", async () => {
+  const runbook = await readFile(operationsUrl, "utf8");
+
+  assert.match(runbook, /raw request or response bodies/);
+  assert.match(runbook, /caught exception messages or stack traces/);
+});
+
 test("restore drills require an isolated target and preserve active application routing", async () => {
   const runbook = await readFile(operationsUrl, "utf8");
 
