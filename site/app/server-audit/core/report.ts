@@ -17,6 +17,7 @@ import { createServerAuditPackageVersionFindings } from "./packageVersionFinding
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
+import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
 import { createServerAuditWebListenerFindings } from "./webListenerFindings";
@@ -114,6 +115,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
+    ...createServerAuditServiceCoverageFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLogCoverageFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
@@ -161,6 +163,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
+      "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
       "Public-file coverage findings compare only the fixed reviewed marker checks for available candidate web roots; missing or contradictory marker evidence is a completeness/integrity signal and does not prove exposure or safety.",
