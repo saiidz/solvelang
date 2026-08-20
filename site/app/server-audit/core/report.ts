@@ -23,6 +23,7 @@ import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
+import { createServerAuditWebInventoryCoverageFindings } from "./webInventoryCoverageFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
 import { createServerAuditWebListenerFindings } from "./webListenerFindings";
 
@@ -133,6 +134,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditCertificateCoverageFindings(snapshot),
     ...createServerAuditCertificateExpiryFallbackFindings(snapshot),
+    ...createServerAuditWebInventoryCoverageFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
     ...createServerAuditWebListenerFindings(snapshot),
     ...createServerAuditFilesystemArtifactRelationshipFindings(snapshot),
@@ -183,6 +185,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
       "Certificate-coverage findings report only supplied certificate records that lack both notAfter and daysRemaining evidence; they do not prove endpoint absence, certificate invalidity, collector authority, or which certificate is actively served.",
       "Certificate-expiry fallback findings derive an alert window only from a supplied notAfter timestamp when daysRemaining is absent; they do not identify the actively served certificate or perform endpoint validation.",
+      "Web-inventory coverage findings report only explicit empty web-server, web-root, or TLS-certificate inventories from the fixed local probes; they do not prove those surfaces are absent, that discovery was complete or authoritative, or that any endpoint is publicly reachable.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
       "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
