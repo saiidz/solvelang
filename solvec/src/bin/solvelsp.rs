@@ -4,7 +4,10 @@
 //! incremental changes, workspace access, and execution are intentionally unsupported.
 
 use serde_json::{Value, json};
-use solvec::{ast::Stmt, lexer, parser};
+use solvec::{
+    ast::{SourceLocation, Stmt},
+    lexer, parser,
+};
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 
@@ -37,8 +40,8 @@ fn symbols(text: &str) -> Vec<Value> {
     }).collect()
 }
 
-fn definition(text: &str, line: usize, character: usize) -> Value {
-    let token = lexer::lex(text)
+fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
+    lexer::lex(text)
         .into_iter()
         .find_map(|located| match located.token {
             lexer::Token::Identifier(name)
@@ -49,25 +52,61 @@ fn definition(text: &str, line: usize, character: usize) -> Value {
                 Some(name)
             }
             _ => None,
-        });
-    let Some(name) = token else {
-        return Value::Null;
-    };
+        })
+}
+
+fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static str)> {
     let mut parser = parser::Parser::new(lexer::lex(text));
     let Ok(statements) = parser.parse() else {
+        return None;
+    };
+    statements
+        .into_iter()
+        .find_map(|statement| match statement {
+            Stmt::Let {
+                name: declared,
+                location,
+                ..
+            } if declared == name => Some((location, "variable")),
+            Stmt::Function {
+                name: declared,
+                location,
+                ..
+            } if declared == name => Some((location, "function")),
+            Stmt::Agent {
+                name: declared,
+                location,
+                ..
+            } if declared == name => Some((location, "agent")),
+            _ => None,
+        })
+}
+
+fn definition(text: &str, line: usize, character: usize) -> Value {
+    let Some(name) = identifier_at_position(text, line, character) else {
         return Value::Null;
     };
-    statements.into_iter().find_map(|statement| match statement {
-        Stmt::Let { name: declared, location, .. } | Stmt::Function { name: declared, location, .. } | Stmt::Agent { name: declared, location, .. } if declared == name => Some(json!({"uri":"","range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        _ => None,
-    }).unwrap_or(Value::Null)
+    let Some((location, _)) = top_level_symbol(text, &name) else {
+        return Value::Null;
+    };
+    json!({"uri":"","range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})
+}
+
+fn hover(text: &str, line: usize, character: usize) -> Value {
+    let Some(name) = identifier_at_position(text, line, character) else {
+        return Value::Null;
+    };
+    let Some((_, kind)) = top_level_symbol(text, &name) else {
+        return Value::Null;
+    };
+    json!({"contents":{"kind":"markdown","value":format!("`{name}`\n\nTop-level SolveLang {kind}.")}})
 }
 
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -107,6 +146,25 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
             if let Some(location) = result.as_object_mut() {
                 location.insert("uri".to_string(), Value::String(uri.to_string()));
             }
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
+            ]
+        }
+        Some("textDocument/hover") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let position = &message["params"]["position"];
+            let result = documents
+                .get(uri)
+                .map(|text| {
+                    hover(
+                        text,
+                        position["line"].as_u64().unwrap_or(0) as usize,
+                        position["character"].as_u64().unwrap_or(0) as usize,
+                    )
+                })
+                .unwrap_or(Value::Null);
             vec![
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
@@ -170,6 +228,7 @@ mod tests {
             &mut HashMap::new(),
         );
         assert_eq!(output[0]["result"]["capabilities"]["textDocumentSync"], 1);
+        assert_eq!(output[0]["result"]["capabilities"]["hoverProvider"], true);
     }
 
     #[test]
@@ -209,5 +268,29 @@ mod tests {
             &mut documents,
         );
         assert_eq!(output[0]["result"]["uri"], "file:///test.solve");
+    }
+
+    #[test]
+    fn hover_describes_open_document_top_level_symbols_only() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(output[0]["result"]["contents"]["kind"], "markdown");
+        assert_eq!(
+            output[0]["result"]["contents"]["value"],
+            "`item`\n\nTop-level SolveLang variable."
+        );
+
+        let unopened = process_message(
+            json!({"id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///missing.solve"},"position":{"line":0,"character":0}}}),
+            &mut documents,
+        );
+        assert!(unopened[0]["result"].is_null());
     }
 }
