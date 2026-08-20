@@ -259,7 +259,6 @@ test("creates and completes payment-method setup with server-owned customer and 
     ["setup-create", {
       customer: "cus_1",
       usage: "off_session",
-      payment_method_types: ["card"],
       metadata: { accountId: "acct_1", purpose: "api_subscription_payment_method" },
     }],
     ["setup-retrieve", "seti_1"],

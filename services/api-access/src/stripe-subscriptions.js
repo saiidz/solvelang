@@ -162,7 +162,6 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       return stripe.setupIntents.create({
         customer: customerId,
         usage: "off_session",
-        payment_method_types: ["card"],
         metadata: { accountId, purpose: "api_subscription_payment_method" },
       });
     },
