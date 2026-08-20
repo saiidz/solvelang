@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "solvelang.production-monitoring-contract.v1",
+  "mode": "repository-readiness-only",
+  "authorizesDeployment": false,
+  "surfaces": [
+    {
+      "id": "customer-auth",
+      "activationGate": "customer authentication must not be newly exposed until these signals have an owner-routed alert implementation",
+      "signals": [
+        "customer-api-lambda-errors",
+        "customer-api-lambda-throttles",
+        "authorizer-lambda-errors",
+        "authorizer-lambda-throttles",
+        "sanitized-authorization-denial-spike"
+      ],
+      "evidence": "sanitized request IDs and error codes only"
+    },
+    {
+      "id": "subscription-billing",
+      "activationGate": "subscription billing remains disabled until these signals have an owner-routed alert implementation",
+      "signals": [
+        "webhook-processing-failure",
+        "webhook-handler-lambda-errors",
+        "stripe-webhook-delivery-health"
+      ],
+      "evidence": "sanitized request IDs and error codes only"
+    },
+    {
+      "id": "priority-queue",
+      "activationGate": "priority queue processing and provider execution remain disabled until these signals have an owner-routed alert implementation",
+      "signals": [
+        "queue-visible-messages",
+        "queue-oldest-message-age",
+        "queue-dead-letter-messages",
+        "worker-lambda-errors",
+        "worker-lambda-throttles"
+      ],
+      "evidence": "sanitized job IDs and error codes only"
+    }
+  ],
+  "prohibitions": [
+    "No provider account, topic, destination, resource identifier, credential, or deployment configuration is stored in this contract.",
+    "A future implementation must record the deployed alarm resources and owner-controlled notification target outside this repository contract before activation."
+  ]
+}

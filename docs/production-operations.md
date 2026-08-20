@@ -8,6 +8,8 @@ These controls define the minimum operational baseline for the API access/billin
 
 Production must have alerts routed to an owner-controlled notification target for:
 
+The provider-neutral, repository-only [monitoring readiness contract](production-monitoring-contract.json) locks the required future signals and activation gates for customer authentication, subscription billing, and priority queues. It contains no provider account, resource, notification target, or deployment configuration and does not authorize activation.
+
 ### API Lambda
 
 - `Errors >= 1` over 5 minutes for the customer/API handler.
