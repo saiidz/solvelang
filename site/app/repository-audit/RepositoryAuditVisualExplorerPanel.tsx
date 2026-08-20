@@ -68,13 +68,16 @@ export function RepositoryAuditVisualExplorerPanel({
       maxRows: 40,
     });
   }, [explorer, impactIndex, selectedNodeId]);
-  const intelligenceRequestKey = impactIndex
-    ? createRepositorySelectedNodeIntelligenceRequestKey(
-      explorer.graphId,
-      workflowEvidence?.graphId,
-      selectedNodeId,
-    )
-    : undefined;
+  const intelligenceRequestKey = useMemo(
+    () => impactIndex
+      ? createRepositorySelectedNodeIntelligenceRequestKey(
+        explorer.graphId,
+        workflowEvidence,
+        selectedNodeId,
+      )
+      : undefined,
+    [explorer.graphId, impactIndex, selectedNodeId, workflowEvidence],
+  );
 
   useEffect(() => {
     if (!impactIndex || !workflowEvidence || !selectedNodeId || !intelligenceRequestKey) return;
