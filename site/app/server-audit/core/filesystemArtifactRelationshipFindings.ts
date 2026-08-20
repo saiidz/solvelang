@@ -36,14 +36,21 @@ export function createServerAuditFilesystemArtifactRelationshipFindings(
 
   for (const relationship of analysis.relationships) {
     if (relationship.kind !== "ambiguous-filesystem-log" && relationship.kind !== "ambiguous-filesystem-backup") continue;
+    const evidence = relationship.sources.map((source) => ({ source, summary: relationship.kind }));
+    if (relationship.sourcesTruncated) {
+      evidence.push({
+        source: relationship.id,
+        summary: `source fanout truncated at ${analysis.execution.maxSourcesPerRelationship} entries; artifact source retained`,
+      });
+    }
     findings.push({
       id: stableId(["filesystem-artifact", relationship.kind, relationship.id]),
       severity: "medium",
       category: "evidence-integrity",
       title: ambiguityTitle(relationship.kind),
-      summary: "The artifact path matched more than one equally specific collected filesystem mount. The finding uses structural snapshot indexes only and does not choose an authoritative mount.",
+      summary: `The artifact path matched more than one equally specific collected filesystem mount. The finding uses structural snapshot indexes only and does not choose an authoritative mount.${relationship.sourcesTruncated ? " The source fanout was truncated, with the triggering artifact source retained." : ""}`,
       recommendation: "Re-collect filesystem and artifact inventory with the reviewed collector, remove duplicate/contradictory mount evidence, and avoid drawing storage-posture conclusions until the mapping is unambiguous.",
-      evidence: relationship.sources.map((source) => ({ source, summary: relationship.kind })),
+      evidence,
     });
   }
 
