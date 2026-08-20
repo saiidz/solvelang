@@ -112,7 +112,8 @@ export function RepositoryAuditVisualExplorerPanel({
     ? intelligenceState
     : undefined;
   const activeProduct = activeIntelligenceState?.product;
-  const activeIntelligence = activeProduct?.selectedNodeId === selectedNodeId
+  const activeIntelligence = activeProduct
+    && activeProduct.selectedNodeId === selectedNodeId
     && activeProduct.graphId === explorer.graphId
     ? activeProduct
     : undefined;
@@ -177,7 +178,7 @@ export function RepositoryAuditVisualExplorerPanel({
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenNodesByFilter} hidden by filter</span>
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenNodesByLimit} hidden by node limit</span>
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenEdgesByLimit} hidden by edge limit</span>
-        {presentation.summary.selectedNodeShown ? <span className="rounded-full bg-cyan-100 px-3 py-1.5 text-cyan-900">{presentation.summary.directNeighborsShown} direct neighbor(s)</span> : null}
+        {presentation.summary.selectedNodeShown ? <span className="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-semibold text-cyan-900">{presentation.summary.directNeighborsShown} direct neighbor(s)</span> : null}
       </div>
 
       {presentation.status === "partial" ? (
