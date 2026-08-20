@@ -54,7 +54,7 @@ function workflowEvidence(
   };
 }
 
-test("creates a deterministic request key only for an actionable selection", () => {
+test("creates a deterministic compact request key only for an actionable selection", () => {
   const evidence = workflowEvidence("graph-a");
   const requestKey = createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, "node-a");
 
@@ -62,9 +62,17 @@ test("creates a deterministic request key only for an actionable selection", () 
     requestKey,
     createRepositorySelectedNodeIntelligenceRequestKey("graph-a", { ...evidence }, "node-a"),
   );
-  assert.match(requestKey ?? "", /^selected-intelligence:/);
+  assert.match(requestKey ?? "", /^selected-intelligence:v1:[a-f0-9]{32}$/);
   assert.equal(createRepositorySelectedNodeIntelligenceRequestKey("graph-a", undefined, "node-a"), undefined);
   assert.equal(createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, undefined), undefined);
+});
+
+test("keeps request identity compact for a large accepted workflow target", () => {
+  const evidence = workflowEvidence("graph-a", `packages/${"a".repeat(128 * 1024)}/package-lock.json`);
+  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, "node-a");
+
+  assert.match(requestKey ?? "", /^selected-intelligence:v1:[a-f0-9]{32}$/);
+  assert.ok((requestKey?.length ?? Number.POSITIVE_INFINITY) < 80);
 });
 
 test("changes request identity when bounded workflow evidence changes on the same graph and node", () => {
@@ -96,6 +104,20 @@ test("changes request identity when bounded workflow evidence changes on the sam
   assert.equal(view.pending, true);
   assert.equal(view.product, undefined);
   assert.equal(view.error, "");
+});
+
+test("changes request identity when workflow partial-truth metadata changes", () => {
+  const previousEvidence = workflowEvidence("graph-a");
+  const currentEvidence: RepositoryWorkflowPathEvidenceAnalysis = {
+    ...previousEvidence,
+    status: "partial",
+    skipped: { ...previousEvidence.skipped, dynamicReferences: 1 },
+  };
+
+  assert.notEqual(
+    createRepositorySelectedNodeIntelligenceRequestKey("graph-a", previousEvidence, "node-a"),
+    createRepositorySelectedNodeIntelligenceRequestKey("graph-a", currentEvidence, "node-a"),
+  );
 });
 
 test("treats a prior request result as pending after a rapid selection change", () => {
