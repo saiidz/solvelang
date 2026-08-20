@@ -50,6 +50,11 @@ type RelationshipSeed = {
   syntax: DockerComposeServiceRelationship["evidence"]["syntax"];
 };
 
+type StaticMappingEntry = {
+  key: string;
+  tail: string;
+};
+
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -71,6 +76,14 @@ function literalServiceName(value: string): string | undefined {
   const unquoted = trimmed.replace(/^(?:"([^"]*)"|'([^']*)')$/, "$1$2");
   if (!/^[A-Za-z0-9_.-]+$/.test(unquoted)) return undefined;
   return unquoted;
+}
+
+function staticMappingEntry(value: string): StaticMappingEntry | undefined {
+  const match = /^((?:"[^"]*"|'[^']*'|[A-Za-z0-9_.-]+))\s*:\s*(.*)$/.exec(value);
+  if (!match) return undefined;
+  const key = literalServiceName(match[1]!);
+  if (!key) return undefined;
+  return { key, tail: match[2]! };
 }
 
 function parseInlineList(value: string): string[] | undefined {
@@ -119,9 +132,9 @@ export function analyzeDockerComposeServiceRelationships(
     }
     if (indent <= servicesIndent) break;
 
-    const serviceMatch = /^([A-Za-z0-9_.-]+)\s*:\s*$/.exec(trimmed);
-    if (indent === servicesIndent + 2 && serviceMatch) {
-      currentService = serviceMatch[1]!;
+    const serviceEntry = staticMappingEntry(trimmed);
+    if (indent === servicesIndent + 2 && serviceEntry && serviceEntry.tail.trim() === "") {
+      currentService = serviceEntry.key;
       currentServiceIndent = indent;
       dependsOnIndent = undefined;
       services.add(currentService);
@@ -163,9 +176,9 @@ export function analyzeDockerComposeServiceRelationships(
       continue;
     }
 
-    const mappingMatch = /^([A-Za-z0-9_.-]+)\s*:\s*.*$/.exec(trimmed);
-    if (mappingMatch) {
-      seeds.push({ fromService: currentService, toService: mappingMatch[1]!, syntax: "mapping" });
+    const mappingEntry = staticMappingEntry(trimmed);
+    if (mappingEntry) {
+      seeds.push({ fromService: currentService, toService: mappingEntry.key, syntax: "mapping" });
       continue;
     }
 
