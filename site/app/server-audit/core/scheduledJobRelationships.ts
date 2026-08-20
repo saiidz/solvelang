@@ -38,6 +38,7 @@ export type ServerAuditScheduledJobRelationshipAnalysis = {
     processTargetsObserved: number;
     relationshipsObserved: number;
     jobsWithRelationships: number;
+    jobsWithMultipleRelationships: number;
     unresolvedJobs: number;
   };
   execution: {
@@ -168,6 +169,7 @@ export function analyzeServerAuditScheduledJobRelationships(
   let oversizedCommandSummariesSkipped = 0;
   let relationshipsObserved = 0;
   let jobsWithRelationships = 0;
+  let jobsWithMultipleRelationships = 0;
   const relationships: ServerAuditScheduledJobRelationship[] = [];
 
   boundedJobs.forEach((job, jobIndex) => {
@@ -193,6 +195,9 @@ export function analyzeServerAuditScheduledJobRelationships(
     relationshipsObserved += jobRelationshipCount;
     if (jobRelationshipCount > 0) {
       jobsWithRelationships += 1;
+    }
+    if (jobRelationshipCount > 1) {
+      jobsWithMultipleRelationships += 1;
     }
 
     const remainingRelationshipCapacity = Math.max(0, maxRelationships - relationships.length);
@@ -265,6 +270,7 @@ export function analyzeServerAuditScheduledJobRelationships(
       processTargetsObserved: processes.length,
       relationshipsObserved,
       jobsWithRelationships,
+      jobsWithMultipleRelationships,
       unresolvedJobs: Math.max(0, boundedJobs.length - oversizedCommandSummariesSkipped - jobsWithRelationships),
     },
     execution: {
