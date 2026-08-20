@@ -432,6 +432,7 @@ fn is_builtin(name: &str) -> bool {
         "length"
             | "contains"
             | "get"
+            | "keys"
             | "json_parse"
             | "json_stringify"
             | "http_get"
@@ -508,5 +509,10 @@ mod tests {
     fn accepts_valid_loop_control_statements() {
         let statements = parse("while true { break }\nfor item in [1] { continue }\n");
         assert!(check(&statements).is_ok());
+    }
+
+    #[test]
+    fn recognizes_pure_object_keys_helper() {
+        assert!(check(&parse("print(keys({ beta: 2, alpha: 1 }))\n")).is_ok());
     }
 }
