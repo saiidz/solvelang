@@ -69,6 +69,8 @@ export function createApiAccessHandler({
         "access-control-allow-methods": "GET,POST,OPTIONS",
         "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret,x-solvelang-csrf,stripe-signature",
         "cache-control": "no-store",
+        "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+        "referrer-policy": "no-referrer",
         "x-content-type-options": "nosniff",
         vary: "Origin",
         ...extraHeaders,

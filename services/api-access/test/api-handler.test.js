@@ -85,6 +85,9 @@ test("internal routes require a constant-time admin secret and return the plaint
   assert.equal(issued.statusCode, 201);
   assert.equal(JSON.parse(issued.body).apiKey, "sl_test_once");
   assert.equal(issued.headers["cache-control"], "no-store");
+  assert.equal(issued.headers["content-security-policy"], "default-src 'none'; frame-ancestors 'none'");
+  assert.equal(issued.headers["referrer-policy"], "no-referrer");
+  assert.equal(issued.headers["x-content-type-options"], "nosniff");
 });
 
 test("customer routes support password login, credential setup, cookies, ownership, and CSRF", async () => {
