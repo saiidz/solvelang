@@ -1,4 +1,6 @@
 import type { RepositorySelectedNodeIntelligence } from "./selectedNodeIntelligence";
+import type { RepositoryWorkflowPathEvidenceAnalysis } from "./workflowPathEvidence";
+import { canonicalRepositoryAuditJson } from "./reportIntegrity";
 
 export type RepositorySelectedNodeIntelligenceRequestState = {
   requestKey: string;
@@ -15,11 +17,15 @@ export type RepositorySelectedNodeIntelligenceViewState = {
 
 export function createRepositorySelectedNodeIntelligenceRequestKey(
   explorerGraphId: string,
-  workflowGraphId: string | undefined,
+  workflowEvidence: RepositoryWorkflowPathEvidenceAnalysis | undefined,
   selectedNodeId: string | undefined,
 ): string | undefined {
-  if (!workflowGraphId || !selectedNodeId) return undefined;
-  return `${explorerGraphId}:${workflowGraphId}:${selectedNodeId}`;
+  if (!workflowEvidence || !selectedNodeId) return undefined;
+  return `selected-intelligence:${canonicalRepositoryAuditJson({
+    explorerGraphId,
+    selectedNodeId,
+    workflowEvidence,
+  })}`;
 }
 
 export function resolveRepositorySelectedNodeIntelligenceViewState(
