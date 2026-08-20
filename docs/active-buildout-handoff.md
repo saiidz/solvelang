@@ -8,40 +8,52 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, `main` is `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`, the safe merge of Server Audit security-probe truth PR #611.
+At this refresh, reviewed source `main` is `fa8c669e73d7ef6d764af877513d9cf7558143d5`, the merge of #615 after #614 corrected Server Audit service-state truth.
 
-The safe non-production open-PR queue is **zero**. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action.
+The safe non-production open-PR queue was **zero** at that checkpoint. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action.
 
 The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated.
 
 ## Latest queue-drain checkpoint
 
-The latest Server Audit coverage/report hardening train is fully merged:
+The latest Server Audit truth-hardening train is merged:
 
 - #602/#603 — explicit-empty scheduled-job inventory remains unknown coverage because fixed cron-directory scans can yield no records when directories are missing, unreadable, or contain no qualifying entries; the signal is composed into canonical JSON/HTML reports with structural evidence only.
 - #604 was closed unmerged after newer `main` invalidated its validation; verified successor #606 preserved the reviewed filesystem-coverage scope.
 - #606/#608 — explicit-empty filesystem inventory remains unknown coverage rather than proof that the host has no mounted filesystems; canonical report composition preserves the fixed `df -P -B1` collector authority boundary.
 - #605/#607 were closed unmerged only after verified successors existed; #609 preserved the reviewed web-inventory coverage payload on then-current `main`.
 - #609/#610 — explicit-empty web-server, web-root, and TLS-certificate inventories become bounded coverage signals and are composed into canonical JSON/HTML reports without endpoint reachability claims or private web evidence.
-- #611 — security posture analysis now preserves unknown/inconclusive probe truth instead of converting unavailable values into configuration-risk findings. A Codex review finding identified common `N/A` / `not applicable` sentinels; exact head `5d496cceafe163439d228297e7181ca0f163dba7` was corrected to normalize `N/A`, `not applicable`, and `not-applicable`, with deterministic regression coverage across firewall, automatic updates, SSH, SELinux, and AppArmor. The review thread was replied to and resolved, exact-head GitHub-hosted CI + Rust/RustSec passed, and the PR merged as `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`.
+- #611 — unavailable/unknown security probes no longer become SSH/firewall/update configuration-risk findings. A Codex review caught additional `N/A` / `not applicable` sentinels; corrected exact head `5d496cceafe163439d228297e7181ca0f163dba7` passed Hosted CI + Rust/RustSec and merged as `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`.
+- #612 — documentation-only sync through #611 merged after exact-head Hosted CI + Rust/RustSec.
+- #614 — systemd inventory states such as `inactive dead`, `active exited`, `inactive exited`, and normal running units are no longer treated as service failures; only explicit `failed` / `error` state tokens produce the medium unhealthy-service finding. Exact head `65d25315cf221143b25ff6af6f0fdca928e1df22` passed Hosted CI + Rust/RustSec and merged as `17406bc43c33746b053684a06da68e4bc96650f0`.
+- #613 was closed unmerged after #614 advanced `main`; current-main successor #615 preserved the corrected canonical JSON/HTML regression test.
+- #615 — report-level tests now pin the #611 behavior so common unknown security-probe sentinels stay structural coverage evidence, raw sentinel spellings do not leak, and configuration-risk titles are not reintroduced by report composition. Exact head `7471a0732247f7659caf841e04cbe90197ceb1fe` passed Hosted CI + Rust/RustSec and merged as `fa8c669e73d7ef6d764af877513d9cf7558143d5`.
 
 All ordinary branches in this train used GitHub-hosted validation. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
+## Post-scan security verification
+
+The last completed full standard security scan previously covered exact `main` `5d39a38ba43364e597da4f8f94cb6a7a05f21800` and reported no remaining findings after #577 symlink-confinement remediation.
+
+A source-backed security diff review was then completed for the exact range:
+
+`5d39a38ba43364e597da4f8f94cb6a7a05f21800..fa8c669e73d7ef6d764af877513d9cf7558143d5`
+
+The range is 122 commits and 47 changed files. Every changed production source file was reviewed, including Repository Audit Compose product wiring and all changed Server Audit analysis/report/coverage modules. Review focused on untrusted snapshot handling, redaction/privacy, HTML/JSON output safety, bounds/DoS, path/reference handling, and accidental capability/network/write expansion. No reportable security regression was found. Changed tests were also checked for shell/network/environment access and no such new CI-side capability was found.
+
+This is a **security diff review**, not a replacement claim that a new full Codex Security standard repository scan ran on `fa8c669e...`. If a fresh full standard scan is required for a production gate, run it separately on the then-current exact `main` and record that exact SHA.
+
 ## Major merged work that must not be recreated
 
-The following generations are merged repository history. Historical issues, branches, or old handoff text are not instructions to rebuild them:
-
-- #288 → #290 → #291 → #298 → #299 → #300 → #301 — deterministic Python imports plus Repository Audit dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow relationships, and bounded report integration.
+- #288 → #301 — deterministic Python imports plus Repository Audit dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow relationships, and bounded report integration.
 - #311/#313/#314 — affected-test/workflow intelligence and report composition.
 - #317/#319/#322/#327/#332 — architecture/security-boundary analysis, integrity-covered artifacts, bounded presentation, and browser export.
 - #329/#335 — deterministic ranked Solve Graph node search and MCP exposure.
 - #333 — bounded local TypeScript `extends` and project-reference relationships.
 - #337/#348/#349 — bounded visual-explorer model, presentation model, and browser panel.
 - #340 — bounded Server Audit scheduled-job relationships from sanitized summaries only.
-- #341 — conservative repository-local PHP `require`/`include` relationships for explicit static local literals only.
-- #350→#356 — bounded deployment-path evidence/artifact/presentation/browser integration.
-- #358→#364 — bounded Angular/Nest framework-path evidence/artifact/presentation/browser integration.
-- #365→#371 — bounded Angular target `options.tsConfig` evidence/artifact/presentation/browser integration.
+- #341 — conservative repository-local PHP literal `require`/`include` relationships.
+- #350→#371 — deployment-path, Angular/Nest framework-path, and Angular target-config evidence/artifact/presentation/browser integrations.
 - #372/#373 and #432→#448 — bounded shortest paths, product/browser verification, deterministic explanations, and additive read-only MCP exposure.
 - #450→#456 — deterministic alternative-path and dependent-impact explanations across core/browser/MCP.
 - #457→#472 — selected-node impact/affected-validation browser intelligence, cancellation-safe request state, stale-selection protection, workflow-evidence identity, and deterministic interaction coverage.
@@ -58,7 +70,7 @@ The following generations are merged repository history. Historical issues, bran
 - #562→#578 — bounded static Docker Compose service/image and `depends_on` evidence, snapshot/artifact/presentation/browser surfaces, quoted static service keys, dependency panel, and top-level product wiring. Compose evaluation, interpolation/anchors/profiles, image resolution, container starts, network access, and writes remain disabled.
 - #575/#576/#579 — bounded backup/log consistency evidence/findings and canonical report composition with exact-overlap deduplication.
 - #577 — root-confined writes reject an existing symbolic-link final component.
-- #581→#611 — bounded Server Audit certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web inventory coverage, report-truth hardening, and unknown security-probe handling described above.
+- #581→#615 — bounded Server Audit certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web coverage, report-truth hardening, security-probe truth, normal systemd service-state truth, and canonical report regression coverage described above.
 
 ## Repository Audit / Solve Graph state
 
@@ -68,7 +80,7 @@ Repository source is not executed to improve graph coverage. Gradle remains defe
 
 ## Server Audit state
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; scheduled-job and service→process→listener structural relationships; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; canonical JSON/HTML composition for those coverage states; and conservative handling of unavailable security posture probes.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; scheduled-job and service→process→listener structural relationships; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
 
 Continue package/service/port/process/scheduled-job relationship quality, cache/log/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform parser/report tests. Do not add remote mutation/remediation execution.
 
