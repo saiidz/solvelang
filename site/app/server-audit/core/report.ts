@@ -27,6 +27,7 @@ import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindi
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
+import { createServerAuditWebIdentityCoverageFindings } from "./webIdentityCoverageFindings";
 import { createServerAuditWebInventoryCoverageFindings } from "./webInventoryCoverageFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
 import { createServerAuditWebListenerFindings } from "./webListenerFindings";
@@ -142,6 +143,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditCertificateCoverageFindings(snapshot),
     ...createServerAuditCertificateIdentityCoverageFindings(snapshot),
     ...createServerAuditCertificateExpiryFallbackFindings(snapshot),
+    ...createServerAuditWebIdentityCoverageFindings(snapshot),
     ...createServerAuditWebInventoryCoverageFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
     ...createServerAuditWebListenerFindings(snapshot),
@@ -197,6 +199,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Certificate-coverage findings report only supplied certificate records that lack both notAfter and daysRemaining evidence; they do not prove endpoint absence, certificate invalidity, collector authority, or which certificate is actively served.",
       "Certificate-identity coverage findings report only supplied certificate records whose identity is empty after trim and NFC normalization; they do not identify the actively served certificate, prove endpoint reachability, or establish collector authority.",
       "Certificate-expiry fallback findings derive an alert window only from a supplied notAfter timestamp when daysRemaining is absent; they do not identify the actively served certificate or perform endpoint validation.",
+      "Web-identity coverage findings report only supplied web-server labels or web-root paths that are empty after trim and NFC normalization; they do not prove service absence, root absence, public reachability, or collector authority.",
       "Web-inventory coverage findings report only explicit empty web-server, web-root, or TLS-certificate inventories from the fixed local probes; they do not prove those surfaces are absent, that discovery was complete or authoritative, or that any endpoint is publicly reachable.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
       "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
