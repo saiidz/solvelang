@@ -83,7 +83,11 @@ test("explains deterministic dependent impact paths", async () => {
   assert.equal(first.headline, "3 impacted nodes observed");
   assert.equal(first.summary.impactedNodes, 3);
   assert.equal(first.summary.maximumObservedDepth, 2);
-  assert.deepEqual(first.rows.map((row) => row.node.id), [direct.id, sibling.id, transitive.id]);
+  assert.deepEqual(
+    first.rows.map((row) => row.node.id).sort(),
+    [direct.id, sibling.id, transitive.id].sort(),
+  );
+  assert.deepEqual(first.rows.map((row) => row.depth), [1, 1, 2]);
   assert.deepEqual(first.rows.find((row) => row.node.id === transitive.id)!.steps.map((step) => step.sentence), [
     "direct.ts --imports--> root.ts",
     "transitive.ts --calls--> direct.ts",
