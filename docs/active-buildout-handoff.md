@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this refresh, `main` before this documentation-only PR is `f82980a563ecd211da2883bfcaff84563487a48f`, the merge of safe LSP formatting PR #548. The safe non-production PR queue is **zero**. This documentation sync is intentionally repository-only and does not change the authoritative production record.
+At this refresh, `main` before this documentation-only PR is `701d3380f36031b865547655e3ab0b6a63eedd50`, the merge of bounded Maven evidence PR #557. The safe non-production PR queue is **zero**. This documentation sync is intentionally repository-only and does not change the authoritative production record.
 
 The historical #288→#301 Repository Audit dependency train is merged and must not be recreated. PRs #161/#164/#169 are also merged repository-history facts only; their historical merge approvals are not standing authorization for deployment or live activation.
 
@@ -56,6 +56,10 @@ The 2026-08-20 queue drain reconciled safe branches prepared across several fast
 - #545 — nested imported `.solve` `check` diagnostics retain root-relative provenance and never leak an absolute source root.
 - #546 — test-backed operations logging contract that allows only sanitized codes and allowlisted correlation fields; raw request/response bodies and caught exception messages/stacks are prohibited. It does not change live logging configuration.
 - #548 — parser-gated `textDocument/formatting` for didOpen-cached documents using the canonical formatter. It returns no edit for unchanged text and has no execution, workspace, or incremental-sync capability.
+- #549/#552/#556/#557 — bounded static Cargo, Go, .NET, and Maven evidence adapters. They parse explicit local manifest/project/POM facts under 1 MiB and 1,000-result bounds; preserve unresolved/outside-scan truth; and do not execute source/build tools, resolve registries, use a network, or write.
+- #550 — fail-closed suspected API-key exposure incident contract: no plaintext key storage or investigation use, no emergency pepper rotation, and an owner-recorded revoke/suspend/handoff decision.
+- #551/#555 — conservative lint warns after an `if` only when both explicit branches terminate; language-reference text now describes that structural rule without evaluating conditions.
+- #553/#554 — owner-recorded evidence/reconciliation before re-enabling an emergency-disabled billing path, plus sanitized restore-drill evidence requirements. Neither permits a live billing action, restore, or routing/configuration change.
 
 All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
@@ -91,7 +95,7 @@ Do not recreate merged generations merely because historical issues, branches, o
 
 Repository Audit and Solve Graph remain deterministic, bounded, local/analyze-only surfaces. Merged capabilities include repository ingestion/inventory; JavaScript/TypeScript, Python, conservative local PHP, TypeScript config, Angular/Nest and deployment/config relationships; dependency consistency; conservative dead-code evidence; test/documentation and workflow mapping; architecture/security-boundary summaries; ranked, shortest-path, alternative-path and dependent-impact queries; deterministic path/impact explanations; selected-node affected-validation intelligence; integrity-covered artifacts; local browser exploration; redaction; explicit complete/partial/truncation truth; read-only MCP query/explanation surfaces; affected-validation candidates; hotspot candidates; and the bounded impact artifact/product bundle merged through #511.
 
-Repository source is not executed to improve graph coverage. The local explorer also presents bounded unreached candidates and node-kind filtering; MCP adds entrypoint/unreachable candidates, affected validations, cycles, hotspots, and security summaries. Prefer conservative parser/config evidence and explicit unknown/partial states over guessed relationships. Repository Audit write/remediation mode remains disabled.
+Repository source is not executed to improve graph coverage. Static adapters now include local Cargo, Go, .NET, and Maven evidence; Gradle remains excluded because accurate build-script handling requires evaluation. The local explorer also presents bounded unreached candidates and node-kind filtering; MCP adds entrypoint/unreachable candidates, affected validations, cycles, hotspots, and security summaries. Prefer conservative parser/config evidence and explicit unknown/partial states over guessed relationships. Repository Audit write/remediation mode remains disabled.
 
 ## Server Audit state
 
