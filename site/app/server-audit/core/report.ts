@@ -5,6 +5,7 @@ import { createServerAuditCertificateConsistencyFindings } from "./certificateCo
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
+import { createServerAuditLargeLogFindings } from "./largeLogFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
@@ -31,6 +32,10 @@ const LEGACY_WEB_ROOT_PERMISSION_TITLES = new Set([
   "Web root is world-writable",
   "Web root is group-writable",
   "Application web root owned by root",
+]);
+
+const LEGACY_LARGE_LOG_TITLES = new Set([
+  "Very large log file",
 ]);
 
 function stableHash(input: string) {
@@ -62,7 +67,9 @@ function sortFindings(findings: ServerAuditFinding[]): ServerAuditFinding[] {
 }
 
 function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
-  return analyzeServerSnapshot(snapshot).filter((finding) => !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title));
+  return analyzeServerSnapshot(snapshot).filter(
+    (finding) => !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title) && !LEGACY_LARGE_LOG_TITLES.has(finding.title),
+  );
 }
 
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
@@ -73,6 +80,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditArtifactFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
+    ...createServerAuditLargeLogFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
