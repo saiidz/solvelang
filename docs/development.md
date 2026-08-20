@@ -66,6 +66,8 @@ cargo run -- run ../examples/support_triage.solve
 
 The support-triage example is intentionally deterministic. It demonstrates readable business rules without pretending that inbox, CRM, Slack, or ticketing integrations are connected.
 
+The `solvec` package also exposes the canonical lexer, parser, diagnostics, formatter, semantic checker, and runtime modules as a shared Rust library. The CLI consumes those same APIs; future editor tooling must use this library rather than duplicate language behavior.
+
 Useful CLI inspection commands:
 
 ```bash
