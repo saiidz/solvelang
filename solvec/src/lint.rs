@@ -50,10 +50,7 @@ impl Linter {
             }
 
             self.lint_statement(statement);
-            terminated |= matches!(
-                statement,
-                Stmt::Return { .. } | Stmt::Break { .. } | Stmt::Continue { .. }
-            );
+            terminated |= statement_terminates(statement);
         }
     }
 
@@ -136,6 +133,22 @@ impl Linter {
     }
 }
 
+fn statement_terminates(statement: &Stmt) -> bool {
+    match statement {
+        Stmt::Return { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => true,
+        Stmt::If {
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            !else_branch.is_empty()
+                && then_branch.last().is_some_and(statement_terminates)
+                && else_branch.last().is_some_and(statement_terminates)
+        }
+        _ => false,
+    }
+}
+
 fn statement_location(statement: &Stmt) -> SourceLocation {
     match statement {
         Stmt::Let { location, .. }
@@ -196,5 +209,24 @@ mod tests {
         assert!(warnings[1].message.contains("unreachable"));
         assert_eq!(warnings[2].line, 3);
         assert!(warnings[2].message.contains("network-capable"));
+    }
+
+    #[test]
+    fn reports_statements_after_if_with_two_terminating_branches() {
+        let warnings = lint(&parse(
+            "if input.done { return 1 } else { return 2 }\nprint(\"unreachable\")\n",
+        ));
+
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].line, 2);
+        assert_eq!(warnings[0].column, 1);
+        assert_eq!(warnings[0].message, "unreachable statement");
+    }
+
+    #[test]
+    fn does_not_assume_an_if_without_two_terminating_branches_stops_execution() {
+        let warnings = lint(&parse("if input.done { return 1 }\nprint(\"reachable\")\n"));
+
+        assert!(warnings.is_empty());
     }
 }

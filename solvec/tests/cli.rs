@@ -426,6 +426,22 @@ http_get("http://127.0.0.1:9")
 }
 
 #[test]
+fn lint_reports_unreachable_code_after_two_terminating_if_branches() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_lint_terminating_if.solve",
+        "if input.done { return 1 } else { return 2 }\nprint(\"unreachable\")\n",
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["lint", &file]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    assert!(stderr.is_empty(), "unexpected stderr: {stderr}");
+    assert!(stdout.contains("SolveLang Warning on line 2, column 1"));
+    assert!(stdout.contains("unreachable statement"));
+    assert!(stdout.contains("✓ SolveLang lint completed with 1 warnings"));
+}
+
+#[test]
 fn lint_remaps_warnings_to_imported_source() {
     let directory = create_temp_workflow_dir("solvelang_lint_import_provenance");
     let entry = directory.join("entry.solve");
