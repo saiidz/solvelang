@@ -36,7 +36,7 @@ export function createServerAuditFilesystemArtifactRelationshipFindings(
 
   for (const relationship of analysis.relationships) {
     if (relationship.kind !== "ambiguous-filesystem-log" && relationship.kind !== "ambiguous-filesystem-backup") continue;
-    const evidence = relationship.sources.map((source) => ({ source, summary: relationship.kind }));
+    const evidence: ServerAuditFinding["evidence"] = relationship.sources.map((source) => ({ source, summary: relationship.kind }));
     if (relationship.sourcesTruncated) {
       evidence.push({
         source: relationship.id,
