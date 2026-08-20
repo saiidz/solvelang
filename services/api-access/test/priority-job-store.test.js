@@ -60,7 +60,7 @@ test("completion and retry cleanup remove worker leases", async () => {
     {
       command: "UpdateCommand",
       inspect(input) {
-        assert.match(input.UpdateExpression, /REMOVE workerId, leaseExpiresAt, lastErrorCode, lastFailedAt/);
+        assert.match(input.UpdateExpression, /REMOVE workerId, leaseExpiresAt, lastHeartbeatAt, lastErrorCode, lastFailedAt/);
         assert.match(input.ConditionExpression, /workerId = :workerId/);
       },
     },
@@ -74,5 +74,19 @@ test("completion and retry cleanup remove worker leases", async () => {
   const store = createDynamoPriorityJobStore(client, { jobsTable: "jobs" });
   await store.completeJob("job_" + "a".repeat(32), "worker", { ok: true }, "2026-07-29T20:00:00.000Z");
   await store.releaseJob("job_" + "b".repeat(32), "worker", "retry", "2026-07-29T20:00:00.000Z");
+  assert.equal(client.steps.length, 0);
+});
+
+test("heartbeat renews only the current unexpired worker lease", async () => {
+  const client = new ScriptedClient([{
+    command: "UpdateCommand",
+    inspect(input) {
+      assert.match(input.ConditionExpression, /#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAt/);
+      assert.equal(input.ExpressionAttributeValues[":renewedAt"], "2026-07-29T20:00:00.000Z");
+      assert.equal(input.ExpressionAttributeValues[":leaseExpiresAt"], Date.UTC(2026, 6, 29, 20, 1, 0));
+    },
+  }]);
+  const store = createDynamoPriorityJobStore(client, { jobsTable: "jobs" });
+  await store.renewLease("job_" + "a".repeat(32), "worker", Date.UTC(2026, 6, 29, 20, 0, 0), Date.UTC(2026, 6, 29, 20, 1, 0));
   assert.equal(client.steps.length, 0);
 });

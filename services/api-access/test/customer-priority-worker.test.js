@@ -19,6 +19,7 @@ function storeWith(job) {
     calls,
     async claimJob(...args) { calls.push(["claim", ...args]); return { status: "claimed", job }; },
     async completeJob(...args) { calls.push(["complete", ...args]); },
+    async renewLease(...args) { calls.push(["renew", ...args]); },
     async failJob(...args) { calls.push(["fail", ...args]); },
     async releaseJob(...args) { calls.push(["release", ...args]); },
   };
@@ -63,6 +64,61 @@ test("customer-owned repository audit invokes only an explicitly supplied execut
     reportId: "report-123",
     provider: "test-fixture",
   });
+});
+
+test("customer execution renews its lease while running and fails closed if renewal is lost", async () => {
+  const store = storeWith({
+    jobId: JOB_ID,
+    accountId: ACCOUNT_ID,
+    jobType: "repository_audit",
+    priority: "express",
+    sourceFingerprint: "c".repeat(64),
+  });
+  let tick = 1_000;
+  const worker = createPriorityWorker({
+    laneName: "express",
+    jobStore: store,
+    accountAccess: { async assertActive() {} },
+    executeCustomerJob: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      return { reportId: "report-123", provider: "test-fixture" };
+    },
+    workerId: "worker",
+    now: () => (tick += 1),
+    leaseMs: 1_000,
+    heartbeatMs: 10,
+    logger: { error() {} },
+  });
+  assert.deepEqual(await worker({ Records: [record()] }), { batchItemFailures: [] });
+  assert.equal(store.calls.some((call) => call[0] === "renew"), true);
+});
+
+test("customer execution is retried when its lease heartbeat fails", async () => {
+  const store = storeWith({
+    jobId: JOB_ID,
+    accountId: ACCOUNT_ID,
+    jobType: "repository_audit",
+    priority: "express",
+    sourceFingerprint: "c".repeat(64),
+  });
+  store.renewLease = async () => { throw new Error("lease lost"); };
+  const worker = createPriorityWorker({
+    laneName: "express",
+    jobStore: store,
+    accountAccess: { async assertActive() {} },
+    executeCustomerJob: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 35));
+      return { reportId: "report-123", provider: "test-fixture" };
+    },
+    workerId: "worker",
+    now: () => 1_000,
+    leaseMs: 1_000,
+    heartbeatMs: 10,
+    logger: { error() {} },
+  });
+  assert.deepEqual(await worker({ Records: [record()] }), { batchItemFailures: [{ itemIdentifier: "message-1" }] });
+  assert.equal(store.calls.some((call) => call[0] === "complete"), false);
+  assert.equal(store.calls.some((call) => call[0] === "release"), true);
 });
 
 test("customer-owned jobs fail closed when no provider executor is configured", async () => {

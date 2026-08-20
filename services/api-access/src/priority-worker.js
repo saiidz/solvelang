@@ -45,6 +45,8 @@ export function createPriorityWorker({
   now = Date.now,
   workerId = "priority-worker",
   logger = console,
+  leaseMs = WORKER_LEASE_MS,
+  heartbeatMs = Math.floor(WORKER_LEASE_MS / 2),
 }) {
   const lane = getPriorityLane(laneName);
   if (!jobStore || typeof jobStore.claimJob !== "function" || typeof jobStore.completeJob !== "function" || typeof jobStore.releaseJob !== "function" || typeof jobStore.failJob !== "function") {
@@ -55,6 +57,12 @@ export function createPriorityWorker({
   }
   if (executeCustomerJob !== undefined && typeof executeCustomerJob !== "function") {
     throw new Error("Priority customer executor is invalid.");
+  }
+  if (!Number.isSafeInteger(leaseMs) || leaseMs < 1_000 || leaseMs > 15 * 60_000) {
+    throw new Error("Priority worker lease duration is invalid.");
+  }
+  if (!Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1 || heartbeatMs >= leaseMs) {
+    throw new Error("Priority worker heartbeat interval is invalid.");
   }
   if (typeof workerId !== "string" || !workerId || workerId.length > 256 || /[\u0000-\u001f\u007f]/.test(workerId)) {
     throw new Error("Priority worker ID is invalid.");
@@ -70,7 +78,7 @@ export function createPriorityWorker({
         message = parseMessage(record);
         if (message.priority !== lane.name) throw new Error("Priority queue message was sent to the wrong lane.");
         const claimedAt = now();
-        const claim = await jobStore.claimJob(message.jobId, lane.name, leaseOwner, claimedAt, claimedAt + WORKER_LEASE_MS);
+        const claim = await jobStore.claimJob(message.jobId, lane.name, leaseOwner, claimedAt, claimedAt + leaseMs);
         if (claim.status === "terminal") continue;
         if (claim.status === "busy") {
           logger.error({ type: "priority_worker_busy", lane: lane.name, messageId: record?.messageId });
@@ -99,26 +107,39 @@ export function createPriorityWorker({
         } else if (job.jobType === "repository_audit") {
           if (!accountId) throw new Error("Customer priority job account is required.");
           if (!executeCustomerJob) throw new Error("Customer priority job executor is unavailable.");
-          const execution = await executeCustomerJob({
-            jobId: message.jobId,
-            accountId,
-            priority: lane.name,
-            sourceFingerprint: job.sourceFingerprint,
-            weightedCredits: job.weightedCredits,
-          });
-          if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
-            throw new Error("Customer priority executor result is invalid.");
+          if (typeof jobStore.renewLease !== "function") throw new Error("Priority job lease renewal is unavailable.");
+          let heartbeatFailure;
+          const heartbeat = setInterval(() => {
+            if (heartbeatFailure) return;
+            const renewedAt = now();
+            Promise.resolve(jobStore.renewLease(message.jobId, leaseOwner, renewedAt, renewedAt + leaseMs))
+              .catch((error) => { heartbeatFailure = error; });
+          }, heartbeatMs);
+          try {
+            const execution = await executeCustomerJob({
+              jobId: message.jobId,
+              accountId,
+              priority: lane.name,
+              sourceFingerprint: job.sourceFingerprint,
+              weightedCredits: job.weightedCredits,
+            });
+            if (heartbeatFailure) throw new Error("Priority job lease renewal failed.");
+            if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
+              throw new Error("Customer priority executor result is invalid.");
+            }
+            result = {
+              schemaVersion: 1,
+              jobType: job.jobType,
+              priority: lane.name,
+              capacityWeight: lane.capacityWeight,
+              sourceFingerprint: job.sourceFingerprint,
+              processedBy: leaseOwner,
+              ...(cleanExecutorField(execution.reportId, "report ID") ? { reportId: cleanExecutorField(execution.reportId, "report ID") } : {}),
+              ...(cleanExecutorField(execution.provider, "provider") ? { provider: cleanExecutorField(execution.provider, "provider") } : {}),
+            };
+          } finally {
+            clearInterval(heartbeat);
           }
-          result = {
-            schemaVersion: 1,
-            jobType: job.jobType,
-            priority: lane.name,
-            capacityWeight: lane.capacityWeight,
-            sourceFingerprint: job.sourceFingerprint,
-            processedBy: leaseOwner,
-            ...(cleanExecutorField(execution.reportId, "report ID") ? { reportId: cleanExecutorField(execution.reportId, "report ID") } : {}),
-            ...(cleanExecutorField(execution.provider, "provider") ? { provider: cleanExecutorField(execution.provider, "provider") } : {}),
-          };
         } else {
           throw new Error("Unsupported priority job type.");
         }
