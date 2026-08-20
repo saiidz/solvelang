@@ -11,6 +11,7 @@ import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
+import { createServerAuditLogCoverageFindings } from "./logCoverageFindings";
 import { createServerAuditStaleLogFindings } from "./staleLogFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
@@ -114,6 +115,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
+    ...createServerAuditLogCoverageFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
     ...createServerAuditStaleLogFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
@@ -155,6 +157,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Backup/log consistency findings identify only contradictory duplicate artifact evidence; collection-time churn can explain some log differences and the stage does not determine which value is authoritative.",
       "Backup-coverage findings report only supplied backup records that lack ageHours or sizeBytes evidence; they do not prove backup failure, freshness, artifact completeness, restoreability, or complete backup discovery.",
       "Backup-posture findings use only supplied age and size evidence against a bounded review threshold; they do not prove backup success, restoreability, retention quality, or off-host/offsite protection.",
+      "Log-coverage findings report only explicit empty log inventories or supplied log records that lack modifiedAt or sizeBytes evidence; they do not prove logging failure, activity, retention, completeness, or collector authority.",
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
