@@ -2,6 +2,7 @@ import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, Server
 import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditArtifactFindings } from "./artifactFindings";
 import { createServerAuditBackupLogConsistencyFindings } from "./backupLogConsistencyFindings";
+import { createServerAuditBackupPostureFindings } from "./backupPostureFindings";
 import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
 import { createServerAuditCertificateCoverageFindings } from "./certificateCoverageFindings";
 import { createServerAuditCertificateExpiryFallbackFindings } from "./certificateExpiryFindings";
@@ -44,6 +45,10 @@ const LEGACY_LARGE_LOG_TITLES = new Set([
   "Very large log file",
 ]);
 
+const LEGACY_BACKUP_POSTURE_TITLES = new Set([
+  "Newest backup is older than 72 hours",
+]);
+
 function stableHash(input: string) {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -74,7 +79,10 @@ function sortFindings(findings: ServerAuditFinding[]): ServerAuditFinding[] {
 
 function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   return analyzeServerSnapshot(snapshot).filter(
-    (finding) => !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title) && !LEGACY_LARGE_LOG_TITLES.has(finding.title),
+    (finding) =>
+      !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title)
+      && !LEGACY_LARGE_LOG_TITLES.has(finding.title)
+      && !LEGACY_BACKUP_POSTURE_TITLES.has(finding.title),
   );
 }
 
@@ -99,6 +107,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
   const findings = sortFindings([
     ...createBaselineFindings(snapshot),
     ...createArtifactConsistencyFindings(snapshot),
+    ...createServerAuditBackupPostureFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
@@ -142,6 +151,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
       "Backup/log consistency findings identify only contradictory duplicate artifact evidence; collection-time churn can explain some log differences and the stage does not determine which value is authoritative.",
+      "Backup-posture findings use only supplied age and size evidence against a bounded review threshold; they do not prove backup success, restoreability, retention quality, or off-host/offsite protection.",
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
