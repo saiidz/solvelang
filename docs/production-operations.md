@@ -72,6 +72,8 @@ Before public production availability:
 6. document a separately approved configuration-switch and rollback path; do not switch application configuration as part of the drill;
 7. delete the drill recovery table only after evidence is retained.
 
+Before cleanup, retain a sanitized drill record outside source code with the source and recovery-table identifiers, requested UTC recovery point, isolation verification, encryption/access-control verification, aggregate-only representative-record verification result, and confirmation that no active route or configuration was changed. Do not retain record contents, secrets, sessions, credentials, or raw logs as drill evidence.
+
 Never overwrite a healthy production table during a drill.
 
 ## Rollback
