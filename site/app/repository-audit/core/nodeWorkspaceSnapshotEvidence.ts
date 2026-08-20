@@ -29,7 +29,7 @@ export type NodeWorkspaceSnapshotEvidence = {
   workspace?: NodeWorkspaceEvidence;
   summary: {
     packageManifestsSeen: number;
-    packageManifestsParsed: number;
+    manifestTextsAccepted: number;
     packageManifestsSkipped: number;
     skippedEvidenceReturned: number;
     skippedEvidenceHidden: number;
@@ -108,7 +108,7 @@ export function analyzeNodeWorkspaceSnapshot(
       rootPackageJson: null,
       summary: {
         packageManifestsSeen: manifests.length,
-        packageManifestsParsed: 0,
+        manifestTextsAccepted: 0,
         packageManifestsSkipped: 0,
         skippedEvidenceReturned: 0,
         skippedEvidenceHidden: 0,
@@ -148,7 +148,7 @@ export function analyzeNodeWorkspaceSnapshot(
       rootPackageJson: "package.json",
       summary: {
         packageManifestsSeen: manifests.length,
-        packageManifestsParsed: discoveredPackages.size,
+        manifestTextsAccepted: discoveredPackages.size,
         packageManifestsSkipped: skippedAll.length,
         skippedEvidenceReturned: skipped.length,
         skippedEvidenceHidden,
@@ -199,7 +199,7 @@ export function analyzeNodeWorkspaceSnapshot(
     workspace,
     summary: {
       packageManifestsSeen: manifests.length,
-      packageManifestsParsed: discoveredPackages.size + 1,
+      manifestTextsAccepted: discoveredPackages.size + 1,
       packageManifestsSkipped: skippedAll.length,
       skippedEvidenceReturned: skipped.length,
       skippedEvidenceHidden,
