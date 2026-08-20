@@ -56,7 +56,7 @@ export function createServerAuditScheduledJobRelationshipFindings(
     const sourcesTruncated = allSources.length > boundedSources.length;
 
     findings.push({
-      id: stableId(["scheduled-job", "multiple-targets", String(jobIndex), String(relationships.length)]),
+      id: stableId(["scheduled-job", "multiple-targets", String(jobIndex), String(relationships.length), ...allSources]),
       severity: "info",
       category: "evidence-integrity",
       title: "Scheduled job maps to multiple collected targets",
