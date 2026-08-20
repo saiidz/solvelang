@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RepositorySelectedNodeIntelligence } from "./selectedNodeIntelligence";
+import type { RepositoryWorkflowPathEvidenceAnalysis } from "./workflowPathEvidence";
 import {
   createRepositorySelectedNodeIntelligenceRequestKey,
   resolveRepositorySelectedNodeIntelligenceViewState,
@@ -11,19 +12,97 @@ function product(graphId: string, selectedNodeId: string): RepositorySelectedNod
   return { graphId, selectedNodeId } as RepositorySelectedNodeIntelligence;
 }
 
+function workflowEvidence(
+  graphId: string,
+  targetPath = "package-lock.json",
+): RepositoryWorkflowPathEvidenceAnalysis {
+  return {
+    schema: "solvelang.repository-audit.workflow-path-evidence.v0",
+    mode: "analyze-only",
+    graphId,
+    status: "complete",
+    references: [{
+      referenceId: `workflow-path:.github/workflows/ci.yml:cache-dependency-path:10:${targetPath}`,
+      workflowPath: ".github/workflows/ci.yml",
+      kind: "cache-dependency-path",
+      rawReference: targetPath,
+      targetPath,
+      targetState: "present",
+      evidence: { path: ".github/workflows/ci.yml", line: 10 },
+    }],
+    impacts: [{
+      targetPath,
+      workflows: [".github/workflows/ci.yml"],
+      referenceKinds: ["cache-dependency-path"],
+    }],
+    skipped: {
+      missingText: 0,
+      oversizedText: 0,
+      dynamicReferences: 0,
+      multilineReferences: 0,
+    },
+    execution: {
+      networkAccess: false,
+      writeAccess: false,
+      maxReferences: 250,
+      maxWorkflowTextBytes: 512 * 1024,
+      referencesTruncated: false,
+      acceptedFiles: 3,
+      workflowFilesExamined: 1,
+      graphTruncated: false,
+    },
+  };
+}
+
 test("creates a deterministic request key only for an actionable selection", () => {
+  const evidence = workflowEvidence("graph-a");
+  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, "node-a");
+
   assert.equal(
-    createRepositorySelectedNodeIntelligenceRequestKey("graph-a", "graph-a", "node-a"),
-    "graph-a:graph-a:node-a",
+    requestKey,
+    createRepositorySelectedNodeIntelligenceRequestKey("graph-a", { ...evidence }, "node-a"),
   );
+  assert.match(requestKey ?? "", /^selected-intelligence:/);
   assert.equal(createRepositorySelectedNodeIntelligenceRequestKey("graph-a", undefined, "node-a"), undefined);
-  assert.equal(createRepositorySelectedNodeIntelligenceRequestKey("graph-a", "graph-a", undefined), undefined);
+  assert.equal(createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, undefined), undefined);
+});
+
+test("changes request identity when bounded workflow evidence changes on the same graph and node", () => {
+  const previousEvidence = workflowEvidence("graph-a", "package-lock.json");
+  const currentEvidence = workflowEvidence("graph-a", "pnpm-lock.yaml");
+  const previousRequestKey = createRepositorySelectedNodeIntelligenceRequestKey(
+    "graph-a",
+    previousEvidence,
+    "node-a",
+  );
+  const currentRequestKey = createRepositorySelectedNodeIntelligenceRequestKey(
+    "graph-a",
+    currentEvidence,
+    "node-a",
+  );
+
+  assert.notEqual(previousRequestKey, currentRequestKey);
+
+  const view = resolveRepositorySelectedNodeIntelligenceViewState(
+    "graph-a",
+    "node-a",
+    currentRequestKey,
+    {
+      requestKey: previousRequestKey ?? "",
+      product: product("graph-a", "node-a"),
+    },
+  );
+
+  assert.equal(view.pending, true);
+  assert.equal(view.product, undefined);
+  assert.equal(view.error, "");
 });
 
 test("treats a prior request result as pending after a rapid selection change", () => {
-  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey("graph-a", "graph-a", "node-b");
+  const evidence = workflowEvidence("graph-a");
+  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, "node-b");
   const state = {
-    requestKey: "graph-a:graph-a:node-a",
+    requestKey: createRepositorySelectedNodeIntelligenceRequestKey("graph-a", evidence, "node-a") ?? "",
     product: product("graph-a", "node-a"),
   };
 
@@ -35,7 +114,11 @@ test("treats a prior request result as pending after a rapid selection change", 
 });
 
 test("never activates a product from another graph or selected node", () => {
-  const requestKey = "graph-a:graph-a:node-a";
+  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey(
+    "graph-a",
+    workflowEvidence("graph-a"),
+    "node-a",
+  ) ?? "";
 
   const wrongGraph = resolveRepositorySelectedNodeIntelligenceViewState(
     "graph-a",
@@ -56,7 +139,11 @@ test("never activates a product from another graph or selected node", () => {
 });
 
 test("activates only the exact current result and scopes errors to the current request", () => {
-  const requestKey = "graph-a:graph-a:node-a";
+  const requestKey = createRepositorySelectedNodeIntelligenceRequestKey(
+    "graph-a",
+    workflowEvidence("graph-a"),
+    "node-a",
+  ) ?? "";
   const current = product("graph-a", "node-a");
 
   const success = resolveRepositorySelectedNodeIntelligenceViewState(
