@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import type { SolveGraphQueryIndex } from "../solve-graph/core/query-impact";
-import { createSolveGraphImpactQueryProduct } from "../solve-graph/core/impact-query-product";
 import { RepositoryAuditImpactExplanationPanel } from "./RepositoryAuditImpactExplanationPanel";
 import type {
   RepositoryAuditVisualExplorer,
   RepositoryAuditVisualExplorerNode,
 } from "./core/visualExplorer";
+import { createRepositoryAuditSelectedNodeImpactProduct } from "./core/selectedNodeImpact";
 import { createRepositoryAuditVisualExplorerPresentation } from "./core/visualExplorerPresentation";
 
 type RepositoryAuditVisualExplorerPanelProps = {
@@ -50,21 +50,13 @@ export function RepositoryAuditVisualExplorerPanel({
     [presentation.nodes],
   );
   const impactProduct = useMemo(() => {
-    if (!impactIndex || !selectedNodeId) return undefined;
-    if (impactIndex.document.graphId !== explorer.graphId) {
-      throw new Error("Repository Audit visual explorer impact index must match the explorer graph.");
-    }
-    return createSolveGraphImpactQueryProduct(impactIndex, {
-      changedNodeIds: [selectedNodeId],
-      query: {
-        maxDepth: 6,
-        maxResults: 200,
-      },
-      presentation: {
-        maxRows: 40,
-      },
+    if (!impactIndex) return undefined;
+    return createRepositoryAuditSelectedNodeImpactProduct(explorer, impactIndex, selectedNodeId, {
+      maxDepth: 6,
+      maxResults: 200,
+      maxRows: 40,
     });
-  }, [explorer.graphId, impactIndex, selectedNodeId]);
+  }, [explorer, impactIndex, selectedNodeId]);
 
   return (
     <section className={`rounded-[2rem] border border-cyan-200 bg-cyan-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
