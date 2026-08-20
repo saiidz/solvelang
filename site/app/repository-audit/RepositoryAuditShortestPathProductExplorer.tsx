@@ -1,5 +1,6 @@
 "use client";
 
+import { RepositoryAuditShortestPathExplanationPanel } from "./RepositoryAuditShortestPathExplanationPanel";
 import { RepositoryAuditShortestPathPanel } from "./RepositoryAuditShortestPathPanel";
 import { RepositoryAuditShortestPathProductPanel } from "./RepositoryAuditShortestPathProductPanel";
 import type { SolveGraphShortestPathProductBundle } from "../solve-graph/core/shortest-path-product";
@@ -18,6 +19,7 @@ export function RepositoryAuditShortestPathProductExplorer({
   return (
     <div className={`grid gap-5 ${className}`.trim()}>
       <RepositoryAuditShortestPathPanel presentation={bundle.presentation} />
+      <RepositoryAuditShortestPathExplanationPanel bundle={bundle} />
       <RepositoryAuditShortestPathProductPanel bundle={bundle} onDownload={onDownload} />
     </div>
   );
