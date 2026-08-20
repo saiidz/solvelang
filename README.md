@@ -30,6 +30,7 @@ Public claims should use these labels:
 
 - Rust lexer, parser, AST, and interpreter prototype
 - CLI commands for running, validating, tokenizing, and inspecting ASTs
+- conservative source-located semantic checks with `solvec check`
 - variables, reassignment, conditions, loops, functions, arrays, objects, imports, and JSON helpers
 - source-located parser and runtime diagnostics
 - deterministic local execution
@@ -79,6 +80,7 @@ Planned capabilities are direction, not working product features.
 git clone https://github.com/saiidz/solvelang.git
 cd solvelang/solvec
 cargo run -- validate ../examples/support_triage.solve
+cargo run -- check ../examples/support_triage.solve
 cargo run -- run ../examples/support_triage.solve
 ```
 
@@ -137,6 +139,7 @@ cargo run -- run ../examples/support_triage.solve
 ```text
 solvec run <file.solve>       Run a SolveLang workflow
 solvec validate <file.solve>  Parse and validate without executing
+solvec check <file.solve>     Check conservative static semantics without executing
 solvec tokens <file.solve>    Print lexer tokens
 solvec ast <file.solve>       Print the parsed AST
 solvec help                   Show CLI help

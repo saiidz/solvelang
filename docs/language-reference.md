@@ -10,10 +10,12 @@ From `solvec/`:
 
 ```bash
 cargo run -- validate ../examples/support_triage.solve
+cargo run -- check ../examples/support_triage.solve
 cargo run -- run ../examples/support_triage.solve
 ```
 
 - `validate` lexes and parses a script, then exits without running it.
+- `check` performs `validate` plus conservative source-only semantic checks. It never runs a workflow or selects a runtime policy.
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
 - `ast` prints the parsed AST.
@@ -439,6 +441,16 @@ cargo run -- run --allow-root /tmp/solvelang-inputs ./trusted-workflow.solve
 Allowed filesystem roots reject paths containing `..` and reject resolved paths outside the configured roots.
 
 For details, see [runtime-safety.md](runtime-safety.md).
+
+## Static semantic checks
+
+Use `check` to find definite source-level mistakes before a run:
+
+```bash
+cargo run -- check ../examples/support_triage.solve
+```
+
+The checker reports source-located, high-confidence errors such as unknown top-level variables, unknown function and agent references, duplicate function or agent names, declared-function arity mismatches, non-array `for` iterables, and type-invalid operations on literal or otherwise known values. It intentionally leaves values that depend on `input`, calls, branches, and runtime globals as unknown rather than guessing. `check` is read-only and independent of safe-mode flags; it does not execute builtins, agents, imports beyond the normal source loader, or network/file operations.
 
 ## Validate Vs Run
 

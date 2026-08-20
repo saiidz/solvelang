@@ -305,6 +305,52 @@ print(response.status)
 }
 
 #[test]
+fn check_reports_source_located_semantic_errors_without_execution() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_semantic_check.solve",
+        "let name = \"Ada\"\nprint(name[false])\n",
+    );
+
+    let stderr = run_solvec_error(&["check", &file]);
+
+    assert!(stderr.contains("SolveLang Error on line 2, column 12"));
+    assert!(stderr.contains("index access requires an array or object"));
+}
+
+#[test]
+fn check_is_read_only_and_does_not_select_runtime_policy() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_semantic_no_execution.solve",
+        "write_file(\"/definitely/not/written\", \"nope\")\n",
+    );
+    let (success, stdout, stderr) = run_solvec_with_env(
+        &["check", &file],
+        &[
+            ("SOLVELANG_AI_PROVIDER", "openai"),
+            ("OPENAI_API_KEY", "not-a-real-key"),
+        ],
+        &[],
+    );
+
+    assert!(success, "unexpected stderr: {}", stderr);
+    assert!(stdout.contains("✓ SolveLang semantic check passed"));
+}
+
+#[test]
+fn check_remaps_semantic_diagnostics_to_imported_source() {
+    let directory = create_temp_workflow_dir("solvelang_semantic_import_provenance");
+    let entry = directory.join("entry.solve");
+    let imported = directory.join("shared.solve");
+    fs::write(&entry, "import \"shared.solve\"\n").unwrap();
+    fs::write(&imported, "print(missing)\n").unwrap();
+
+    let stderr = run_solvec_error(&["check", entry.to_str().unwrap()]);
+
+    assert!(stderr.contains("SolveLang Error on line 1, column 7 in shared.solve"));
+    assert!(stderr.contains("unknown variable 'missing'"));
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);
