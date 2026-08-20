@@ -1,0 +1,74 @@
+{
+  "name": "solvelang-vscode",
+  "displayName": "SolveLang",
+  "description": "Syntax support and opt-in local tooling for SolveLang .solve files.",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages", "Formatters"],
+  "activationEvents": ["onLanguage:solvelang", "onCommand:solvelang.startLanguageServer", "onCommand:solvelang.formatDocument"],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "solvelang",
+      "aliases": ["SolveLang", "solve"],
+      "extensions": [".solve"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "solvelang",
+      "scopeName": "source.solvelang",
+      "path": "./syntaxes/solvelang.tmLanguage.json"
+    }],
+    "commands": [
+      { "command": "solvelang.startLanguageServer", "title": "SolveLang: Start Language Server" },
+      { "command": "solvelang.stopLanguageServer", "title": "SolveLang: Stop Language Server" },
+      { "command": "solvelang.formatDocument", "title": "SolveLang: Format Document" }
+    ],
+    "configuration": {
+      "title": "SolveLang",
+      "properties": {
+        "solvelang.languageServer.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start the configured local solvelsp process. Disabled by default."
+        },
+        "solvelang.languageServer.command": {
+          "type": "string",
+          "default": "solvelsp",
+          "description": "Local solvelsp executable. It is started only when languageServer.enabled is true."
+        },
+        "solvelang.languageServer.args": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "description": "Arguments passed to the local solvelsp executable."
+        },
+        "solvelang.formatter.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow the Format Document command to invoke the configured local solvec formatter. Disabled by default."
+        },
+        "solvelang.formatter.command": {
+          "type": "string",
+          "default": "solvec",
+          "description": "Local solvec executable used for formatting."
+        },
+        "solvelang.formatter.args": {
+          "type": "array",
+          "default": ["fmt"],
+          "items": { "type": "string" },
+          "description": "Arguments before the document path, normally [\"fmt\"]."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

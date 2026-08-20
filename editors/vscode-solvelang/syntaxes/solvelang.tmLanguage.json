@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SolveLang",
+  "scopeName": "source.solvelang",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#builtins" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [{ "name": "comment.line.double-slash.solvelang", "match": "//.*$" }]
+    },
+    "strings": {
+      "patterns": [{ "name": "string.quoted.double.solvelang", "begin": "\\\"", "end": "\\\"", "patterns": [{ "name": "constant.character.escape.solvelang", "match": "\\\\." }] }]
+    },
+    "numbers": {
+      "patterns": [{ "name": "constant.numeric.solvelang", "match": "\\b(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?\\b" }]
+    },
+    "keywords": {
+      "patterns": [{ "name": "keyword.control.solvelang", "match": "\\b(?:let|if|else|for|in|while|fn|return|break|continue|import|agent|instruction|tool|print)\\b" }]
+    },
+    "constants": {
+      "patterns": [{ "name": "constant.language.solvelang", "match": "\\b(?:true|false|null)\\b" }]
+    },
+    "builtins": {
+      "patterns": [{ "name": "support.function.solvelang", "match": "\\b(?:length|contains|get|json_parse|json_stringify)\\b" }]
+    }
+  }
+}
