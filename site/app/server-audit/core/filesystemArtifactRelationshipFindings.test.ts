@@ -31,6 +31,20 @@ test("reports ambiguous filesystem mappings using structural indexes only", () =
   assert.equal(JSON.stringify(findings).includes("/var/log/app.log"), false);
 });
 
+test("retains the triggering artifact and exposes source-fanout truncation", () => {
+  const findings = createServerAuditFilesystemArtifactRelationshipFindings(snapshot({
+    filesystems: Array.from({ length: 40 }, () => ({ mount: "/var" })),
+    logs: [{ path: "/var/log/app.log" }],
+  }));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].title, "Log evidence maps ambiguously to filesystem inventory");
+  assert.equal(findings[0].evidence.some((entry) => entry.source === "logs[0]"), true);
+  assert.equal(findings[0].evidence.some((entry) => entry.summary.includes("source fanout truncated")), true);
+  assert.equal(findings[0].summary.includes("source fanout was truncated"), true);
+  assert.equal(JSON.stringify(findings).includes("/var/log/app.log"), false);
+});
+
 test("reports unresolved and invalid path coverage without exposing paths", () => {
   const findings = createServerAuditFilesystemArtifactRelationshipFindings(snapshot({
     filesystems: [{ mount: "/srv" }, { mount: "relative-mount" }],
