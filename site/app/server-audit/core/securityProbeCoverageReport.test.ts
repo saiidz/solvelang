@@ -52,7 +52,10 @@ test("canonical reports preserve unknown security probes as structural coverage 
   assert.ok(json.includes("Security posture probes are inconclusive"));
   assert.ok(html.includes("Security posture probes are inconclusive"));
 
-  for (const rawSentinel of ["N/A", "not applicable", "not-applicable", "not available", "unavailable", "not collected"]) {
+  // `unavailable` is intentionally present in the sanitized structural summary
+  // (`value unavailable or unknown`), so verify only raw sentinel spellings that
+  // would indicate the snapshot values themselves leaked into the report.
+  for (const rawSentinel of ["N/A", "not applicable", "not-applicable", "not available", "not collected"]) {
     assert.equal(json.includes(rawSentinel), false);
     assert.equal(html.includes(rawSentinel), false);
   }
