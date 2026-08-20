@@ -44,6 +44,15 @@ test("restore drills require an isolated target and preserve active application 
   assert.match(runbook, /Never overwrite a healthy production table during a drill/);
 });
 
+test("restore drills retain sanitized isolation and verification evidence before cleanup", async () => {
+  const runbook = await readFile(operationsUrl, "utf8");
+
+  assert.match(runbook, /source and recovery-table identifiers/);
+  assert.match(runbook, /requested UTC recovery point/);
+  assert.match(runbook, /aggregate-only representative-record verification result/);
+  assert.match(runbook, /no active route or configuration was changed/);
+});
+
 test("monitoring readiness contract keeps future auth, billing, and queue gates provider-neutral", async () => {
   const contract = JSON.parse(await readFile(monitoringContractUrl, "utf8"));
 
