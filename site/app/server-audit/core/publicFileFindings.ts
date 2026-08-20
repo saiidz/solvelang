@@ -19,8 +19,8 @@ function stableId(parts: string[]): string {
   return `srv_${hash.toString(16).padStart(8, "0")}`;
 }
 
-function hasValidRootReference(rootIndex: number, rootCount: number): boolean {
-  return Number.isInteger(rootIndex) && rootIndex >= 0 && rootIndex < rootCount;
+function hasValidRootReference(rootIndex: number, roots: readonly unknown[]): boolean {
+  return Number.isInteger(rootIndex) && rootIndex >= 0 && rootIndex < roots.length && roots[rootIndex] !== undefined;
 }
 
 export function createServerAuditPublicFileFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
@@ -28,7 +28,7 @@ export function createServerAuditPublicFileFindings(snapshot: ServerAuditSnapsho
   const indexedChecks = (snapshot.web?.publicFileChecks ?? []).map((check, index) => ({ check, index }));
 
   const presentFindings = indexedChecks
-    .filter(({ check }) => check.present && hasValidRootReference(check.rootIndex, roots.length))
+    .filter(({ check }) => check.present && hasValidRootReference(check.rootIndex, roots))
     .map(({ check, index }): ServerAuditFinding => {
       const sources = [`web.publicFileChecks[${index}]`, `web.roots[${check.rootIndex}]`];
       return {
@@ -43,7 +43,7 @@ export function createServerAuditPublicFileFindings(snapshot: ServerAuditSnapsho
     });
 
   const invalidReferenceFindings = indexedChecks
-    .filter(({ check }) => !hasValidRootReference(check.rootIndex, roots.length))
+    .filter(({ check }) => !hasValidRootReference(check.rootIndex, roots))
     .map(({ index }): ServerAuditFinding => {
       const source = `web.publicFileChecks[${index}].rootIndex`;
       return {
