@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this refresh, `main` is `e3a08978376afbc04cd5f784fd2b76d66696d47d`, the merge of safe PR #464. The safe non-production PR queue is **zero**.
+At this refresh, `main` is `fb992925f1004c6fb01e65c0f15424bb6956ff2a`, the merge of safe PR #467. The safe non-production PR queue is **zero**.
 
 The previously protected repository-preparation PRs #161/#164/#169 are merged repository-history facts only. Those merges do **not** authorize deployment, IAM/KMS changes, queue/provider/customer-priority activation, billing, email, charges/refunds, source execution, or production customer/CRM mutation.
 
@@ -24,9 +24,14 @@ The following work is merged and must not be recreated:
 - #461 — fail-safe stale-selection guard and deterministic interaction coverage so a previous-scan node cannot invoke impact traversal with an unavailable root;
 - #462 — selected-node affected-test/workflow adapter over the existing bounded affected-validation mapper;
 - #463 — browser presentation panel for affected tests and explicit repository workflow-path references, including separate partial/truncation truth;
-- #464 — deterministic selected-node intelligence product composing impact and affected-validation evidence while preserving independent bounds and network/write-disabled state.
+- #464 — deterministic selected-node intelligence product composing impact and affected-validation evidence while preserving independent bounds and network/write-disabled state;
+- #465 — roadmap/handoff synchronization through the selected-node intelligence product;
+- #466 — cancellation-safe local visual-explorer composition of the selected-node intelligence product and affected-validation panel;
+- #467 — top-level product wiring that passes the already-produced bounded workflow-path evidence into the explorer, activating selected-node affected-test/workflow evidence in the local product.
 
-All of #455–#464 are repository-only/analyze-only. Exact-head required Hosted CI and Rust/RustSec were green before their merges. No Trusted Mac/Windows requirement was introduced by these ordinary branches.
+#468 was closed unmerged as a duplicate only after #467 was verified on the same base with the narrower one-line product-wiring scope.
+
+All of #455–#467 are repository-only/analyze-only. Exact-head required Hosted CI and Rust/RustSec were green before the code merges. No Trusted Mac/Windows requirement was introduced by these ordinary branches.
 
 ### Earlier safe milestones that must not be recreated
 
@@ -79,11 +84,11 @@ Repository merges do not change those live-state facts by themselves. Production
 
 Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary analysis; bounded visual-explorer/browser presentation; ranked, shortest-path, alternative-path, and dependent-impact query/product flows; deterministic shortest/alternative/impact explanations; read-only MCP query/explanation exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
 
-The newest selected-node contracts now allow one canonical explorer selection to be validated against both bounded dependent-impact evidence and bounded affected-test/workflow evidence. The composition product is merged through #464, and the affected-validation presentation panel is merged through #463.
+The newest selected-node contracts now allow one canonical explorer selection to be validated against both bounded dependent-impact evidence and bounded affected-test/workflow evidence. The composition product is merged through #464, browser composition through #466, and top-level workflow-evidence wiring through #467.
 
 Current safe priorities:
 
-1. wire the merged #464 selected-node intelligence product into the local visual explorer using the merged #463 panel, with race-safe stale-selection handling and no exported-schema change;
+1. strengthen deterministic interaction/controller coverage around the merged #466/#467 explorer integration, including rapid selection changes, stale result suppression, and explicit partial/truncation truth;
 2. keep affected-test/workflow mappings conservative: structural mapping is not behavioral coverage proof, and incomplete graph/workflow evidence must remain visibly partial;
 3. improve MCP/Codex read-only integration over merged graph/query/explanation contracts;
 4. continue only conservative framework/deployment/reference adapters where static repository evidence is explicit and non-executing;
@@ -123,7 +128,7 @@ When the safe queue is six or fewer, new safe work may proceed only after live r
 ## Current safe engineering order
 
 1. Keep shared Hosted CI/Rust/RustSec blockers clear and drain any safe open PR queue first.
-2. Wire the selected-node intelligence product (#464) into the local Repository Audit explorer with the affected-validation panel (#463), preserving stale-selection/race safety and explicit bounded truth.
+2. Strengthen deterministic selected-node explorer interaction/controller coverage over the merged #466/#467 impact plus affected-validation experience.
 3. Keep durable roadmap/handoff/production truth aligned with live repository state.
 4. Continue Repository Audit impact/path explanation quality, MCP/Codex integration, conservative remaining relationships, visual-explorer ergonomics, and cross-platform tests.
 5. Continue Solve Graph conservative language/reference adapters and bounded query/path/impact quality.
