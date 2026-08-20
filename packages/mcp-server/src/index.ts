@@ -8,6 +8,7 @@ import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { findSolveGraphCycles } from "./solve-graph-cycles.js";
+import { findSolveGraphHotspots } from "./solve-graph-hotspots.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
@@ -103,6 +104,14 @@ const solveGraphCyclesInputSchema = z.object({
   edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
   maxComponents: z.number().int().min(1).max(100).optional(),
   maxNodesPerComponent: z.number().int().min(1).max(100).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphHotspotsInputSchema = z.object({
+  ...solveGraphInputFields,
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxHotspots: z.number().int().min(1).max(100).optional(),
+  maxImpactDepth: z.number().int().min(0).max(64).optional(),
+  maxImpactResults: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
@@ -379,6 +388,20 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_hotspots",
+  {
+    title: "Find Solve Graph hotspot candidates",
+    description: "Rank bounded structural hotspot candidates by direct and transitive dependents in an integrity-valid analyze-only Solve Graph. Results are candidate evidence, not runtime criticality or defect claims.",
+    inputSchema: solveGraphHotspotsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, edgeKinds, maxHotspots, maxImpactDepth, maxImpactResults }) => textResult(findSolveGraphHotspots(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { edgeKinds, maxHotspots, maxImpactDepth, maxImpactResults },
+  )),
+);
+
+server.registerTool(
   "solvelang_capabilities",
   {
     title: "List SolveLang capabilities",
@@ -406,6 +429,7 @@ server.registerTool(
       "solvelang_graph_impact",
       "solvelang_graph_explain_impact",
       "solvelang_graph_cycles",
+      "solvelang_graph_hotspots",
       "solvelang_capabilities",
     ],
     privacy: [
