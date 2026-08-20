@@ -11,6 +11,12 @@ import {
   type RepositoryDeploymentPathPresentation,
   type RepositoryDeploymentPathPresentationOptions,
 } from "./deploymentPathPresentation";
+import type { DockerComposeRelationshipSnapshotEvidence } from "./dockerComposeRelationshipSnapshotEvidence";
+import {
+  createDockerComposeRelationshipSnapshotPresentation,
+  type DockerComposeRelationshipSnapshotPresentation,
+  type DockerComposeRelationshipSnapshotPresentationOptions,
+} from "./dockerComposeRelationshipSnapshotPresentation";
 import type { DockerComposeSnapshotEvidence } from "./dockerComposeSnapshotEvidence";
 import {
   createDockerComposeSnapshotPresentation,
@@ -39,6 +45,7 @@ export type RepositoryAuditBrowserIntelligenceOptions = {
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentationOptions;
   deploymentPaths?: RepositoryDeploymentPathPresentationOptions;
   dockerCompose?: DockerComposeSnapshotPresentationOptions;
+  dockerComposeRelationships?: DockerComposeRelationshipSnapshotPresentationOptions;
   frameworkPaths?: RepositoryFrameworkPathPresentationOptions;
   packageScriptPaths?: RepositoryPackageScriptPathPresentationOptions;
   visualExplorer?: RepositoryAuditVisualExplorerOptions;
@@ -52,6 +59,7 @@ export type RepositoryAuditBrowserIntelligence = {
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentation;
   deploymentPaths: RepositoryDeploymentPathPresentation;
   dockerCompose?: DockerComposeSnapshotPresentation;
+  dockerComposeRelationships?: DockerComposeRelationshipSnapshotPresentation;
   frameworkPaths?: RepositoryFrameworkPathPresentation;
   packageScriptPaths?: RepositoryPackageScriptPathPresentation;
   visualExplorer: RepositoryAuditVisualExplorer;
@@ -61,15 +69,23 @@ export type RepositoryAuditBrowserIntelligence = {
     angularTargetConfigPartial?: boolean;
     deploymentPathPartial: boolean;
     dockerComposePartial?: boolean;
+    dockerComposeRelationshipPartial?: boolean;
     frameworkPathPartial?: boolean;
     packageScriptPathPartial?: boolean;
     visualExplorerPartial: boolean;
   };
 };
 
+type RepositorySnapshotIdentityEvidence = {
+  source: {
+    fingerprint: string;
+    revision: string;
+  };
+};
+
 function sameSnapshotIdentity(
   graph: SolveGraphDocument,
-  evidence: DockerComposeSnapshotEvidence,
+  evidence: RepositorySnapshotIdentityEvidence,
 ): boolean {
   return graph.source.fingerprint === evidence.source.fingerprint
     && graph.source.revision === evidence.source.revision;
@@ -83,6 +99,7 @@ export async function createRepositoryAuditBrowserIntelligence(
   angularTargetConfigEvidence?: RepositoryAngularTargetConfigEvidenceAnalysis,
   packageScriptPathEvidence?: RepositoryPackageScriptPathEvidenceAnalysis,
   dockerComposeEvidence?: DockerComposeSnapshotEvidence,
+  dockerComposeRelationshipEvidence?: DockerComposeRelationshipSnapshotEvidence,
 ): Promise<RepositoryAuditBrowserIntelligence> {
   if (graph.graphId !== deploymentPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires deployment evidence from the same Solve Graph document.");
@@ -99,6 +116,9 @@ export async function createRepositoryAuditBrowserIntelligence(
   if (dockerComposeEvidence && !sameSnapshotIdentity(graph, dockerComposeEvidence)) {
     throw new Error("Repository Audit browser intelligence requires Docker Compose evidence from the same repository snapshot.");
   }
+  if (dockerComposeRelationshipEvidence && !sameSnapshotIdentity(graph, dockerComposeRelationshipEvidence)) {
+    throw new Error("Repository Audit browser intelligence requires Docker Compose relationship evidence from the same repository snapshot.");
+  }
 
   const visualExplorer = await createRepositoryAuditVisualExplorer(graph, options.visualExplorer);
   const deploymentPaths = createRepositoryDeploymentPathPresentation(
@@ -107,6 +127,12 @@ export async function createRepositoryAuditBrowserIntelligence(
   );
   const dockerCompose = dockerComposeEvidence
     ? createDockerComposeSnapshotPresentation(dockerComposeEvidence, options.dockerCompose)
+    : undefined;
+  const dockerComposeRelationships = dockerComposeRelationshipEvidence
+    ? createDockerComposeRelationshipSnapshotPresentation(
+      dockerComposeRelationshipEvidence,
+      options.dockerComposeRelationships,
+    )
     : undefined;
   const frameworkPaths = frameworkPathEvidence
     ? createRepositoryFrameworkPathPresentation(frameworkPathEvidence, options.frameworkPaths)
@@ -135,6 +161,10 @@ export async function createRepositoryAuditBrowserIntelligence(
     dockerCompose.status === "partial"
     || dockerCompose.execution.rowsTruncated
   );
+  const dockerComposeRelationshipPartial = dockerComposeRelationships !== undefined && (
+    dockerComposeRelationships.status === "partial"
+    || dockerComposeRelationships.execution.rowsTruncated
+  );
   const frameworkPathPartial = frameworkPaths !== undefined && (
     frameworkPaths.status === "partial"
     || frameworkPaths.execution.rowsTruncated
@@ -152,6 +182,7 @@ export async function createRepositoryAuditBrowserIntelligence(
     status: angularTargetConfigPartial
       || deploymentPathPartial
       || dockerComposePartial
+      || dockerComposeRelationshipPartial
       || frameworkPathPartial
       || packageScriptPathPartial
       || visualExplorerPartial
@@ -160,6 +191,7 @@ export async function createRepositoryAuditBrowserIntelligence(
     ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigs }),
     deploymentPaths,
     ...(dockerCompose === undefined ? {} : { dockerCompose }),
+    ...(dockerComposeRelationships === undefined ? {} : { dockerComposeRelationships }),
     ...(frameworkPaths === undefined ? {} : { frameworkPaths }),
     ...(packageScriptPaths === undefined ? {} : { packageScriptPaths }),
     visualExplorer,
@@ -169,6 +201,7 @@ export async function createRepositoryAuditBrowserIntelligence(
       ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigPartial }),
       deploymentPathPartial,
       ...(dockerCompose === undefined ? {} : { dockerComposePartial }),
+      ...(dockerComposeRelationships === undefined ? {} : { dockerComposeRelationshipPartial }),
       ...(frameworkPaths === undefined ? {} : { frameworkPathPartial }),
       ...(packageScriptPaths === undefined ? {} : { packageScriptPathPartial }),
       visualExplorerPartial,
