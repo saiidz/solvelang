@@ -43,6 +43,17 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function youngestBackupWithAge(backups: NonNullable<ServerAuditSnapshot["backups"]>) {
+  let youngest: { index: number; ageHours: number } | undefined;
+  backups.forEach((backup, index) => {
+    if (backup.ageHours === undefined || !Number.isFinite(backup.ageHours)) return;
+    if (youngest === undefined || backup.ageHours < youngest.ageHours) {
+      youngest = { index, ageHours: backup.ageHours };
+    }
+  });
+  return youngest;
+}
+
 export function createServerAuditBackupPostureFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditBackupPostureOptions = {},
@@ -53,19 +64,20 @@ export function createServerAuditBackupPostureFindings(
   if (backups === undefined) return [];
 
   const findings: ServerAuditFinding[] = [];
-  backups.forEach((backup, index) => {
-    if (backup.ageHours !== undefined && backup.ageHours > staleAfterHours) {
-      findings.push({
-        id: stableId(["backup-posture", "stale", String(index), String(backup.ageHours), String(staleAfterHours)]),
-        severity: "medium",
-        category: "backup",
-        title: "Backup evidence is older than the configured freshness threshold",
-        summary: `Collected backup entry ${index} is ${backup.ageHours} hours old, exceeding the ${staleAfterHours}-hour review threshold. The finding intentionally withholds the backup name and path.`,
-        recommendation: "Verify that a newer successful backup exists and that restore testing, retention, and off-host/offsite protection match the workload's recovery objectives before relying on this backup posture.",
-        evidence: [{ source: `backups[${index}].ageHours`, summary: `${backup.ageHours} hours` }],
-      });
-    }
+  const youngest = youngestBackupWithAge(backups);
+  if (youngest !== undefined && youngest.ageHours > staleAfterHours) {
+    findings.push({
+      id: stableId(["backup-posture", "stale", String(youngest.index), String(youngest.ageHours), String(staleAfterHours)]),
+      severity: "medium",
+      category: "backup",
+      title: "Backup evidence is older than the configured freshness threshold",
+      summary: `The youngest collected backup entry with age evidence is entry ${youngest.index} at ${youngest.ageHours} hours old, exceeding the ${staleAfterHours}-hour review threshold. The finding intentionally withholds backup names and paths.`,
+      recommendation: "Verify that a newer successful backup exists and that restore testing, retention, and off-host/offsite protection match the workload's recovery objectives before relying on this backup posture.",
+      evidence: [{ source: `backups[${youngest.index}].ageHours`, summary: `${youngest.ageHours} hours` }],
+    });
+  }
 
+  backups.forEach((backup, index) => {
     if (backup.sizeBytes === 0) {
       findings.push({
         id: stableId(["backup-posture", "zero-size", String(index)]),
