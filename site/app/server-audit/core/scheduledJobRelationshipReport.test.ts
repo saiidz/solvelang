@@ -89,21 +89,15 @@ test("canonical reports preserve partially materialized scheduled-job fanout tru
     schemaVersion: "1",
     collectedAt: "2026-08-20T20:50:00.000Z",
     host: { hostname: "audit-host" },
-    services: [{ name: "private-api.service", state: "active" }],
-    processes: [
-      { pid: 10, ppid: 1, uid: 1000, state: "S", name: "private-api" },
-      { pid: 20, ppid: 1, uid: 1000, state: "S", name: "private-worker" },
-    ],
+    services: Array.from({ length: 1_001 }, () => ({ name: "private-shared.service", state: "active" })),
     scheduledJobs: [{
       source: "cron:/private/fanout",
-      commandSummary: "private-api.service private-api private-worker",
+      commandSummary: "private-shared.service",
     }],
     metadata: { redactionsApplied: true },
   };
 
-  const report = createServerAuditReport(input, "2026-08-20T20:51:00.000Z", {
-    scheduledJobRelationshipOptions: { maxRelationships: 2 },
-  });
+  const report = createServerAuditReport(input, "2026-08-20T20:51:00.000Z");
   const fanout = report.findings.find(
     (finding) => finding.title === "Some multi-target scheduled-job mappings are not fully materialized",
   );
@@ -128,7 +122,7 @@ test("canonical reports preserve partially materialized scheduled-job fanout tru
     assert.ok(json.includes(text));
     assert.ok(html.includes(text));
   }
-  for (const sensitive of ["private-api", "private-worker", "cron:/private/fanout"]) {
+  for (const sensitive of ["private-shared.service", "cron:/private/fanout"]) {
     assert.equal(json.includes(sensitive), false);
     assert.equal(html.includes(sensitive), false);
   }
