@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this refresh, `main` is `ff82c65c817cb6a383f6be70afdefb866c4cba56`, the merge of safe Solve Graph PR #511. The safe non-production PR queue is **two**: #508 (API subscription availability copy, draft while exact-head Hosted validation settles) and this documentation-sync PR #509.
+At this refresh, `main` before this documentation-only PR is `19115da27cd93443d4186117b5233dce4f2c7ed2`, the merge of safe API availability-copy PR #508. The safe non-production PR queue is **one**: this documentation-sync PR #509.
 
 The historical #288→#301 Repository Audit dependency train is merged and must not be recreated. PRs #161/#164/#169 are also merged repository-history facts only; their historical merge approvals are not standing authorization for deployment or live activation.
 
@@ -38,6 +38,7 @@ The 2026-08-20 queue drain reconciled safe branches prepared across several fast
 - #507 — bounded Server Audit web-listener consistency evidence merged. It compares supplied local web-server evidence with conventional local TCP HTTP(S) listener evidence, performs no network scan, and does not infer application ownership or public reachability.
 - #510 — parser-backed `textDocument/documentSymbol` support for documents opened through the minimal stdio LSP. Full-document diagnostics remain supported; incremental edits, workspace access, execution, and editor packaging remain unsupported.
 - #511 — bounded analyze-only Solve Graph impact artifact/download/product bundle with canonical digest verification and no network or write capability.
+- #508 — public API pricing now labels subscription plans as preview-only/unavailable while recurring billing is disabled, removes purchase-implying CTA wording, and records that cancellation/refund/invoice/support terms must exist before launch. No live Stripe action, billing activation, or production deployment occurred.
 
 All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
@@ -65,7 +66,7 @@ All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trust
 - #484 — sanitized incident-record gate/QA contract;
 - #485 — conservative `solvec check` semantic analysis, including compatibility with merged loop-control statements;
 - #486/#487/#488/#489/#490/#491/#492/#493/#495/#496/#497 — hotspot, workspace-boundary, formatter/linter/runtime-helper, Server Audit relationship/log, affected-validation MCP, module/browser-runtime ADR, and shared-language-library work described above;
-- #498/#500/#502/#503/#504/#506/#507/#510/#511 — latest billing-readiness, MCP, LSP, Solve Graph validation/impact, review-fix, and Server Audit queue-drain work described above.
+- #498/#500/#502/#503/#504/#506/#507/#508/#510/#511 — latest billing-readiness, public availability truth, MCP, LSP, Solve Graph validation/impact, review-fix, and Server Audit queue-drain work described above.
 
 Do not recreate merged generations merely because historical issues, branches, or earlier handoff text mention predecessor PR numbers.
 
@@ -113,7 +114,7 @@ Current boundaries include:
 - Repository Audit write/remediation mode: **disabled**;
 - Server Audit mutation/remediation mode: **disabled**.
 
-Repository merges such as #498/#500 do not change those live-state facts by themselves.
+Repository merges such as #498/#500/#508 do not change those live-state facts by themselves.
 
 ## Safe queue and integration policy
 
