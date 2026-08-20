@@ -350,7 +350,7 @@ Additional limitations include:
 - integer-focused numeric behavior
 - incomplete type checking
 - narrow standard library
-- basic module support through relative imports
+- basic file-include support through relative imports (not module namespaces)
 - experimental provider and side-effect features
 - limited browser runtime compatibility
 - no published production reliability or performance benchmarks
