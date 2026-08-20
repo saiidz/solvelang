@@ -57,7 +57,7 @@ test("scheduled-job relationship findings expose multi-target and unresolved tru
     "cron:/private/api",
     "cron:/private/unmatched",
     "*/5 * * * *",
-    "0 2 * * * *",
+    "0 2 * * *",
   ]) {
     assert.equal(serialized.includes(sensitive), false);
   }
