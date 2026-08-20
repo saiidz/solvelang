@@ -24,6 +24,15 @@ test("production operations log policy excludes raw request and exception materi
   assert.match(runbook, /caught exception messages or stack traces/);
 });
 
+test("suspected API-key exposure requires an owner-recorded fail-closed decision", async () => {
+  const runbook = await readFile(operationsUrl, "utf8");
+
+  assert.match(runbook, /## Suspected API-key exposure/);
+  assert.match(runbook, /treat the key as untrusted/);
+  assert.match(runbook, /accountable owner must record the decision to revoke/);
+  assert.match(runbook, /Do not paste or store the plaintext key/);
+});
+
 test("restore drills require an isolated target and preserve active application routing", async () => {
   const runbook = await readFile(operationsUrl, "utf8");
 
