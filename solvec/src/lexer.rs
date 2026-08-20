@@ -8,6 +8,8 @@ pub enum Token {
     While,
     For,
     In,
+    Break,
+    Continue,
     Agent,
     Tool,
     Instruction,
@@ -285,6 +287,8 @@ fn keyword_or_identifier(word: &str) -> Token {
         "while" => Token::While,
         "for" => Token::For,
         "in" => Token::In,
+        "break" => Token::Break,
+        "continue" => Token::Continue,
         "agent" => Token::Agent,
         "tool" => Token::Tool,
         "instruction" => Token::Instruction,
@@ -333,6 +337,17 @@ print("ok" .. "!")
 
         assert!(kinds.contains(&Token::For));
         assert!(kinds.contains(&Token::In));
+    }
+
+    #[test]
+    fn tokenizes_loop_control_keywords() {
+        let kinds = lex("break continue")
+            .into_iter()
+            .map(|located| located.token)
+            .collect::<Vec<_>>();
+
+        assert!(kinds.contains(&Token::Break));
+        assert!(kinds.contains(&Token::Continue));
     }
 
     #[test]
