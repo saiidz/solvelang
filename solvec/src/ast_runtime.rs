@@ -711,6 +711,9 @@ impl AstRuntime {
         location: SourceLocation,
     ) -> Option<Result<Value, RuntimeError>> {
         match name {
+            "length" => Some(self.length(args, location)),
+            "contains" => Some(self.contains(args, location)),
+            "get" => Some(self.get(args, location)),
             "json_parse" => {
                 let input = args
                     .first()
@@ -863,6 +866,140 @@ impl AstRuntime {
             }
             _ => None,
         }
+    }
+
+    fn length(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
+        let values = self.evaluate_builtin_arguments("length", args, 1, 1, location)?;
+        let length = match &values[0] {
+            Value::Text(value) => value.chars().count(),
+            Value::Array(values) => values.len(),
+            Value::Object(entries) => entries.len(),
+            value => {
+                return Err(self.error_at(
+                    location,
+                    format!(
+                        "length expects a text, array, or object value, got {}",
+                        value.type_name()
+                    ),
+                    None,
+                ));
+            }
+        };
+        let length = i32::try_from(length).map_err(|_| {
+            self.error_at(
+                location,
+                "length result exceeds SolveLang's signed 32-bit number range",
+                None,
+            )
+        })?;
+        Ok(Value::Number(length))
+    }
+
+    fn contains(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
+        let values = self.evaluate_builtin_arguments("contains", args, 2, 2, location)?;
+        let contains = match (&values[0], &values[1]) {
+            (Value::Text(text), Value::Text(needle)) => text.contains(needle),
+            (Value::Text(_), value) => {
+                return Err(self.error_at(
+                    location,
+                    format!(
+                        "contains expects a text search value for text, got {}",
+                        value.type_name()
+                    ),
+                    None,
+                ));
+            }
+            (Value::Array(values), needle) => values.contains(needle),
+            (Value::Object(entries), Value::Text(key)) => entries.contains_key(key),
+            (Value::Object(_), value) => {
+                return Err(self.error_at(
+                    location,
+                    format!(
+                        "contains expects a text key for an object, got {}",
+                        value.type_name()
+                    ),
+                    None,
+                ));
+            }
+            (value, _) => {
+                return Err(self.error_at(
+                    location,
+                    format!(
+                        "contains expects a text, array, or object value, got {}",
+                        value.type_name()
+                    ),
+                    None,
+                ));
+            }
+        };
+        Ok(Value::Bool(contains))
+    }
+
+    fn get(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
+        let values = self.evaluate_builtin_arguments("get", args, 2, 3, location)?;
+        let fallback = values.get(2).cloned().unwrap_or(Value::Null);
+        match (&values[0], &values[1]) {
+            (Value::Array(items), Value::Number(index)) => Ok(usize::try_from(*index)
+                .ok()
+                .and_then(|index| items.get(index).cloned())
+                .unwrap_or(fallback)),
+            (Value::Array(_), value) => Err(self.error_at(
+                location,
+                format!(
+                    "get expects a number index for an array, got {}",
+                    value.type_name()
+                ),
+                None,
+            )),
+            (Value::Object(entries), Value::Text(key)) => {
+                Ok(entries.get(key).cloned().unwrap_or(fallback))
+            }
+            (Value::Object(_), value) => Err(self.error_at(
+                location,
+                format!(
+                    "get expects a text key for an object, got {}",
+                    value.type_name()
+                ),
+                None,
+            )),
+            (value, _) => Err(self.error_at(
+                location,
+                format!(
+                    "get expects an array or object value, got {}",
+                    value.type_name()
+                ),
+                None,
+            )),
+        }
+    }
+
+    fn evaluate_builtin_arguments(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        minimum: usize,
+        maximum: usize,
+        location: SourceLocation,
+    ) -> Result<Vec<Value>, RuntimeError> {
+        if args.len() < minimum || args.len() > maximum {
+            let expected = if minimum == maximum {
+                minimum.to_string()
+            } else {
+                format!("between {} and {}", minimum, maximum)
+            };
+            return Err(self.error_at(
+                location,
+                format!(
+                    "{} expects {} argument{} but received {}",
+                    name,
+                    expected,
+                    if maximum == 1 { "" } else { "s" },
+                    args.len()
+                ),
+                None,
+            ));
+        }
+        args.iter().map(|arg| self.eval(arg)).collect()
     }
 
     fn http_get(&self, url: &str, location: SourceLocation) -> Result<Value, RuntimeError> {
@@ -1225,6 +1362,91 @@ if user.active {
         let mut runtime = AstRuntime::default();
 
         runtime.run(&statements).expect("runtime succeeds");
+    }
+
+    #[test]
+    fn evaluates_pure_collection_and_text_helpers() {
+        let source = r#"
+let owners = ["Ari", "Bea"]
+let ticket = { status: "open", count: 2 }
+print(length(owners))
+print(length("hé"))
+print(length(ticket))
+print(contains(owners, "Bea"))
+print(contains("SolveLang", "Lang"))
+print(contains(ticket, "status"))
+print(get(owners, 1))
+print(get(ticket, "missing", "fallback"))
+print(get(owners, 8, "fallback"))
+"#;
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            source,
+            "helpers.solve",
+            None,
+            true,
+        );
+
+        runtime.run(&parse(source)).expect("pure helpers succeed");
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Bool(true),
+                Value::Bool(true),
+                Value::Bool(true),
+                Value::Text("Bea".to_string()),
+                Value::Text("fallback".to_string()),
+                Value::Text("fallback".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn pure_collection_helpers_report_typed_errors() {
+        for (source, expected) in [
+            (
+                "print(length(1))",
+                "length expects a text, array, or object value",
+            ),
+            (
+                "print(contains(\"1\", 1))",
+                "contains expects a text search value for text",
+            ),
+            (
+                "print(contains({ status: true }, 1))",
+                "contains expects a text key for an object",
+            ),
+            (
+                "print(get(\"text\", 0))",
+                "get expects an array or object value",
+            ),
+            (
+                "print(get([1], \"0\"))",
+                "get expects a number index for an array",
+            ),
+            (
+                "print(length(\"one\", \"two\"))",
+                "length expects 1 argument but received 2",
+            ),
+        ] {
+            let mut runtime = AstRuntime::with_input(
+                ExecutionPolicy::safe(Vec::new()),
+                source,
+                "helpers.solve",
+                None,
+                false,
+            );
+            let error = runtime
+                .run(&parse(source))
+                .expect_err("invalid helper arguments should fail");
+            assert!(
+                error.to_string().contains(expected),
+                "unexpected error: {error}"
+            );
+        }
     }
 
     #[test]

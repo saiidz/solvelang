@@ -1093,8 +1093,11 @@ fn preflight_expr(
                 if let Some(message) = denied_builtin_message(name) {
                     return Err(capability_failure(message));
                 }
-                let allowed = matches!(name.as_str(), "json_parse" | "json_stringify")
-                    || (function_names.contains(name.as_str()) && !is_explicitly_unsafe_name(name));
+                let allowed = matches!(
+                    name.as_str(),
+                    "length" | "contains" | "get" | "json_parse" | "json_stringify"
+                ) || (function_names.contains(name.as_str())
+                    && !is_explicitly_unsafe_name(name));
                 if !allowed {
                     return Err(capability_failure(
                         "unknown or unsafe function calls are disabled by hardened execution policy",

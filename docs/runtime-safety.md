@@ -32,6 +32,10 @@ Hardened execution denies:
 - runtime `env` calls and AI-provider configuration reads;
 - unknown functions and known shell, process, plugin, payment, email, database, or mutation-style function names.
 
+The deterministic `length`, `contains`, `get`, `json_parse`, and
+`json_stringify` helpers remain available in hardened mode. They only transform
+in-memory SolveLang values and do not grant a runtime capability.
+
 The CLI statically inspects the complete flattened AST before the first statement executes. Denied calls in function bodies, imported source, and unreachable branches still fail closed. Runtime capability guards remain in place as defense in depth.
 
 Capability-enabling `--allow-network`, `--allow-file-read`, `--allow-file-write`, `--allow-env`, and `--allow-root` flags are rejected when any hardened flag is active. There is no capability override inside hardened mode.

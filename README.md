@@ -31,7 +31,7 @@ Public claims should use these labels:
 - Rust lexer, parser, AST, and interpreter prototype
 - CLI commands for running, validating, tokenizing, and inspecting ASTs
 - conservative source-located semantic checks with `solvec check`
-- variables, reassignment, conditions, loops, functions, arrays, objects, imports, and JSON helpers
+- variables, reassignment, conditions, loops, functions, arrays, objects, imports, JSON helpers, and pure collection/text helpers
 - source-located parser and runtime diagnostics
 - deterministic local execution
 - hardened execution modes that deny network, file, environment, and agent capabilities

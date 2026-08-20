@@ -309,6 +309,42 @@ Parser recovery uses statement boundaries so one malformed statement generally y
 
 ## Builtins
 
+### Pure standard-library helpers
+
+`length`, `contains`, and `get` are deterministic pure helpers. They do not read
+files, environment variables, or the network, so hardened runs allow them.
+
+`length(value)` returns the number of Unicode scalar values in text, the number
+of items in an array, or the number of keys in an object. It rejects all other
+types.
+
+```solve
+print(length("hé")) // 2
+print(length(["support", "sales"])) // 2
+print(length({ status: "open", urgent: true })) // 2
+```
+
+`contains(collection, value)` returns whether text contains a text substring,
+an array contains an equal value, or an object contains a text key.
+
+```solve
+print(contains("SolveLang", "Lang"))
+print(contains(["support", "sales"], "sales"))
+print(contains({ status: "open" }, "status"))
+```
+
+`get(collection, key, fallback)` reads an array by numeric index or an object
+by text key without throwing for a missing key or out-of-range (including
+negative) index. Its third argument is optional and defaults to `null`.
+
+```solve
+let owners = ["Ari", "Bea"]
+let ticket = { status: "open" }
+print(get(owners, 1)) // Bea
+print(get(owners, 9, "unassigned")) // unassigned
+print(get(ticket, "priority", "normal")) // normal
+```
+
 ### `json_parse(text)`
 
 Parses JSON text into SolveLang values.

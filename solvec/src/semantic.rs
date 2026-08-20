@@ -429,7 +429,10 @@ fn merge_types(left: Type, right: Type) -> Type {
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "json_parse"
+        "length"
+            | "contains"
+            | "get"
+            | "json_parse"
             | "json_stringify"
             | "http_get"
             | "http_post"
