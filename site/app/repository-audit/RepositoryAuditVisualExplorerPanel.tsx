@@ -111,9 +111,10 @@ export function RepositoryAuditVisualExplorerPanel({
   const activeIntelligenceState = intelligenceRequestKey && intelligenceState?.requestKey === intelligenceRequestKey
     ? intelligenceState
     : undefined;
-  const activeIntelligence = activeIntelligenceState?.product?.selectedNodeId === selectedNodeId
-    && activeIntelligenceState.product.graphId === explorer.graphId
-    ? activeIntelligenceState.product
+  const activeProduct = activeIntelligenceState?.product;
+  const activeIntelligence = activeProduct?.selectedNodeId === selectedNodeId
+    && activeProduct.graphId === explorer.graphId
+    ? activeProduct
     : undefined;
   const selectedImpactProduct = activeIntelligence?.impact ?? impactProduct;
   const intelligencePending = Boolean(intelligenceRequestKey && intelligenceState?.requestKey !== intelligenceRequestKey);
