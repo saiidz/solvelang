@@ -37,6 +37,7 @@ Collected categories include:
 - listening TCP/UDP sockets with bounded process name only;
 - bounded process inventory containing PID, parent PID, numeric uid, state, and executable `comm` name only;
 - service state inventory;
+- bounded, exact-name service/process/listener relationship evidence, preserving ambiguous or unresolved attribution rather than guessing ownership;
 - installed package names/versions as inventory (not CVE conclusions);
 - scheduled-job source names with command bodies omitted;
 - web server activity and candidate web-root metadata;
@@ -75,6 +76,7 @@ v0 checks include:
 - Database integrity/content is not inspected.
 - Application secrets/customer contents are not inspected.
 - A clean report is not a penetration test, compliance certification, or guarantee of security.
+- Service/listener attribution does not infer process paths, supervisor aliases, case-folded names, or network reachability from a local socket record.
 
 ## Collector usage
 
