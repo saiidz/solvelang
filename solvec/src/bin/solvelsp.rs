@@ -37,6 +37,32 @@ fn symbols(text: &str) -> Vec<Value> {
     }).collect()
 }
 
+fn definition(text: &str, line: usize, character: usize) -> Value {
+    let token = lexer::lex(text)
+        .into_iter()
+        .find_map(|located| match located.token {
+            lexer::Token::Identifier(name)
+                if located.line == line + 1
+                    && character + 1 >= located.column
+                    && character < located.column + name.len() =>
+            {
+                Some(name)
+            }
+            _ => None,
+        });
+    let Some(name) = token else {
+        return Value::Null;
+    };
+    let mut parser = parser::Parser::new(lexer::lex(text));
+    let Ok(statements) = parser.parse() else {
+        return Value::Null;
+    };
+    statements.into_iter().find_map(|statement| match statement {
+        Stmt::Let { name: declared, location, .. } | Stmt::Function { name: declared, location, .. } | Stmt::Agent { name: declared, location, .. } if declared == name => Some(json!({"uri":"","range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
+        _ => None,
+    }).unwrap_or(Value::Null)
+}
+
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
@@ -61,6 +87,28 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 .unwrap_or("");
             vec![
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":documents.get(uri).map(|text| symbols(text)).unwrap_or_default()}),
+            ]
+        }
+        Some("textDocument/definition") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let position = &message["params"]["position"];
+            let mut result = documents
+                .get(uri)
+                .map(|text| {
+                    definition(
+                        text,
+                        position["line"].as_u64().unwrap_or(0) as usize,
+                        position["character"].as_u64().unwrap_or(0) as usize,
+                    )
+                })
+                .unwrap_or(Value::Null);
+            if let Some(location) = result.as_object_mut() {
+                location.insert("uri".to_string(), Value::String(uri.to_string()));
+            }
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
         }
         _ => Vec::new(),
@@ -147,5 +195,19 @@ mod tests {
             &mut documents,
         );
         assert_eq!(output[0]["result"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn definition_resolves_only_open_document_top_level_symbols() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(output[0]["result"]["uri"], "file:///test.solve");
     }
 }
