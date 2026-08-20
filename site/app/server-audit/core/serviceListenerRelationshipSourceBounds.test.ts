@@ -40,5 +40,5 @@ test("service-listener analysis bounds per-relationship source allocation for am
   assert.equal(result.summary.relationshipsWithTruncatedSources, 1);
   assert.equal(result.execution.maxSourcesPerRelationship, 32);
   assert.equal(result.execution.relationshipsTruncated, false);
-  assert.match(result.relationships[0].id, /^server-service-listener:[a-f0-9]{8}$/);
+  assert.equal(result.relationships[0].id, "server-service-listener:e2ca86dd");
 });
