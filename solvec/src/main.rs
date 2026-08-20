@@ -1149,6 +1149,7 @@ fn preflight_expr(
                 let allowed = matches!(
                     name.as_str(),
                     "length"
+                        | "is_empty"
                         | "contains"
                         | "get"
                         | "keys"

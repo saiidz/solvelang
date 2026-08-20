@@ -430,6 +430,7 @@ fn is_builtin(name: &str) -> bool {
     matches!(
         name,
         "length"
+            | "is_empty"
             | "contains"
             | "get"
             | "keys"
@@ -514,7 +515,8 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_pure_object_helpers() {
+    fn recognizes_pure_collection_helpers() {
+        assert!(check(&parse("print(is_empty([]))\n")).is_ok());
         assert!(check(&parse("print(keys({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(values({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(entries({ beta: 2, alpha: 1 }))\n")).is_ok());
