@@ -39,7 +39,7 @@ function derivedFinding(
       category: "tls",
       title: "TLS certificate expired",
       summary: `Certificate expiry evidence at web.certificates[${index}] is about ${daysAgo} day(s) before the supplied snapshot collection time.`,
-      recommendation: "Confirm which certificate is active, renew or replace it if needed, and verify the served chain through an separately approved endpoint check before relying on this snapshot alone.",
+      recommendation: "Confirm which certificate is active, renew or replace it if needed, and verify the served chain through a separately approved endpoint check before relying on this snapshot alone.",
       evidence: [{ source, summary: "expiry window derived from notAfter because daysRemaining was absent" }],
     };
   }
