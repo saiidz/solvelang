@@ -16,14 +16,17 @@ import { createServerAuditLargeLogFindings } from "./largeLogFindings";
 import { createServerAuditListenerCoverageFindings } from "./listenerCoverageFindings";
 import { createServerAuditLogCoverageFindings } from "./logCoverageFindings";
 import { createServerAuditStaleLogFindings } from "./staleLogFindings";
+import { createServerAuditPackageIdentityCoverageFindings } from "./packageIdentityCoverageFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessCoverageFindings } from "./processCoverageFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
+import { createServerAuditProcessIdentityCoverageFindings } from "./processIdentityCoverageFindings";
 import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
 import { createServerAuditScheduledJobRelationshipFindings } from "./scheduledJobRelationshipFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
+import { createServerAuditServiceIdentityCoverageFindings } from "./serviceIdentityCoverageFindings";
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
@@ -126,13 +129,16 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditInventoryFindings(snapshot),
     ...createServerAuditFilesystemCoverageFindings(snapshot),
     ...createServerAuditProcessCoverageFindings(snapshot),
+    ...createServerAuditProcessIdentityCoverageFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
+    ...createServerAuditServiceIdentityCoverageFindings(snapshot),
     ...createServerAuditScheduledJobCoverageFindings(snapshot),
     ...createServerAuditScheduledJobRelationshipFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditServiceListenerRelationshipFindings(snapshot),
     ...createServerAuditServiceProcessRelationshipFindings(snapshot),
+    ...createServerAuditPackageIdentityCoverageFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLogCoverageFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
@@ -185,12 +191,15 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Process-coverage findings report only an explicit empty process inventory; because the reviewed collector maps failed/unavailable fixed `ps` execution or empty usable output to an empty array, they do not prove that the host has no processes or that process collection was complete or authoritative.",
+      "Process-identity coverage findings report only supplied process records whose executable identity is empty after trim and NFC normalization; they do not prove process absence, process ownership, runtime health, or collector authority.",
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
+      "Service-identity coverage findings report only supplied service records whose identity is empty after trim and NFC normalization; they do not prove service absence, service ownership, runtime health, or collector authority.",
       "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
       "Scheduled-job relationship findings use only bounded exact-name-token matches over supplied sanitized command summaries and service/process names; multi-target, unresolved, oversized, or truncated results are completeness/integrity signals and do not prove command execution, ownership, job validity, runtime health, or collector authority.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Service-listener relationship findings use only conservative exact static-label matches across supplied service, process, and listener records; ambiguous, unresolved, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, exposure, runtime health, or collector authority.",
       "Service-process relationship findings use only conservative exact static-label matches across supplied service and process records; grouped, unmatched, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, process identity, runtime health, or collector authority.",
+      "Package-identity coverage findings report only supplied package records whose identity is empty after trim and NFC normalization; they do not prove package absence, package discovery completeness, collector authority, or vulnerability status.",
       "Package-version evidence findings report explicit empty inventories plus missing or non-specific supplied versions; they do not prove package discovery completeness, collector authority, or vulnerability status.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Public-file reference-integrity findings report only that supplied marker evidence cannot be linked to an available web-root record; they do not establish marker presence or exposure.",
