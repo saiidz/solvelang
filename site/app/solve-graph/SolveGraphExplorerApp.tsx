@@ -44,6 +44,7 @@ export default function SolveGraphExplorerApp() {
   const [loaded, setLoaded] = useState<LoadedState | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [kind, setKind] = useState("");
   const [message, setMessage] = useState("Choose a canonical Solve Graph JSON file. Nothing is uploaded or executed.");
   const [loading, setLoading] = useState(false);
 
@@ -52,12 +53,13 @@ export default function SolveGraphExplorerApp() {
     try {
       return findSolveGraphNodes(loaded.index, {
         ...(search.trim() ? { text: search.trim() } : {}),
+        ...(kind ? { kinds: [kind as SolveGraphNode["kind"]] } : {}),
         limit: 150,
       });
     } catch {
       return [];
     }
-  }, [loaded, search]);
+  }, [loaded, search, kind]);
 
   const selected = selectedId && loaded ? loaded.index.nodesById.get(selectedId) ?? null : null;
 
@@ -202,6 +204,11 @@ export default function SolveGraphExplorerApp() {
                   placeholder="file, symbol, route, test…"
                   className="mt-2 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none placeholder:text-slate-600 focus:border-sky-400"
                 />
+                <label className="sr-only" htmlFor="graph-kind">Filter by node kind</label>
+                <select id="graph-kind" value={kind} onChange={(event) => setKind(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-sky-400">
+                  <option value="">All node kinds</option>
+                  {["file", "module", "function", "route", "test", "workflow", "job", "resource", "permission"].map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
                 <p className="mt-2 text-xs text-slate-500">Showing {matches.length} of {loaded.document.nodes.length.toLocaleString()} nodes.</p>
                 <div className="mt-3 max-h-[560px] space-y-2 overflow-y-auto pr-1">
                   {matches.map((node) => (
