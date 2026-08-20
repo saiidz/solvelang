@@ -109,6 +109,16 @@ function exactTokenMatch(tokens: ReadonlySet<string>, names: readonly string[]):
   return names.find((name) => tokens.has(name));
 }
 
+function addTargetIndex(index: Map<string, number[]>, token: string, targetIndex: number): void {
+  if (!token) return;
+  const targets = index.get(token);
+  if (targets) {
+    targets.push(targetIndex);
+  } else {
+    index.set(token, [targetIndex]);
+  }
+}
+
 function compareRelationship(
   left: ServerAuditScheduledJobRelationship,
   right: ServerAuditScheduledJobRelationship,
@@ -143,6 +153,18 @@ export function analyzeServerAuditScheduledJobRelationships(
   const remainingTargetCapacity = Math.max(0, maxTargets - boundedServices.length);
   const boundedProcesses = processes.slice(0, remainingTargetCapacity);
   const targetsTruncated = services.length + processes.length > maxTargets;
+  const serviceIndexesByToken = new Map<string, number[]>();
+  const processIndexesByToken = new Map<string, number[]>();
+
+  boundedServices.forEach((service, targetIndex) => {
+    for (const candidate of serviceCandidateNames(service.name)) {
+      addTargetIndex(serviceIndexesByToken, candidate, targetIndex);
+    }
+  });
+  boundedProcesses.forEach((process, processIndex) => {
+    addTargetIndex(processIndexesByToken, normalize(process.name), processIndex);
+  });
+
   let oversizedCommandSummariesSkipped = 0;
   let relationshipsObserved = 0;
   let jobsWithRelationships = 0;
@@ -156,16 +178,32 @@ export function analyzeServerAuditScheduledJobRelationships(
     const tokens = summaryTokens(job.commandSummary);
     if (tokens.size === 0) return;
 
-    let jobRelationshipCount = 0;
+    const matchedServiceIndexes = new Set<number>();
+    const matchedProcessIndexes = new Set<number>();
+    for (const token of tokens) {
+      for (const targetIndex of serviceIndexesByToken.get(token) ?? []) {
+        matchedServiceIndexes.add(targetIndex);
+      }
+      for (const processIndex of processIndexesByToken.get(token) ?? []) {
+        matchedProcessIndexes.add(processIndex);
+      }
+    }
+
+    const jobRelationshipCount = matchedServiceIndexes.size + matchedProcessIndexes.size;
+    relationshipsObserved += jobRelationshipCount;
+    if (jobRelationshipCount > 0) {
+      jobsWithRelationships += 1;
+    }
+
     const remainingRelationshipCapacity = Math.max(0, maxRelationships - relationships.length);
+    if (remainingRelationshipCapacity === 0 || jobRelationshipCount === 0) return;
     const jobRelationships: ServerAuditScheduledJobRelationship[] = [];
 
-    boundedServices.forEach((service, targetIndex) => {
+    for (const targetIndex of matchedServiceIndexes) {
+      const service = boundedServices[targetIndex];
+      if (!service) continue;
       const matchedName = exactTokenMatch(tokens, serviceCandidateNames(service.name));
-      if (!matchedName) return;
-      jobRelationshipCount += 1;
-      relationshipsObserved += 1;
-      if (remainingRelationshipCapacity === 0) return;
+      if (!matchedName) continue;
       jobRelationships.push({
         relationshipId: stableId(["scheduled-job-service", String(jobIndex), String(targetIndex), normalize(service.name)]),
         kind: "scheduled-job-service",
@@ -180,14 +218,13 @@ export function analyzeServerAuditScheduledJobRelationships(
           summary: `sanitized command summary contains the exact service-name token '${matchedName}'`,
         },
       });
-    });
+    }
 
-    boundedProcesses.forEach((process, processIndex) => {
+    for (const processIndex of matchedProcessIndexes) {
+      const process = boundedProcesses[processIndex];
+      if (!process) continue;
       const normalizedName = normalize(process.name);
-      if (!normalizedName || !tokens.has(normalizedName)) return;
-      jobRelationshipCount += 1;
-      relationshipsObserved += 1;
-      if (remainingRelationshipCapacity === 0) return;
+      if (!normalizedName) continue;
       jobRelationships.push({
         relationshipId: stableId(["scheduled-job-process", String(jobIndex), String(processIndex), normalizedName]),
         kind: "scheduled-job-process",
@@ -202,15 +239,10 @@ export function analyzeServerAuditScheduledJobRelationships(
           summary: `sanitized command summary contains the exact process-name token '${normalizedName}'`,
         },
       });
-    });
+    }
 
-    if (jobRelationshipCount > 0) {
-      jobsWithRelationships += 1;
-    }
-    if (remainingRelationshipCapacity > 0 && jobRelationships.length > 0) {
-      jobRelationships.sort(compareRelationship);
-      relationships.push(...jobRelationships.slice(0, remainingRelationshipCapacity));
-    }
+    jobRelationships.sort(compareRelationship);
+    relationships.push(...jobRelationships.slice(0, remainingRelationshipCapacity));
   });
 
   relationships.sort(compareRelationship);
