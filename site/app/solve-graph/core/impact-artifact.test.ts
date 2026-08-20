@@ -112,7 +112,7 @@ test("rejects tampering, non-canonical fields, and oversized serialized artifact
 
   await assert.rejects(
     parseAndVerifySolveGraphImpactArtifact(index, " ".repeat(MAX_SOLVE_GRAPH_IMPACT_ARTIFACT_BYTES + 1)),
-    /1 MiB verification limit/,
+    /8 MiB verification limit/,
   );
 });
 
