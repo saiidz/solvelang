@@ -506,6 +506,24 @@ fn builtin_type_errors_exit_with_runtime_error() {
 }
 
 #[test]
+fn hardened_mode_allows_pure_standard_library_helpers() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_pure_standard_library.solve",
+        r#"
+let labels = ["new", "urgent"]
+let ticket = { labels: labels }
+print(length(ticket.labels))
+print(contains(labels, "urgent"))
+print(get(ticket, "missing", "not-set"))
+"#,
+    );
+
+    let output = run_solvec(&["run", "--safe", &file]);
+    assert!(output.contains(ADVISORY_LABEL));
+    assert!(output.contains("2\ntrue\nnot-set"));
+}
+
+#[test]
 fn file_builtins_read_and_write_temp_files() {
     let mut path = std::env::temp_dir();
     path.push("solvelang_cli_file_builtin.txt");
