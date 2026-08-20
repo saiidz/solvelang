@@ -1302,7 +1302,27 @@ impl AstRuntime {
             .file_name()
             .ok_or_else(|| RuntimeError::new(format!("invalid file path '{}'", path.display())))?;
 
-        Ok(canonical_parent.join(file_name))
+        let candidate = canonical_parent.join(file_name);
+        if self.policy.restrict_filesystem_roots {
+            match std::fs::symlink_metadata(&candidate) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    return Err(RuntimeError::new(format!(
+                        "refusing to write through symbolic link '{}'",
+                        candidate.display()
+                    )));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(RuntimeError::new(format!(
+                        "failed to inspect output path '{}': {}",
+                        candidate.display(),
+                        error
+                    )));
+                }
+            }
+        }
+        Ok(candidate)
     }
 
     fn reject_path_traversal(&self, path: &str) -> Result<(), RuntimeError> {
@@ -1387,6 +1407,12 @@ impl AstRuntime {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+    #[cfg(unix)]
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{AstRuntime, ExecutionPolicy};
     use crate::lexer::lex;
@@ -1730,5 +1756,44 @@ print(first_after_skip([1, 4, 9]))
             );
             assert!(runtime.outputs().is_empty());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn restricted_file_writes_reject_existing_symlinks() {
+        let root = std::env::temp_dir().join(format!(
+            "solvelang_write_symlink_{}_{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock is valid")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).expect("temporary root is created");
+        let outside = root.with_extension("outside");
+        fs::write(&outside, "outside").expect("outside file is created");
+        let link = root.join("escape.txt");
+        symlink(&outside, &link).expect("symlink is created");
+
+        let mut policy = ExecutionPolicy::unrestricted();
+        policy.allowed_roots = vec![fs::canonicalize(&root).expect("root canonicalizes")];
+        policy.restrict_filesystem_roots = true;
+        let source = format!("write_file(\"{}\", \"overwritten\")", link.display());
+        let mut runtime = AstRuntime::with_input(policy, &source, "write.solve", None, false);
+        let error = runtime
+            .run(&parse(&source))
+            .expect_err("restricted writes must reject a symlink target");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to write through symbolic link")
+        );
+        assert_eq!(
+            fs::read_to_string(&outside).expect("outside file is readable"),
+            "outside"
+        );
+        fs::remove_dir_all(&root).expect("temporary root is removed");
+        fs::remove_file(&outside).expect("outside file is removed");
     }
 }
