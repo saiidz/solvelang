@@ -358,3 +358,12 @@ test("logout revokes the server session and clears the partitioned cookie", asyn
     (error) => error instanceof ApiAccessError && error.code === "invalid_session",
   );
 });
+
+test("malformed percent-encoded session cookies fail closed as invalid sessions", async () => {
+  const { service } = setup();
+
+  await assert.rejects(
+    () => service.authenticate("sl_api_session=%"),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_session",
+  );
+});
