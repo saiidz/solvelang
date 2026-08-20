@@ -47,7 +47,7 @@ fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<S
             lexer::Token::Identifier(name)
                 if located.line == line + 1
                     && character + 1 >= located.column
-                    && character < located.column + name.len() =>
+                    && character < located.column + name.encode_utf16().count() =>
             {
                 Some(name)
             }
@@ -115,7 +115,7 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
             lexer::Token::Identifier(candidate) if candidate == name => Some(json!({
                 "range": {
                     "start": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1)},
-                    "end": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1) + candidate.len()}
+                    "end": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1) + candidate.encode_utf16().count()}
                 },
                 "kind": 1
             })),
@@ -360,5 +360,25 @@ mod tests {
             &mut documents,
         );
         assert!(unknown[0]["result"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn highlight_ranges_use_utf16_character_units() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///utf16.solve","text":"let café = 1\nprint(café)"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":8,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///utf16.solve"},"position":{"line":1,"character":6}}}),
+            &mut documents,
+        );
+        let highlights = output[0]["result"].as_array().expect("highlight list");
+        assert_eq!(highlights.len(), 2);
+        for highlight in highlights {
+            let start = highlight["range"]["start"]["character"].as_u64().unwrap();
+            let end = highlight["range"]["end"]["character"].as_u64().unwrap();
+            assert_eq!(end - start, 4);
+        }
     }
 }
