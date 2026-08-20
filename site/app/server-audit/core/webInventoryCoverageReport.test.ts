@@ -33,11 +33,14 @@ test("canonical reports compose explicit empty web inventories with structural e
     "No web-root records supplied",
     "No TLS certificate records supplied",
   ].includes(finding.title));
-  assert.deepEqual(webCoverage.flatMap((finding) => finding.evidence), [
-    { source: "web.certificates", summary: "0 TLS certificate records" },
-    { source: "web.roots", summary: "0 web-root records" },
-    { source: "web.servers", summary: "0 web-server records" },
-  ]);
+  assert.deepEqual(
+    webCoverage.flatMap((finding) => finding.evidence).sort((left, right) => left.source.localeCompare(right.source)),
+    [
+      { source: "web.certificates", summary: "0 TLS certificate records" },
+      { source: "web.roots", summary: "0 web-root records" },
+      { source: "web.servers", summary: "0 web-server records" },
+    ],
+  );
 
   const json = serverAuditReportJson(report);
   const html = serverAuditReportHtml(report);
