@@ -56,6 +56,50 @@ export type SolveGraphAlternativePathsResponse = {
   };
 };
 
+export type SolveGraphAlternativePathExplanationStep = {
+  index: number;
+  edgeId: string;
+  edgeKind: SolveGraphEdgeKind;
+  from: SolveGraphToolNode;
+  to: SolveGraphToolNode;
+  sentence: string;
+};
+
+export type SolveGraphAlternativePathExplanation = {
+  index: number;
+  hopCount: number;
+  nodes: SolveGraphToolNode[];
+  steps: SolveGraphAlternativePathExplanationStep[];
+};
+
+export type SolveGraphAlternativePathsExplanation = {
+  schema: "solvelang.mcp.solve-graph.alternative-paths-explanation.v0";
+  mode: "analyze-only";
+  graphId: string;
+  direction: SolveGraphAlternativePathDirection;
+  sourceId: string;
+  targetId: string;
+  status: "complete" | "partial";
+  headline: string;
+  detail: string;
+  paths: SolveGraphAlternativePathExplanation[];
+  notices: string[];
+  summary: {
+    pathCount: number;
+    shortestHopCount: number | null;
+    longestHopCount: number | null;
+    statesCreated: number;
+  };
+  execution: {
+    networkAccess: false;
+    writeAccess: false;
+    queryTruncated: boolean;
+    maxDepth: number;
+    maxPaths: number;
+    maxStates: number;
+  };
+};
+
 type PathState = {
   nodeIds: string[];
   hops: SolveGraphAlternativePathHop[];
@@ -95,6 +139,16 @@ function safeNode(node: SolveGraphNode): SolveGraphToolNode {
     label: node.label,
     ...(typeof path === "string" ? { path } : {}),
     ...(typeof packageName === "string" ? { packageName } : {}),
+  };
+}
+
+function copyToolNode(node: SolveGraphToolNode): SolveGraphToolNode {
+  return {
+    id: node.id,
+    kind: node.kind,
+    label: node.label,
+    ...(typeof node.path === "string" ? { path: node.path } : {}),
+    ...(typeof node.packageName === "string" ? { packageName: node.packageName } : {}),
   };
 }
 
@@ -261,5 +315,186 @@ export function findSolveGraphAlternativePaths(
     statesCreated,
     depthBoundaryReached,
     depthBoundaryReached ? "depth" : undefined,
+  );
+}
+
+function validateExplanationResponse(response: SolveGraphAlternativePathsResponse): void {
+  if (response.tool !== "solve_graph.alternative_paths") {
+    throw new Error("Solve Graph alternative-path explanation requires an alternative-path response.");
+  }
+  if (response.execution.networkAccess !== false || response.execution.writeAccess !== false) {
+    throw new Error("Solve Graph alternative-path explanation requires capability-free input.");
+  }
+  if (!Number.isSafeInteger(response.execution.maxDepth)
+    || response.execution.maxDepth < 0
+    || response.execution.maxDepth > MAX_SOLVE_GRAPH_ALTERNATIVE_PATH_DEPTH
+    || !Number.isSafeInteger(response.execution.maxPaths)
+    || response.execution.maxPaths < 1
+    || response.execution.maxPaths > MAX_SOLVE_GRAPH_ALTERNATIVE_PATHS
+    || !Number.isSafeInteger(response.execution.maxStates)
+    || response.execution.maxStates < 1
+    || response.execution.maxStates > MAX_SOLVE_GRAPH_ALTERNATIVE_PATH_STATES) {
+    throw new Error("Solve Graph alternative-path explanation received invalid query bounds.");
+  }
+  if (!Number.isSafeInteger(response.statesCreated)
+    || response.statesCreated < 1
+    || response.statesCreated > response.execution.maxStates) {
+    throw new Error("Solve Graph alternative-path explanation received invalid state-count truth.");
+  }
+  if (response.paths.length > response.execution.maxPaths) {
+    throw new Error("Solve Graph alternative-path explanation received too many paths.");
+  }
+  if (response.truncated !== (response.truncationReason !== undefined)) {
+    throw new Error("Solve Graph alternative-path explanation received inconsistent truncation truth.");
+  }
+  if (response.truncationReason !== undefined
+    && response.truncationReason !== "depth"
+    && response.truncationReason !== "path-count"
+    && response.truncationReason !== "state-count") {
+    throw new Error("Solve Graph alternative-path explanation received an invalid truncation reason.");
+  }
+
+  if (response.sourceId === response.targetId) {
+    const [path] = response.paths;
+    if (response.truncated || response.paths.length !== 1 || !path || path.nodes.length !== 1 || path.hops.length !== 0
+      || path.nodes[0]!.id !== response.sourceId) {
+      throw new Error("Solve Graph alternative-path explanation received invalid zero-hop truth.");
+    }
+  }
+
+  for (const path of response.paths) {
+    if (path.nodes.length === 0 || path.nodes.length !== path.hops.length + 1) {
+      throw new Error("Solve Graph alternative-path explanation received an invalid path shape.");
+    }
+    if (path.hops.length > response.execution.maxDepth) {
+      throw new Error("Solve Graph alternative-path explanation received a path outside the configured depth bound.");
+    }
+    if (path.nodes[0]!.id !== response.sourceId || path.nodes[path.nodes.length - 1]!.id !== response.targetId) {
+      throw new Error("Solve Graph alternative-path explanation received invalid path endpoints.");
+    }
+    if (new Set(path.nodes.map((node) => node.id)).size !== path.nodes.length) {
+      throw new Error("Solve Graph alternative-path explanation requires simple cycle-free paths.");
+    }
+
+    path.hops.forEach((hop, index) => {
+      const from = path.nodes[index];
+      const to = path.nodes[index + 1];
+      if (!from || !to || hop.traversalFromId !== from.id || hop.traversalToId !== to.id) {
+        throw new Error("Solve Graph alternative-path explanation received mismatched traversal evidence.");
+      }
+      const underlyingMatches = response.direction === "dependencies"
+        ? hop.edgeFromId === from.id && hop.edgeToId === to.id
+        : hop.edgeToId === from.id && hop.edgeFromId === to.id;
+      if (!underlyingMatches) {
+        throw new Error("Solve Graph alternative-path explanation received mismatched edge orientation.");
+      }
+    });
+  }
+}
+
+function explanationHeadline(response: SolveGraphAlternativePathsResponse): string {
+  if (response.sourceId === response.targetId) return "Source and target are the same node";
+  if (response.paths.length > 0 && response.truncated) return "Alternative paths found; search incomplete";
+  if (response.paths.length > 0) return "Alternative paths found";
+  if (response.truncated) return "Alternative path search incomplete";
+  return "No alternative path found";
+}
+
+function explanationDetail(response: SolveGraphAlternativePathsResponse): string {
+  const pathCount = response.paths.length;
+  const pathLabel = `${pathCount} path${pathCount === 1 ? "" : "s"}`;
+  const stateLabel = `${response.statesCreated} search state${response.statesCreated === 1 ? "" : "s"}`;
+  if (response.sourceId === response.targetId) {
+    return `The query resolved immediately with one zero-hop path after creating ${stateLabel}.`;
+  }
+  if (pathCount > 0 && response.truncated) {
+    return `Observed ${pathLabel} before the bounded search stopped after creating ${stateLabel}; additional paths may exist.`;
+  }
+  if (pathCount > 0) {
+    return `Observed ${pathLabel} in the complete configured search after creating ${stateLabel}.`;
+  }
+  if (response.truncated) {
+    return `No path was established before the bounded search stopped after creating ${stateLabel}; absence is not proven.`;
+  }
+  return `No path exists within the completely searched configured graph scope after creating ${stateLabel}.`;
+}
+
+function explanationNotices(response: SolveGraphAlternativePathsResponse): string[] {
+  if (response.truncationReason === "depth") {
+    return ["Alternative-path search reached the configured depth bound; additional paths may exist beyond the observed search depth."];
+  }
+  if (response.truncationReason === "path-count") {
+    return ["Alternative-path search reached the configured path-count bound; additional paths may exist outside the returned set."];
+  }
+  if (response.truncationReason === "state-count") {
+    return ["Alternative-path search reached the configured traversal-state bound; additional paths may exist outside the observed search states."];
+  }
+  if (response.paths.length === 0) {
+    return ["No path was found within a complete search of the configured graph scope and edge filters."];
+  }
+  return [];
+}
+
+export function createSolveGraphAlternativePathsExplanation(
+  response: SolveGraphAlternativePathsResponse,
+): SolveGraphAlternativePathsExplanation {
+  validateExplanationResponse(response);
+  const hopCounts = response.paths.map((path) => path.hops.length);
+
+  return {
+    schema: "solvelang.mcp.solve-graph.alternative-paths-explanation.v0",
+    mode: "analyze-only",
+    graphId: response.graphId,
+    direction: response.direction,
+    sourceId: response.sourceId,
+    targetId: response.targetId,
+    status: response.truncated ? "partial" : "complete",
+    headline: explanationHeadline(response),
+    detail: explanationDetail(response),
+    paths: response.paths.map((path, pathIndex) => ({
+      index: pathIndex + 1,
+      hopCount: path.hops.length,
+      nodes: path.nodes.map(copyToolNode),
+      steps: path.hops.map((hop, hopIndex) => {
+        const from = copyToolNode(path.nodes[hopIndex]!);
+        const to = copyToolNode(path.nodes[hopIndex + 1]!);
+        return {
+          index: hopIndex + 1,
+          edgeId: hop.edgeId,
+          edgeKind: hop.edgeKind,
+          from,
+          to,
+          sentence: response.direction === "dependencies"
+            ? `${from.label} --${hop.edgeKind}--> ${to.label}`
+            : `${from.label} <--${hop.edgeKind}-- ${to.label}`,
+        };
+      }),
+    })),
+    notices: explanationNotices(response),
+    summary: {
+      pathCount: response.paths.length,
+      shortestHopCount: hopCounts.length > 0 ? Math.min(...hopCounts) : null,
+      longestHopCount: hopCounts.length > 0 ? Math.max(...hopCounts) : null,
+      statesCreated: response.statesCreated,
+    },
+    execution: {
+      networkAccess: false,
+      writeAccess: false,
+      queryTruncated: response.truncated,
+      maxDepth: response.execution.maxDepth,
+      maxPaths: response.execution.maxPaths,
+      maxStates: response.execution.maxStates,
+    },
+  };
+}
+
+export function explainSolveGraphAlternativePaths(
+  document: SolveGraphDocument,
+  sourceId: string,
+  targetId: string,
+  options: SolveGraphAlternativePathOptions = {},
+): SolveGraphAlternativePathsExplanation {
+  return createSolveGraphAlternativePathsExplanation(
+    findSolveGraphAlternativePaths(document, sourceId, targetId, options),
   );
 }
