@@ -1,4 +1,5 @@
 import type { RepositorySelectedNodeIntelligence } from "./selectedNodeIntelligence";
+import type { RepositoryWorkflowPathEvidenceAnalysis } from "./workflowPathEvidence";
 
 export type RepositorySelectedNodeIntelligenceRequestState = {
   requestKey: string;
@@ -13,13 +14,31 @@ export type RepositorySelectedNodeIntelligenceViewState = {
   pending: boolean;
 };
 
+function createWorkflowEvidenceRevision(workflowEvidence: RepositoryWorkflowPathEvidenceAnalysis): string {
+  return JSON.stringify([
+    workflowEvidence.status,
+    workflowEvidence.references.map((reference) => [reference.referenceId, reference.targetState]),
+    workflowEvidence.skipped.missingText,
+    workflowEvidence.skipped.oversizedText,
+    workflowEvidence.skipped.dynamicReferences,
+    workflowEvidence.skipped.multilineReferences,
+    workflowEvidence.execution.referencesTruncated,
+    workflowEvidence.execution.graphTruncated,
+  ]);
+}
+
 export function createRepositorySelectedNodeIntelligenceRequestKey(
   explorerGraphId: string,
-  workflowGraphId: string | undefined,
+  workflowEvidence: RepositoryWorkflowPathEvidenceAnalysis | undefined,
   selectedNodeId: string | undefined,
 ): string | undefined {
-  if (!workflowGraphId || !selectedNodeId) return undefined;
-  return `${explorerGraphId}:${workflowGraphId}:${selectedNodeId}`;
+  if (!workflowEvidence || !selectedNodeId) return undefined;
+  return JSON.stringify([
+    explorerGraphId,
+    workflowEvidence.graphId,
+    selectedNodeId,
+    createWorkflowEvidenceRevision(workflowEvidence),
+  ]);
 }
 
 export function resolveRepositorySelectedNodeIntelligenceViewState(
