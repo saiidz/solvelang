@@ -1,22 +1,35 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SolveGraphQueryIndex } from "../solve-graph/core/query-impact";
+import { RepositoryAuditAffectedValidationPanel } from "./RepositoryAuditAffectedValidationPanel";
 import { RepositoryAuditImpactExplanationPanel } from "./RepositoryAuditImpactExplanationPanel";
+import {
+  createRepositorySelectedNodeIntelligence,
+  type RepositorySelectedNodeIntelligence,
+} from "./core/selectedNodeIntelligence";
 import type {
   RepositoryAuditVisualExplorer,
   RepositoryAuditVisualExplorerNode,
 } from "./core/visualExplorer";
 import { createRepositoryAuditSelectedNodeImpactProduct } from "./core/selectedNodeImpact";
 import { createRepositoryAuditVisualExplorerPresentation } from "./core/visualExplorerPresentation";
+import type { RepositoryWorkflowPathEvidenceAnalysis } from "./core/workflowPathEvidence";
 
 type RepositoryAuditVisualExplorerPanelProps = {
   explorer: RepositoryAuditVisualExplorer;
   impactIndex?: SolveGraphQueryIndex;
+  workflowEvidence?: RepositoryWorkflowPathEvidenceAnalysis;
   className?: string;
 };
 
 type ExplorerKindFilter = RepositoryAuditVisualExplorerNode["kind"] | "all";
+
+type SelectedIntelligenceState = {
+  requestKey: string;
+  product?: RepositorySelectedNodeIntelligence;
+  error?: string;
+};
 
 function visibleNodeLabel(node: RepositoryAuditVisualExplorerNode): string {
   return node.path ?? node.label;
@@ -25,11 +38,13 @@ function visibleNodeLabel(node: RepositoryAuditVisualExplorerNode): string {
 export function RepositoryAuditVisualExplorerPanel({
   explorer,
   impactIndex,
+  workflowEvidence,
   className = "",
 }: RepositoryAuditVisualExplorerPanelProps) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<ExplorerKindFilter>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
+  const [intelligenceState, setIntelligenceState] = useState<SelectedIntelligenceState>();
 
   const kinds = useMemo(
     () => [...new Set(explorer.nodes.map((node) => node.kind))].sort(),
@@ -57,6 +72,54 @@ export function RepositoryAuditVisualExplorerPanel({
       maxRows: 40,
     });
   }, [explorer, impactIndex, selectedNodeId]);
+  const intelligenceRequestKey = impactIndex && workflowEvidence && selectedNodeId
+    ? `${explorer.graphId}:${workflowEvidence.graphId}:${selectedNodeId}`
+    : undefined;
+
+  useEffect(() => {
+    if (!impactIndex || !workflowEvidence || !selectedNodeId || !intelligenceRequestKey) return;
+    let cancelled = false;
+
+    void createRepositorySelectedNodeIntelligence(
+      explorer,
+      impactIndex,
+      workflowEvidence,
+      selectedNodeId,
+      {
+        impact: { maxDepth: 6, maxResults: 200, maxRows: 40 },
+        validation: {
+          maxDepth: 6,
+          maxTraversalResults: 200,
+          maxTestsPerPath: 40,
+          maxWorkflowsPerPath: 40,
+        },
+      },
+    ).then((product) => {
+      if (cancelled) return;
+      setIntelligenceState({ requestKey: intelligenceRequestKey, product });
+    }).catch((caught: unknown) => {
+      if (cancelled) return;
+      setIntelligenceState({
+        requestKey: intelligenceRequestKey,
+        error: caught instanceof Error ? caught.message : "Selected-node intelligence could not be composed.",
+      });
+    });
+
+    return () => { cancelled = true; };
+  }, [explorer, impactIndex, intelligenceRequestKey, selectedNodeId, workflowEvidence]);
+
+  const activeIntelligenceState = intelligenceRequestKey && intelligenceState?.requestKey === intelligenceRequestKey
+    ? intelligenceState
+    : undefined;
+  const activeProduct = activeIntelligenceState?.product;
+  const activeIntelligence = activeProduct
+    && activeProduct.selectedNodeId === selectedNodeId
+    && activeProduct.graphId === explorer.graphId
+    ? activeProduct
+    : undefined;
+  const selectedImpactProduct = activeIntelligence?.impact ?? impactProduct;
+  const intelligencePending = Boolean(intelligenceRequestKey && intelligenceState?.requestKey !== intelligenceRequestKey);
+  const intelligenceError = activeIntelligenceState?.error ?? "";
 
   return (
     <section className={`rounded-[2rem] border border-cyan-200 bg-cyan-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
@@ -115,7 +178,7 @@ export function RepositoryAuditVisualExplorerPanel({
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenNodesByFilter} hidden by filter</span>
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenNodesByLimit} hidden by node limit</span>
         <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.hiddenEdgesByLimit} hidden by edge limit</span>
-        {presentation.summary.selectedNodeShown ? <span className="rounded-full bg-cyan-100 px-3 py-1.5 text-cyan-900">{presentation.summary.directNeighborsShown} direct neighbor(s)</span> : null}
+        {presentation.summary.selectedNodeShown ? <span className="rounded-full bg-cyan-100 px-3 py-1.5 text-xs font-semibold text-cyan-900">{presentation.summary.directNeighborsShown} direct neighbor(s)</span> : null}
       </div>
 
       {presentation.status === "partial" ? (
@@ -190,21 +253,35 @@ export function RepositoryAuditVisualExplorerPanel({
         </div>
       </div>
 
-      {impactProduct && impactIndex ? (
+      {selectedImpactProduct && impactIndex ? (
         <div className="mt-8">
           <p className="mb-3 text-xs font-semibold text-slate-600">
-            Selected-node impact uses the canonical bounded graph, not the currently filtered explorer rows. Query cap: {impactProduct.request.maxResults ?? 200} result(s), depth {impactProduct.request.maxDepth ?? 6}; explanation cap: {impactProduct.request.presentationMaxRows ?? 40} row(s).
+            Selected-node impact uses the canonical bounded graph, not the currently filtered explorer rows. Query cap: {selectedImpactProduct.request.maxResults ?? 200} result(s), depth {selectedImpactProduct.request.maxDepth ?? 6}; explanation cap: {selectedImpactProduct.request.presentationMaxRows ?? 40} row(s).
           </p>
           <RepositoryAuditImpactExplanationPanel
             index={impactIndex}
-            result={impactProduct.query}
-            options={{ maxRows: impactProduct.request.presentationMaxRows ?? 40 }}
+            result={selectedImpactProduct.query}
+            options={{ maxRows: selectedImpactProduct.request.presentationMaxRows ?? 40 }}
           />
         </div>
       ) : impactIndex ? (
         <p className="mt-8 rounded-2xl border border-dashed border-violet-200 bg-white p-5 text-sm text-slate-600">
           Select a visible node to explain its bounded dependent impact across the canonical analyzed graph.
         </p>
+      ) : null}
+
+      {intelligencePending ? (
+        <p className="mt-4 rounded-xl border border-emerald-200 bg-white p-3 text-sm text-slate-700">
+          Mapping bounded affected tests and explicit workflow references for the selected node…
+        </p>
+      ) : null}
+      {intelligenceError ? (
+        <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">
+          Selected-node validation evidence was not shown: {intelligenceError}
+        </p>
+      ) : null}
+      {activeIntelligence?.validation ? (
+        <RepositoryAuditAffectedValidationPanel analysis={activeIntelligence.validation} className="mt-8" />
       ) : null}
 
       <p className="mt-5 text-xs leading-5 text-slate-500">
