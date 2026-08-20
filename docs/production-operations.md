@@ -106,6 +106,14 @@ Production secrets must be independent from test and rotated one class at a time
 
 Changing the API-key fingerprint pepper can invalidate existing key lookup/verification behavior. Do not rotate it casually. A migration/dual-read strategy must be designed before rotation if existing keys are to survive.
 
+## Suspected API-key exposure
+
+For a suspected API-key leak, open the owner-controlled incident record before any containment decision. Do not paste or store the plaintext key in the incident record, issue, pull request, chat, logs, screenshots, or repository.
+
+Until a separately authorized operator has verified the scoped outcome, treat the key as untrusted and do not use it for investigation or customer work. The accountable owner must record the decision to revoke the identified key, suspend the affected account where scope cannot be bounded, or explicitly hand off the unresolved risk; do not infer the affected account from unverified reports.
+
+If a separately authorized revoke occurs, retain only the sanitized key identifier, decision owner, timestamp, and verification that the revoked key is denied. Issue any replacement through the normal authenticated, audited path; do not rotate the API-key pepper as an incident shortcut.
+
 ### Customer-auth pepper
 
 Rotation can invalidate active session/magic-token fingerprints. Plan a controlled session reset or a versioned/dual-pepper transition.
