@@ -214,7 +214,7 @@ impl Checker {
                     }
                     self.check_block(body, &mut function_values, true);
                 }
-                Stmt::Agent { .. } => {}
+                Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Agent { .. } => {}
                 Stmt::Ask {
                     agent,
                     message,
@@ -498,6 +498,12 @@ mod tests {
     fn permits_dynamic_input_and_runtime_dependent_function_globals() {
         let statements =
             parse("fn show() { print(input.customer) print(later) }\nlet later = \"ok\"\nshow()\n");
+        assert!(check(&statements).is_ok());
+    }
+
+    #[test]
+    fn accepts_valid_loop_control_statements() {
+        let statements = parse("while true { break }\nfor item in [1] { continue }\n");
         assert!(check(&statements).is_ok());
     }
 }
