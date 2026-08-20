@@ -30,6 +30,7 @@ A merged feature is not automatically production-enabled, and production account
 - The local Solve Graph explorer now presents bounded unreached candidates and an accessible node-kind filter through #530/#534/#542. Source-graph, traversal, and presentation partiality remain separate; these are structural candidates, not runtime reachability claims.
 - Read-only MCP entrypoint and unreachable-from-known-entrypoint candidates are merged through #513/#519. Cycle, hotspot, affected-validation, and security-summary tools remain bounded/static evidence surfaces.
 - Bounded Node workspace metadata and snapshot evidence are merged through #535/#539, preserving manifest-text/skipped-evidence bounds and absent/partial/complete truth.
+- Bounded static Cargo, Go, .NET, and Maven evidence adapters are merged through #549/#552/#556/#557. They parse explicit local files only, preserve unresolved/outside-scan truth, and never resolve registries, evaluate build tools, execute source, use a network, or write. Gradle remains deferred because faithful build-script support requires evaluation.
 - Local selected-node impact browser integration is merged through #457→#460. #461 hardens stale-selection behavior so a previous-scan node cannot invoke impact traversal with an unavailable root.
 - Selected-node affected-test/workflow mapping is merged through #462; the bounded browser presentation panel is merged through #463; #464 composes selected-node impact plus affected-validation into one deterministic analyze-only product with independent partial/truncation truth; #466 integrates that product into the visual explorer with cancellation-safe browser state; and #467 passes the already-produced workflow-path evidence into the explorer so selected-node affected-test/workflow evidence is active in the local product.
 - Repository-local TypeScript `extends` / project-reference evidence is merged through #333.
@@ -42,6 +43,8 @@ A merged feature is not automatically production-enabled, and production account
 - The language now includes deterministic `fmt`, `lint`, `check`, loop control, and pure helpers including `keys`, `values`, `entries`, and `is_empty` (#482/#485/#488/#492/#517/#520/#523/#525/#527/#543), with hardened execution still denying capability-bearing builtins.
 - Browser/WASM parity is deliberately deferred behind the pure-core extraction specified in ADR #537; the shared Rust library still exposes host adapters and is not safe to compile as the browser runtime.
 - Repository-only operational preparation includes safe restore-drill contract gates (#531) and a provider-neutral future monitoring readiness contract (#538); neither deploys or enables a live feature.
+- Additional repository-only operational contracts cover sanitized suspected API-key exposure handling (#550), evidence/reconciliation before re-enabling an emergency-disabled billing path (#553), and aggregate-only sanitized restore-drill evidence (#554). They authorize no live action.
+- Conservative lint recognizes direct unreachable code plus a statement after an `if` whose two explicit branches terminate (#551/#555), without condition evaluation or dynamic inference.
 - Subscription event replay retention uses receipt time for delayed delivery records (#544), while billing/webhooks/checkout remain disabled in production.
 
 ## Current baseline
