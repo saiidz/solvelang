@@ -38,6 +38,15 @@ test("selects deterministic test, workflow, and job candidates from bounded depe
   assert.match(result.notice, /candidate evidence/);
 });
 
+test("retains a selected validation node as the depth-zero candidate", async () => {
+  const { testNode, index } = await fixture();
+  const impact = analyzeSolveGraphImpact(index, [testNode.id], { maxDepth: 4, maxResults: 200 });
+  const result = createAffectedValidationCandidates(index, impact);
+  assert.equal(result.candidates[0]?.node.id, testNode.id);
+  assert.equal(result.candidates[0]?.depth, 0);
+  assert.equal(result.candidates[0]?.rootId, testNode.id);
+});
+
 test("keeps validation presentation truncation distinct from bounded impact traversal", async () => {
   const { changed, index } = await fixture();
   const completeImpact = analyzeSolveGraphImpact(index, [changed.id], { maxDepth: 4, maxResults: 200 });
