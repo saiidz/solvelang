@@ -3,15 +3,15 @@
 **Purpose:** durable repository/build truth for continuing `saiidz/solvelang` without duplicating merged work or confusing repository state with production state.  
 **Captured:** 2026-08-20
 
-Before every build/integration run, re-read current `main`, open/closed PRs, exact branch heads/bases, mergeability, review threads, Hosted CI/Rust/RustSec, self-hosted validation state when relevant, open issues, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-19.md`. Live GitHub and live production evidence always win over hashes recorded here.
+Before every build/integration run, re-read current `main`, open/closed PRs, exact branch heads/bases, mergeability, review threads, Hosted CI/Rust/RustSec, self-hosted validation state when relevant, open issues, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-19.md`. Live GitHub and verified live production evidence always win over hashes recorded here.
 
 ## Current repository checkpoint
 
-At this refresh, `main` is `fb992925f1004c6fb01e65c0f15424bb6956ff2a`, the merge of safe PR #467. The safe non-production PR queue is **zero**.
+At this refresh, `main` is `4ecafd346763de27d427f10edd9568c6970239b9`, the merge of safe PR #472. The safe non-production PR queue is **zero**.
 
-The previously protected repository-preparation PRs #161/#164/#169 are merged repository-history facts only. Those merges do **not** authorize deployment, IAM/KMS changes, queue/provider/customer-priority activation, billing, email, charges/refunds, source execution, or production customer/CRM mutation.
+The historical #288→#301 Repository Audit dependency train is merged and must not be recreated. The formerly protected repository-preparation PRs #161/#164/#169 are also merged repository-history facts only. Their merges do **not** authorize deployment, IAM/KMS changes, queue/provider/customer-priority activation, billing, email, charges/refunds, source execution, or production customer/CRM mutation.
 
-### Recent selected-node / impact train
+## Latest selected-node / audit integration train
 
 The following work is merged and must not be recreated:
 
@@ -21,19 +21,22 @@ The following work is merged and must not be recreated:
 - #458 — integrity-checked impact query-product composition;
 - #459 — selected-node impact preparation in the local visual explorer;
 - #460 — top-level Repository Audit query-index wiring for selected-node impact;
-- #461 — fail-safe stale-selection guard and deterministic interaction coverage so a previous-scan node cannot invoke impact traversal with an unavailable root;
-- #462 — selected-node affected-test/workflow adapter over the existing bounded affected-validation mapper;
-- #463 — browser presentation panel for affected tests and explicit repository workflow-path references, including separate partial/truncation truth;
-- #464 — deterministic selected-node intelligence product composing impact and affected-validation evidence while preserving independent bounds and network/write-disabled state;
+- #461 — fail-safe stale-selection guard so a previous-scan node cannot invoke impact traversal with an unavailable root;
+- #462 — selected-node affected-test/workflow adapter over the bounded affected-validation mapper;
+- #463 — browser affected-validation panel with separate partial/truncation truth;
+- #464 — deterministic selected-node intelligence product combining impact and affected-validation evidence while preserving independent bounds;
 - #465 — roadmap/handoff synchronization through the selected-node intelligence product;
-- #466 — cancellation-safe local visual-explorer composition of the selected-node intelligence product and affected-validation panel;
-- #467 — top-level product wiring that passes the already-produced bounded workflow-path evidence into the explorer, activating selected-node affected-test/workflow evidence in the local product.
+- #466 — cancellation-safe local visual-explorer composition of selected-node intelligence;
+- #467 — top-level product wiring that passes bounded workflow-path evidence into the explorer and activates affected-test/workflow evidence;
+- #468 — closed unmerged as a verified duplicate only after narrower #467 was confirmed on the same base;
+- #469 — roadmap/handoff synchronization through #466/#467 and #468 supersession;
+- #470 — pure selected-node request/view-state controller with deterministic tests for rapid selection changes, wrong-graph/wrong-node late results, request-scoped errors, and cleared selections;
+- #471 — bounded Server Audit filesystem→log/backup relationship findings with structural/redacted ambiguity, unresolved/invalid/truncated coverage truth and source-fanout truncation evidence;
+- #472 — selected-node request identity now changes with bounded workflow-evidence semantics even when graph/node identity is unchanged. A Codex review found that the first implementation retained full canonical workflow evidence in browser request state and could create extremely large keys. The final reviewed head `8d8e4d4f0db270a54ac491c7f5ab14aa524ebd77` replaces that with a compact versioned deterministic identity over only the structural workflow fields consumed by selected-node affected-validation, adds a 128 KiB-target regression test plus partial-truth identity coverage, passed exact-head Hosted CI and Rust/RustSec, resolved the review thread, and merged as current `main` `4ecafd346763de27d427f10edd9568c6970239b9`.
 
-#468 was closed unmerged as a duplicate only after #467 was verified on the same base with the narrower one-line product-wiring scope.
+#461–#472 are repository-only/analyze-only. No Trusted Mac/Windows requirement was introduced by those ordinary branches, and no runner registration, services, labels, or routing changed.
 
-All of #455–#467 are repository-only/analyze-only. Exact-head required Hosted CI and Rust/RustSec were green before the code merges. No Trusted Mac/Windows requirement was introduced by these ordinary branches.
-
-### Earlier safe milestones that must not be recreated
+## Earlier safe milestones that must not be recreated
 
 - #288 → #290 → #291 → #298 → #299 → #300 → #301 — deterministic Python imports plus Repository Audit dependency consistency, coverage mapping, conservative dead-code candidates, configuration/workflow relationships, and bounded report integration;
 - #311/#313/#314 — affected-test/workflow intelligence and report composition;
@@ -51,7 +54,7 @@ All of #455–#467 are repository-only/analyze-only. Exact-head required Hosted 
 - #445/#446/#447/#448 — deterministic shortest-path explanations across core/browser/MCP, including `solvelang_graph_explain_shortest_path`;
 - #450→#453 — deterministic alternative-path explanations across MCP/core/Repository Audit browser, including `solvelang_graph_explain_alternative_paths`.
 
-Older foundational work includes deterministic ingestion/graph integrity, JavaScript/TypeScript and Python relationships, Server Audit privacy/consistency/process/package/certificate evidence, Trusted Mac/Windows controls, RustSec remediation, account/API/Admin foundations, and production deployment serialization hardening. Do not rebuild merged generations merely because historical issue comments mention predecessor PR numbers.
+Older foundational work includes deterministic ingestion/graph integrity, JavaScript/TypeScript and Python relationships, Server Audit privacy/consistency/process/package/certificate evidence, Trusted Mac/Windows controls, RustSec remediation, account/API/Admin foundations, and production deployment serialization hardening. Do not rebuild merged generations merely because historical issues or branches mention predecessor PR numbers.
 
 ## Authoritative production truth
 
@@ -84,12 +87,12 @@ Repository merges do not change those live-state facts by themselves. Production
 
 Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary analysis; bounded visual-explorer/browser presentation; ranked, shortest-path, alternative-path, and dependent-impact query/product flows; deterministic shortest/alternative/impact explanations; read-only MCP query/explanation exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
 
-The newest selected-node contracts now allow one canonical explorer selection to be validated against both bounded dependent-impact evidence and bounded affected-test/workflow evidence. The composition product is merged through #464, browser composition through #466, and top-level workflow-evidence wiring through #467.
+The selected-node product now composes bounded dependent-impact evidence and affected-test/workflow evidence, rejects stale graph/node results, cancels obsolete async browser work, and keys request state to both graph/node identity and the structural bounded workflow-evidence semantics that affect validation output. The request identity is intentionally compact and versioned rather than retaining full evidence JSON.
 
 Current safe priorities:
 
-1. strengthen deterministic interaction/controller coverage around the merged #466/#467 explorer integration, including rapid selection changes, stale result suppression, and explicit partial/truncation truth;
-2. keep affected-test/workflow mappings conservative: structural mapping is not behavioral coverage proof, and incomplete graph/workflow evidence must remain visibly partial;
+1. keep selected-node race/request identity and partial/truncation behavior deterministic as the explorer evolves;
+2. keep affected-test/workflow mappings conservative: structural mapping is not behavioral coverage proof and incomplete graph/workflow evidence must remain visibly partial;
 3. improve MCP/Codex read-only integration over merged graph/query/explanation contracts;
 4. continue only conservative framework/deployment/reference adapters where static repository evidence is explicit and non-executing;
 5. improve local visual-explorer ergonomics while preserving bounded-search and presentation-truncation truth;
@@ -105,7 +108,7 @@ Do not execute repository source to improve graph coverage. Prefer conservative 
 
 ## Server Audit state
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface, bounded snapshot/schema parser, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, process/listener/package/certificate/permission/inventory consistency checks, and bounded scheduled-job relationships.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface, bounded snapshot/schema parser, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, process/listener/package/certificate/permission/inventory consistency checks, bounded scheduled-job relationships, and bounded filesystem→log/backup relationship integrity findings through #471.
 
 Continue read-only package/service/port/process/scheduled-job relationship quality, log/cache/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform tests. Do not add remote mutation/remediation execution.
 
@@ -128,14 +131,13 @@ When the safe queue is six or fewer, new safe work may proceed only after live r
 ## Current safe engineering order
 
 1. Keep shared Hosted CI/Rust/RustSec blockers clear and drain any safe open PR queue first.
-2. Strengthen deterministic selected-node explorer interaction/controller coverage over the merged #466/#467 impact plus affected-validation experience.
-3. Keep durable roadmap/handoff/production truth aligned with live repository state.
-4. Continue Repository Audit impact/path explanation quality, MCP/Codex integration, conservative remaining relationships, visual-explorer ergonomics, and cross-platform tests.
-5. Continue Solve Graph conservative language/reference adapters and bounded query/path/impact quality.
-6. Continue Server Audit read-only relationship/posture quality and deterministic reporting/tests.
-7. Continue language/runtime/DX work: formatter/linter, semantic/type checks, control-flow/module/package design, diagnostics, editor support, and deterministic tests.
-8. Keep security/account hardening, rollback preservation, least privilege, launch readiness, and operations current.
-9. Keep TOTP, customer-priority activation, billing, provider execution, email, and charge/refund work dormant behind fresh production approvals.
+2. Keep durable roadmap/handoff/production truth aligned with live repository state.
+3. Continue Repository Audit impact/path explanation quality, MCP/Codex integration, conservative remaining relationships, visual-explorer ergonomics, and cross-platform tests.
+4. Continue Solve Graph conservative language/reference adapters and bounded query/path/impact quality.
+5. Continue Server Audit read-only relationship/posture quality and deterministic reporting/tests.
+6. Continue language/runtime/DX work: formatter/linter, semantic/type checks, control-flow/module/package design, diagnostics, editor support, and deterministic tests.
+7. Keep security/account hardening, rollback preservation, least privilege, launch readiness, and operations current.
+8. Keep TOTP, customer-priority activation, billing, provider execution, email, and charge/refund work dormant behind fresh production approvals.
 
 ## Hard safety boundary
 
