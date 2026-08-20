@@ -71,8 +71,15 @@ Useful CLI inspection commands:
 ```bash
 cargo run -- tokens ../examples/support_triage.solve
 cargo run -- ast ../examples/support_triage.solve
+cargo run -- fmt ../examples/support_triage.solve
+cargo run -- fmt --check ../examples/support_triage.solve
 cargo run -- help
 ```
+
+`fmt` validates the named source file before writing it, normalizes line endings
+to LF, and uses a raw token-oriented layer so comments and string escapes are
+not reconstructed from the comment-free AST. `fmt --check` makes no changes and
+exits nonzero when the file is not already canonical.
 
 ## 5. Understand safe execution
 
