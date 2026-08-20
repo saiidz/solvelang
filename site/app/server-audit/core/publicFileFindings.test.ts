@@ -35,6 +35,41 @@ test("public-file marker findings report structural evidence without web-root pa
   assert.ok(serialized.includes("env-file"));
 });
 
+test("public-file marker findings fail closed on unavailable root references in direct snapshots", () => {
+  const input = snapshot();
+  input.web!.publicFileChecks = [
+    { rootIndex: 4, marker: "env-file", present: true },
+    { rootIndex: -1, marker: "npmrc", present: false },
+  ];
+
+  const findings = createServerAuditPublicFileFindings(input);
+  assert.equal(findings.length, 2);
+  assert.ok(findings.every((finding) => finding.category === "evidence-integrity"));
+  assert.ok(findings.every((finding) => finding.title === "Public-file marker check references an unavailable web root"));
+  assert.deepEqual(findings.map((finding) => finding.evidence[0]?.source), [
+    "web.publicFileChecks[0].rootIndex",
+    "web.publicFileChecks[1].rootIndex",
+  ]);
+  assert.equal(findings.some((finding) => finding.title === "Environment-file marker exists under a candidate web root"), false);
+
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("/srv/private/customer-app/public"), false);
+  assert.equal(serialized.includes("web.roots[4]"), false);
+});
+
+test("public-file marker findings fail closed when an in-range root record is unavailable", () => {
+  const input = snapshot();
+  input.web!.roots = Array<{ path: string }>(1);
+  input.web!.publicFileChecks = [{ rootIndex: 0, marker: "env-file", present: true }];
+
+  const findings = createServerAuditPublicFileFindings(input);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].category, "evidence-integrity");
+  assert.equal(findings[0].title, "Public-file marker check references an unavailable web root");
+  assert.equal(findings[0].evidence[0]?.source, "web.publicFileChecks[0].rootIndex");
+  assert.equal(findings.some((finding) => finding.category === "web-exposure"), false);
+});
+
 test("public-file marker findings are deterministic and bounded with explicit truncation truth", () => {
   const input = snapshot();
   input.web!.publicFileChecks = Array.from({ length: 140 }, (_, index) => ({
