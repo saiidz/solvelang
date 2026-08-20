@@ -14,6 +14,15 @@ const SENSITIVE_PUBLIC_PORTS = new Map([
   [9200, "Elasticsearch"],
   [11211, "Memcached"],
 ]);
+const UNKNOWN_SECURITY_VALUES = new Set([
+  "",
+  "unknown",
+  "unavailable",
+  "not available",
+  "not-collected",
+  "not collected",
+  "undetermined",
+]);
 
 function stableId(parts: string[]) {
   const input = parts.join("\u001f");
@@ -40,6 +49,10 @@ function normalize(value: string | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+function isUnknownSecurityValue(value: string | undefined) {
+  return UNKNOWN_SECURITY_VALUES.has(normalize(value));
+}
+
 function isYes(value: string | undefined) {
   return ["yes", "true", "enabled", "on", "active"].includes(normalize(value));
 }
@@ -51,6 +64,30 @@ function isNo(value: string | undefined) {
 function firewallActive(value: string | undefined) {
   const tokens = normalize(value).split(/[^a-z]+/).filter(Boolean);
   return tokens.some((token) => ["active", "enabled", "on", "running"].includes(token));
+}
+
+function createSecurityProbeCoverageFinding(snapshot: ServerAuditSnapshot): ServerAuditFinding | undefined {
+  if (!snapshot.security) return undefined;
+  const probes: Array<[string, string | undefined]> = [
+    ["security.firewall", snapshot.security.firewall],
+    ["security.automaticUpdates", snapshot.security.automaticUpdates],
+    ["security.rootSshLogin", snapshot.security.rootSshLogin],
+    ["security.passwordSshLogin", snapshot.security.passwordSshLogin],
+    ["security.selinux", snapshot.security.selinux],
+    ["security.apparmor", snapshot.security.apparmor],
+  ];
+  const inconclusive = probes
+    .filter(([, value]) => isUnknownSecurityValue(value))
+    .map(([source]) => ({ source, summary: "value unavailable or unknown" }));
+  if (inconclusive.length === 0) return undefined;
+  return finding(
+    "info",
+    "coverage",
+    "Security posture probes are inconclusive",
+    `${inconclusive.length} supplied security posture probe(s) are missing or explicitly unknown, so those controls cannot be classified from this snapshot.`,
+    "Re-collect the bounded security posture with the reviewed read-only collector before treating those controls as enabled, disabled, secure, or insecure.",
+    inconclusive,
+  );
 }
 
 export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
@@ -78,20 +115,31 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
     }
   }
 
-  if (snapshot.security?.rootSshLogin && !isNo(snapshot.security.rootSshLogin)) {
+  const securityProbeCoverage = createSecurityProbeCoverageFinding(snapshot);
+  if (securityProbeCoverage) findings.push(securityProbeCoverage);
+
+  if (snapshot.security?.rootSshLogin
+    && !isUnknownSecurityValue(snapshot.security.rootSshLogin)
+    && !isNo(snapshot.security.rootSshLogin)) {
     findings.push(finding("high", "ssh", "Root SSH login is not disabled", `Collected SSH posture reports root login as ${snapshot.security.rootSshLogin}.`, "Disable direct root SSH login after confirming a tested privileged-access alternative and recovery path.", [{ source: "sshd", summary: `PermitRootLogin=${snapshot.security.rootSshLogin}` }]));
   }
 
-  if (snapshot.security?.passwordSshLogin && !isNo(snapshot.security.passwordSshLogin)) {
+  if (snapshot.security?.passwordSshLogin
+    && !isUnknownSecurityValue(snapshot.security.passwordSshLogin)
+    && !isNo(snapshot.security.passwordSshLogin)) {
     findings.push(finding("medium", "ssh", "SSH password authentication remains enabled", `Collected SSH posture reports password login as ${snapshot.security.passwordSshLogin}.`, "Prefer key-based or centrally managed authentication after verifying operators will not be locked out.", [{ source: "sshd", summary: `PasswordAuthentication=${snapshot.security.passwordSshLogin}` }]));
   }
 
   const firewall = normalize(snapshot.security?.firewall);
-  if (firewall && !firewallActive(snapshot.security?.firewall)) {
+  if (firewall
+    && !isUnknownSecurityValue(snapshot.security?.firewall)
+    && !firewallActive(snapshot.security?.firewall)) {
     findings.push(finding("high", "network", "Host firewall not reported active", `Firewall posture was reported as ${snapshot.security?.firewall}.`, "Verify the effective host/network firewall policy and enable an allowlist-based policy if the host is otherwise exposed.", [{ source: "firewall", summary: snapshot.security?.firewall ?? "unknown" }]));
   }
 
-  if (snapshot.security?.automaticUpdates && !isYes(snapshot.security.automaticUpdates)) {
+  if (snapshot.security?.automaticUpdates
+    && !isUnknownSecurityValue(snapshot.security.automaticUpdates)
+    && !isYes(snapshot.security.automaticUpdates)) {
     findings.push(finding("medium", "patching", "Automatic security updates not confirmed", `Automatic update posture was reported as ${snapshot.security.automaticUpdates}.`, "Define a tested patch cadence or enable controlled automatic security updates with maintenance and rollback procedures.", [{ source: "updates", summary: snapshot.security.automaticUpdates }]));
   }
 
