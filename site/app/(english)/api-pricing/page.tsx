@@ -51,6 +51,12 @@ export default function ApiPricingPage() {
           <p className="mt-6 text-lg leading-8 text-slate-300">One SolveLang credit covers up to 5,000 input tokens and 1,000 output tokens. Larger jobs consume multiple credits, keeping provider cost and customer usage predictable.</p>
         </header>
 
+        <section className="mb-10 rounded-3xl border border-amber-300/30 bg-amber-300/10 p-8" aria-labelledby="api-subscription-availability">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-amber-200">Availability</p>
+          <h2 id="api-subscription-availability" className="mt-3 text-2xl font-bold">API subscriptions are not available to purchase yet.</h2>
+          <p className="mt-3 max-w-4xl text-slate-200">The plans below are a preview of intended API capacity. Subscription checkout and recurring charges are disabled, so choosing a plan cannot create a subscription or charge you. Subscription cancellation, refund, invoice, and support terms will be published before launch.</p>
+        </section>
+
         <section className="grid gap-6 md:grid-cols-3">
           {plans.map((plan) => (
             <article key={plan.key} className={plan.highlighted ? "rounded-3xl border-2 border-cyan-300 bg-cyan-300/5 p-7 shadow-2xl shadow-cyan-950/30" : "rounded-3xl border border-white/10 bg-white/5 p-7"}>
@@ -69,7 +75,7 @@ export default function ApiPricingPage() {
                 <li>✓ Hard monthly credit limit</li>
                 <li>✓ One-time secret reveal and instant revocation</li>
               </ul>
-              <Link href={`/account/api-keys/?plan=${plan.key}`} className={plan.highlighted ? "mt-8 block rounded-xl bg-cyan-300 px-5 py-3 text-center font-bold text-slate-950 hover:bg-cyan-200" : "mt-8 block rounded-xl border border-white/20 px-5 py-3 text-center font-bold hover:bg-white/5"}>Choose {plan.name}</Link>
+              <Link href={`/account/api-keys/?plan=${plan.key}`} className={plan.highlighted ? "mt-8 block rounded-xl bg-cyan-300 px-5 py-3 text-center font-bold text-slate-950 hover:bg-cyan-200" : "mt-8 block rounded-xl border border-white/20 px-5 py-3 text-center font-bold hover:bg-white/5"}>View {plan.name}</Link>
             </article>
           ))}
         </section>

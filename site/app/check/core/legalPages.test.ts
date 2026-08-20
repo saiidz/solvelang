@@ -54,6 +54,15 @@ test("the public sitemap and legal navigation include the legal and withdrawal r
   assert.match(landing, /\/withdraw\//);
 });
 
+test("API pricing labels subscription plans as unavailable until billing launch", async () => {
+  const apiPricing = await source("app/(english)/api-pricing/page.tsx");
+  assert.match(apiPricing, /API subscriptions are not available to purchase yet\./);
+  assert.match(apiPricing, /Subscription checkout and recurring charges are disabled/);
+  assert.match(apiPricing, /Subscription cancellation, refund, invoice, and support terms will be published before launch\./);
+  assert.match(apiPricing, />View \{plan\.name\}<\/Link>/);
+  assert.doesNotMatch(apiPricing, />Choose \{plan\.name\}<\/Link>/);
+});
+
 test("checkout requires both unchecked accessible clickwrap statements before loading verification", async () => {
   const [checkout, checkoutTerms, entitlementTerms] = await Promise.all([
     source("app/checkout/PaymentElementClient.tsx"),
