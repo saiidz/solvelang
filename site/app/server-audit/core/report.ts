@@ -6,6 +6,7 @@ import { createServerAuditBackupLogConsistencyFindings } from "./backupLogConsis
 import { createServerAuditBackupPostureFindings } from "./backupPostureFindings";
 import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
 import { createServerAuditCertificateCoverageFindings } from "./certificateCoverageFindings";
+import { createServerAuditCertificateIdentityCoverageFindings } from "./certificateIdentityCoverageFindings";
 import { createServerAuditCertificateExpiryFallbackFindings } from "./certificateExpiryFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
@@ -139,6 +140,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditPublicFileCoverageFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditCertificateCoverageFindings(snapshot),
+    ...createServerAuditCertificateIdentityCoverageFindings(snapshot),
     ...createServerAuditCertificateExpiryFallbackFindings(snapshot),
     ...createServerAuditWebInventoryCoverageFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
@@ -193,6 +195,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Public-file coverage findings compare only the fixed reviewed marker checks for available candidate web roots; missing or contradictory marker evidence is a completeness/integrity signal and does not prove exposure or safety.",
       "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
       "Certificate-coverage findings report only supplied certificate records that lack both notAfter and daysRemaining evidence; they do not prove endpoint absence, certificate invalidity, collector authority, or which certificate is actively served.",
+      "Certificate-identity coverage findings report only supplied certificate records whose identity is empty after trim and NFC normalization; they do not identify the actively served certificate, prove endpoint reachability, or establish collector authority.",
       "Certificate-expiry fallback findings derive an alert window only from a supplied notAfter timestamp when daysRemaining is absent; they do not identify the actively served certificate or perform endpoint validation.",
       "Web-inventory coverage findings report only explicit empty web-server, web-root, or TLS-certificate inventories from the fixed local probes; they do not prove those surfaces are absent, that discovery was complete or authoritative, or that any endpoint is publicly reachable.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
