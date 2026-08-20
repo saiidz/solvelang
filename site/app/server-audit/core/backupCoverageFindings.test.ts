@@ -13,27 +13,43 @@ function snapshot(backups: NonNullable<ServerAuditSnapshot["backups"]>): ServerA
   };
 }
 
-test("backup coverage reports missing age evidence without backup identity leakage", () => {
+test("backup coverage reports missing freshness and size evidence without backup identity leakage", () => {
   const findings = createServerAuditBackupCoverageFindings(snapshot([
     { name: "private-customer-a", path: "/backups/private-customer-a" },
-    { name: "has-age", path: "/backups/has-age", ageHours: 8 },
+    { name: "has-all", path: "/backups/has-all", ageHours: 8, sizeBytes: 1024 },
   ]));
 
-  assert.equal(findings.length, 1);
-  assert.equal(findings[0].category, "coverage");
-  assert.equal(findings[0].title, "Backup record lacks freshness evidence");
-  assert.deepEqual(findings[0].evidence, [{ source: "backups[0].ageHours", summary: "freshness evidence is absent" }]);
+  assert.equal(findings.length, 2);
+  const freshness = findings.find((finding) => finding.title === "Backup record lacks freshness evidence");
+  const size = findings.find((finding) => finding.title === "Backup record lacks size evidence");
+  assert.ok(freshness);
+  assert.ok(size);
+  assert.equal(freshness.category, "coverage");
+  assert.equal(size.category, "coverage");
+  assert.deepEqual(freshness.evidence, [{ source: "backups[0].ageHours", summary: "freshness evidence is absent" }]);
+  assert.deepEqual(size.evidence, [{ source: "backups[0].sizeBytes", summary: "size evidence is absent" }]);
   const serialized = JSON.stringify(findings);
   assert.equal(serialized.includes("private-customer-a"), false);
   assert.equal(serialized.includes("/backups/private-customer-a"), false);
 });
 
-test("backup coverage leaves explicit empty inventory and age-bearing records to existing stages", () => {
+test("backup coverage leaves explicit empty inventory and fully evidenced records to existing stages", () => {
   assert.deepEqual(createServerAuditBackupCoverageFindings(snapshot([])), []);
   assert.deepEqual(createServerAuditBackupCoverageFindings(snapshot([
-    { name: "fresh", ageHours: 1 },
-    { name: "stale", ageHours: 100 },
+    { name: "fresh", ageHours: 1, sizeBytes: 2048 },
+    { name: "stale", ageHours: 100, sizeBytes: 4096 },
   ])), []);
+});
+
+test("backup coverage reports only the dimension that is absent", () => {
+  const findings = createServerAuditBackupCoverageFindings(snapshot([
+    { name: "age-only", ageHours: 4 },
+    { name: "size-only", sizeBytes: 512 },
+  ]));
+
+  assert.equal(findings.length, 2);
+  assert.ok(findings.some((finding) => finding.evidence[0]?.source === "backups[0].sizeBytes"));
+  assert.ok(findings.some((finding) => finding.evidence[0]?.source === "backups[1].ageHours"));
 });
 
 test("backup coverage output is deterministic and bounded", () => {
@@ -43,8 +59,8 @@ test("backup coverage output is deterministic and bounded", () => {
 
   assert.deepEqual(first, second);
   assert.equal(first.length, 10);
-  assert.equal(first.filter((finding) => finding.title === "Backup record lacks freshness evidence").length, 9);
-  assert.equal(first.filter((finding) => finding.title === "Backup freshness coverage findings were truncated").length, 1);
+  assert.equal(first.filter((finding) => finding.title === "Backup evidence coverage findings were truncated").length, 1);
+  assert.equal(first.filter((finding) => finding.title !== "Backup evidence coverage findings were truncated").length, 9);
   assert.equal(JSON.stringify(first).includes("private-104"), false);
   assert.throws(() => createServerAuditBackupCoverageFindings(snapshot(backups), { maxFindings: 0 }), /backup-coverage maxFindings/);
 });
