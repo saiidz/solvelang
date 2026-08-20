@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-At this refresh, `main` before this documentation-only PR is `5382e91cfc31c333d8171d9388248b4ac458205a`, the merge of safe Server Audit report-composition PR #579. The safe non-production PR queue is **zero**. This documentation sync is intentionally repository-only and does not change the authoritative production record.
+At this refresh, `main` before this documentation-only PR is `e9de9d5c7538d4f2bd2ee1bc7b0cbfcd3468b57f`, the merge of safe Server Audit public-file report-composition PR #584. The safe non-production PR queue is **zero**. This documentation sync is intentionally repository-only and does not change the authoritative production record.
 
 The historical #288→#301 Repository Audit dependency train is merged and must not be recreated. PRs #161/#164/#169 are also merged repository-history facts only; their historical merge approvals are not standing authorization for deployment or live activation.
 
@@ -65,6 +65,11 @@ The 2026-08-20 queue drain reconciled safe branches prepared across several fast
 - #578 — top-level Repository Audit product wiring for the already-merged Docker Compose relationship evidence/artifact/presentation: same-snapshot analysis, integrity-covered download, browser intelligence, dependency panel, and dedicated relationship-evidence download without changing historical canonical report schemas.
 - #575/#576 — bounded Server Audit backup/log consistency analysis and standard redacted findings for contradictory duplicate evidence, using structural array-index sources only.
 - #579 — canonical Server Audit report composition for #575/#576. The first head failed deterministic Studio tests (`3 !== 2`) and Codex raised a P1 because the new stage overlapped legacy artifact findings. The final exact head `7f1283fad81ecd0d9187f4ff7b47b231840ef3f0` deduplicates only identical category/title/structural-source evidence while preserving distinct legacy backup-by-path evidence; exact-head Hosted CI and Rust/RustSec passed and the review thread was resolved before merge.
+- #580 — repository-only roadmap/handoff synchronization through #579; no production state changed.
+- #581 — bounded certificate-expiry fallback findings from supplied `notAfter` timestamps when `daysRemaining` is absent. No endpoint validation or network access is performed.
+- #582 — public-file marker references now fail closed when `rootIndex` does not resolve to an available root record. A Codex sparse-array finding was fixed and regression-tested before exact-head Hosted CI/Rust green merge.
+- #583 — public-file fixed-marker coverage/contradiction analysis now ignores unavailable or sparse roots instead of inventing coverage or contradiction claims; #582 remains authoritative for the invalid-reference condition.
+- #584 — public-file coverage/integrity is composed into canonical JSON/HTML reports with structural/redacted evidence. The first Hosted run exposed a legacy sparse-root crash in baseline permission analysis; that queue blocker was fixed, a direct baseline regression was added, the Codex P1 was resolved, and exact-head Hosted CI/Rust passed before merge.
 
 All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
@@ -93,7 +98,7 @@ All ordinary branches in this drain used GitHub-hosted CI/Rust/RustSec. No Trust
 - #485 — conservative `solvec check` semantic analysis, including compatibility with merged loop-control statements;
 - #486/#487/#488/#489/#490/#491/#492/#493/#495/#496/#497 — hotspot, workspace-boundary, formatter/linter/runtime-helper, Server Audit relationship/log, affected-validation MCP, module/browser-runtime ADR, and shared-language-library work described above;
 - #498/#500/#502/#503/#504/#506/#507/#508/#510/#511 — latest billing-readiness, public availability truth, MCP, LSP, Solve Graph validation/impact, review-fix, and Server Audit queue-drain work described above;
-- #562→#579 — latest Docker Compose Repository Audit, root-confined write hardening, and Server Audit backup/log report-composition work described above.
+- #562→#584 — latest Docker Compose Repository Audit, root-confined write hardening, Server Audit backup/log report composition, certificate-expiry fallback, and fail-closed public-file evidence/report integration.
 
 Do not recreate merged generations merely because historical issues, branches, or earlier handoff text mention predecessor PR numbers.
 
@@ -105,7 +110,7 @@ Repository source is not executed to improve graph coverage. Static adapters now
 
 ## Server Audit state
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface, bounded snapshot/schema parsing, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, process/listener/package/certificate/permission/inventory consistency checks, bounded scheduled-job relationships, filesystem→log/backup relationship evidence, service→process→listener structural attribution, stale-log candidates, local web-server/conventional HTTP(S)-listener consistency evidence, and backup/log consistency findings composed into canonical reports through #575/#576/#579 without exact-overlap double-counting.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface, bounded snapshot/schema parsing, OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence, deterministic findings, redaction, JSON/HTML reporting, process/listener/package/certificate/permission/inventory consistency checks, bounded scheduled-job relationships, filesystem→log/backup relationship evidence, service→process→listener structural attribution, stale-log candidates, local web-server/conventional HTTP(S)-listener consistency evidence, backup/log consistency findings composed into canonical reports through #575/#576/#579 without exact-overlap double-counting, certificate-expiry fallback through #581, and fail-closed public-file root-reference/fixed-marker coverage findings composed into canonical reports through #582/#583/#584.
 
 Continue package/service/port/process/scheduled-job relationship quality, log/cache/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform tests. Do not add remote mutation/remediation execution.
 
