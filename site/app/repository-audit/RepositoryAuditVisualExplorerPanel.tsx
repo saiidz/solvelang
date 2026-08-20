@@ -8,6 +8,7 @@ import {
   createRepositorySelectedNodeIntelligence,
   type RepositorySelectedNodeIntelligence,
 } from "./core/selectedNodeIntelligence";
+import { createRepositorySelectedNodeIntelligenceRequestIdentity } from "./core/selectedNodeInteraction";
 import type {
   RepositoryAuditVisualExplorer,
   RepositoryAuditVisualExplorerNode,
@@ -72,8 +73,8 @@ export function RepositoryAuditVisualExplorerPanel({
       maxRows: 40,
     });
   }, [explorer, impactIndex, selectedNodeId]);
-  const intelligenceRequestKey = impactIndex && workflowEvidence && selectedNodeId
-    ? `${explorer.graphId}:${workflowEvidence.graphId}:${selectedNodeId}`
+  const intelligenceRequestKey = impactIndex && workflowEvidence
+    ? createRepositorySelectedNodeIntelligenceRequestIdentity(explorer, workflowEvidence, selectedNodeId)?.key
     : undefined;
 
   useEffect(() => {
