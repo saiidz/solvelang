@@ -66,6 +66,19 @@ test("TLS baseline findings use structural certificate evidence without exportin
   ]);
 });
 
+test("baseline analysis skips unavailable sparse web-root records", () => {
+  const roots = Array<{ path: string }>(1);
+  const findings = analyzeServerSnapshot({
+    schemaVersion: "1",
+    collectedAt: "2026-08-20T13:00:00.000Z",
+    host: { hostname: "audit-host" },
+    web: { roots },
+    metadata: { redactionsApplied: true },
+  });
+
+  assert.equal(findings.some((finding) => finding.category === "permissions"), false);
+});
+
 test("report generation is deterministic for the same snapshot regardless of generation time", () => {
   const first = createServerAuditReport(risky(), "2026-08-15T06:00:00.000Z");
   const second = createServerAuditReport(risky(), "2026-08-15T07:00:00.000Z");
