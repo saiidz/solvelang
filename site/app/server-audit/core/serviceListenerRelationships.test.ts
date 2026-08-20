@@ -66,8 +66,8 @@ test("service-listener analysis does not infer aliases, paths, or case-folded na
     { name: "pathlike.service", state: "active" },
   ];
   input.processes = [
-    { pid: 40, ppid: 1, uid: 0, state: "S", name: "casesensitive" },
-    { pid: 41, ppid: 1, uid: 0, state: "S", name: "/usr/bin/pathlike" },
+    { pid: 40, ppid: 1, uid: 1000, state: "S", name: "casesensitive" },
+    { pid: 41, ppid: 1, uid: 1000, state: "S", name: "/usr/bin/pathlike" },
   ];
   input.listeningSockets = [
     { protocol: "tcp", localAddress: "127.0.0.1", port: 4000, process: "casesensitive" },
