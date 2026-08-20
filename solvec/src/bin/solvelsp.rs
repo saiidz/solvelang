@@ -152,11 +152,99 @@ fn completions(text: &str) -> Vec<Value> {
         .collect()
 }
 
+fn utf16_character_at(text: &str, line: usize, column: usize) -> Option<usize> {
+    text.lines().nth(line.saturating_sub(1)).map(|source_line| {
+        source_line
+            .chars()
+            .take(column.saturating_sub(1))
+            .map(char::len_utf16)
+            .sum()
+    })
+}
+
+fn semantic_token_kind_and_length(token: &lexer::Token) -> Option<(u32, usize)> {
+    use lexer::Token;
+
+    match token {
+        Token::Let => Some((0, 3)),
+        Token::Fn | Token::If | Token::In | Token::Or => Some((0, 2)),
+        Token::For | Token::And | Token::Not | Token::Ask => Some((0, 3)),
+        Token::Else | Token::Tool | Token::True => Some((0, 4)),
+        Token::While | Token::Break | Token::Agent | Token::Print | Token::False => Some((0, 5)),
+        Token::Return => Some((0, 6)),
+        Token::Continue => Some((0, 8)),
+        Token::Instruction => Some((0, 11)),
+        Token::Identifier(name) => Some((1, name.encode_utf16().count())),
+        Token::Number(number) => Some((2, number.to_string().encode_utf16().count())),
+        Token::Plus
+        | Token::Minus
+        | Token::Star
+        | Token::Slash
+        | Token::Dot
+        | Token::Colon
+        | Token::Equal
+        | Token::LeftParen
+        | Token::RightParen
+        | Token::LeftBrace
+        | Token::RightBrace
+        | Token::LeftBracket
+        | Token::RightBracket
+        | Token::Comma => Some((3, 1)),
+        Token::Join
+        | Token::EqualEqual
+        | Token::BangEqual
+        | Token::GreaterEqual
+        | Token::LessEqual => Some((3, 2)),
+        Token::Greater | Token::Less => Some((3, 1)),
+        Token::Text(_)
+        | Token::InvalidInteger(_)
+        | Token::InvalidCharacter(_)
+        | Token::Newline
+        | Token::Eof => None,
+    }
+}
+
+fn semantic_tokens(text: &str) -> Vec<u32> {
+    let mut parser = parser::Parser::new(lexer::lex(text));
+    if parser.parse().is_err() {
+        return Vec::new();
+    }
+
+    let mut encoded = Vec::new();
+    let mut previous_line = 0;
+    let mut previous_start = 0;
+    for located in lexer::lex(text) {
+        let Some((token_type, length)) = semantic_token_kind_and_length(&located.token) else {
+            continue;
+        };
+        let line = located.line.saturating_sub(1);
+        let Some(start) = utf16_character_at(text, located.line, located.column) else {
+            continue;
+        };
+        let delta_line = line.saturating_sub(previous_line);
+        let delta_start = if delta_line == 0 {
+            start.saturating_sub(previous_start)
+        } else {
+            start
+        };
+        encoded.extend([
+            delta_line as u32,
+            delta_start as u32,
+            length as u32,
+            token_type,
+            0,
+        ]);
+        previous_line = line;
+        previous_start = start;
+    }
+    encoded
+}
+
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{}}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{},"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","variable","number","operator"],"tokenModifiers":[]},"full":true}}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -250,6 +338,18 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
         }
+        Some("textDocument/semanticTokens/full") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let result = documents
+                .get(uri)
+                .map(|text| json!({"data": semantic_tokens(text)}))
+                .unwrap_or_else(|| json!({"data": []}));
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
+            ]
+        }
         _ => Vec::new(),
     }
 }
@@ -315,6 +415,10 @@ mod tests {
             true
         );
         assert!(output[0]["result"]["capabilities"]["completionProvider"].is_object());
+        assert_eq!(
+            output[0]["result"]["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"],
+            json!(["keyword", "variable", "number", "operator"])
+        );
     }
 
     #[test]
@@ -448,5 +552,31 @@ mod tests {
             &mut documents,
         );
         assert!(unopened[0]["result"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn semantic_tokens_are_parser_validated_and_open_document_local() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item + 2)"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":11,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///test.solve"}}}),
+            &mut documents,
+        );
+        assert_eq!(
+            output[0]["result"]["data"],
+            json!([
+                0, 0, 3, 0, 0, 0, 4, 4, 1, 0, 0, 5, 1, 3, 0, 0, 2, 1, 2, 0, 1, 0, 5, 0, 0, 0, 5, 1,
+                3, 0, 0, 1, 4, 1, 0, 0, 5, 1, 3, 0, 0, 2, 1, 2, 0, 0, 1, 1, 3, 0
+            ])
+        );
+
+        let unopened = process_message(
+            json!({"id":12,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///missing.solve"}}}),
+            &mut documents,
+        );
+        assert_eq!(unopened[0]["result"]["data"], json!([]));
     }
 }
