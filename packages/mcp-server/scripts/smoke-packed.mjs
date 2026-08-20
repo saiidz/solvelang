@@ -73,7 +73,17 @@ try {
   assert.match(
     installedEntrypoint,
     /explainSolveGraphShortestPath/,
-    "packed consumer must compose the registered tool through the reviewed explanation contract",
+    "packed consumer must compose the registered shortest-path tool through the reviewed explanation contract",
+  );
+  assert.match(
+    installedEntrypoint,
+    /solvelang_graph_explain_alternative_paths/,
+    "packed consumer must include the alternative-path explanation MCP tool registration",
+  );
+  assert.match(
+    installedEntrypoint,
+    /explainSolveGraphAlternativePaths/,
+    "packed consumer must compose the registered alternative-path tool through the reviewed explanation contract",
   );
 
   const workspaceRoot = path.join(temporaryRoot, "workspace");
