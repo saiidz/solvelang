@@ -8,9 +8,9 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `8b9aa8ea455fc6250b2053ede6d7c0d4c700bab7`, the merge of #628 after the bounded scheduled-job fanout relationship/report train.
+At this refresh, reviewed source `main` is `86a8a1d0bca542181a5e0eafbc3981210feec8c6`, the merge of #638 after #637's bounded Server Audit identity-report composition and the repository-only production-preflight read-policy correction.
 
-The safe non-production open-PR queue is **one** at this checkpoint: documentation-only #629 corrects the live TOTP production truth and its authoritative pointers. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action.
+The safe non-production open-PR queue is **zero** at this checkpoint. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action. #638 is also a merged repository-policy/test change only: its merge did not apply IAM or retry a deployment, and any live production IAM/deployment action remains separately owner-approved.
 
 The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated.
 
@@ -34,8 +34,14 @@ The latest Server Audit truth-hardening train is merged:
 - #624/#625 — scheduled-job relationship construction is bounded before materialization and exact-token targets are indexed once, preserving deterministic IDs/order and exact observed counts while avoiding repeated full target scans.
 - #626/#627 — multi-target scheduled-job truth remains explicit even when the relationship output cap partially materializes fanout; findings preserve observed-vs-materialized counts with structural evidence only.
 - #628 — canonical JSON/HTML regression coverage pins the partial-fanout evidence and verifies raw scheduled-job/service values remain absent from report output.
+- #629 — documentation-only production truth correction records that the production authenticator-app TOTP infrastructure is already deployed and environment-enabled; it does not authorize customer-account enrollment or any new production mutation.
+- #630/#631 — blank normalized TLS-certificate identities become bounded structural coverage findings and are composed into canonical JSON/HTML reports with explicit endpoint/collector authority limits.
+- #632/#633 — blank normalized web-server labels and web-root paths become bounded structural coverage findings and are composed into canonical reports without exposing valid private web identities.
+- #634/#635/#636 — blank normalized service, process, and package identities become deterministic bounded structural coverage findings with no collector or remediation changes.
+- #637 — canonical JSON/HTML reports now compose the #634–#636 service/process/package identity coverage findings, include explicit authority limitations, and pin redaction of valid private identities/version evidence. Exact reviewed head `c8e10c7ab4ffa7c7f21a0d4dd51dc0dcbf7eb799` passed exact-head Hosted CI + Rust/RustSec and merged as `a50e723abb14bd0cf90f02189bbc5a6e30498128`.
+- #638 — repository-only production preflight policy/test now includes read-only `cloudformation:Describe/Get/List` access to the dormant priority stack ARN. Hosted CI, Rust/RustSec, API Access CI, and Customer Priority Foundation Rollout CI were green before an independent merge as `86a8a1d0bca542181a5e0eafbc3981210feec8c6`. This repository merge is not evidence that live IAM was changed or that the dormant foundation deployment was retried.
 
-All ordinary branches in these trains used GitHub-hosted validation. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
+All ordinary branches in the Server Audit train used GitHub-hosted validation. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
 ## Post-scan security verification
 
@@ -47,7 +53,7 @@ A source-backed security diff review was then completed for the exact range:
 
 The range is 122 commits and 47 changed files. Every changed production source file in that exact range was reviewed, including Repository Audit Compose product wiring and all changed Server Audit analysis/report/coverage modules. Review focused on untrusted snapshot handling, redaction/privacy, HTML/JSON output safety, bounds/DoS, path/reference handling, and accidental capability/network/write expansion. No reportable security regression was found. Changed tests were also checked for shell/network/environment access and no such new CI-side capability was found.
 
-This is a **security diff review**, not a replacement claim that a new full Codex Security standard repository scan ran on later `main`. Later #617→#628 work is covered by exact-head Hosted CI/Rust/RustSec and PR review evidence, not by that older full-range security-diff statement. If a fresh full standard scan is required for a production gate, run it separately on the then-current exact `main` and record that exact SHA.
+This is a **security diff review**, not a replacement claim that a new full Codex Security standard repository scan ran on later `main`. Later #617→#638 work is covered by exact-head Hosted/specialized CI and PR review evidence, not by that older full-range security-diff statement. If a fresh full standard scan is required for a production gate, run it separately on the then-current exact `main` and record that exact SHA.
 
 ## Major merged work that must not be recreated
 
@@ -77,7 +83,8 @@ This is a **security diff review**, not a replacement claim that a new full Code
 - #575/#576/#579 — bounded backup/log consistency evidence/findings and canonical report composition with exact-overlap deduplication.
 - #577 — root-confined writes reject an existing symbolic-link final component.
 - #581→#615 — bounded Server Audit certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web coverage, report-truth hardening, security-probe truth, normal systemd service-state truth, and canonical report regression coverage described above.
-- #617→#628 — bounded/redacted service→process→listener, service→process, and scheduled-job→service/process relationship findings/report composition plus construction/indexing/fanout hardening; no collector or remediation capability was widened.
+- #617→#637 — bounded/redacted service→process→listener, service→process, and scheduled-job→service/process relationship findings/report composition; relationship construction/index/fanout hardening; certificate/web/service/process/package identity-coverage findings; and canonical identity-coverage report composition. No collector or remediation capability was widened.
+- #638 — production-preflight repository policy/test correction for read-only priority-stack inspection only; it does not authorize or prove a live IAM update or deployment retry.
 
 ## Repository Audit / Solve Graph state
 
@@ -87,7 +94,7 @@ Repository source is not executed to improve graph coverage. Gradle remains defe
 
 ## Server Audit state
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
 
 Continue package/service/port/process/scheduled-job relationship quality, cache/log/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform parser/report tests. Do not add remote mutation/remediation execution.
 
@@ -128,7 +135,7 @@ Current boundaries include:
 - Repository Audit write/remediation mode: **disabled**;
 - Server Audit mutation/remediation mode: **disabled**.
 
-Repository merges do not change those live-state facts by themselves. The already-live TOTP infrastructure must not be redeployed merely because older documentation described it as pending; any account enrollment/login/backup-code canary or future infrastructure mutation requires fresh owner approval.
+Repository merges do not change those live-state facts by themselves. The #638 repository merge did not apply production IAM or retry the dormant priority deployment. The already-live TOTP infrastructure must not be redeployed merely because older documentation described it as pending; any account enrollment/login/backup-code canary or future infrastructure mutation requires fresh owner approval.
 
 ## Safe queue and integration policy
 
