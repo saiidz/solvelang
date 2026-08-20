@@ -50,6 +50,34 @@ test("unknown security probes remain coverage uncertainty instead of configurati
   assert.equal(JSON.stringify(coverage).includes("PasswordAuthentication=unknown"), false);
 });
 
+test("common unavailable sentinels remain coverage uncertainty instead of configuration findings", () => {
+  const findings = analyzeServerSnapshot(snapshot({
+    firewall: "N/A",
+    automaticUpdates: "not applicable",
+    rootSshLogin: "not-applicable",
+    passwordSshLogin: "not available",
+    selinux: "unavailable",
+    apparmor: "not collected",
+  }));
+
+  for (const title of CONFIGURATION_RISK_TITLES) {
+    assert.equal(findings.some((finding) => finding.title === title), false);
+  }
+
+  const coverage = findings.find((finding) => finding.title === "Security posture probes are inconclusive");
+  assert.ok(coverage);
+  assert.deepEqual(coverage.evidence.map((evidence) => evidence.source), [
+    "security.firewall",
+    "security.automaticUpdates",
+    "security.rootSshLogin",
+    "security.passwordSshLogin",
+    "security.selinux",
+    "security.apparmor",
+  ]);
+  assert.equal(JSON.stringify(coverage).includes("N/A"), false);
+  assert.equal(JSON.stringify(coverage).includes("not applicable"), false);
+});
+
 test("missing probe fields inside a supplied security section are reported as bounded coverage", () => {
   const findings = analyzeServerSnapshot(snapshot({ firewall: "active" }));
   const coverage = findings.find((finding) => finding.title === "Security posture probes are inconclusive");
