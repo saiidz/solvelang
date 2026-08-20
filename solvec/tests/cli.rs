@@ -549,16 +549,18 @@ fn hardened_mode_allows_pure_standard_library_helpers() {
         "solvelang_cli_pure_standard_library.solve",
         r#"
 let labels = ["new", "urgent"]
-let ticket = { labels: labels }
+let ticket = { status: "open", labels: labels, count: 2 }
 print(length(ticket.labels))
 print(contains(labels, "urgent"))
 print(get(ticket, "missing", "not-set"))
+print(keys(ticket))
+print(values(ticket))
 "#,
     );
 
     let output = run_solvec(&["run", "--safe", &file]);
     assert!(output.contains(ADVISORY_LABEL));
-    assert!(output.contains("2\ntrue\nnot-set"));
+    assert!(output.contains("2\ntrue\nnot-set\n[count, labels, status]\n[2, [new, urgent], open]"));
 }
 
 #[test]
