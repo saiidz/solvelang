@@ -33,7 +33,8 @@ export function createServerAuditWebIdentityCoverageFindings(snapshot: ServerAud
   const candidates: ServerAuditFinding[] = [];
 
   for (let index = 0; index < (snapshot.web?.servers?.length ?? 0); index += 1) {
-    if (usable(snapshot.web!.servers![index])) continue;
+    const server = snapshot.web!.servers![index] as unknown;
+    if (typeof server !== "string" || usable(server)) continue;
     const source = `web.servers[${index}]`;
     candidates.push({
       id: stableId(["web-identity-coverage", "server", source]),
@@ -47,7 +48,10 @@ export function createServerAuditWebIdentityCoverageFindings(snapshot: ServerAud
   }
 
   for (let index = 0; index < (snapshot.web?.roots?.length ?? 0); index += 1) {
-    if (usable(snapshot.web!.roots![index].path)) continue;
+    const root = snapshot.web!.roots![index] as unknown;
+    if (!root || typeof root !== "object" || Array.isArray(root)) continue;
+    const path = (root as { path?: unknown }).path;
+    if (typeof path !== "string" || usable(path)) continue;
     const source = `web.roots[${index}].path`;
     candidates.push({
       id: stableId(["web-identity-coverage", "root", source]),
