@@ -66,8 +66,8 @@ test("service-listener analysis does not infer aliases, paths, or case-folded na
     { name: "pathlike.service", state: "active" },
   ];
   input.processes = [
-    { pid: 40, ppid: 1, uid: 1000, state: "S", name: "casesensitive" },
-    { pid: 41, ppid: 1, uid: 1000, state: "S", name: "/usr/bin/pathlike" },
+    { pid: 40, ppid: 1, uid: 0, state: "S", name: "casesensitive" },
+    { pid: 41, ppid: 1, uid: 0, state: "S", name: "/usr/bin/pathlike" },
   ];
   input.listeningSockets = [
     { protocol: "tcp", localAddress: "127.0.0.1", port: 4000, process: "casesensitive" },
@@ -117,4 +117,24 @@ test("service-listener analysis is deterministic, bounded, and rejects invalid b
     () => analyzeServerAuditServiceListenerRelationships(input, { maxRelationships: 0 }),
     /service-listener maxRelationships/,
   );
+});
+
+test("service-listener analysis bounds repeated-label Cartesian candidates during construction", () => {
+  const input = snapshot();
+  input.services = Array.from({ length: 5_000 }, () => ({ name: "shared.service", state: "active" }));
+  input.processes = [{ pid: 50, ppid: 1, uid: 0, state: "S", name: "shared" }];
+  input.listeningSockets = Array.from({ length: 5_000 }, (_, index) => ({
+    protocol: "tcp",
+    localAddress: "127.0.0.1",
+    port: 10_000 + index,
+    process: "shared",
+  }));
+
+  const result = analyzeServerAuditServiceListenerRelationships(input, { maxRelationships: 7 });
+
+  assert.equal(result.relationships.length, 7);
+  assert.equal(result.execution.relationshipsTruncated, true);
+  assert.equal(result.summary.listenerRelationshipsFound, 25_000_000);
+  assert.equal(result.summary.ambiguousListenerAttributions, 0);
+  assert.equal(result.summary.matchedServices, 5_000);
 });
