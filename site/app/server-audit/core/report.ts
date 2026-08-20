@@ -12,6 +12,7 @@ import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
+import { createServerAuditWebListenerFindings } from "./webListenerFindings";
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -86,6 +87,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
+    ...createServerAuditWebListenerFindings(snapshot),
     ...createServerAuditFilesystemArtifactRelationshipFindings(snapshot),
     ...createServerAuditCoverageFindings(snapshot),
   ]);
@@ -121,6 +123,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
       "Certificate-consistency findings identify contradictory duplicate certificate evidence only; they do not choose an active certificate or prove endpoint reachability.",
+      "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
       "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
