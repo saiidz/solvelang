@@ -133,12 +133,10 @@ test("rejects tampered path identity and capability truth", async () => {
     /mismatched hop evidence/,
   );
 
-  const tamperedCapability = structuredClone(bundle) as typeof bundle & {
-    execution: { networkAccess: boolean; writeAccess: false; queryTruncated: boolean };
-  };
-  tamperedCapability.execution.networkAccess = true;
+  const tamperedCapability = structuredClone(bundle);
+  (tamperedCapability.execution as unknown as { networkAccess: boolean }).networkAccess = true;
   assert.throws(
-    () => createSolveGraphShortestPathExplanation(tamperedCapability as typeof bundle),
+    () => createSolveGraphShortestPathExplanation(tamperedCapability),
     /capability-free product inputs/,
   );
 });
