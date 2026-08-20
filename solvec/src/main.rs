@@ -4,6 +4,7 @@ mod ast_runtime;
 mod diagnostics;
 mod lexer;
 mod parser;
+mod semantic;
 mod value;
 
 use ast::{Expr, ExprKind, Stmt};
@@ -24,6 +25,7 @@ const MAX_INPUT_BYTES: u64 = 1_048_576;
 enum Command {
     Run(RunOptions),
     Validate,
+    Check,
     Tokens,
     Ast,
     Help,
@@ -311,6 +313,17 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
             println!("file: {}", filename);
             Ok(())
         }
+        Command::Check => {
+            let source = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&source)?;
+            let statements = parse_source(&source)?;
+            semantic::check(&statements).map_err(|diagnostics| {
+                CliFailure::invalid_workflow(source.format_diagnostics(diagnostics))
+            })?;
+            println!("✓ SolveLang semantic check passed");
+            println!("file: {}", filename);
+            Ok(())
+        }
         Command::Tokens => {
             let source = load_source_with_imports(&filename, false)?;
             validate_diagnostics(&source)?;
@@ -403,6 +416,7 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
         }
         "run" => parse_run_args(&args[1..]),
         "validate" => parse_file_command(Command::Validate, &args[1..]),
+        "check" => parse_file_command(Command::Check, &args[1..]),
         "tokens" => parse_file_command(Command::Tokens, &args[1..]),
         "ast" => parse_file_command(Command::Ast, &args[1..]),
         "legacy" => Err(
@@ -1082,6 +1096,9 @@ fn print_usage() {
     println!("Usage:");
     println!("  solvec run [options] <file.solve>  Run with the canonical AST runtime");
     println!("  solvec validate <file.solve>       Validate syntax without running");
+    println!(
+        "  solvec check <file.solve>          Check conservative static semantics without running"
+    );
     println!("  solvec tokens <file.solve>         Print lexer tokens");
     println!("  solvec ast <file.solve>            Print parsed AST");
     println!();
