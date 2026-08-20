@@ -293,7 +293,7 @@ print(user_name)
 print(user_plan)
 ```
 
-Imports are resolved relative to the importing file. Circular imports are rejected. In hardened mode, imports must be relative regular `.solve` files whose canonical targets remain below the entry workflow's canonical parent. Absolute paths, parent traversal, non-`.solve` paths, and symlink escapes fail before imported content is read. The loader flattens imported source before parsing while retaining line-level provenance, so parser and runtime diagnostics from imported content identify the relative imported-file path and its local line number.
+Imports are resolved relative to the importing file. Circular imports are rejected with a deterministic root-relative import chain. In hardened mode, imports must be relative regular `.solve` files whose canonical targets remain below the entry workflow's canonical parent. Absolute paths, parent traversal, non-`.solve` paths, and symlink escapes fail before imported content is read. The loader flattens imported source before parsing while retaining line-level provenance, so parser and runtime diagnostics from imported content identify the relative imported-file path and its local line number. Imports remain compatibility includes, not module namespaces or package resolution.
 
 ## Runtime Errors
 
