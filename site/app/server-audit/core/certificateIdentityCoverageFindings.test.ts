@@ -48,9 +48,12 @@ test("certificate identity coverage output is deterministic and bounded", () => 
 
   assert.deepEqual(first, second);
   assert.equal(first.length, 100);
-  assert.equal(first.filter((finding) => finding.title === "TLS certificate record lacks a usable identity").length, 99);
+  const identityFindings = first.filter((finding) => finding.title === "TLS certificate record lacks a usable identity");
+  assert.equal(identityFindings.length, 99);
   assert.equal(first.filter((finding) => finding.title === "Certificate identity coverage findings were truncated").length, 1);
-  assert.equal(first.some((finding) => finding.evidence.some((evidence) => evidence.source === "web.certificates[104].name")), false);
+  const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
+  assert.equal(new Set(structuralSources).size, 99);
+  assert.equal(structuralSources.every((source) => /^web\.certificates\[\d+\]\.name$/.test(source)), true);
 });
 
 test("certificate identity coverage emits no finding when certificate evidence is absent", () => {
