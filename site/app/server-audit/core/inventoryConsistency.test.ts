@@ -27,6 +27,10 @@ function snapshot(): ServerAuditSnapshot {
         { path: "/srv/private/app", owner: "deploy", mode: "0755" },
         { path: "/srv/private/app", owner: "root", mode: "0775" },
       ],
+      certificates: [
+        { name: "private.example", notAfter: "2026-09-01T00:00:00.000Z", daysRemaining: 14 },
+        { name: "private.example", notAfter: "2026-09-08T00:00:00.000Z", daysRemaining: 21 },
+      ],
     },
     metadata: { redactionsApplied: true },
   };
@@ -37,6 +41,7 @@ test("inventory consistency reports conflicting duplicate evidence without raw i
   assert.deepEqual(
     analysis.issues.map((issue) => issue.kind).sort(),
     [
+      "conflicting-certificate-metadata",
       "conflicting-filesystem-capacity",
       "conflicting-package-version",
       "conflicting-service-state",
@@ -45,15 +50,18 @@ test("inventory consistency reports conflicting duplicate evidence without raw i
   );
   assert.equal(analysis.execution.networkAccess, false);
   assert.equal(analysis.execution.writeAccess, false);
+  assert.equal(analysis.summary.certificatesChecked, 2);
 
   const serialized = JSON.stringify(analysis.issues);
   assert.equal(serialized.includes("internal-agent"), false);
   assert.equal(serialized.includes("worker.service"), false);
   assert.equal(serialized.includes("/srv/private/app"), false);
+  assert.equal(serialized.includes("private.example"), false);
   assert.ok(serialized.includes("packages[0]"));
   assert.ok(serialized.includes("services[0]"));
   assert.ok(serialized.includes("filesystems[0]"));
   assert.ok(serialized.includes("web.roots[0]"));
+  assert.ok(serialized.includes("web.certificates[0]"));
 });
 
 test("process topology consistency reports conflicting PIDs, self-parenting, and parent cycles without process names", () => {
@@ -61,7 +69,7 @@ test("process topology consistency reports conflicting PIDs, self-parenting, and
   input.packages = [];
   input.services = [];
   input.filesystems = [];
-  input.web = { roots: [] };
+  input.web = { roots: [], certificates: [] };
   input.processes = [
     { pid: 100, ppid: 1, uid: 1000, state: "S", name: "sensitive-worker" },
     { pid: 100, ppid: 1, uid: 0, state: "R", name: "sensitive-worker" },
@@ -104,6 +112,10 @@ test("identical duplicate evidence does not produce false conflict findings", ()
     roots: [
       { path: "/srv/private/app", owner: "deploy", mode: "0755" },
       { path: "/srv/private/app", owner: "deploy", mode: "0755" },
+    ],
+    certificates: [
+      { name: "private.example", notAfter: "2026-09-01T00:00:00.000Z", daysRemaining: 14 },
+      { name: "private.example", notAfter: "2026-09-01T00:00:00.000Z", daysRemaining: 14 },
     ],
   };
   input.processes = [
