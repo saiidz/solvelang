@@ -18,6 +18,21 @@ TypeScript browser runner that supports only documented `let`, text/number,
 rejects unsupported syntax. This avoids exposing host capabilities in the
 browser, but duplicated parsing/evaluation can drift from the Rust semantics.
 
+### Current extraction blocker
+
+The repository now exposes a shared `solvec` library for native editor tooling,
+but that library is not a browser-safe core: it publicly includes `ai`, keeps
+the blocking native `reqwest` dependency, and exposes `ast_runtime`, which
+contains filesystem, environment, HTTP, and AI host adapters. Compiling that
+crate to WASM would therefore carry host-capable code across the intended
+boundary even if a browser wrapper chose a deny-all policy at runtime.
+
+The next implementation prerequisite is a separate dependency-minimal pure
+core crate (or equivalent feature split) containing only the deterministic
+language subset, with the native adapters left outside its dependency graph.
+Until that split exists, shared source fixtures can describe parity but cannot
+prove a safe canonical WASM artifact.
+
 Compiling the existing `solvec` binary wholesale to WebAssembly would therefore
 be neither a safe parity path nor a small packaging change: the binary has no
 browser-targeted library boundary, and its host adapters are not valid browser
