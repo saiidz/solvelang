@@ -84,6 +84,50 @@ test("canonical reports compose scheduled-job relationship uncertainty with stru
   }
 });
 
+test("canonical reports preserve partially materialized scheduled-job fanout truth", () => {
+  const input: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-20T20:50:00.000Z",
+    host: { hostname: "audit-host" },
+    services: Array.from({ length: 1_001 }, () => ({ name: "private-shared.service", state: "active" })),
+    scheduledJobs: [{
+      source: "cron:/private/fanout",
+      commandSummary: "private-shared.service",
+    }],
+    metadata: { redactionsApplied: true },
+  };
+
+  const report = createServerAuditReport(input, "2026-08-20T20:51:00.000Z");
+  const fanout = report.findings.find(
+    (finding) => finding.title === "Some multi-target scheduled-job mappings are not fully materialized",
+  );
+
+  assert.ok(fanout);
+  assert.deepEqual(fanout.evidence, [
+    { source: "scheduledJobRelationships.summary.jobsWithMultipleRelationships", summary: "1" },
+    { source: "scheduledJobRelationships.output.emittedMultiTargetJobs", summary: "1" },
+    {
+      source: "scheduledJobRelationships.summary.jobsWithPartiallyMaterializedMultipleRelationships",
+      summary: "1",
+    },
+  ]);
+
+  const json = serverAuditReportJson(report);
+  const html = serverAuditReportHtml(report);
+  for (const text of [
+    "Some multi-target scheduled-job mappings are not fully materialized",
+    "scheduledJobRelationships.summary.jobsWithPartiallyMaterializedMultipleRelationships",
+    SCHEDULED_JOB_RELATIONSHIP_LIMITATION,
+  ]) {
+    assert.ok(json.includes(text));
+    assert.ok(html.includes(text));
+  }
+  for (const sensitive of ["private-shared.service", "cron:/private/fanout"]) {
+    assert.equal(json.includes(sensitive), false);
+    assert.equal(html.includes(sensitive), false);
+  }
+});
+
 test("canonical reports do not add scheduled-job relationship uncertainty for a unique exact-name-token mapping", () => {
   const input: ServerAuditSnapshot = {
     schemaVersion: "1",
