@@ -17,6 +17,8 @@ const expectedFiles = [
   "package/dist/src/n8n.js",
   "package/dist/src/solve-graph-alternative-paths.d.ts",
   "package/dist/src/solve-graph-alternative-paths.js",
+  "package/dist/src/solve-graph-impact-explanation.d.ts",
+  "package/dist/src/solve-graph-impact-explanation.js",
   "package/dist/src/solve-graph-ranked-search.d.ts",
   "package/dist/src/solve-graph-ranked-search.js",
   "package/dist/src/solve-graph-shortest-path-explanation.d.ts",
@@ -84,6 +86,16 @@ try {
     installedEntrypoint,
     /explainSolveGraphAlternativePaths/,
     "packed consumer must compose the registered alternative-path tool through the reviewed explanation contract",
+  );
+  assert.match(
+    installedEntrypoint,
+    /solvelang_graph_explain_impact/,
+    "packed consumer must include the impact explanation MCP tool registration",
+  );
+  assert.match(
+    installedEntrypoint,
+    /explainSolveGraphImpact/,
+    "packed consumer must compose the registered impact tool through the reviewed explanation contract",
   );
 
   const workspaceRoot = path.join(temporaryRoot, "workspace");
