@@ -9,6 +9,7 @@ import { createServerAuditCertificateCoverageFindings } from "./certificateCover
 import { createServerAuditCertificateExpiryFallbackFindings } from "./certificateExpiryFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
+import { createServerAuditFilesystemCoverageFindings } from "./filesystemCoverageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
 import { createServerAuditListenerCoverageFindings } from "./listenerCoverageFindings";
@@ -117,6 +118,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditBackupPostureFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
+    ...createServerAuditFilesystemCoverageFindings(snapshot),
     ...createServerAuditProcessCoverageFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
@@ -167,6 +169,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Backup-posture findings use only supplied age and size evidence against a bounded review threshold; they do not prove backup success, restoreability, retention quality, or off-host/offsite protection.",
       "Log-coverage findings report only explicit empty log inventories or supplied log records that lack modifiedAt or sizeBytes evidence; they do not prove logging failure, activity, retention, completeness, or collector authority.",
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
+      "Filesystem-coverage findings report only an explicit empty filesystem inventory; because the reviewed collector maps failed/unavailable fixed `df -P -B1` execution or empty usable output to an empty array, they do not prove that the host has no mounted filesystems or that filesystem collection was complete or authoritative.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Process-coverage findings report only an explicit empty process inventory; because the reviewed collector maps failed/unavailable fixed `ps` execution or empty usable output to an empty array, they do not prove that the host has no processes or that process collection was complete or authoritative.",
