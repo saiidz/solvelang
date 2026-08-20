@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, `main` is `175afc8c4b70811202a14c265b3111ccc365e856`, the safe merge of Server Audit process-coverage report composition PR #600.
+At this refresh, `main` is `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`, the safe merge of Server Audit security-probe truth PR #611.
 
 The safe non-production open-PR queue is **zero**. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action.
 
@@ -16,25 +16,14 @@ The historical Repository Audit Python-import/dependency train #288 → #290 →
 
 ## Latest queue-drain checkpoint
 
-The latest safe Server Audit train is fully merged:
+The latest Server Audit coverage/report hardening train is fully merged:
 
-- #581 — certificate-expiry fallback derives supplied expiry posture without endpoint/network validation.
-- #582/#583/#584 — public-file root-reference and fixed-marker coverage fail closed for unavailable/sparse roots and compose into canonical JSON/HTML reports with structural/redacted evidence.
-- #585 — synchronized roadmap/handoff truth through #584.
-- #586 — closed unmerged after Hosted CI proved the proposed certificate-conflict scope duplicated the existing certificate-consistency stage.
-- #587 — bounded missing certificate-expiry evidence for supplied certificate records lacking both `notAfter` and `daysRemaining`; certificate names remain withheld.
-- #588 — backup-posture findings composed into canonical JSON/HTML reports; Hosted CI exposed duplicate 72-hour stale-backup reporting and the legacy duplicate was removed before merge.
-- #589/#590 — bounded missing backup `ageHours` and `sizeBytes` evidence with structural array-index evidence only; backup names/paths remain withheld. #590 also corrected canonical limitation wording after review.
-- #591 — bounded log coverage for explicit empty log inventory and per-record missing `modifiedAt` / `sizeBytes`; raw log paths remain withheld.
-- #592 — documentation-only active-handoff sync through #591.
-- #593 — bounded explicit-empty service inventory coverage. Reconciliation removed a proposed per-record `enabled` gap because the reviewed collector emits service name/state but not `enabled`, avoiding guaranteed false coverage noise.
-- #594 — composes #593 into canonical Server Audit JSON/HTML reports with structural service evidence and an explicit limitation that empty inventory does not prove discovery completeness, boot enablement, runtime health, or collector authority.
-- #595 — extends the package-version stage so explicit `packages: []` becomes bounded coverage evidence while absent `packages` remains generic coverage and concrete inventories remain unchanged. Canonical limitations preserve package-discovery/authority/vulnerability uncertainty; no advisory/CVE lookup occurs.
-- #596 — documentation-only active-handoff sync through #595.
-- #597 — bounded explicit-empty listening-socket coverage. Because the fixed read-only collector maps both empty `ss` output and command failure/unavailability to `[]`, an empty inventory is treated as unknown coverage rather than proof that the host has no listeners.
-- #598 — composes #597 into canonical Server Audit JSON/HTML reports with structural listener evidence and a precise collector-authority/no-listener limitation.
-- #599 — bounded explicit-empty process inventory coverage. Because the fixed read-only collector maps failed/unavailable `ps` execution or empty usable output to `[]`, an empty inventory is treated as unknown coverage rather than proof that the host has no processes.
-- #600 — composes #599 into canonical Server Audit JSON/HTML reports with structural process evidence and an explicit process-collection limitation.
+- #602/#603 — explicit-empty scheduled-job inventory remains unknown coverage because fixed cron-directory scans can yield no records when directories are missing, unreadable, or contain no qualifying entries; the signal is composed into canonical JSON/HTML reports with structural evidence only.
+- #604 was closed unmerged after newer `main` invalidated its validation; verified successor #606 preserved the reviewed filesystem-coverage scope.
+- #606/#608 — explicit-empty filesystem inventory remains unknown coverage rather than proof that the host has no mounted filesystems; canonical report composition preserves the fixed `df -P -B1` collector authority boundary.
+- #605/#607 were closed unmerged only after verified successors existed; #609 preserved the reviewed web-inventory coverage payload on then-current `main`.
+- #609/#610 — explicit-empty web-server, web-root, and TLS-certificate inventories become bounded coverage signals and are composed into canonical JSON/HTML reports without endpoint reachability claims or private web evidence.
+- #611 — security posture analysis now preserves unknown/inconclusive probe truth instead of converting unavailable values into configuration-risk findings. A Codex review finding identified common `N/A` / `not applicable` sentinels; exact head `5d496cceafe163439d228297e7181ca0f163dba7` was corrected to normalize `N/A`, `not applicable`, and `not-applicable`, with deterministic regression coverage across firewall, automatic updates, SSH, SELinux, and AppArmor. The review thread was replied to and resolved, exact-head GitHub-hosted CI + Rust/RustSec passed, and the PR merged as `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`.
 
 All ordinary branches in this train used GitHub-hosted validation. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
 
@@ -69,7 +58,7 @@ The following generations are merged repository history. Historical issues, bran
 - #562→#578 — bounded static Docker Compose service/image and `depends_on` evidence, snapshot/artifact/presentation/browser surfaces, quoted static service keys, dependency panel, and top-level product wiring. Compose evaluation, interpolation/anchors/profiles, image resolution, container starts, network access, and writes remain disabled.
 - #575/#576/#579 — bounded backup/log consistency evidence/findings and canonical report composition with exact-overlap deduplication.
 - #577 — root-confined writes reject an existing symbolic-link final component.
-- #581→#600 — latest bounded Server Audit certificate/public-file/backup/log/service/package/listener/process coverage and report-truth hardening described above.
+- #581→#611 — bounded Server Audit certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web inventory coverage, report-truth hardening, and unknown security-probe handling described above.
 
 ## Repository Audit / Solve Graph state
 
@@ -79,7 +68,7 @@ Repository source is not executed to improve graph coverage. Gradle remains defe
 
 ## Server Audit state
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; scheduled-job and service→process→listener structural relationships; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process coverage; and canonical JSON/HTML composition for those coverage states.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; scheduled-job and service→process→listener structural relationships; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; canonical JSON/HTML composition for those coverage states; and conservative handling of unavailable security posture probes.
 
 Continue package/service/port/process/scheduled-job relationship quality, cache/log/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform parser/report tests. Do not add remote mutation/remediation execution.
 
