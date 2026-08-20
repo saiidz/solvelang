@@ -4,6 +4,9 @@ import { createServerAuditPackageVersionFindings } from "./packageVersionFinding
 import { createServerAuditReport } from "./report";
 import type { ServerAuditSnapshot } from "./types";
 
+const PACKAGE_COVERAGE_LIMITATION =
+  "Package-version evidence findings report explicit empty inventories plus missing or non-specific supplied versions; they do not prove package discovery completeness, collector authority, or vulnerability status.";
+
 function snapshot(packages: NonNullable<ServerAuditSnapshot["packages"]>): ServerAuditSnapshot {
   return {
     schemaVersion: "1",
@@ -20,6 +23,24 @@ test("concrete package versions do not produce version-evidence findings", () =>
     { name: "custom", version: "2026.08+build.17" },
   ]));
   assert.deepEqual(findings, []);
+});
+
+test("explicit empty package inventory is reported but an absent section remains generic coverage", () => {
+  const empty = createServerAuditPackageVersionFindings(snapshot([]));
+  assert.equal(empty.length, 1);
+  assert.equal(empty[0].title, "No package records supplied");
+  assert.deepEqual(empty[0].evidence, [{ source: "packages", summary: "0 package records" }]);
+
+  const absent: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-18T19:20:00.000Z",
+    host: { hostname: "audit-host" },
+  };
+  assert.deepEqual(createServerAuditPackageVersionFindings(absent), []);
+
+  const report = createServerAuditReport(snapshot([]), "2026-08-20T15:45:00.000Z");
+  assert.ok(report.findings.some((finding) => finding.title === "No package records supplied"));
+  assert.ok(report.limitations.includes(PACKAGE_COVERAGE_LIMITATION));
 });
 
 test("empty and placeholder versions are reported structurally without package identity or raw version text", () => {
