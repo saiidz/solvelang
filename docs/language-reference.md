@@ -313,7 +313,7 @@ Parser recovery uses statement boundaries so one malformed statement generally y
 
 ### Pure standard-library helpers
 
-`length`, `contains`, and `get` are deterministic pure helpers. They do not read
+`length`, `contains`, `get`, and `keys` are deterministic pure helpers. They do not read
 files, environment variables, or the network, so hardened runs allow them.
 
 `length(value)` returns the number of Unicode scalar values in text, the number
@@ -345,6 +345,13 @@ let ticket = { status: "open" }
 print(get(owners, 1)) // Bea
 print(get(owners, 9, "unassigned")) // unassigned
 print(get(ticket, "priority", "normal")) // normal
+```
+
+`keys(object)` returns the object's text keys in deterministic lexicographic
+order. It rejects non-object values.
+
+```solve
+print(keys({ status: "open", count: 2 })) // ["count", "status"]
 ```
 
 ### `json_parse(text)`
