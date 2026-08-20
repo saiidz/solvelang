@@ -5,6 +5,7 @@ export type ServerAuditInventoryIssueKind =
   | "conflicting-service-state"
   | "conflicting-filesystem-capacity"
   | "conflicting-web-root-metadata"
+  | "conflicting-certificate-metadata"
   | "conflicting-process-identity"
   | "self-parent-process"
   | "cyclic-process-parentage";
@@ -30,6 +31,7 @@ export type ServerAuditInventoryConsistencyAnalysis = {
     servicesChecked: number;
     filesystemsChecked: number;
     webRootsChecked: number;
+    certificatesChecked: number;
     processesChecked: number;
   };
   execution: {
@@ -87,6 +89,7 @@ export function analyzeServerAuditInventoryConsistency(
   const services = snapshot.services ?? [];
   const filesystems = snapshot.filesystems ?? [];
   const roots = snapshot.web?.roots ?? [];
+  const certificates = snapshot.web?.certificates ?? [];
   const processes = snapshot.processes ?? [];
 
   for (const indexes of groupIndexes(packages, (entry) => entry.name).values()) {
@@ -145,6 +148,20 @@ export function analyzeServerAuditInventoryConsistency(
       severity: "info",
       sources,
       summary: "Multiple entries for the same web-root path report different ownership or mode metadata; permission posture is internally inconsistent.",
+    });
+  }
+
+  for (const indexes of groupIndexes(certificates, (entry) => entry.name).values()) {
+    if (indexes.length < 2) continue;
+    const metadata = indexes.map((index) => `${certificates[index].notAfter ?? ""}\u001f${certificates[index].daysRemaining ?? ""}`);
+    if (distinct(metadata) < 2) continue;
+    const sources = indexes.map((index) => `web.certificates[${index}]`);
+    issues.push({
+      id: stableId("conflicting-certificate-metadata", sources),
+      kind: "conflicting-certificate-metadata",
+      severity: "low",
+      sources,
+      summary: "Multiple entries for the same certificate identity report different expiry metadata; TLS posture is internally inconsistent.",
     });
   }
 
@@ -234,6 +251,7 @@ export function analyzeServerAuditInventoryConsistency(
       servicesChecked: services.length,
       filesystemsChecked: filesystems.length,
       webRootsChecked: roots.length,
+      certificatesChecked: certificates.length,
       processesChecked: processes.length,
     },
     execution: {
