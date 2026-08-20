@@ -60,6 +60,29 @@ test("conflicting duplicate marker checks are explicit and structural", () => {
   assert.equal(JSON.stringify(findings).includes("/var/www/private"), false);
 });
 
+test("coverage ignores unavailable sparse root records instead of inventing root coverage", () => {
+  const roots = Array<{ path: string }>(1);
+  const findings = createServerAuditPublicFileCoverageFindings(snapshot({
+    roots,
+    publicFileChecks: [{ rootIndex: 0, marker: "env-file", present: false }],
+  }));
+
+  assert.deepEqual(findings, []);
+});
+
+test("coverage ignores marker contradictions whose referenced root is unavailable", () => {
+  const findings = createServerAuditPublicFileCoverageFindings(snapshot({
+    roots: [{ path: "/var/www/private" }],
+    publicFileChecks: [
+      ...completeChecks,
+      { rootIndex: 4, marker: "env-file", present: false },
+      { rootIndex: 4, marker: "env-file", present: true },
+    ],
+  }));
+
+  assert.deepEqual(findings, []);
+});
+
 test("public-file coverage findings are deterministic and bounded", () => {
   const roots = Array.from({ length: 10 }, (_, index) => ({ path: `/var/www/private-${index}` }));
   const input = snapshot({ roots, publicFileChecks: [] });
