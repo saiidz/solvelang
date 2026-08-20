@@ -246,6 +246,14 @@ fn legacy_command_and_flag_are_removed_from_public_cli() {
 }
 
 #[test]
+fn help_lists_read_only_lint_and_formatter_commands() {
+    let output = run_solvec(&["help"]);
+
+    assert!(output.contains("solvec lint <file.solve>"));
+    assert!(output.contains("solvec fmt [--check] <file.solve>"));
+}
+
+#[test]
 fn validate_succeeds_for_operator_workflow_examples() {
     for example in [
         "../examples/support_triage.solve",
