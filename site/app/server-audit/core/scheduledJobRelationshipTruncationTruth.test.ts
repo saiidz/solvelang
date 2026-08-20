@@ -28,11 +28,30 @@ test("scheduled-job analysis preserves exact multi-target job counts when output
   assert.equal(result.summary.relationshipsObserved, 4);
   assert.equal(result.summary.jobsWithRelationships, 2);
   assert.equal(result.summary.jobsWithMultipleRelationships, 2);
+  assert.equal(result.summary.jobsWithPartiallyMaterializedMultipleRelationships, 2);
   assert.equal(result.relationships.length, 1);
   assert.equal(result.execution.relationshipsTruncated, true);
 });
 
-test("scheduled-job findings surface multi-target fanout hidden by output truncation without leaking labels", () => {
+test("scheduled-job analysis counts partially materialized fanout even when multi-target status remains visible", () => {
+  const input = snapshot();
+  input.services = [
+    { name: "shared.service", state: "active" },
+    { name: "shared.service", state: "active" },
+    { name: "shared.service", state: "active" },
+  ];
+  input.scheduledJobs = [{ source: "timer-a", commandSummary: "shared.service" }];
+
+  const result = analyzeServerAuditScheduledJobRelationships(input, { maxRelationships: 2 });
+
+  assert.equal(result.summary.relationshipsObserved, 3);
+  assert.equal(result.summary.jobsWithMultipleRelationships, 1);
+  assert.equal(result.summary.jobsWithPartiallyMaterializedMultipleRelationships, 1);
+  assert.equal(result.relationships.length, 2);
+  assert.equal(result.execution.relationshipsTruncated, true);
+});
+
+test("scheduled-job findings surface hidden multi-target classification without leaking labels", () => {
   const findings = createServerAuditScheduledJobRelationshipFindings(snapshot(), { maxRelationships: 1 });
   const hiddenFanout = findings.find(
     (finding) => finding.title === "Some multi-target scheduled-job mappings are not fully materialized",
