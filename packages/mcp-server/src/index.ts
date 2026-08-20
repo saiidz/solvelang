@@ -10,6 +10,7 @@ import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { findSolveGraphAffectedValidations } from "./solve-graph-affected-validations.js";
 import { findSolveGraphCycles } from "./solve-graph-cycles.js";
 import { findSolveGraphHotspots } from "./solve-graph-hotspots.js";
+import { summarizeSolveGraphSecurity } from "./solve-graph-security-summary.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
@@ -123,6 +124,7 @@ const solveGraphHotspotsInputSchema = z.object({
   maxImpactDepth: z.number().int().min(0).max(64).optional(),
   maxImpactResults: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
+const solveGraphSecuritySummaryInputSchema = z.object({ ...solveGraphInputFields, maxNodes: z.number().int().min(1).max(100).optional(), maxRelationships: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
   ...solveGraphInputFields,
@@ -425,6 +427,7 @@ server.registerTool(
     { edgeKinds, maxHotspots, maxImpactDepth, maxImpactResults },
   )),
 );
+server.registerTool("solvelang_graph_security_summary", { title: "Summarize Solve Graph security candidates", description: "Return bounded structural permission, resource, route, and security-relevant relationship candidates from an integrity-valid analyze-only graph. This is not a security audit.", inputSchema: solveGraphSecuritySummaryInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, maxNodes, maxRelationships }) => textResult(summarizeSolveGraphSecurity(await readSolveGraphInput({ path: inputPath, rawJson }), { maxNodes, maxRelationships })));
 
 server.registerTool(
   "solvelang_capabilities",
@@ -456,6 +459,7 @@ server.registerTool(
       "solvelang_graph_affected_validations",
       "solvelang_graph_cycles",
       "solvelang_graph_hotspots",
+      "solvelang_graph_security_summary",
       "solvelang_capabilities",
     ],
     privacy: [
