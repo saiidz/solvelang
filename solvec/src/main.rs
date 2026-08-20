@@ -175,12 +175,12 @@ impl LoadedSource {
                 let location = if origin.path == self.entry_path {
                     format!(
                         "SolveLang Warning on line {}, column {}:",
-                        warning.line, warning.column
+                        origin.line, warning.column
                     )
                 } else {
                     format!(
                         "SolveLang Warning on line {}, column {} in {}:",
-                        warning.line, warning.column, warning.path
+                        origin.line, warning.column, origin.path
                     )
                 };
                 format!(
@@ -839,7 +839,8 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
     let metadata = fs::metadata(&entry).map_err(|error| {
         CliFailure::source(format!(
             "failed to inspect '{}': {}",
-            entry.display(), error
+            entry.display(),
+            error
         ))
     })?;
     if !metadata.is_file() {
@@ -873,7 +874,7 @@ fn load_file_recursive(
     is_entry: bool,
 ) -> Result<LoadedSource, CliFailure> {
     if !visited.insert(canonical.to_path_buf()) {
-        let message = format!("circular import detected for '{}',", canonical.display());
+        let message = format!("circular import detected for '{}'", canonical.display());
         return Err(if hardened && !is_entry {
             CliFailure::import(message)
         } else {
