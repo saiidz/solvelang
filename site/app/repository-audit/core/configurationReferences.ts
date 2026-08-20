@@ -9,6 +9,7 @@ import {
 export type RepositoryConfigurationReferenceKind =
   | "package-entrypoint"
   | "github-local-action"
+  | "github-reusable-workflow"
   | "typescript-extends"
   | "typescript-project-reference";
 
@@ -194,6 +195,18 @@ function workflowReferences(
     const rawReference = match[1];
     const directory = resolveRelativePath("", rawReference);
     if (!directory) continue;
+    if (isWorkflowPath(directory)) {
+      references.push({
+        referenceId: makeReferenceId("github-reusable-workflow", path, rawReference, `line-${index + 1}`),
+        kind: "github-reusable-workflow",
+        fromPath: path,
+        rawReference,
+        targetPath: directory,
+        targetState: targetState(directory, snapshotPaths, acceptedPaths),
+        evidence: { path, line: index + 1 },
+      });
+      continue;
+    }
     const actionCandidates = [`${directory}/action.yml`, `${directory}/action.yaml`];
     const targetPath = actionCandidates.find((candidate) => snapshotPaths.has(candidate));
     references.push({
