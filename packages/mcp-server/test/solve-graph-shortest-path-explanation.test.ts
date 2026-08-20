@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createSolveGraphShortestPathExplanation } from "../src/solve-graph-shortest-path-explanation.js";
 import type { SolveGraphShortestPathResponse } from "../src/solve-graph-shortest-path.js";
+import { SOLVE_GRAPH_TOOL_API_VERSION } from "../src/solve-graph.js";
 
 const sourceId = `sgn_${"1".repeat(32)}`;
 const middleId = `sgn_${"2".repeat(32)}`;
@@ -45,7 +46,7 @@ function foundResponse(direction: "dependencies" | "dependents" = "dependencies"
     },
   ];
   return {
-    apiVersion: "v0",
+    apiVersion: SOLVE_GRAPH_TOOL_API_VERSION,
     tool: "solve_graph.shortest_path",
     graphId: `sg_${"f".repeat(32)}`,
     direction,
@@ -67,7 +68,7 @@ function foundResponse(direction: "dependencies" | "dependents" = "dependencies"
 
 function noPathResponse(truncationReason?: "depth" | "visited-count"): SolveGraphShortestPathResponse {
   return {
-    apiVersion: "v0",
+    apiVersion: SOLVE_GRAPH_TOOL_API_VERSION,
     tool: "solve_graph.shortest_path",
     graphId: `sg_${"f".repeat(32)}`,
     direction: "dependencies",
