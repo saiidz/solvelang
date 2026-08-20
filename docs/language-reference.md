@@ -531,11 +531,12 @@ cargo run -- lint ../examples/support_triage.solve
 ```
 
 The initial rules deliberately report only structural facts: statements after a
-direct `return`, `break`, or `continue` in the same block, plus calls to known
-network, filesystem, environment, or agent-provider-capable operations. The
-linter also examines unreachable code so a capability warning cannot be hidden
-behind a return. It does not infer unused variables, constant-loop behavior,
-or duplicate object keys where the current AST cannot prove them without false
+direct `return`, `break`, or `continue` in the same block, or after an `if`
+whose two explicit branches terminate, plus calls to known network,
+filesystem, environment, or agent-provider-capable operations. The linter also
+examines unreachable code so a capability warning cannot be hidden behind a
+return. It does not infer unused variables, constant-loop behavior, or
+duplicate object keys where the current AST cannot prove them without false
 positives. `lint` loads and parses normal imports but never evaluates source,
 reads runtime files, selects a provider, or changes capability policy.
 
