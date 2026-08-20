@@ -1,5 +1,6 @@
 "use client";
 
+import { RepositoryAuditAlternativePathsExplanationPanel } from "./RepositoryAuditAlternativePathsExplanationPanel";
 import { RepositoryAuditAlternativePathsPanel } from "./RepositoryAuditAlternativePathsPanel";
 import type { SolveGraphAlternativePathsProductBundle } from "../solve-graph/core/alternative-paths-product";
 
@@ -17,6 +18,7 @@ export function RepositoryAuditAlternativePathsProductPanel({
   return (
     <div className={`grid gap-5 ${className}`.trim()}>
       <RepositoryAuditAlternativePathsPanel presentation={bundle.presentation} />
+      <RepositoryAuditAlternativePathsExplanationPanel bundle={bundle} />
 
       <section
         aria-labelledby="repository-audit-alternative-path-export-heading"
