@@ -40,6 +40,7 @@ Paid priority must remain disabled until those alarms and queue workers are depl
 ## Log policy
 
 - Use structured logs with no plaintext API keys, magic-link tokens, session tokens, peppers, Stripe secret keys, webhook secrets, or full payment credentials.
+- Do not log raw request or response bodies, caught exception messages or stack traces; retain only allowlisted correlation fields and sanitized error codes.
 - Keep request IDs and sanitized error codes so incidents can be correlated without secrets.
 - Production log retention must be explicitly configured rather than left indefinite.
 - Access to logs must be restricted through IAM.
