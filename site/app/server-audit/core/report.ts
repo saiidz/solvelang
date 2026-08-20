@@ -6,6 +6,7 @@ import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
+import { createServerAuditStaleLogFindings } from "./staleLogFindings";
 import { createServerAuditPackageVersionFindings } from "./packageVersionFindings";
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
@@ -81,6 +82,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
+    ...createServerAuditStaleLogFindings(snapshot),
     ...createServerAuditPublicFileFindings(snapshot),
     ...createServerAuditCertificateConsistencyFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
@@ -114,6 +116,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
       "Backup/log consistency findings identify only contradictory duplicate artifact evidence; collection-time churn can explain some log differences and the stage does not determine which value is authoritative.",
+      "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
