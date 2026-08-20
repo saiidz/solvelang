@@ -1,6 +1,7 @@
 import type { ServerAuditFinding, ServerAuditReport, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
 import { analyzeServerSnapshot } from "./analyze";
 import { createServerAuditArtifactFindings } from "./artifactFindings";
+import { createServerAuditBackupLogConsistencyFindings } from "./backupLogConsistencyFindings";
 import { createServerAuditCertificateConsistencyFindings } from "./certificateConsistencyFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
@@ -74,12 +75,29 @@ function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFindi
   );
 }
 
+function findingEvidenceIdentity(finding: ServerAuditFinding): string {
+  return [
+    finding.category,
+    finding.title,
+    ...finding.evidence.map((item) => item.source).sort(),
+  ].join("\u001f");
+}
+
+function createArtifactConsistencyFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
+  const preferred = createServerAuditBackupLogConsistencyFindings(snapshot);
+  const preferredIdentities = new Set(preferred.map(findingEvidenceIdentity));
+  const legacy = createServerAuditArtifactFindings(snapshot).filter(
+    (finding) => !preferredIdentities.has(findingEvidenceIdentity(finding)),
+  );
+  return [...preferred, ...legacy];
+}
+
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
   const findings = sortFindings([
     ...createBaselineFindings(snapshot),
+    ...createArtifactConsistencyFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
-    ...createServerAuditArtifactFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
