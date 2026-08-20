@@ -75,13 +75,29 @@ function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFindi
   );
 }
 
+function findingEvidenceIdentity(finding: ServerAuditFinding): string {
+  return [
+    finding.category,
+    finding.title,
+    ...finding.evidence.map((item) => item.source).sort(),
+  ].join("\u001f");
+}
+
+function createArtifactConsistencyFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
+  const preferred = createServerAuditBackupLogConsistencyFindings(snapshot);
+  const preferredIdentities = new Set(preferred.map(findingEvidenceIdentity));
+  const legacy = createServerAuditArtifactFindings(snapshot).filter(
+    (finding) => !preferredIdentities.has(findingEvidenceIdentity(finding)),
+  );
+  return [...preferred, ...legacy];
+}
+
 export function createServerAuditReport(snapshot: ServerAuditSnapshot, generatedAt = new Date().toISOString()): ServerAuditReport {
   const findings = sortFindings([
     ...createBaselineFindings(snapshot),
-    ...createServerAuditBackupLogConsistencyFindings(snapshot),
+    ...createArtifactConsistencyFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
-    ...createServerAuditArtifactFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLargeLogFindings(snapshot),
