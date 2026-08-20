@@ -108,6 +108,7 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
   });
 
   for (const root of snapshot.web?.roots ?? []) {
+    if (root === undefined) continue;
     const mode = root.mode ?? "";
     if (/^[0-7]{3,4}$/.test(mode)) {
       const permissions = mode.slice(-3);
