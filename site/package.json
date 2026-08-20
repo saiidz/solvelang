@@ -10,7 +10,7 @@
     "verify:i18n-export": "node qa/verify-i18n-export.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test:seo": "node --test qa/seo-contract.test.mjs qa/server-audit-collector-contract.test.mjs",
+    "test:seo": "node --test qa/seo-contract.test.mjs qa/server-audit-collector-contract.test.mjs qa/production-operations-contract.test.mjs",
     "test:studio": "tsc -p tsconfig.studio-tests.json && node --test --test-reporter=dot .studio-test-dist/app/studio/core/*.test.js .studio-test-dist/app/check/core/*.test.js .studio-test-dist/app/repository-audit/core/*.test.js .studio-test-dist/app/server-audit/core/*.test.js .studio-test-dist/app/account/core/*.test.js .studio-test-dist/app/solve-graph/core/*.test.js"
   },
   "dependencies": {

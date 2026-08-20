@@ -118,6 +118,23 @@ Use Stripe-supported key rotation. Update the protected production secret, deplo
 
 When rotating the webhook endpoint/signing secret, support an overlap strategy if required so legitimate deliveries are not dropped during cutover. Verify signed delivery before retiring the prior endpoint/secret.
 
+## Incident record and redaction gate
+
+Before any production change, outage communication, rollback decision, or post-incident review, open an owner-controlled incident record outside source code. This is an operational record, not a request to run a production command.
+
+The initial record must contain only:
+
+- the UTC detection time, the accountable incident owner, and the approved communication channel;
+- the affected component and customer-impact statement, with unknown impact recorded as `unknown` rather than guessed;
+- the reviewed commit SHA, workflow run URL/ID, stack/region identifier, and sanitized request IDs or error codes when they are relevant;
+- the observed monitoring signal, its time window, and whether the signal is still firing;
+- the explicit decision to observe, roll back, or disable a mutation path, plus the owner who made that decision;
+- the verification result after the decision, including `/health` and feature-flag state where a separately authorized operator performed those checks.
+
+Do not put live secrets, API keys, webhook payloads/signing secrets, session or magic-link tokens, cookies, password values or hashes, payment details, customer workflow/source content, raw log bodies, or recovery codes in the incident record, issue, pull request, chat, screenshot, or repository. Preserve the minimum sanitized evidence needed to correlate the incident; keep any protected raw evidence only in the approved restricted-access system.
+
+An incident remains open until an accountable owner records one of: a verified recovery, a completed state-preserving rollback, or an explicit handoff with the unresolved risk and next owner. Do not mark recovery solely because an alert stopped firing; record the corresponding health, feature-state, and customer-impact verification.
+
 ## Incident ownership
 
 Before production launch, record outside source code:
