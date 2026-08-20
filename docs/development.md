@@ -81,6 +81,10 @@ to LF, and uses a raw token-oriented layer so comments and string escapes are
 not reconstructed from the comment-free AST. `fmt --check` makes no changes and
 exits nonzero when the file is not already canonical.
 
+`lint` is also read-only. It reports only source-located structural warnings and
+does not execute a workflow, select an execution policy, or turn warnings into
+nonzero status.
+
 ## 5. Understand safe execution
 
 A normal `solvec run` is for trusted local scripts and can expose runtime capabilities such as file, network, environment, and experimental agent behavior.

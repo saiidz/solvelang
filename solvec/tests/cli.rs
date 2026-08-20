@@ -375,6 +375,44 @@ fn check_remaps_semantic_diagnostics_to_imported_source() {
 }
 
 #[test]
+fn lint_reports_source_located_warnings_without_execution() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_lint_warnings.solve",
+        r#"
+let done = false
+while done {
+    print("never")
+}
+return 1
+http_get("http://127.0.0.1:9")
+"#,
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["lint", &file]);
+
+    assert!(success, "unexpected stderr: {stderr}");
+    assert!(stderr.is_empty(), "unexpected stderr: {stderr}");
+    assert!(stdout.contains("SolveLang Warning on line 7, column 1"));
+    assert!(stdout.contains("unreachable statement"));
+    assert!(stdout.contains("network-capable builtin 'http_get'"));
+    assert!(stdout.contains("✓ SolveLang lint completed with 2 warnings"));
+}
+
+#[test]
+fn lint_remaps_warnings_to_imported_source() {
+    let directory = create_temp_workflow_dir("solvelang_lint_import_provenance");
+    let entry = directory.join("entry.solve");
+    let imported = directory.join("shared.solve");
+    fs::write(&entry, "import \"shared.solve\"\n").unwrap();
+    fs::write(&imported, "return 1\nprint(\"unreachable\")\n").unwrap();
+
+    let output = run_solvec(&["lint", entry.to_str().unwrap()]);
+
+    assert!(output.contains("SolveLang Warning on line 2, column 1 in shared.solve"));
+    assert!(output.contains("unreachable statement"));
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);

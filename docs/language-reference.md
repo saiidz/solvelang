@@ -11,12 +11,14 @@ From `solvec/`:
 ```bash
 cargo run -- validate ../examples/support_triage.solve
 cargo run -- check ../examples/support_triage.solve
+cargo run -- lint ../examples/support_triage.solve
 cargo run -- fmt --check ../examples/support_triage.solve
 cargo run -- run ../examples/support_triage.solve
 ```
 
 - `validate` lexes and parses a script, then exits without running it.
 - `check` performs `validate` plus conservative source-only semantic checks. It never runs a workflow or selects a runtime policy.
+- `lint` performs `validate` plus conservative source-only warnings. It never runs a workflow or selects a runtime policy, and warnings do not make the command fail.
 - `fmt` validates and canonically rewrites one source file without running it. `fmt --check` is read-only and exits nonzero when formatting would change the file. Formatting is deterministic and idempotent; it preserves line comments and the original spelling of string escapes while normalizing line endings to LF.
 - `run` lexes, parses, and executes the script with the Rust AST runtime.
 - `tokens` prints lexer tokens.
@@ -489,6 +491,23 @@ cargo run -- check ../examples/support_triage.solve
 ```
 
 The checker reports source-located, high-confidence errors such as unknown top-level variables, unknown function and agent references, duplicate function or agent names, declared-function arity mismatches, non-array `for` iterables, and type-invalid operations on literal or otherwise known values. It intentionally leaves values that depend on `input`, calls, branches, and runtime globals as unknown rather than guessing. `check` is read-only and independent of safe-mode flags; it does not execute builtins, agents, imports beyond the normal source loader, or network/file operations.
+
+## Lint warnings
+
+Use `lint` for read-only, source-located warnings that do not prevent a run:
+
+```bash
+cargo run -- lint ../examples/support_triage.solve
+```
+
+The initial rules deliberately report only structural facts: statements after a
+direct `return`, `break`, or `continue` in the same block, plus calls to known
+network, filesystem, environment, or agent-provider-capable operations. The
+linter also examines unreachable code so a capability warning cannot be hidden
+behind a return. It does not infer unused variables, constant-loop behavior,
+or duplicate object keys where the current AST cannot prove them without false
+positives. `lint` loads and parses normal imports but never evaluates source,
+reads runtime files, selects a provider, or changes capability policy.
 
 ## Validate Vs Run
 
