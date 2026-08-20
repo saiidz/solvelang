@@ -7,7 +7,7 @@ Before every build/integration run, re-read current `main`, open/closed PRs, exa
 
 ## Current repository checkpoint
 
-Immediately before this handoff refresh branch was created, `main` was `925f38b4d9d2e46fa3ef1d4ee40a58f49806f1a8`, the merge of PR #448. The safe non-production PR queue was **zero**.
+Immediately before this handoff refresh branch was created, `main` was `46ab2deee9346d84d83c5fe130b85e7968214436`, the merge of safe PR #453. The safe non-production PR queue was **zero**.
 
 The previously protected repository-preparation PRs are merged in repository history:
 
@@ -33,7 +33,10 @@ Recent safe milestones that must not be recreated include:
 - #372 — bounded deterministic Solve Graph shortest-path query;
 - #373 — read-only MCP exposure for bounded Solve Graph shortest paths;
 - #432/#436/#439/#441/#442/#443 — bounded shortest-path product bundle verification, browser visualization/export, query-product composition, and the final one-file product explorer. #437/#438/#440 are closed superseded predecessors and must not be revived;
-- #445/#446/#447/#448 — deterministic shortest-path explanation quality across core, Repository Audit/browser, and MCP contracts, culminating in additive read-only MCP tool `solvelang_graph_explain_shortest_path` with packed-consumer validation. Complete-vs-partial truth is preserved, and the explanation path does not execute repository code or gain network/write capability.
+- #445/#446/#447/#448 — deterministic shortest-path explanation quality across core, Repository Audit/browser, and MCP contracts, culminating in additive read-only MCP tool `solvelang_graph_explain_shortest_path` with packed-consumer validation;
+- #449 — roadmap/active-handoff truth synchronization after the shortest-path explanation train;
+- #450/#451 — deterministic bounded alternative-path explanations in the MCP contract and additive read-only MCP tool `solvelang_graph_explain_alternative_paths`, with exact-head MCP/general/Rust validation and packed-consumer coverage;
+- #452/#453 — deterministic alternative-path product explanations in the Solve Graph core plus Repository Audit browser presentation. Query truncation and presentation-row truncation remain distinct, zero-hop paths remain explicit, and the explanation path stays analyze-only with network/write capability disabled.
 
 Older foundational work remains in history, including deterministic ingestion, graph integrity, JavaScript/TypeScript and Python relationships, Server Audit privacy/consistency/process/package/certificate evidence, Trusted Mac/Windows controls, RustSec remediation, account/API/Admin foundations, and production deployment serialization hardening. Do not rebuild merged generations merely because older handoffs mention predecessor PR numbers.
 
@@ -64,11 +67,11 @@ The #161/#164/#169 repository merges do not change those live-state facts by the
 
 ## Repository Audit state
 
-Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary path analysis; bounded visual-explorer/browser presentation; deterministic ranked search and shortest-path query/product/browser flows; deterministic shortest-path explanations; read-only MCP shortest-path and explanation exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
+Repository Audit is an active bounded read-only product surface. Merged capabilities include deterministic repository ingestion/inventory and Solve Graph composition; JavaScript/TypeScript, Python, conservative local PHP, local TypeScript-config, Angular/Nest framework, Angular target-config, package/configuration/workflow/deployment relationships; dependency consistency; direct test/documentation mapping; conservative dead-code evidence; changed-path affected-test/workflow mapping; architecture/security-boundary path analysis; bounded visual-explorer/browser presentation; deterministic ranked search, shortest-path, and alternative-path query/product/browser flows; deterministic shortest-path and alternative-path explanations; read-only MCP shortest-path/alternative-path query and explanation exposure; integrity-covered artifacts; explicit partial/truncation truth; deterministic IDs/order; redaction; and strict report contracts.
 
 Current safe priorities:
 
-1. improve impact and alternative-path evidence explanations without weakening deterministic bounds or complete-vs-partial truth;
+1. improve impact-analysis explanations and other query/path evidence quality without weakening deterministic bounds or complete-vs-partial truth;
 2. improve MCP/Codex read-only integration over merged graph/query/explanation contracts;
 3. continue only conservative framework/deployment/reference adapters where static repository evidence is explicit and non-executing;
 4. improve local visual-explorer ergonomics while preserving partial/truncation truth;
@@ -78,7 +81,7 @@ Repository Audit write/remediation mode remains disabled.
 
 ## Solve Graph state
 
-Solve Graph remains deterministic and analyze-only. Current merged query/reference work includes JavaScript/TypeScript imports/references, Python local imports, explicit local PHP literal include/require relationships, local TypeScript/Angular configuration references, ranked node search, bounded dependency/dependent traversal, bounded shortest-path queries, deterministic shortest-path explanation composition, integrity-covered shortest-path product composition, impact analysis, architecture/security summaries, affected-validation mapping, and read-only MCP shortest-path/explanation exposure.
+Solve Graph remains deterministic and analyze-only. Current merged query/reference work includes JavaScript/TypeScript imports/references, Python local imports, explicit local PHP literal include/require relationships, local TypeScript/Angular configuration references, ranked node search, bounded dependency/dependent traversal, bounded shortest-path and alternative-path queries, deterministic shortest-path and alternative-path explanation composition, integrity-covered shortest/alternative-path product composition, impact analysis, architecture/security summaries, affected-validation mapping, and read-only MCP shortest-path/alternative-path query and explanation exposure.
 
 Do not execute repository source to improve graph coverage. Prefer conservative parser/config evidence and explicit partial/unknown states over guessed relationships.
 
@@ -108,7 +111,7 @@ When the safe queue is six or fewer, new safe work may proceed only after live r
 
 1. Keep shared Hosted CI/Rust/RustSec blockers clear and drain any safe open PR queue first.
 2. Keep durable roadmap/handoff/production truth aligned with live repository state.
-3. Continue Repository Audit impact/alternative-path explanation quality, MCP/Codex integration, conservative remaining relationships, visual-explorer ergonomics, and cross-platform tests.
+3. Continue Repository Audit impact explanation quality, MCP/Codex integration, conservative remaining relationships, visual-explorer ergonomics, and cross-platform tests.
 4. Continue Solve Graph conservative language/reference adapters and bounded query/path/impact explanation quality.
 5. Continue Server Audit read-only relationship/posture quality and deterministic reporting/tests.
 6. Continue language/runtime/DX work: formatter/linter, semantic/type checks, control-flow/module/package design, diagnostics, editor support, and deterministic tests.
