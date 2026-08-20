@@ -45,16 +45,30 @@ export function createServerAuditBackupCoverageFindings(
   if (backups === undefined || backups.length === 0) return [];
 
   const candidates = backups.flatMap((backup, index): ServerAuditFinding[] => {
-    if (backup.ageHours !== undefined) return [];
-    return [{
-      id: stableId(["backup-coverage", "missing-age", String(index)]),
-      severity: "info",
-      category: "coverage",
-      title: "Backup record lacks freshness evidence",
-      summary: "A supplied backup record has no ageHours value, so freshness posture for that artifact cannot be established from this snapshot.",
-      recommendation: "Re-collect backup inventory with the reviewed read-only collector before relying on backup freshness; verify restoreability separately against the workload's recovery objectives.",
-      evidence: [{ source: `backups[${index}].ageHours`, summary: "freshness evidence is absent" }],
-    }];
+    const findings: ServerAuditFinding[] = [];
+    if (backup.ageHours === undefined) {
+      findings.push({
+        id: stableId(["backup-coverage", "missing-age", String(index)]),
+        severity: "info",
+        category: "coverage",
+        title: "Backup record lacks freshness evidence",
+        summary: "A supplied backup record has no ageHours value, so freshness posture for that artifact cannot be established from this snapshot.",
+        recommendation: "Re-collect backup inventory with the reviewed read-only collector before relying on backup freshness; verify restoreability separately against the workload's recovery objectives.",
+        evidence: [{ source: `backups[${index}].ageHours`, summary: "freshness evidence is absent" }],
+      });
+    }
+    if (backup.sizeBytes === undefined) {
+      findings.push({
+        id: stableId(["backup-coverage", "missing-size", String(index)]),
+        severity: "info",
+        category: "coverage",
+        title: "Backup record lacks size evidence",
+        summary: "A supplied backup record has no sizeBytes value, so zero-byte and artifact-size posture for that entry cannot be established from this snapshot.",
+        recommendation: "Re-collect backup inventory with bounded size evidence before relying on artifact-size posture; verify backup success and restoreability separately.",
+        evidence: [{ source: `backups[${index}].sizeBytes`, summary: "size evidence is absent" }],
+      });
+    }
+    return findings;
   }).sort(compareFinding);
 
   if (candidates.length <= maxFindings) return candidates;
@@ -64,9 +78,9 @@ export function createServerAuditBackupCoverageFindings(
     id: stableId(["backup-coverage", "findings-truncated", String(maxFindings), String(candidates.length)]),
     severity: "info",
     category: "coverage",
-    title: "Backup freshness coverage findings were truncated",
+    title: "Backup evidence coverage findings were truncated",
     summary: `The backup-coverage stage produced ${candidates.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
-    recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from backup freshness evidence.",
+    recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from backup freshness or size evidence.",
     evidence: [{ source: "backups", summary: `finding limit ${maxFindings} reached` }],
   });
   return bounded.sort(compareFinding);
