@@ -1,9 +1,10 @@
 import { sha256Hex } from "../../repository-audit/core/ingestion";
 import { canonicalSolveGraphJson } from "./canonical";
-import type {
-  SolveGraphQueryIndex,
-  SolveGraphTraversalEntry,
-  SolveGraphTraversalResult,
+import {
+  defaultSolveGraphImpactEdgeKinds,
+  type SolveGraphQueryIndex,
+  type SolveGraphTraversalEntry,
+  type SolveGraphTraversalResult,
 } from "./query-impact";
 
 export type SolveGraphImpactArtifact = {
@@ -26,6 +27,7 @@ export type SolveGraphImpactDownload = {
 const HARD_MAX_QUERY_ENTRIES = 10_000;
 const HARD_MAX_DEPTH = 64;
 const encoder = new TextEncoder();
+const impactEdgeKindSet = new Set<string>(defaultSolveGraphImpactEdgeKinds);
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -93,6 +95,9 @@ function assertResult(index: SolveGraphQueryIndex, query: SolveGraphTraversalRes
       const edge = edgeById.get(entry.viaEdgeId);
       if (!edge || edge.from !== entry.id || edge.to !== entry.parentId) {
         throw new Error("Solve Graph impact artifact edge traversal is invalid.");
+      }
+      if (!impactEdgeKindSet.has(edge.kind)) {
+        throw new Error("Solve Graph impact artifact edge kind is outside the default impact scope.");
       }
     }
     entryById.set(entry.id, entry);
