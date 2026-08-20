@@ -35,6 +35,8 @@ const expectedFiles = [
   "package/dist/src/solve-graph-shortest-path-explanation.js",
   "package/dist/src/solve-graph-shortest-path.d.ts",
   "package/dist/src/solve-graph-shortest-path.js",
+  "package/dist/src/solve-graph-unreachable-candidates.d.ts",
+  "package/dist/src/solve-graph-unreachable-candidates.js",
   "package/dist/src/solve-graph.d.ts",
   "package/dist/src/solve-graph.js",
   "package/dist/src/workspace.d.ts",
@@ -112,6 +114,7 @@ try {
   assert.match(installedEntrypoint, /solvelang_graph_hotspots/, "packed consumer must include the hotspot MCP tool registration");
   assert.match(installedEntrypoint, /findSolveGraphHotspots/, "packed consumer must compose the registered hotspot tool through the reviewed hotspot contract");
   assert.match(installedEntrypoint, /solvelang_graph_entrypoint_candidates/, "packed consumer must include the entrypoint-candidates MCP tool registration");
+  assert.match(installedEntrypoint, /solvelang_graph_unreachable_candidates/, "packed consumer must include the unreachable-candidates MCP tool registration");
   assert.match(installedEntrypoint, /solvelang_graph_security_summary/, "packed consumer must include the security-summary MCP tool registration");
   assert.match(installedEntrypoint, /solvelang_graph_affected_validations/, "packed consumer must include the affected-validation MCP tool registration");
   assert.match(installedEntrypoint, /findSolveGraphAffectedValidations/, "packed consumer must compose the registered affected-validation tool through the reviewed contract");

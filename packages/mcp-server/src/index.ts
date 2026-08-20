@@ -11,6 +11,7 @@ import { findSolveGraphAffectedValidations } from "./solve-graph-affected-valida
 import { findSolveGraphCycles } from "./solve-graph-cycles.js";
 import { findSolveGraphHotspots } from "./solve-graph-hotspots.js";
 import { findSolveGraphEntrypointCandidates } from "./solve-graph-entrypoints.js";
+import { findSolveGraphUnreachableCandidates } from "./solve-graph-unreachable-candidates.js";
 import { summarizeSolveGraphSecurity } from "./solve-graph-security-summary.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
@@ -126,6 +127,7 @@ const solveGraphHotspotsInputSchema = z.object({
   maxImpactResults: z.number().int().min(1).max(10_000).optional(),
 }).superRefine(requireExactlyOneInput);
 const solveGraphEntrypointsInputSchema = z.object({ ...solveGraphInputFields, maxCandidates: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
+const solveGraphUnreachableInputSchema = z.object({ ...solveGraphInputFields, entrypointIds: z.array(z.string().regex(/^sgn_[a-f0-9]{32}$/)).min(1).max(128), edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(), maxDepth: z.number().int().min(0).max(64).optional(), maxResults: z.number().int().min(1).max(10_000).optional(), maxCandidates: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
 const solveGraphSecuritySummaryInputSchema = z.object({ ...solveGraphInputFields, maxNodes: z.number().int().min(1).max(100).optional(), maxRelationships: z.number().int().min(1).max(100).optional() }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
@@ -430,6 +432,7 @@ server.registerTool(
   )),
 );
 server.registerTool("solvelang_graph_entrypoint_candidates", { title: "Find Solve Graph entrypoint candidates", description: "Return bounded structural route, workflow, job, and exposes-related entrypoint candidates from an integrity-valid analyze-only graph. This does not establish runtime reachability or public exposure.", inputSchema: solveGraphEntrypointsInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, maxCandidates }) => textResult(findSolveGraphEntrypointCandidates(await readSolveGraphInput({ path: inputPath, rawJson }), { maxCandidates })));
+server.registerTool("solvelang_graph_unreachable_candidates", { title: "Find structurally unreached Solve Graph candidates", description: "Return bounded nodes not reached from selected entrypoint IDs in an analyze-only graph. Results are static candidates, not runtime unreachability or dead-code findings.", inputSchema: solveGraphUnreachableInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, entrypointIds, edgeKinds, maxDepth, maxResults, maxCandidates }) => textResult(findSolveGraphUnreachableCandidates(await readSolveGraphInput({ path: inputPath, rawJson }), entrypointIds, { edgeKinds, maxDepth, maxResults, maxCandidates })));
 server.registerTool("solvelang_graph_security_summary", { title: "Summarize Solve Graph security candidates", description: "Return bounded structural permission, resource, route, and security-relevant relationship candidates from an integrity-valid analyze-only graph. This is not a security audit.", inputSchema: solveGraphSecuritySummaryInputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async ({ path: inputPath, rawJson, maxNodes, maxRelationships }) => textResult(summarizeSolveGraphSecurity(await readSolveGraphInput({ path: inputPath, rawJson }), { maxNodes, maxRelationships })));
 
 server.registerTool(
