@@ -130,10 +130,10 @@ test("supports zero-hop paths and rejects capability-bearing documents", () => {
   assert.equal(same.summary.hopCount, 0);
   assert.equal(same.headline, "Source and target are the same node");
 
-  const unsafe = fixture() as SolveGraphDocument & { execution: { networkAccess: boolean; writeAccess: false } };
+  const unsafe = fixture() as unknown as { execution: { networkAccess: boolean; writeAccess: boolean } };
   unsafe.execution.networkAccess = true;
   assert.throws(
-    () => explainSolveGraphShortestPath(unsafe as SolveGraphDocument, sourceId, targetId),
+    () => explainSolveGraphShortestPath(unsafe as unknown as SolveGraphDocument, sourceId, targetId),
     /requires an analyze-only document/,
   );
 });
