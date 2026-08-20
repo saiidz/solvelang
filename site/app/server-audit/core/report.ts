@@ -45,6 +45,10 @@ const LEGACY_LARGE_LOG_TITLES = new Set([
   "Very large log file",
 ]);
 
+const LEGACY_BACKUP_POSTURE_TITLES = new Set([
+  "Newest backup is older than 72 hours",
+]);
+
 function stableHash(input: string) {
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
@@ -75,7 +79,10 @@ function sortFindings(findings: ServerAuditFinding[]): ServerAuditFinding[] {
 
 function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   return analyzeServerSnapshot(snapshot).filter(
-    (finding) => !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title) && !LEGACY_LARGE_LOG_TITLES.has(finding.title),
+    (finding) =>
+      !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title)
+      && !LEGACY_LARGE_LOG_TITLES.has(finding.title)
+      && !LEGACY_BACKUP_POSTURE_TITLES.has(finding.title),
   );
 }
 
