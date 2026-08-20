@@ -42,6 +42,7 @@ test("maps only exact sanitized service and process name tokens", () => {
       ["scheduled-job-process", "cron:/etc/cron.d/backup", "backup-agent", "exact-name-token"],
     ],
   );
+  assert.equal(result.summary.relationshipsObserved, 2);
   assert.equal(result.summary.jobsWithRelationships, 2);
   assert.equal(result.summary.unresolvedJobs, 1);
   assert.equal(result.execution.networkAccess, false);
@@ -81,7 +82,38 @@ test("propagates bounded and oversized-summary limitations as partial truth", ()
   assert.equal(result.execution.targetsTruncated, true);
   assert.equal(result.execution.oversizedCommandSummariesSkipped, 1);
   assert.equal(result.relationships.length, 1);
+  assert.equal(result.summary.relationshipsObserved, 1);
   assert.equal(result.summary.jobsAnalyzed, 1);
+});
+
+test("bounds materialized relationships while preserving exact candidate counts and deterministic prefix", () => {
+  const services = Array.from({ length: 500 }, () => ({ name: "shared.service", state: "running" }));
+  const scheduledJobs = Array.from({ length: 50 }, (_, index) => ({
+    source: `job-${index}`,
+    commandSummary: "shared.service",
+  }));
+  const input: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-19T00:00:00Z",
+    host: { hostname: "example" },
+    services,
+    scheduledJobs,
+  };
+
+  const result = analyzeServerAuditScheduledJobRelationships(input, {
+    maxJobs: 50,
+    maxTargets: 500,
+    maxRelationships: 3,
+  });
+
+  assert.equal(result.summary.relationshipsObserved, 25_000);
+  assert.equal(result.summary.jobsWithRelationships, 50);
+  assert.equal(result.execution.relationshipsTruncated, true);
+  assert.equal(result.relationships.length, 3);
+  assert.deepEqual(
+    result.relationships.map((relationship) => [relationship.jobIndex, relationship.targetIndex]),
+    [[0, 0], [0, 1], [0, 2]],
+  );
 });
 
 test("is deterministic and fails closed on invalid bounds", () => {
