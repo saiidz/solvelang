@@ -19,7 +19,7 @@ import {
   solveGraphNodeKinds,
   type SolveGraphDocument,
 } from "./solve-graph.js";
-import { readWorkspaceText, resolveWorkspacePath, workspaceRoot } from "./workspace.js";
+import { readWorkspaceText, resolveWorkspaceFilePath, workspaceRoot } from "./workspace.js";
 
 function textResult(value: unknown) {
   return { content: [{ type: "text" as const, text: typeof value === "string" ? value : JSON.stringify(value, null, 2) }] };
@@ -191,7 +191,7 @@ server.registerTool(
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   async ({ path: inputPath }) => {
-    const absolutePath = resolveWorkspacePath(inputPath);
+    const absolutePath = await resolveWorkspaceFilePath(inputPath);
     if (!absolutePath.endsWith(".solve")) throw new Error("The validation tool accepts .solve files only.");
     await readWorkspaceText(inputPath);
     return textResult(await runSolvec(absolutePath));

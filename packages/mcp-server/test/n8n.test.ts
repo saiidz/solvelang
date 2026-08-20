@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "../src/n8n.js";
-import { readWorkspaceText, resolveWorkspacePath } from "../src/workspace.js";
+import { readWorkspaceText, resolveWorkspaceFilePath, resolveWorkspacePath } from "../src/workspace.js";
 
 type ParityCase = { name: string; workflow: unknown; expectedIds: string[]; score: number };
 type InvalidParityCase = { name: string; workflow: unknown };
@@ -81,6 +81,16 @@ test("workspace paths cannot escape the configured root", async () => {
   await writeFile(path.join(root, "workflow.json"), JSON.stringify({ nodes: [{}] }));
   const result = await readWorkspaceText("workflow.json");
   assert.match(result.text, /nodes/);
+});
+
+test("workspace file readers reject symbolic links", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "solvelang-mcp-"));
+  const outside = path.join(os.tmpdir(), `solvelang-mcp-secret-${Date.now()}.json`);
+  process.env.SOLVELANG_WORKSPACE_ROOT = root;
+  await writeFile(outside, JSON.stringify({ secret: "outside" }));
+  await symlink(outside, path.join(root, "workflow.json"));
+  await assert.rejects(() => resolveWorkspaceFilePath("workflow.json"), /symbolic link/);
+  await assert.rejects(() => readWorkspaceText("workflow.json"), /symbolic link/);
 });
 
 test("MCP preflight matches the shared parity fixtures", async () => {
