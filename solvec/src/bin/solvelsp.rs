@@ -124,11 +124,39 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
         .collect()
 }
 
+fn completions(text: &str) -> Vec<Value> {
+    let mut parser = parser::Parser::new(lexer::lex(text));
+    let Ok(statements) = parser.parse() else {
+        return Vec::new();
+    };
+    statements
+        .into_iter()
+        .filter_map(|statement| match statement {
+            Stmt::Let { name, .. } => Some(json!({
+                "label": name,
+                "kind": 6,
+                "detail": "Top-level SolveLang variable"
+            })),
+            Stmt::Function { name, params, .. } => Some(json!({
+                "label": name,
+                "kind": 3,
+                "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
+            })),
+            Stmt::Agent { name, .. } => Some(json!({
+                "label": name,
+                "kind": 7,
+                "detail": "Top-level SolveLang agent"
+            })),
+            _ => None,
+        })
+        .collect()
+}
+
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{}}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -210,6 +238,18 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
         }
+        Some("textDocument/completion") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let result = documents
+                .get(uri)
+                .map(|text| completions(text))
+                .unwrap_or_default();
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
+            ]
+        }
         _ => Vec::new(),
     }
 }
@@ -274,6 +314,7 @@ mod tests {
             output[0]["result"]["capabilities"]["documentHighlightProvider"],
             true
         );
+        assert!(output[0]["result"]["capabilities"]["completionProvider"].is_object());
     }
 
     #[test]
@@ -380,5 +421,32 @@ mod tests {
             let end = highlight["range"]["end"]["character"].as_u64().unwrap();
             assert_eq!(end - start, 4);
         }
+    }
+
+    #[test]
+    fn completion_returns_parser_backed_top_level_symbols_from_open_documents() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nfn work(value) {}\nagent helper { instruction \"Assist\" }"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":9,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":3,"character":0}}}),
+            &mut documents,
+        );
+        let items = output[0]["result"].as_array().expect("completion items");
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0]["label"], "item");
+        assert_eq!(
+            items[1]["detail"],
+            "Top-level SolveLang function with 1 parameter(s)"
+        );
+        assert_eq!(items[2]["kind"], 7);
+
+        let unopened = process_message(
+            json!({"id":10,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///missing.solve"},"position":{"line":0,"character":0}}}),
+            &mut documents,
+        );
+        assert!(unopened[0]["result"].as_array().unwrap().is_empty());
     }
 }
