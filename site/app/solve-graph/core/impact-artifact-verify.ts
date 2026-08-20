@@ -9,7 +9,7 @@ import type {
   SolveGraphTraversalResult,
 } from "./query-impact";
 
-export const MAX_SOLVE_GRAPH_IMPACT_ARTIFACT_BYTES = 1024 * 1024;
+export const MAX_SOLVE_GRAPH_IMPACT_ARTIFACT_BYTES = 8 * 1024 * 1024;
 
 const encoder = new TextEncoder();
 
@@ -114,7 +114,7 @@ export async function parseAndVerifySolveGraphImpactArtifact(
     throw new Error("Solve Graph impact artifact content must be text.");
   }
   if (encoder.encode(content).byteLength > MAX_SOLVE_GRAPH_IMPACT_ARTIFACT_BYTES) {
-    throw new Error("Solve Graph impact artifact exceeds the 1 MiB verification limit.");
+    throw new Error("Solve Graph impact artifact exceeds the 8 MiB verification limit.");
   }
 
   let parsed: unknown;
