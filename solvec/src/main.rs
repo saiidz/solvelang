@@ -1141,6 +1141,7 @@ fn preflight_expr(
                         | "get"
                         | "keys"
                         | "values"
+                        | "entries"
                         | "json_parse"
                         | "json_stringify"
                 ) || (function_names.contains(name.as_str())

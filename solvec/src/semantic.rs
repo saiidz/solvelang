@@ -434,6 +434,7 @@ fn is_builtin(name: &str) -> bool {
             | "get"
             | "keys"
             | "values"
+            | "entries"
             | "json_parse"
             | "json_stringify"
             | "http_get"
@@ -516,5 +517,6 @@ mod tests {
     fn recognizes_pure_object_helpers() {
         assert!(check(&parse("print(keys({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(values({ beta: 2, alpha: 1 }))\n")).is_ok());
+        assert!(check(&parse("print(entries({ beta: 2, alpha: 1 }))\n")).is_ok());
     }
 }

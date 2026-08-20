@@ -313,7 +313,7 @@ Parser recovery uses statement boundaries so one malformed statement generally y
 
 ### Pure standard-library helpers
 
-`length`, `contains`, `get`, `keys`, and `values` are deterministic pure helpers. They do not read
+`length`, `contains`, `get`, `keys`, `values`, and `entries` are deterministic pure helpers. They do not read
 files, environment variables, or the network, so hardened runs allow them.
 
 `length(value)` returns the number of Unicode scalar values in text, the number
@@ -359,6 +359,13 @@ lexicographic order. It rejects non-object values.
 
 ```solve
 print(values({ status: "open", count: 2 })) // [2, "open"]
+```
+
+`entries(object)` returns `[key, value]` pairs in deterministic lexicographic
+key order. It rejects non-object values.
+
+```solve
+print(entries({ status: "open", count: 2 })) // [["count", 2], ["status", "open"]]
 ```
 
 ### `json_parse(text)`
