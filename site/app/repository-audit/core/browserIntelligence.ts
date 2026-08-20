@@ -11,6 +11,12 @@ import {
   type RepositoryDeploymentPathPresentation,
   type RepositoryDeploymentPathPresentationOptions,
 } from "./deploymentPathPresentation";
+import type { DockerComposeSnapshotEvidence } from "./dockerComposeSnapshotEvidence";
+import {
+  createDockerComposeSnapshotPresentation,
+  type DockerComposeSnapshotPresentation,
+  type DockerComposeSnapshotPresentationOptions,
+} from "./dockerComposeSnapshotPresentation";
 import type { RepositoryFrameworkPathEvidenceAnalysis } from "./frameworkPathEvidence";
 import {
   createRepositoryFrameworkPathPresentation,
@@ -32,6 +38,7 @@ import {
 export type RepositoryAuditBrowserIntelligenceOptions = {
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentationOptions;
   deploymentPaths?: RepositoryDeploymentPathPresentationOptions;
+  dockerCompose?: DockerComposeSnapshotPresentationOptions;
   frameworkPaths?: RepositoryFrameworkPathPresentationOptions;
   packageScriptPaths?: RepositoryPackageScriptPathPresentationOptions;
   visualExplorer?: RepositoryAuditVisualExplorerOptions;
@@ -44,6 +51,7 @@ export type RepositoryAuditBrowserIntelligence = {
   status: "complete" | "partial";
   angularTargetConfigs?: RepositoryAngularTargetConfigPresentation;
   deploymentPaths: RepositoryDeploymentPathPresentation;
+  dockerCompose?: DockerComposeSnapshotPresentation;
   frameworkPaths?: RepositoryFrameworkPathPresentation;
   packageScriptPaths?: RepositoryPackageScriptPathPresentation;
   visualExplorer: RepositoryAuditVisualExplorer;
@@ -52,11 +60,20 @@ export type RepositoryAuditBrowserIntelligence = {
     writeAccess: false;
     angularTargetConfigPartial?: boolean;
     deploymentPathPartial: boolean;
+    dockerComposePartial?: boolean;
     frameworkPathPartial?: boolean;
     packageScriptPathPartial?: boolean;
     visualExplorerPartial: boolean;
   };
 };
+
+function sameSnapshotIdentity(
+  graph: SolveGraphDocument,
+  evidence: DockerComposeSnapshotEvidence,
+): boolean {
+  return graph.source.fingerprint === evidence.source.fingerprint
+    && graph.source.revision === evidence.source.revision;
+}
 
 export async function createRepositoryAuditBrowserIntelligence(
   graph: SolveGraphDocument,
@@ -65,6 +82,7 @@ export async function createRepositoryAuditBrowserIntelligence(
   frameworkPathEvidence?: RepositoryFrameworkPathEvidenceAnalysis,
   angularTargetConfigEvidence?: RepositoryAngularTargetConfigEvidenceAnalysis,
   packageScriptPathEvidence?: RepositoryPackageScriptPathEvidenceAnalysis,
+  dockerComposeEvidence?: DockerComposeSnapshotEvidence,
 ): Promise<RepositoryAuditBrowserIntelligence> {
   if (graph.graphId !== deploymentPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires deployment evidence from the same Solve Graph document.");
@@ -78,12 +96,18 @@ export async function createRepositoryAuditBrowserIntelligence(
   if (packageScriptPathEvidence && graph.graphId !== packageScriptPathEvidence.graphId) {
     throw new Error("Repository Audit browser intelligence requires package-script path evidence from the same Solve Graph document.");
   }
+  if (dockerComposeEvidence && !sameSnapshotIdentity(graph, dockerComposeEvidence)) {
+    throw new Error("Repository Audit browser intelligence requires Docker Compose evidence from the same repository snapshot.");
+  }
 
   const visualExplorer = await createRepositoryAuditVisualExplorer(graph, options.visualExplorer);
   const deploymentPaths = createRepositoryDeploymentPathPresentation(
     deploymentPathEvidence,
     options.deploymentPaths,
   );
+  const dockerCompose = dockerComposeEvidence
+    ? createDockerComposeSnapshotPresentation(dockerComposeEvidence, options.dockerCompose)
+    : undefined;
   const frameworkPaths = frameworkPathEvidence
     ? createRepositoryFrameworkPathPresentation(frameworkPathEvidence, options.frameworkPaths)
     : undefined;
@@ -107,6 +131,10 @@ export async function createRepositoryAuditBrowserIntelligence(
   );
   const deploymentPathPartial = deploymentPaths.status === "partial"
     || deploymentPaths.execution.rowsTruncated;
+  const dockerComposePartial = dockerCompose !== undefined && (
+    dockerCompose.status === "partial"
+    || dockerCompose.execution.rowsTruncated
+  );
   const frameworkPathPartial = frameworkPaths !== undefined && (
     frameworkPaths.status === "partial"
     || frameworkPaths.execution.rowsTruncated
@@ -123,6 +151,7 @@ export async function createRepositoryAuditBrowserIntelligence(
     graphId: graph.graphId,
     status: angularTargetConfigPartial
       || deploymentPathPartial
+      || dockerComposePartial
       || frameworkPathPartial
       || packageScriptPathPartial
       || visualExplorerPartial
@@ -130,6 +159,7 @@ export async function createRepositoryAuditBrowserIntelligence(
       : "complete",
     ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigs }),
     deploymentPaths,
+    ...(dockerCompose === undefined ? {} : { dockerCompose }),
     ...(frameworkPaths === undefined ? {} : { frameworkPaths }),
     ...(packageScriptPaths === undefined ? {} : { packageScriptPaths }),
     visualExplorer,
@@ -138,6 +168,7 @@ export async function createRepositoryAuditBrowserIntelligence(
       writeAccess: false,
       ...(angularTargetConfigs === undefined ? {} : { angularTargetConfigPartial }),
       deploymentPathPartial,
+      ...(dockerCompose === undefined ? {} : { dockerComposePartial }),
       ...(frameworkPaths === undefined ? {} : { frameworkPathPartial }),
       ...(packageScriptPaths === undefined ? {} : { packageScriptPathPartial }),
       visualExplorerPartial,
