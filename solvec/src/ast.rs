@@ -119,6 +119,12 @@ pub enum Stmt {
         body: Vec<Stmt>,
         location: SourceLocation,
     },
+    Break {
+        location: SourceLocation,
+    },
+    Continue {
+        location: SourceLocation,
+    },
     Agent {
         name: String,
         instruction: String,

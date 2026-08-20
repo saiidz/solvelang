@@ -958,6 +958,7 @@ fn preflight_statements(
                 preflight_expr(iterable, hardened, function_names)?;
                 preflight_statements(body, input_injected, hardened, function_names)?;
             }
+            Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Agent { .. } if hardened => {
                 return Err(capability_failure(
                     "agent declarations and tools are disabled by hardened execution policy",

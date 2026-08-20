@@ -112,6 +112,14 @@ struct Agent {
     tools: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum ControlFlow {
+    None,
+    Return(Value),
+    Break,
+    Continue,
+}
+
 #[derive(Clone, Debug)]
 pub struct ExecutionPolicy {
     pub allow_network: bool,
@@ -255,17 +263,18 @@ impl AstRuntime {
         self.execute_block(statements).map(|_| ())
     }
 
-    fn execute_block(&mut self, statements: &[Stmt]) -> Result<Option<Value>, RuntimeError> {
+    fn execute_block(&mut self, statements: &[Stmt]) -> Result<ControlFlow, RuntimeError> {
         for statement in statements {
-            if let Some(value) = self.execute(statement)? {
-                return Ok(Some(value));
+            let flow = self.execute(statement)?;
+            if flow != ControlFlow::None {
+                return Ok(flow);
             }
         }
 
-        Ok(None)
+        Ok(ControlFlow::None)
     }
 
-    fn execute(&mut self, statement: &Stmt) -> Result<Option<Value>, RuntimeError> {
+    fn execute(&mut self, statement: &Stmt) -> Result<ControlFlow, RuntimeError> {
         match statement {
             Stmt::Let {
                 name,
@@ -281,7 +290,7 @@ impl AstRuntime {
                 }
                 let value = self.eval(value)?;
                 self.vars.insert(name.clone(), value);
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::Assign {
                 name,
@@ -304,14 +313,14 @@ impl AstRuntime {
                 }
                 let value = self.eval(value)?;
                 self.vars.insert(name.clone(), value);
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::Print { value, .. } => {
                 let value = self.eval(value)?;
                 self.emit(value);
-                Ok(None)
+                Ok(ControlFlow::None)
             }
-            Stmt::Return { value, .. } => Ok(Some(self.eval(value)?)),
+            Stmt::Return { value, .. } => Ok(ControlFlow::Return(self.eval(value)?)),
             Stmt::Function {
                 name, params, body, ..
             } => {
@@ -327,7 +336,7 @@ impl AstRuntime {
                         body: body.clone(),
                     },
                 );
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::If {
                 condition,
@@ -349,8 +358,10 @@ impl AstRuntime {
                 let mut safety_counter = 0;
 
                 while self.eval(condition)?.is_truthy() {
-                    if let Some(value) = self.execute_block(body)? {
-                        return Ok(Some(value));
+                    match self.execute_block(body)? {
+                        ControlFlow::None | ControlFlow::Continue => {}
+                        ControlFlow::Break => return Ok(ControlFlow::None),
+                        flow @ ControlFlow::Return(_) => return Ok(flow),
                     }
 
                     safety_counter += 1;
@@ -366,7 +377,7 @@ impl AstRuntime {
                     }
                 }
 
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::For {
                 name,
@@ -396,12 +407,16 @@ impl AstRuntime {
                 }
                 for value in values {
                     self.vars.insert(name.clone(), value);
-                    if let Some(value) = self.execute_block(body)? {
-                        return Ok(Some(value));
+                    match self.execute_block(body)? {
+                        ControlFlow::None | ControlFlow::Continue => {}
+                        ControlFlow::Break => return Ok(ControlFlow::None),
+                        flow @ ControlFlow::Return(_) => return Ok(flow),
                     }
                 }
-                Ok(None)
+                Ok(ControlFlow::None)
             }
+            Stmt::Break { .. } => Ok(ControlFlow::Break),
+            Stmt::Continue { .. } => Ok(ControlFlow::Continue),
             Stmt::Agent {
                 name,
                 instruction,
@@ -415,7 +430,7 @@ impl AstRuntime {
                         tools: tools.clone(),
                     },
                 );
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::Ask {
                 agent,
@@ -425,11 +440,11 @@ impl AstRuntime {
                 let message_value = self.eval(message)?;
                 let response = self.ask_agent(agent, &message_value, *location)?;
                 self.emit(Value::Text(response));
-                Ok(None)
+                Ok(ControlFlow::None)
             }
             Stmt::Expr(expr) => {
                 self.eval(expr)?;
-                Ok(None)
+                Ok(ControlFlow::None)
             }
         }
     }
@@ -676,9 +691,17 @@ impl AstRuntime {
             self.vars.insert(param.clone(), value);
         }
 
-        let result = self.execute_block(&function.body)?.unwrap_or(Value::Null);
+        let flow = self.execute_block(&function.body)?;
         self.vars = saved_vars;
-        Ok(result)
+        match flow {
+            ControlFlow::None => Ok(Value::Null),
+            ControlFlow::Return(value) => Ok(value),
+            ControlFlow::Break | ControlFlow::Continue => Err(self.error_at(
+                location,
+                "loop control escaped a function body",
+                Some("Use break and continue only directly inside a loop.".to_string()),
+            )),
+        }
     }
 
     fn call_builtin(
@@ -1232,6 +1255,71 @@ print(result)
 
         runtime.run(&statements).expect("runtime succeeds");
         assert_eq!(runtime.outputs(), &[Value::Number(3)]);
+    }
+
+    #[test]
+    fn break_and_continue_target_only_the_innermost_loop() {
+        let statements = parse(
+            r#"
+let total = 0
+let outer = 0
+while outer < 3 {
+    outer = outer + 1
+    let inner = 0
+    while inner < 4 {
+        inner = inner + 1
+        if inner == 2 {
+            continue
+        }
+        if inner == 4 {
+            break
+        }
+        total = total + outer * 10 + inner
+    }
+}
+print(total)
+"#,
+        );
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::unrestricted(),
+            "",
+            "test.solve",
+            None,
+            true,
+        );
+
+        runtime.run(&statements).expect("loop control succeeds");
+        assert_eq!(runtime.outputs(), &[Value::Number(132)]);
+    }
+
+    #[test]
+    fn loop_control_preserves_function_return_propagation() {
+        let statements = parse(
+            r#"
+fn first_after_skip(values) {
+    for value in values {
+        if value == 1 {
+            continue
+        }
+        return value
+    }
+    return 0
+}
+print(first_after_skip([1, 4, 9]))
+"#,
+        );
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::unrestricted(),
+            "",
+            "test.solve",
+            None,
+            true,
+        );
+
+        runtime
+            .run(&statements)
+            .expect("return should leave the loop and function");
+        assert_eq!(runtime.outputs(), &[Value::Number(4)]);
     }
 
     #[test]

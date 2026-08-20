@@ -8,6 +8,7 @@ pub struct Parser {
     tokens: Vec<LocatedToken>,
     current: usize,
     errors: Vec<Diagnostic>,
+    loop_depth: usize,
 }
 
 impl Parser {
@@ -16,6 +17,7 @@ impl Parser {
             tokens,
             current: 0,
             errors: Vec::new(),
+            loop_depth: 0,
         }
     }
 
@@ -56,6 +58,8 @@ impl Parser {
             Token::If => self.if_statement(),
             Token::While => self.while_statement(),
             Token::For => self.for_statement(),
+            Token::Break => self.loop_control_statement(true),
+            Token::Continue => self.loop_control_statement(false),
             Token::Agent => self.agent_statement(),
             Token::Ask => self.ask_statement(),
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
@@ -132,7 +136,10 @@ impl Parser {
         let location = self.advance_location();
         let name = self.consume_identifier("Expected function name after 'fn'.")?;
         let params = self.parameter_list()?;
-        let body = self.block()?;
+        let loop_depth = std::mem::replace(&mut self.loop_depth, 0);
+        let body = self.block();
+        self.loop_depth = loop_depth;
+        let body = body?;
         Some(Stmt::Function {
             name,
             params,
@@ -162,7 +169,10 @@ impl Parser {
     fn while_statement(&mut self) -> Option<Stmt> {
         let location = self.advance_location();
         let condition = self.expression();
-        let body = self.block()?;
+        self.loop_depth += 1;
+        let body = self.block();
+        self.loop_depth -= 1;
+        let body = body?;
         Some(Stmt::While {
             condition,
             body,
@@ -181,12 +191,34 @@ impl Parser {
             return None;
         }
         let iterable = self.expression();
-        let body = self.block()?;
+        self.loop_depth += 1;
+        let body = self.block();
+        self.loop_depth -= 1;
+        let body = body?;
         Some(Stmt::For {
             name,
             iterable,
             body,
             location,
+        })
+    }
+
+    fn loop_control_statement(&mut self, is_break: bool) -> Option<Stmt> {
+        let location = self.advance_location();
+        if self.loop_depth == 0 {
+            let keyword = if is_break { "break" } else { "continue" };
+            self.error_at(
+                location,
+                &format!("'{}' can only be used inside a loop.", keyword),
+                "Move it into a while or for loop body.",
+            );
+            return None;
+        }
+
+        Some(if is_break {
+            Stmt::Break { location }
+        } else {
+            Stmt::Continue { location }
         })
     }
 
@@ -734,6 +766,34 @@ print(user.name)
 
         assert!(errors.iter().any(|error| {
             error.line == 1 && error.column == 10 && error.message.contains("expected 'in'")
+        }));
+    }
+
+    #[test]
+    fn reports_source_located_errors_for_loop_control_outside_loops() {
+        let errors = parse("break\ncontinue\nfn helper() { break }\n")
+            .expect_err("loop control outside a loop should fail parsing");
+
+        assert!(errors.iter().any(|error| {
+            error.line == 1
+                && error.column == 1
+                && error
+                    .message
+                    .contains("'break' can only be used inside a loop")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.line == 2
+                && error.column == 1
+                && error
+                    .message
+                    .contains("'continue' can only be used inside a loop")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.line == 3
+                && error.column == 15
+                && error
+                    .message
+                    .contains("'break' can only be used inside a loop")
         }));
     }
 

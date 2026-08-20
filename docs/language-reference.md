@@ -229,7 +229,23 @@ while count < 3 {
 }
 ```
 
-The runtime stops a loop after 10,000 iterations as a safety guard.
+The runtime stops a loop after 10,000 iterations as a safety guard. `break` exits the nearest enclosing loop and continues after it; `continue` skips the rest of the current iteration of that nearest loop. Both are only valid inside a `while` or `for` body.
+
+```solve
+let count = 0
+
+while count < 5 {
+  count = count + 1
+  if count == 2 {
+    continue
+  }
+  if count == 4 {
+    break
+  }
+  print(count)
+}
+// Prints 1 then 3.
+```
 
 Use `for item in items` to visit every value in an array. The loop variable is assigned for each iteration, including within nested loops. A non-array iterable is a source-located runtime error, and arrays longer than 10,000 items are rejected before the loop body runs.
 
