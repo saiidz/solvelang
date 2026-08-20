@@ -94,6 +94,32 @@ services:
   });
 });
 
+test("accepts quoted static Compose service and dependency keys", () => {
+  const result = analyzeDockerComposeServiceRelationships(`
+services:
+  "api.service":
+    depends_on:
+      'db-primary':
+        condition: service_healthy
+  'db-primary':
+    image: postgres:17
+`);
+
+  assert.equal(result.status, "complete");
+  assert.deepEqual(result.services, ["api.service", "db-primary"]);
+  assert.deepEqual(result.relationships, [
+    {
+      relationshipId: "docker-compose:depends-on:api.service:db-primary",
+      kind: "depends-on",
+      fromService: "api.service",
+      toService: "db-primary",
+      targetState: "present",
+      evidence: { field: "depends_on", syntax: "mapping" },
+    },
+  ]);
+  assert.equal(result.summary.unsupportedReferences, 0);
+});
+
 test("reports unsupported dynamic references and deduplicates repeated relationships", () => {
   const result = analyzeDockerComposeServiceRelationships(`
 services:
