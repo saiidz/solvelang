@@ -62,6 +62,10 @@ test("scheduled-job findings surface hidden multi-target classification without 
   assert.deepEqual(hiddenFanout.evidence, [
     { source: "scheduledJobRelationships.summary.jobsWithMultipleRelationships", summary: "2" },
     { source: "scheduledJobRelationships.output.emittedMultiTargetJobs", summary: "0" },
+    {
+      source: "scheduledJobRelationships.summary.jobsWithPartiallyMaterializedMultipleRelationships",
+      summary: "2",
+    },
   ]);
 
   const serialized = JSON.stringify(findings);
