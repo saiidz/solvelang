@@ -5,7 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
-import { findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
+import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
@@ -302,6 +302,22 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_explain_alternative_paths",
+  {
+    title: "Explain alternative Solve Graph paths",
+    description: "Find and explain deterministic bounded simple dependency or dependent paths with explicit complete-versus-partial truth for depth, path-count, and traversal-state limits.",
+    inputSchema: solveGraphAlternativePathsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, sourceId, targetId, direction, edgeKinds, maxDepth, maxPaths, maxStates }) => textResult(explainSolveGraphAlternativePaths(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    sourceId,
+    targetId,
+    { direction, edgeKinds, maxDepth, maxPaths, maxStates },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_impact",
   {
     title: "Analyze Solve Graph impact",
@@ -339,6 +355,7 @@ server.registerTool(
       "solvelang_graph_shortest_path",
       "solvelang_graph_explain_shortest_path",
       "solvelang_graph_alternative_paths",
+      "solvelang_graph_explain_alternative_paths",
       "solvelang_graph_impact",
       "solvelang_capabilities",
     ],
