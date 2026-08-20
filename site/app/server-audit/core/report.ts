@@ -19,6 +19,7 @@ import { createServerAuditProcessCoverageFindings } from "./processCoverageFindi
 import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
+import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
@@ -119,6 +120,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditProcessCoverageFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
+    ...createServerAuditScheduledJobCoverageFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditPackageVersionFindings(snapshot),
     ...createServerAuditLogCoverageFindings(snapshot),
@@ -169,6 +171,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Process-coverage findings report only an explicit empty process inventory; because the reviewed collector maps failed/unavailable fixed `ps` execution or empty usable output to an empty array, they do not prove that the host has no processes or that process collection was complete or authoritative.",
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
+      "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Package-version evidence findings report explicit empty inventories plus missing or non-specific supplied versions; they do not prove package discovery completeness, collector authority, or vulnerability status.",
       "Public-file marker findings prove only local marker presence under a candidate web root; they do not prove that a file is reachable over HTTP or disclose its contents.",
