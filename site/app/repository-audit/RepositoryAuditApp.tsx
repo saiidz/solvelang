@@ -5,6 +5,7 @@ import { createSolveGraphQueryIndex, type SolveGraphQueryIndex } from "../solve-
 import { RepositoryAuditAngularTargetConfigPanel } from "./RepositoryAuditAngularTargetConfigPanel";
 import { RepositoryAuditDeploymentPathPanel } from "./RepositoryAuditDeploymentPathPanel";
 import { RepositoryAuditDockerComposePanel } from "./RepositoryAuditDockerComposePanel";
+import { RepositoryAuditDockerComposeRelationshipPanel } from "./RepositoryAuditDockerComposeRelationshipPanel";
 import { RepositoryAuditFrameworkPathPanel } from "./RepositoryAuditFrameworkPathPanel";
 import { RepositoryAuditVisualExplorerPanel } from "./RepositoryAuditVisualExplorerPanel";
 import { analyzeRepositorySnapshot, type RepositoryAuditAnalysisResult } from "./core/analysisPipeline";
@@ -14,6 +15,8 @@ import { extractRepositoryArchive, type RepositoryArchiveExtractionResult } from
 import { createRepositoryAuditBrowserIntelligence, type RepositoryAuditBrowserIntelligence } from "./core/browserIntelligence";
 import { createCanonicalRepositoryAuditArtifact, type CanonicalRepositoryAuditArtifact } from "./core/canonicalArtifact";
 import { createRepositoryDeploymentPathEvidenceDownload, type RepositoryDeploymentPathEvidenceDownload } from "./core/deploymentPathArtifact";
+import { createDockerComposeRelationshipSnapshotDownload, type DockerComposeRelationshipSnapshotDownload } from "./core/dockerComposeRelationshipSnapshotArtifact";
+import { analyzeDockerComposeRelationshipSnapshot } from "./core/dockerComposeRelationshipSnapshotEvidence";
 import { createDockerComposeSnapshotDownload, type DockerComposeSnapshotDownload } from "./core/dockerComposeSnapshotArtifact";
 import { analyzeDockerComposeSnapshot } from "./core/dockerComposeSnapshotEvidence";
 import { createRepositoryFrameworkPathEvidenceDownload, type RepositoryFrameworkPathEvidenceDownload } from "./core/frameworkPathArtifact";
@@ -38,6 +41,7 @@ type ScanResult = {
   architecturePathEvidence: RepositoryArchitecturePathEvidenceDownload;
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceDownload;
   dockerComposeEvidence: DockerComposeSnapshotDownload;
+  dockerComposeRelationshipEvidence: DockerComposeRelationshipSnapshotDownload;
   frameworkPathEvidence: RepositoryFrameworkPathEvidenceDownload;
   browserIntelligence: RepositoryAuditBrowserIntelligence;
   impactIndex: SolveGraphQueryIndex;
@@ -144,6 +148,7 @@ export function RepositoryAuditApp() {
       },
     });
     const dockerComposeSnapshotEvidence = analyzeDockerComposeSnapshot(ingestion.snapshot);
+    const dockerComposeRelationshipSnapshotEvidence = analyzeDockerComposeRelationshipSnapshot(ingestion.snapshot);
     const analysis = intelligence.inventory;
     const now = new Date();
     const report = createRepositoryAuditProductReport({ archiveName, extraction, ingestion, analysis, intelligence, now });
@@ -170,6 +175,10 @@ export function RepositoryAuditApp() {
       archiveName,
       dockerComposeSnapshotEvidence,
     );
+    const dockerComposeRelationshipEvidence = await createDockerComposeRelationshipSnapshotDownload(
+      archiveName,
+      dockerComposeRelationshipSnapshotEvidence,
+    );
     const frameworkPathEvidence = await createRepositoryFrameworkPathEvidenceDownload(
       archiveName,
       intelligence.frameworkPathEvidence,
@@ -182,12 +191,14 @@ export function RepositoryAuditApp() {
         angularTargetConfigs: { maxRows: 100 },
         deploymentPaths: { maxRows: 100 },
         dockerCompose: { maxRows: 100 },
+        dockerComposeRelationships: { maxRows: 100 },
         frameworkPaths: { maxRows: 100 },
       },
       intelligence.frameworkPathEvidence,
       intelligence.angularTargetConfigEvidence,
       undefined,
       dockerComposeSnapshotEvidence,
+      dockerComposeRelationshipSnapshotEvidence,
     );
     return {
       extraction,
@@ -200,6 +211,7 @@ export function RepositoryAuditApp() {
       architecturePathEvidence,
       deploymentPathEvidence,
       dockerComposeEvidence,
+      dockerComposeRelationshipEvidence,
       frameworkPathEvidence,
       browserIntelligence,
       impactIndex,
@@ -263,7 +275,7 @@ export function RepositoryAuditApp() {
     }
   }
 
-  function exportReport(format: "product-json" | "canonical-json" | "angular-target-json" | "architecture-json" | "deployment-json" | "docker-compose-json" | "framework-json" | "html"): void {
+  function exportReport(format: "product-json" | "canonical-json" | "angular-target-json" | "architecture-json" | "deployment-json" | "docker-compose-json" | "docker-compose-relationships-json" | "framework-json" | "html"): void {
     if (!result) return;
     const base = `${repositoryAuditSafeFilename(result.report.archive.name)}-solvelang-repository-audit`;
     if (format === "product-json") download(`${base}.json`, `${JSON.stringify(result.report, null, 2)}\n`, "application/json;charset=utf-8");
@@ -272,22 +284,25 @@ export function RepositoryAuditApp() {
     else if (format === "architecture-json") download(result.architecturePathEvidence.filename, result.architecturePathEvidence.content, result.architecturePathEvidence.mediaType);
     else if (format === "deployment-json") download(result.deploymentPathEvidence.filename, result.deploymentPathEvidence.content, result.deploymentPathEvidence.mediaType);
     else if (format === "docker-compose-json") download(result.dockerComposeEvidence.filename, result.dockerComposeEvidence.content, result.dockerComposeEvidence.mediaType);
+    else if (format === "docker-compose-relationships-json") download(result.dockerComposeRelationshipEvidence.filename, result.dockerComposeRelationshipEvidence.content, result.dockerComposeRelationshipEvidence.mediaType);
     else if (format === "framework-json") download(result.frameworkPathEvidence.filename, result.frameworkPathEvidence.content, result.frameworkPathEvidence.mediaType);
     else download(`${base}.html`, createRepositoryAuditHtmlReport(result.report), "text/html;charset=utf-8");
     recordEvent(
       format === "angular-target-json"
         ? "repository_audit_angular_target_config_evidence_downloaded"
-        : format === "docker-compose-json"
-          ? "repository_audit_docker_compose_evidence_downloaded"
-          : format === "framework-json"
-            ? "repository_audit_framework_path_evidence_downloaded"
-            : format === "deployment-json"
-              ? "repository_audit_deployment_path_evidence_downloaded"
-              : format === "architecture-json"
-                ? "repository_audit_architecture_evidence_downloaded"
-                : format === "canonical-json"
-                  ? "repository_audit_canonical_evidence_downloaded"
-                  : "repository_audit_report_downloaded",
+        : format === "docker-compose-relationships-json"
+          ? "repository_audit_docker_compose_relationship_evidence_downloaded"
+          : format === "docker-compose-json"
+            ? "repository_audit_docker_compose_evidence_downloaded"
+            : format === "framework-json"
+              ? "repository_audit_framework_path_evidence_downloaded"
+              : format === "deployment-json"
+                ? "repository_audit_deployment_path_evidence_downloaded"
+                : format === "architecture-json"
+                  ? "repository_audit_architecture_evidence_downloaded"
+                  : format === "canonical-json"
+                    ? "repository_audit_canonical_evidence_downloaded"
+                    : "repository_audit_report_downloaded",
     );
   }
 
@@ -350,10 +365,10 @@ export function RepositoryAuditApp() {
             <li>✓ Maps bounded JavaScript/TypeScript dependencies and impact hotspots without executing code</li>
             <li>✓ Summarizes bounded architecture and security-boundary paths as structural evidence</li>
             <li>✓ Maps explicit repository-local deployment, Angular/Nest framework, and Angular target tsConfig references without executing code</li>
-            <li>✓ Presents bounded Docker Compose services and literal image declarations without evaluating Compose or starting containers</li>
+            <li>✓ Presents bounded Docker Compose services, literal image declarations, and explicit depends_on relationships without evaluating Compose or starting containers</li>
             <li>✓ Flags credential patterns with values redacted from reports and the UI</li>
             <li>✓ Never executes repository code, scripts, hooks, or package managers</li>
-            <li>✓ Produces product JSON, integrity-covered canonical, architecture, deployment, Docker Compose, framework, and Angular target-config evidence JSON, and a printable HTML report</li>
+            <li>✓ Produces product JSON, integrity-covered canonical, architecture, deployment, Docker Compose inventory/relationship, framework, and Angular target-config evidence JSON, and a printable HTML report</li>
           </ul>
           <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-5 text-sm leading-6 text-slate-300">
             No file is deleted, moved, renamed, merged, or rewritten. Cleanup recommendations require a separate branch, validation, rollback planning, and human approval.
@@ -382,7 +397,7 @@ export function RepositoryAuditApp() {
           <section className="rounded-[2rem] border border-blue-200 bg-blue-50 p-6 sm:p-8">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Evidence export</p>
             <h2 className="mt-2 text-2xl font-semibold">Keep the audit record</h2>
-            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path, deployment-path, Docker Compose, framework-path, and Angular target-config artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
+            <p className="mt-3 leading-7 text-slate-700">Download the product report, versioned canonical evidence, or dedicated architecture/security-path, deployment-path, Docker Compose inventory/relationship, framework-path, and Angular target-config artifacts for integrity verification. Evidence remains bounded and redacted without exporting secret values or keyed HMAC correlation fingerprints.</p>
             <div className="mt-7 flex flex-col gap-3 xl:flex-row xl:flex-wrap">
               <button type="button" onClick={() => exportReport("html")} className="rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800">Download HTML report</button>
               <button type="button" onClick={() => exportReport("product-json")} className="rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">Download product JSON</button>
@@ -391,6 +406,7 @@ export function RepositoryAuditApp() {
               <button type="button" onClick={() => exportReport("architecture-json")} className="rounded-xl border border-violet-300 bg-white px-5 py-3 text-sm font-semibold text-violet-800 hover:bg-violet-100">Download architecture paths</button>
               <button type="button" onClick={() => exportReport("deployment-json")} className="rounded-xl border border-indigo-300 bg-white px-5 py-3 text-sm font-semibold text-indigo-800 hover:bg-indigo-100">Download deployment paths</button>
               <button type="button" onClick={() => exportReport("docker-compose-json")} className="rounded-xl border border-cyan-300 bg-white px-5 py-3 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Download Docker Compose evidence</button>
+              <button type="button" onClick={() => exportReport("docker-compose-relationships-json")} className="rounded-xl border border-sky-300 bg-white px-5 py-3 text-sm font-semibold text-sky-800 hover:bg-sky-100">Download Compose relationships</button>
               <button type="button" onClick={() => exportReport("framework-json")} className="rounded-xl border border-cyan-300 bg-white px-5 py-3 text-sm font-semibold text-cyan-800 hover:bg-cyan-100">Download framework paths</button>
             </div>
             <p className="mt-5 text-sm font-semibold text-slate-700">Canonical schema {result.canonicalArtifact.report.schemaVersion} · report {result.canonicalArtifact.report.reportId}</p>
@@ -403,6 +419,8 @@ export function RepositoryAuditApp() {
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Deployment SHA-256: {result.deploymentPathEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-3 text-sm font-semibold text-slate-700">Docker Compose evidence {result.dockerComposeEvidence.artifact.schemaVersion} · {result.dockerComposeEvidence.artifact.status}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Docker Compose SHA-256: {result.dockerComposeEvidence.artifact.integrity.canonicalJsonSha256}</p>
+            <p className="mt-3 text-sm font-semibold text-slate-700">Docker Compose relationship evidence {result.dockerComposeRelationshipEvidence.artifact.schemaVersion} · {result.dockerComposeRelationshipEvidence.artifact.status}</p>
+            <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Compose relationship SHA-256: {result.dockerComposeRelationshipEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-3 text-sm font-semibold text-slate-700">Framework evidence {result.frameworkPathEvidence.artifact.schemaVersion} · {result.frameworkPathEvidence.artifact.status}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Framework SHA-256: {result.frameworkPathEvidence.artifact.integrity.canonicalJsonSha256}</p>
             <p className="mt-2 break-all font-mono text-xs leading-5 text-slate-600">Source: {result.analysis.source.fingerprint}</p>
@@ -459,6 +477,9 @@ export function RepositoryAuditApp() {
         <RepositoryAuditDeploymentPathPanel presentation={result.browserIntelligence.deploymentPaths} className="mt-8" />
         {result.browserIntelligence.dockerCompose ? (
           <RepositoryAuditDockerComposePanel presentation={result.browserIntelligence.dockerCompose} className="mt-8" />
+        ) : null}
+        {result.browserIntelligence.dockerComposeRelationships ? (
+          <RepositoryAuditDockerComposeRelationshipPanel presentation={result.browserIntelligence.dockerComposeRelationships} className="mt-8" />
         ) : null}
         {result.browserIntelligence.frameworkPaths ? (
           <RepositoryAuditFrameworkPathPanel presentation={result.browserIntelligence.frameworkPaths} className="mt-8" />
