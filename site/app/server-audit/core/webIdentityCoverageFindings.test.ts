@@ -44,6 +44,15 @@ test("web identity coverage accepts normalized non-empty server and root identit
   })), []);
 });
 
+test("web identity coverage leaves unavailable records to their dedicated integrity stages", () => {
+  const unavailableServer = undefined as unknown as string;
+  const unavailableRoot = undefined as unknown as NonNullable<NonNullable<ServerAuditSnapshot["web"]>["roots"]>[number];
+  assert.deepEqual(createServerAuditWebIdentityCoverageFindings(snapshot({
+    servers: [unavailableServer],
+    roots: [unavailableRoot],
+  })), []);
+});
+
 test("web identity coverage output is deterministic and bounded across server and root records", () => {
   const first = createServerAuditWebIdentityCoverageFindings(snapshot({
     servers: Array.from({ length: 50 }, () => " "),
