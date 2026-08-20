@@ -36,6 +36,7 @@ export type ServerAuditScheduledJobRelationshipAnalysis = {
     jobsAnalyzed: number;
     serviceTargetsObserved: number;
     processTargetsObserved: number;
+    relationshipsObserved: number;
     jobsWithRelationships: number;
     unresolvedJobs: number;
   };
@@ -143,8 +144,9 @@ export function analyzeServerAuditScheduledJobRelationships(
   const boundedProcesses = processes.slice(0, remainingTargetCapacity);
   const targetsTruncated = services.length + processes.length > maxTargets;
   let oversizedCommandSummariesSkipped = 0;
-  const allRelationships: ServerAuditScheduledJobRelationship[] = [];
-  const jobsWithRelationships = new Set<number>();
+  let relationshipsObserved = 0;
+  let jobsWithRelationships = 0;
+  const relationships: ServerAuditScheduledJobRelationship[] = [];
 
   boundedJobs.forEach((job, jobIndex) => {
     if (job.commandSummary.length > maxCommandSummaryCharacters) {
@@ -154,11 +156,17 @@ export function analyzeServerAuditScheduledJobRelationships(
     const tokens = summaryTokens(job.commandSummary);
     if (tokens.size === 0) return;
 
+    let jobRelationshipCount = 0;
+    const remainingRelationshipCapacity = Math.max(0, maxRelationships - relationships.length);
+    const jobRelationships: ServerAuditScheduledJobRelationship[] = [];
+
     boundedServices.forEach((service, targetIndex) => {
       const matchedName = exactTokenMatch(tokens, serviceCandidateNames(service.name));
       if (!matchedName) return;
-      jobsWithRelationships.add(jobIndex);
-      allRelationships.push({
+      jobRelationshipCount += 1;
+      relationshipsObserved += 1;
+      if (remainingRelationshipCapacity === 0) return;
+      jobRelationships.push({
         relationshipId: stableId(["scheduled-job-service", String(jobIndex), String(targetIndex), normalize(service.name)]),
         kind: "scheduled-job-service",
         jobIndex,
@@ -177,8 +185,10 @@ export function analyzeServerAuditScheduledJobRelationships(
     boundedProcesses.forEach((process, processIndex) => {
       const normalizedName = normalize(process.name);
       if (!normalizedName || !tokens.has(normalizedName)) return;
-      jobsWithRelationships.add(jobIndex);
-      allRelationships.push({
+      jobRelationshipCount += 1;
+      relationshipsObserved += 1;
+      if (remainingRelationshipCapacity === 0) return;
+      jobRelationships.push({
         relationshipId: stableId(["scheduled-job-process", String(jobIndex), String(processIndex), normalizedName]),
         kind: "scheduled-job-process",
         jobIndex,
@@ -193,11 +203,18 @@ export function analyzeServerAuditScheduledJobRelationships(
         },
       });
     });
+
+    if (jobRelationshipCount > 0) {
+      jobsWithRelationships += 1;
+    }
+    if (remainingRelationshipCapacity > 0 && jobRelationships.length > 0) {
+      jobRelationships.sort(compareRelationship);
+      relationships.push(...jobRelationships.slice(0, remainingRelationshipCapacity));
+    }
   });
 
-  allRelationships.sort(compareRelationship);
-  const relationshipsTruncated = allRelationships.length > maxRelationships;
-  const relationships = allRelationships.slice(0, maxRelationships);
+  relationships.sort(compareRelationship);
+  const relationshipsTruncated = relationshipsObserved > maxRelationships;
   const jobsTruncated = jobs.length > maxJobs;
   const partial = jobsTruncated
     || targetsTruncated
@@ -214,8 +231,9 @@ export function analyzeServerAuditScheduledJobRelationships(
       jobsAnalyzed: boundedJobs.length - oversizedCommandSummariesSkipped,
       serviceTargetsObserved: services.length,
       processTargetsObserved: processes.length,
-      jobsWithRelationships: jobsWithRelationships.size,
-      unresolvedJobs: Math.max(0, boundedJobs.length - oversizedCommandSummariesSkipped - jobsWithRelationships.size),
+      relationshipsObserved,
+      jobsWithRelationships,
+      unresolvedJobs: Math.max(0, boundedJobs.length - oversizedCommandSummariesSkipped - jobsWithRelationships),
     },
     execution: {
       networkAccess: false,
