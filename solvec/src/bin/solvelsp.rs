@@ -6,7 +6,7 @@
 use serde_json::{Value, json};
 use solvec::{
     ast::{SourceLocation, Stmt},
-    lexer, parser,
+    formatter, lexer, parser,
 };
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
@@ -240,11 +240,34 @@ fn semantic_tokens(text: &str) -> Vec<u32> {
     encoded
 }
 
+fn document_formatting(text: &str) -> Option<Vec<Value>> {
+    let mut parser = parser::Parser::new(lexer::lex(text));
+    if parser.parse().is_err() {
+        return None;
+    }
+
+    let formatted = formatter::format_source(text);
+    if formatted == text {
+        return Some(Vec::new());
+    }
+
+    let lines: Vec<&str> = text.split('\n').collect();
+    let last_line = lines.len().saturating_sub(1);
+    let last_character = lines[last_line].encode_utf16().count();
+    Some(vec![json!({
+        "range": {
+            "start": {"line": 0, "character": 0},
+            "end": {"line": last_line, "character": last_character}
+        },
+        "newText": formatted
+    })])
+}
+
 fn process_message(message: Value, documents: &mut HashMap<String, String>) -> Vec<Value> {
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{},"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","variable","number","operator"],"tokenModifiers":[]},"full":true}}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{},"documentFormattingProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","variable","number","operator"],"tokenModifiers":[]},"full":true}}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -350,6 +373,18 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
         }
+        Some("textDocument/formatting") => {
+            let uri = message["params"]["textDocument"]["uri"]
+                .as_str()
+                .unwrap_or("");
+            let result = documents
+                .get(uri)
+                .and_then(|text| document_formatting(text).map(Value::from))
+                .unwrap_or(Value::Null);
+            vec![
+                json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
+            ]
+        }
         _ => Vec::new(),
     }
 }
@@ -415,6 +450,10 @@ mod tests {
             true
         );
         assert!(output[0]["result"]["capabilities"]["completionProvider"].is_object());
+        assert_eq!(
+            output[0]["result"]["capabilities"]["documentFormattingProvider"],
+            true
+        );
         assert_eq!(
             output[0]["result"]["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"],
             json!(["keyword", "variable", "number", "operator"])
@@ -578,5 +617,49 @@ mod tests {
             &mut documents,
         );
         assert_eq!(unopened[0]["result"]["data"], json!([]));
+    }
+
+    #[test]
+    fn formatting_uses_the_canonical_formatter_for_parser_valid_open_documents() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"// 😀\nlet value=1"}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":13,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///test.solve"}}}),
+            &mut documents,
+        );
+
+        assert_eq!(output[0]["result"][0]["newText"], "// 😀\nlet value = 1\n");
+        assert_eq!(
+            output[0]["result"][0]["range"]["start"],
+            json!({"line": 0, "character": 0})
+        );
+        assert_eq!(
+            output[0]["result"][0]["range"]["end"],
+            json!({"line": 1, "character": 11})
+        );
+    }
+
+    #[test]
+    fn formatting_rejects_invalid_or_unopened_documents() {
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///invalid.solve","text":"let = 1"}}}),
+            &mut documents,
+        );
+
+        let invalid = process_message(
+            json!({"id":14,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///invalid.solve"}}}),
+            &mut documents,
+        );
+        assert!(invalid[0]["result"].is_null());
+
+        let unopened = process_message(
+            json!({"id":15,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///missing.solve"}}}),
+            &mut documents,
+        );
+        assert!(unopened[0]["result"].is_null());
     }
 }
