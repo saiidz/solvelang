@@ -4,6 +4,7 @@ mod ast_runtime;
 mod diagnostics;
 mod formatter;
 mod lexer;
+mod lint;
 mod parser;
 mod semantic;
 mod value;
@@ -27,6 +28,7 @@ enum Command {
     Run(RunOptions),
     Validate,
     Check,
+    Lint,
     Format { check: bool },
     Tokens,
     Ast,
@@ -163,6 +165,37 @@ impl LoadedSource {
                 format!(
                     "{}\n{}\n{}\n{}^\nHint: {}",
                     location, diagnostic.message, origin.text, pointer_padding, diagnostic.hint
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+
+    fn format_warnings(&self, warnings: Vec<lint::Warning>) -> String {
+        warnings
+            .into_iter()
+            .map(|warning| {
+                let Some(origin) = self.origin(warning.line) else {
+                    return format!(
+                        "SolveLang Warning on line {}, column {}:\n{}\nHint: {}",
+                        warning.line, warning.column, warning.message, warning.hint
+                    );
+                };
+                let pointer_padding = " ".repeat(warning.column.saturating_sub(1));
+                let location = if origin.path == self.entry_path {
+                    format!(
+                        "SolveLang Warning on line {}, column {}:",
+                        origin.line, warning.column
+                    )
+                } else {
+                    format!(
+                        "SolveLang Warning on line {}, column {} in {}:",
+                        origin.line, warning.column, origin.path
+                    )
+                };
+                format!(
+                    "{}\n{}\n{}\n{}^\nHint: {}",
+                    location, warning.message, origin.text, pointer_padding, warning.hint
                 )
             })
             .collect::<Vec<_>>()
@@ -342,6 +375,23 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
             println!("file: {}", filename);
             Ok(())
         }
+        Command::Lint => {
+            let source = load_source_with_imports(&filename, false)?;
+            validate_diagnostics(&source)?;
+            let statements = parse_source(&source)?;
+            let warnings = lint::lint(&statements);
+            if warnings.is_empty() {
+                println!("✓ SolveLang lint passed with no warnings");
+            } else {
+                println!("{}", source.format_warnings(warnings.clone()));
+                println!(
+                    "✓ SolveLang lint completed with {} warnings",
+                    warnings.len()
+                );
+            }
+            println!("file: {}", filename);
+            Ok(())
+        }
         Command::Format { check } => execute_format(&filename, check),
         Command::Tokens => {
             let source = load_source_with_imports(&filename, false)?;
@@ -436,6 +486,7 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
         "run" => parse_run_args(&args[1..]),
         "validate" => parse_file_command(Command::Validate, &args[1..]),
         "check" => parse_file_command(Command::Check, &args[1..]),
+        "lint" => parse_file_command(Command::Lint, &args[1..]),
         "fmt" => parse_format_command(&args[1..]),
         "tokens" => parse_file_command(Command::Tokens, &args[1..]),
         "ast" => parse_file_command(Command::Ast, &args[1..]),
@@ -1168,6 +1219,7 @@ fn print_usage() {
     println!(
         "  solvec check <file.solve>          Check conservative static semantics without running"
     );
+    println!("  solvec lint <file.solve>           Report conservative warnings without running");
     println!("  solvec fmt [--check] <file.solve>  Format source without changing meaning");
     println!("  solvec tokens <file.solve>         Print lexer tokens");
     println!("  solvec ast <file.solve>            Print parsed AST");
