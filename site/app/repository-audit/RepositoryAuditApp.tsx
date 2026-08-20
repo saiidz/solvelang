@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
+import { createSolveGraphQueryIndex, type SolveGraphQueryIndex } from "../solve-graph/core/query-impact";
 import { RepositoryAuditAngularTargetConfigPanel } from "./RepositoryAuditAngularTargetConfigPanel";
 import { RepositoryAuditDeploymentPathPanel } from "./RepositoryAuditDeploymentPathPanel";
 import { RepositoryAuditFrameworkPathPanel } from "./RepositoryAuditFrameworkPathPanel";
@@ -35,6 +36,7 @@ type ScanResult = {
   deploymentPathEvidence: RepositoryDeploymentPathEvidenceDownload;
   frameworkPathEvidence: RepositoryFrameworkPathEvidenceDownload;
   browserIntelligence: RepositoryAuditBrowserIntelligence;
+  impactIndex: SolveGraphQueryIndex;
 };
 
 const severityClasses: Record<RepositorySeverity, string> = {
@@ -162,6 +164,7 @@ export function RepositoryAuditApp() {
       archiveName,
       intelligence.frameworkPathEvidence,
     );
+    const impactIndex = await createSolveGraphQueryIndex(intelligence.graph.graph);
     const browserIntelligence = await createRepositoryAuditBrowserIntelligence(
       intelligence.graph.graph,
       intelligence.deploymentPathEvidence,
@@ -185,6 +188,7 @@ export function RepositoryAuditApp() {
       deploymentPathEvidence,
       frameworkPathEvidence,
       browserIntelligence,
+      impactIndex,
     };
   }
 
@@ -430,7 +434,7 @@ export function RepositoryAuditApp() {
           {result.intelligence.architecturePaths.status === "partial" ? <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">Architecture-path evidence is partial because one or more graph or traversal bounds were reached.</p> : null}
         </section>
 
-        <RepositoryAuditVisualExplorerPanel explorer={result.browserIntelligence.visualExplorer} className="mt-8" />
+        <RepositoryAuditVisualExplorerPanel explorer={result.browserIntelligence.visualExplorer} impactIndex={result.impactIndex} className="mt-8" />
         <RepositoryAuditDeploymentPathPanel presentation={result.browserIntelligence.deploymentPaths} className="mt-8" />
         {result.browserIntelligence.frameworkPaths ? (
           <RepositoryAuditFrameworkPathPanel presentation={result.browserIntelligence.frameworkPaths} className="mt-8" />
