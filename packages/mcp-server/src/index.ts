@@ -6,6 +6,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
+import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
@@ -85,6 +86,15 @@ const solveGraphImpactInputSchema = z.object({
   edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
   maxDepth: z.number().int().min(0).max(64).optional(),
   maxResults: z.number().int().min(1).max(10_000).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphImpactExplanationInputSchema = z.object({
+  ...solveGraphInputFields,
+  changedNodeIds: z.array(z.string().regex(/^sgn_[a-f0-9]{32}$/)).min(1).max(128),
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxDepth: z.number().int().min(0).max(64).optional(),
+  maxResults: z.number().int().min(1).max(10_000).optional(),
+  maxRows: z.number().int().min(1).max(256).optional(),
 }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
@@ -332,6 +342,21 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_explain_impact",
+  {
+    title: "Explain Solve Graph impact",
+    description: "Compute and explain bounded transitive dependent impact for changed stable node IDs while preserving complete-versus-partial traversal truth and separate explanation-row truncation.",
+    inputSchema: solveGraphImpactExplanationInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, changedNodeIds, edgeKinds, maxDepth, maxResults, maxRows }) => textResult(explainSolveGraphImpact(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    changedNodeIds,
+    { edgeKinds, maxDepth, maxResults, maxRows },
+  )),
+);
+
+server.registerTool(
   "solvelang_capabilities",
   {
     title: "List SolveLang capabilities",
@@ -357,6 +382,7 @@ server.registerTool(
       "solvelang_graph_alternative_paths",
       "solvelang_graph_explain_alternative_paths",
       "solvelang_graph_impact",
+      "solvelang_graph_explain_impact",
       "solvelang_capabilities",
     ],
     privacy: [
