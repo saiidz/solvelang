@@ -57,13 +57,14 @@ function isYes(value: string | undefined) {
   return ["yes", "true", "enabled", "on", "active"].includes(normalize(value));
 }
 
-function isNo(value: string | undefined) {
-  return ["no", "false", "disabled", "off", "inactive"].includes(normalize(value));
+function sshLoginDisabled(value: string | undefined) {
+  return normalize(value) === "no";
 }
 
 function firewallActive(value: string | undefined) {
-  const tokens = normalize(value).split(/[^a-z]+/).filter(Boolean);
-  return tokens.some((token) => ["active", "enabled", "on", "running"].includes(token));
+  const normalized = normalize(value);
+  return ["active", "enabled", "on", "running"].includes(normalized)
+    || /^status:\s*active(?:\s|$)/.test(normalized);
 }
 
 function createSecurityProbeCoverageFinding(snapshot: ServerAuditSnapshot): ServerAuditFinding | undefined {
@@ -120,13 +121,13 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
 
   if (snapshot.security?.rootSshLogin
     && !isUnknownSecurityValue(snapshot.security.rootSshLogin)
-    && !isNo(snapshot.security.rootSshLogin)) {
+    && !sshLoginDisabled(snapshot.security.rootSshLogin)) {
     findings.push(finding("high", "ssh", "Root SSH login is not disabled", `Collected SSH posture reports root login as ${snapshot.security.rootSshLogin}.`, "Disable direct root SSH login after confirming a tested privileged-access alternative and recovery path.", [{ source: "sshd", summary: `PermitRootLogin=${snapshot.security.rootSshLogin}` }]));
   }
 
   if (snapshot.security?.passwordSshLogin
     && !isUnknownSecurityValue(snapshot.security.passwordSshLogin)
-    && !isNo(snapshot.security.passwordSshLogin)) {
+    && !sshLoginDisabled(snapshot.security.passwordSshLogin)) {
     findings.push(finding("medium", "ssh", "SSH password authentication remains enabled", `Collected SSH posture reports password login as ${snapshot.security.passwordSshLogin}.`, "Prefer key-based or centrally managed authentication after verifying operators will not be locked out.", [{ source: "sshd", summary: `PasswordAuthentication=${snapshot.security.passwordSshLogin}` }]));
   }
 
