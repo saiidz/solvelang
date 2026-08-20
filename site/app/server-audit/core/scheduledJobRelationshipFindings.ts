@@ -77,18 +77,23 @@ export function createServerAuditScheduledJobRelationshipFindings(
     });
   }
 
-  if (analysis.summary.jobsWithMultipleRelationships > emittedMultiTargetJobs) {
+  const partiallyMaterializedMultiTargetJobs = analysis.summary.jobsWithPartiallyMaterializedMultipleRelationships;
+  if (
+    analysis.summary.jobsWithMultipleRelationships > emittedMultiTargetJobs
+    || partiallyMaterializedMultiTargetJobs > 0
+  ) {
     findings.push({
       id: stableId([
         "scheduled-job",
         "multi-target-output-truncated",
         String(analysis.summary.jobsWithMultipleRelationships),
         String(emittedMultiTargetJobs),
+        String(partiallyMaterializedMultiTargetJobs),
       ]),
       severity: "info",
       category: "coverage",
       title: "Some multi-target scheduled-job mappings are not fully materialized",
-      summary: `${analysis.summary.jobsWithMultipleRelationships} analyzed scheduled-job record(s) had more than one exact-name-token match in the bounded supplied targets, while only ${emittedMultiTargetJobs} record(s) had at least two relationships materialized in the bounded output. Per-job fanout details can therefore be incomplete even though the observed multi-target count remains exact for the analyzed snapshot.`,
+      summary: `${analysis.summary.jobsWithMultipleRelationships} analyzed scheduled-job record(s) had more than one exact-name-token match in the bounded supplied targets; ${emittedMultiTargetJobs} record(s) had at least two relationships materialized in the bounded output, and ${partiallyMaterializedMultiTargetJobs} multi-target record(s) had observed fanout that exceeded the remaining relationship-output capacity. Per-job fanout details can therefore be incomplete even though the observed multi-target counts remain exact for the analyzed snapshot.`,
       recommendation: "Treat per-job scheduled-job fanout as partial when the relationship output is truncated; narrow or split the read-only snapshot rather than executing scheduled-job commands or guessing aliases.",
       evidence: [
         {
@@ -98,6 +103,10 @@ export function createServerAuditScheduledJobRelationshipFindings(
         {
           source: "scheduledJobRelationships.output.emittedMultiTargetJobs",
           summary: String(emittedMultiTargetJobs),
+        },
+        {
+          source: "scheduledJobRelationships.summary.jobsWithPartiallyMaterializedMultipleRelationships",
+          summary: String(partiallyMaterializedMultiTargetJobs),
         },
       ],
     });
