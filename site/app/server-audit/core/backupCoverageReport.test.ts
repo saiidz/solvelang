@@ -47,5 +47,7 @@ test("canonical reports compose missing backup freshness and size evidence witho
     assert.equal(json.includes(privateValue), false);
     assert.equal(html.includes(privateValue), false);
   }
-  assert.ok(report.limitations.some((item) => item.includes("Backup-coverage findings")));
+  assert.ok(report.limitations.includes(
+    "Backup-coverage findings report only supplied backup records that lack ageHours or sizeBytes evidence; they do not prove backup failure, freshness, artifact completeness, restoreability, or complete backup discovery.",
+  ));
 });
