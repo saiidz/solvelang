@@ -1,6 +1,7 @@
 import { sha256Hex } from "../../repository-audit/core/ingestion";
 import { canonicalSolveGraphJson } from "./canonical";
 import {
+  analyzeSolveGraphImpact,
   defaultSolveGraphImpactEdgeKinds,
   type SolveGraphQueryIndex,
   type SolveGraphTraversalEntry,
@@ -108,6 +109,11 @@ function assertResult(index: SolveGraphQueryIndex, query: SolveGraphTraversalRes
     if (!entry || entry.depth !== 0 || entry.rootId !== root) {
       throw new Error("Solve Graph impact artifact is missing a canonical root entry.");
     }
+  }
+
+  const expected = analyzeSolveGraphImpact(index, query.roots);
+  if (canonicalSolveGraphJson(query) !== canonicalSolveGraphJson(expected)) {
+    throw new Error("Solve Graph impact artifact does not match the canonical default impact traversal.");
   }
 }
 
