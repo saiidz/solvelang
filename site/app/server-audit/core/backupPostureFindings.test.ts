@@ -18,17 +18,34 @@ test("fresh non-empty backup evidence produces no finding", () => {
   ])), []);
 });
 
-test("stale backup evidence is structural and withholds name and path", () => {
+test("older retained backup evidence does not make posture stale when a newer backup is fresh", () => {
   const findings = createServerAuditBackupPostureFindings(snapshot([
-    { name: "private-customer-backup", path: "/backup/private-customer", ageHours: 96, sizeBytes: 1024 },
+    { name: "private-old", path: "/backup/private-old", ageHours: 240, sizeBytes: 1024 },
+    { name: "private-fresh", path: "/backup/private-fresh", ageHours: 12, sizeBytes: 1024 },
+  ]));
+
+  assert.deepEqual(findings, []);
+});
+
+test("stale backup posture uses the youngest available age and withholds names and paths", () => {
+  const findings = createServerAuditBackupPostureFindings(snapshot([
+    { name: "private-older", path: "/backup/private-older", ageHours: 144, sizeBytes: 1024 },
+    { name: "private-youngest", path: "/backup/private-youngest", ageHours: 96, sizeBytes: 1024 },
   ]));
 
   assert.equal(findings.length, 1);
   assert.equal(findings[0].severity, "medium");
-  assert.equal(findings[0].evidence[0].source, "backups[0].ageHours");
+  assert.equal(findings[0].evidence[0].source, "backups[1].ageHours");
+  assert.equal(findings[0].evidence[0].summary, "96 hours");
   const serialized = JSON.stringify(findings);
-  assert.equal(serialized.includes("private-customer"), false);
+  assert.equal(serialized.includes("private-"), false);
   assert.equal(serialized.includes("/backup"), false);
+});
+
+test("backup evidence exactly at the threshold is not stale", () => {
+  assert.deepEqual(createServerAuditBackupPostureFindings(snapshot([
+    { name: "private-threshold", path: "/backup/private-threshold", ageHours: 72, sizeBytes: 1024 },
+  ])), []);
 });
 
 test("zero-byte backup evidence is conservative and structural", () => {
@@ -56,6 +73,7 @@ test("backup posture findings are deterministic and bounded", () => {
 
   assert.deepEqual(first, second);
   assert.equal(first.length, 5);
+  assert.equal(first.filter((finding) => finding.title === "Public-file coverage findings were truncated").length, 0);
   assert.equal(first.filter((finding) => finding.title === "Backup posture findings were truncated").length, 1);
   assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
   assert.equal(JSON.stringify(first).includes("private-"), false);
