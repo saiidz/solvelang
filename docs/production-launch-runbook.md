@@ -146,6 +146,8 @@ If a production billing incident occurs:
 6. roll back application/infrastructure changes as appropriate;
 7. never delete billing/account data as an incident-response shortcut.
 
+Before any re-enable decision, the accountable owner must record the incident decision and a separately authorized operator must retain post-disable evidence that new checkout and plan-change mutations are blocked, along with the resulting health and feature-flag state. Do not re-enable a mutation path solely because an alert stops firing; require an owner-recorded decision after the reconciled customer, invoice, and subscription state is verified.
+
 ## Evidence to retain
 
 For every production launch/canary, retain:
