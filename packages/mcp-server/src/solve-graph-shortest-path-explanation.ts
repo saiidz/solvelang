@@ -1,6 +1,9 @@
-import type {
-  SolveGraphShortestPathResponse,
+import {
+  findSolveGraphShortestPath,
+  type SolveGraphShortestPathOptions,
+  type SolveGraphShortestPathResponse,
 } from "./solve-graph-shortest-path.js";
+import type { SolveGraphDocument } from "./solve-graph.js";
 
 const MAX_EXPLANATION_HOPS = 64;
 
@@ -186,4 +189,15 @@ export function createSolveGraphShortestPathExplanation(
       queryTruncated: response.truncated,
     },
   };
+}
+
+export function explainSolveGraphShortestPath(
+  document: SolveGraphDocument,
+  sourceId: string,
+  targetId: string,
+  options: SolveGraphShortestPathOptions = {},
+): SolveGraphShortestPathExplanation {
+  return createSolveGraphShortestPathExplanation(
+    findSolveGraphShortestPath(document, sourceId, targetId, options),
+  );
 }

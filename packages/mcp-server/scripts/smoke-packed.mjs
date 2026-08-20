@@ -61,6 +61,21 @@ try {
     maxBuffer: 10 * 1024 * 1024,
   });
 
+  const installedEntrypoint = await readFile(
+    path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "index.js"),
+    "utf8",
+  );
+  assert.match(
+    installedEntrypoint,
+    /solvelang_graph_explain_shortest_path/,
+    "packed consumer must include the shortest-path explanation MCP tool registration",
+  );
+  assert.match(
+    installedEntrypoint,
+    /explainSolveGraphShortestPath/,
+    "packed consumer must compose the registered tool through the reviewed explanation contract",
+  );
+
   const workspaceRoot = path.join(temporaryRoot, "workspace");
   await mkdir(workspaceRoot);
   const child = execFile("npx", ["--no-install", "solvelang-mcp"], {
