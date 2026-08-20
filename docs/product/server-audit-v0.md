@@ -63,6 +63,7 @@ v0 checks include:
 - fixed sensitive-file markers present under candidate web roots, without claiming that local presence proves HTTP reachability;
 - explicit absence/staleness of collected backup evidence;
 - very large log files;
+- local web-server and conventional HTTP(S)-listener evidence gaps, without inferring endpoint reachability or scanning the network;
 - stale log-activity candidates based only on collected modification timestamps, without inferring rotation success or workload health;
 - failed/dead service evidence;
 - contradictory process topology evidence such as conflicting duplicate PIDs, self-parenting, or cyclic parent relationships;
