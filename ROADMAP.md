@@ -9,7 +9,7 @@ This roadmap distinguishes four states deliberately:
 - **production deployed but gated/limited**;
 - **planned**.
 
-A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-19.md` take precedence over stale hashes or historical planning text.
+A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-20.md` take precedence over stale hashes or historical planning text.
 
 ## Current implementation overlay — 2026-08-20
 
@@ -41,7 +41,7 @@ A merged feature is not automatically production-enabled, and production account
 - Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
 - Customer-priority source/upload/API foundations, validation-only production preflight (#164), and dormant production queue-foundation rollout preparation (#169) are merged in repository history. **Production customer priority remains OFF.** Those merges do not establish a live deployment or activation.
-- Production TOTP remains OFF/incomplete. The 2026-08-19 Admin rollout did not perform the dedicated TOTP KMS rollout. Subscription billing remains OFF, paid priority remains OFF, and no real-charge authorization exists.
+- Production authenticator-app TOTP infrastructure is **deployed and environment-enabled** as re-verified on 2026-08-20. The dedicated production TOTP KMS stack/key/alias and the expected OIDC supplemental policies are live; specific customer-account enrollment remains a separate account-level state and no enrollment is authorized by repository state. Subscription billing remains OFF, paid priority remains OFF, and no real-charge authorization exists.
 - Local editor support is intentionally narrow: `solvelsp` now supports parser-backed diagnostics, symbols, definition, hover, highlights, completion, and semantic tokens for didOpen-cached documents (#503/#510/#512/#518/#521/#526/#529). The opt-in VS Code package (#515/#516) defaults executable launch settings to false. Incremental sync, workspace indexing, execution, and network access remain unsupported.
 - The language now includes deterministic `fmt`, `lint`, `check`, loop control, and pure helpers including `keys`, `values`, `entries`, and `is_empty` (#482/#485/#488/#492/#517/#520/#523/#525/#527/#543), with hardened execution still denying capability-bearing builtins. #577 additionally rejects a symlink final component for root-restricted writes so an allowed-root path cannot redirect an overwrite outside that root.
 - Browser/WASM parity is deliberately deferred behind the pure-core extraction specified in ADR #537; the shared Rust library still exposes host adapters and is not safe to compile as the browser runtime.
@@ -65,7 +65,7 @@ A merged feature is not automatically production-enabled, and production account
 
 ### Production account/API/Admin foundation
 
-Verified production state recorded on 2026-08-19:
+Verified production state recorded through 2026-08-20:
 
 - API access: **enabled**;
 - customer accounts: **enabled**;
@@ -76,9 +76,10 @@ Verified production state recorded on 2026-08-19:
 - private Admin Gateway: **deployed**;
 - `admin.solve-lang.com`: **live behind Cloudflare Access/private ingress**;
 - static Admin UI: **published through a separately approved production publication stage**;
-- optional authenticator-app TOTP implementation: **merged in code**;
-- authenticator-app TOTP production rollout: **disabled / incomplete**;
-- dedicated production TOTP KMS rollout: **not performed in the verified Admin work**;
+- authenticator-app TOTP implementation: **merged in code**;
+- authenticator-app TOTP production infrastructure/feature flag: **deployed and environment-enabled**;
+- dedicated production TOTP KMS foundation: **live and re-verified on 2026-08-20**;
+- specific customer-account authenticator enrollment: **separate account-level state; not established by the 2026-08-20 infrastructure audit**;
 - subscription billing: **disabled**;
 - production billing webhook path: **disabled by feature boundary**;
 - paid priority selection: **disabled**;
@@ -86,7 +87,7 @@ Verified production state recorded on 2026-08-19:
 - real charge authorization: **none**;
 - general managed hosted SolveLang workflow execution: **not live**.
 
-The authoritative production-facing record is `docs/current-production-status-2026-08-19.md`. Facts explicitly marked there as carried forward were not silently re-audited by unrelated repository work.
+The authoritative production-facing record is `docs/current-production-status-2026-08-20.md`. It explicitly supersedes the 2026-08-19 record for the TOTP/KMS/IAM facts re-verified on 2026-08-20 and carries forward no unrelated production claims silently.
 
 ## Product direction
 
@@ -112,7 +113,7 @@ Re-evaluate live state before every run. The current safe order is:
 8. continue language/runtime and developer-experience work, especially the conservative local module/package foundation, semantic quality, pure-core extraction needed for browser parity, diagnostics, and non-executing editor support;
 9. continue safe Admin Panel repository preparation while treating every future live production change as a fresh protected action;
 10. continue dormant customer-priority engineering while queue/customer/provider gates stay OFF unless a separately approved live rollout proves otherwise;
-11. continue TOTP preparation while production TOTP stays OFF;
+11. keep customer-account TOTP enrollment/login/backup-code canaries behind fresh owner approval; do not repeat the already-live IAM/KMS/API TOTP infrastructure rollout merely because older documentation described it as pending;
 12. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
 13. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
 
@@ -153,9 +154,9 @@ Automatic remote remediation execution remains out of scope.
 
 ## Admin and production boundary
 
-The private Admin Gateway, Cloudflare Access/private ingress, static Admin UI, and Admin application password rotation were completed through separately approved production stages on 2026-08-19 and are recorded in `docs/current-production-status-2026-08-19.md`.
+The private Admin Gateway, Cloudflare Access/private ingress, static Admin UI, and Admin application password rotation were completed through separately approved production stages on 2026-08-19. The production TOTP IAM/KMS/API foundation is separately recorded as deployed and environment-enabled in `docs/current-production-status-2026-08-20.md`. Neither record authorizes a new live mutation.
 
-PRs #161, #164, and #169 are merged repository history. Their former merge approvals are historical repository events, not standing authorization for deployment or activation. Any future IAM/KMS change, gateway redeploy, DNS/Access/private-ingress change, Admin publication/update, credential rotation, queue/customer/provider activation, customer-priority activation, TOTP rollout, billing change, or production canary with mutation potential requires fresh explicit owner approval scoped to that action.
+PRs #161, #164, and #169 are merged repository history. Their former merge approvals are historical repository events, not standing authorization for deployment or activation. Any future IAM/KMS change, gateway redeploy, DNS/Access/private-ingress change, Admin publication/update, credential rotation, queue/customer/provider activation, customer-priority activation, TOTP account enrollment or TOTP infrastructure change, billing change, or production canary with mutation potential requires fresh explicit owner approval scoped to that action.
 
 ## Hard safety boundary
 
@@ -165,7 +166,8 @@ Do not automatically:
 - deploy production;
 - change DNS/private ingress/Zero Trust;
 - publish or update the production Admin UI;
-- enable TOTP, customer priority, or billing;
+- enroll/activate authenticator TOTP for a customer account or mutate the live TOTP infrastructure;
+- enable customer priority or billing;
 - use Stripe live or create charges/refunds;
 - send email;
 - mutate production customer/CRM data;
