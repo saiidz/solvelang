@@ -7,6 +7,7 @@ import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
+import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
 import {
   MAX_SOLVE_GRAPH_BYTES,
@@ -269,6 +270,22 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_explain_shortest_path",
+  {
+    title: "Explain shortest Solve Graph path",
+    description: "Find and explain one deterministic bounded shortest dependency or dependent path using safe structural summaries, preserving complete-versus-partial search truth without executing repository code.",
+    inputSchema: solveGraphShortestPathInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, sourceId, targetId, direction, edgeKinds, maxDepth, maxVisited }) => textResult(explainSolveGraphShortestPath(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    sourceId,
+    targetId,
+    { direction, edgeKinds, maxDepth, maxVisited },
+  )),
+);
+
+server.registerTool(
   "solvelang_graph_alternative_paths",
   {
     title: "Find alternative Solve Graph paths",
@@ -320,6 +337,7 @@ server.registerTool(
       "solvelang_graph_dependencies",
       "solvelang_graph_dependents",
       "solvelang_graph_shortest_path",
+      "solvelang_graph_explain_shortest_path",
       "solvelang_graph_alternative_paths",
       "solvelang_graph_impact",
       "solvelang_capabilities",
