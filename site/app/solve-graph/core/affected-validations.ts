@@ -45,7 +45,6 @@ export function createAffectedValidationCandidates(
   if (impact.direction !== "dependents") throw new Error("Solve Graph affected validations require dependent impact evidence.");
   const maxCandidates = boundedMaximum(options.maxCandidates);
   const candidates = impact.entries
-    .filter((entry) => entry.depth > 0)
     .map((entry) => ({ entry, node: index.nodesById.get(entry.id) }))
     .filter((value): value is { entry: SolveGraphTraversalResult["entries"][number]; node: SolveGraphNode } => Boolean(value.node && validationKinds.has(value.node.kind)))
     .sort((left, right) => left.entry.depth - right.entry.depth || compareText(left.entry.rootId, right.entry.rootId) || compareText(left.node.id, right.node.id));
