@@ -25,6 +25,12 @@ type RepositoryAuditVisualExplorerPanelProps = {
 
 type ExplorerKindFilter = RepositoryAuditVisualExplorerNode["kind"] | "all";
 
+type SelectedIntelligenceState = {
+  requestKey: string;
+  product?: RepositorySelectedNodeIntelligence;
+  error?: string;
+};
+
 function visibleNodeLabel(node: RepositoryAuditVisualExplorerNode): string {
   return node.path ?? node.label;
 }
@@ -38,9 +44,7 @@ export function RepositoryAuditVisualExplorerPanel({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<ExplorerKindFilter>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
-  const [selectedIntelligence, setSelectedIntelligence] = useState<RepositorySelectedNodeIntelligence>();
-  const [intelligencePending, setIntelligencePending] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState("");
+  const [intelligenceState, setIntelligenceState] = useState<SelectedIntelligenceState>();
 
   const kinds = useMemo(
     () => [...new Set(explorer.nodes.map((node) => node.kind))].sort(),
@@ -68,18 +72,14 @@ export function RepositoryAuditVisualExplorerPanel({
       maxRows: 40,
     });
   }, [explorer, impactIndex, selectedNodeId]);
+  const intelligenceRequestKey = impactIndex && workflowEvidence && selectedNodeId
+    ? `${explorer.graphId}:${workflowEvidence.graphId}:${selectedNodeId}`
+    : undefined;
 
   useEffect(() => {
+    if (!impactIndex || !workflowEvidence || !selectedNodeId || !intelligenceRequestKey) return;
     let cancelled = false;
-    setSelectedIntelligence(undefined);
-    setIntelligenceError("");
 
-    if (!impactIndex || !workflowEvidence || !selectedNodeId) {
-      setIntelligencePending(false);
-      return () => { cancelled = true; };
-    }
-
-    setIntelligencePending(true);
     void createRepositorySelectedNodeIntelligence(
       explorer,
       impactIndex,
@@ -96,23 +96,28 @@ export function RepositoryAuditVisualExplorerPanel({
       },
     ).then((product) => {
       if (cancelled) return;
-      setSelectedIntelligence(product);
-      setIntelligencePending(false);
+      setIntelligenceState({ requestKey: intelligenceRequestKey, product });
     }).catch((caught: unknown) => {
       if (cancelled) return;
-      setSelectedIntelligence(undefined);
-      setIntelligenceError(caught instanceof Error ? caught.message : "Selected-node intelligence could not be composed.");
-      setIntelligencePending(false);
+      setIntelligenceState({
+        requestKey: intelligenceRequestKey,
+        error: caught instanceof Error ? caught.message : "Selected-node intelligence could not be composed.",
+      });
     });
 
     return () => { cancelled = true; };
-  }, [explorer, impactIndex, selectedNodeId, workflowEvidence]);
+  }, [explorer, impactIndex, intelligenceRequestKey, selectedNodeId, workflowEvidence]);
 
-  const activeIntelligence = selectedIntelligence?.selectedNodeId === selectedNodeId
-    && selectedIntelligence.graphId === explorer.graphId
-    ? selectedIntelligence
+  const activeIntelligenceState = intelligenceRequestKey && intelligenceState?.requestKey === intelligenceRequestKey
+    ? intelligenceState
+    : undefined;
+  const activeIntelligence = activeIntelligenceState?.product?.selectedNodeId === selectedNodeId
+    && activeIntelligenceState.product.graphId === explorer.graphId
+    ? activeIntelligenceState.product
     : undefined;
   const selectedImpactProduct = activeIntelligence?.impact ?? impactProduct;
+  const intelligencePending = Boolean(intelligenceRequestKey && intelligenceState?.requestKey !== intelligenceRequestKey);
+  const intelligenceError = activeIntelligenceState?.error ?? "";
 
   return (
     <section className={`rounded-[2rem] border border-cyan-200 bg-cyan-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
