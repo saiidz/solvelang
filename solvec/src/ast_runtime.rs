@@ -716,6 +716,7 @@ impl AstRuntime {
             "get" => Some(self.get(args, location)),
             "keys" => Some(self.keys(args, location)),
             "values" => Some(self.values(args, location)),
+            "entries" => Some(self.entries(args, location)),
             "json_parse" => {
                 let input = args
                     .first()
@@ -996,6 +997,23 @@ impl AstRuntime {
             value => Err(self.error_at(
                 location,
                 format!("values expects an object value, got {}", value.type_name()),
+                None,
+            )),
+        }
+    }
+
+    fn entries(&mut self, args: &[Expr], location: SourceLocation) -> Result<Value, RuntimeError> {
+        let values = self.evaluate_builtin_arguments("entries", args, 1, 1, location)?;
+        match &values[0] {
+            Value::Object(entries) => Ok(Value::Array(
+                entries
+                    .iter()
+                    .map(|(key, value)| Value::Array(vec![Value::Text(key.clone()), value.clone()]))
+                    .collect(),
+            )),
+            value => Err(self.error_at(
+                location,
+                format!("entries expects an object value, got {}", value.type_name()),
                 None,
             )),
         }
@@ -1408,6 +1426,7 @@ print(get(ticket, "missing", "fallback"))
 print(get(owners, 8, "fallback"))
 print(keys(ticket))
 print(values(ticket))
+print(entries(ticket))
 "#;
         let mut runtime = AstRuntime::with_input(
             ExecutionPolicy::safe(Vec::new()),
@@ -1435,6 +1454,13 @@ print(values(ticket))
                     Value::Text("status".to_string()),
                 ]),
                 Value::Array(vec![Value::Number(2), Value::Text("open".to_string())]),
+                Value::Array(vec![
+                    Value::Array(vec![Value::Text("count".to_string()), Value::Number(2)]),
+                    Value::Array(vec![
+                        Value::Text("status".to_string()),
+                        Value::Text("open".to_string()),
+                    ]),
+                ]),
             ]
         );
     }
@@ -1464,6 +1490,7 @@ print(values(ticket))
             ),
             ("print(keys([1]))", "keys expects an object value"),
             ("print(values([1]))", "values expects an object value"),
+            ("print(entries([1]))", "entries expects an object value"),
             (
                 "print(length(\"one\", \"two\"))",
                 "length expects 1 argument but received 2",
@@ -1475,6 +1502,10 @@ print(values(ticket))
             (
                 "print(values({ one: 1 }, { two: 2 }))",
                 "values expects 1 argument but received 2",
+            ),
+            (
+                "print(entries({ one: 1 }, { two: 2 }))",
+                "entries expects 1 argument but received 2",
             ),
         ] {
             let mut runtime = AstRuntime::with_input(
