@@ -96,11 +96,27 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       }
     },
 
+    async renewLease(jobId, workerId, renewedAt, leaseExpiresAt) {
+      await documentClient.send(new UpdateCommand({
+        TableName: jobsTable,
+        Key: { jobId },
+        UpdateExpression: "SET leaseExpiresAt = :leaseExpiresAt, lastHeartbeatAt = :renewedAt",
+        ConditionExpression: "#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAt",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: {
+          ":processing": "processing",
+          ":workerId": workerId,
+          ":renewedAt": new Date(renewedAt).toISOString(),
+          ":leaseExpiresAt": leaseExpiresAt,
+        },
+      }));
+    },
+
     async releaseJob(jobId, workerId, errorCode, failedAt) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :dispatched, lastErrorCode = :errorCode, lastFailedAt = :failedAt REMOVE workerId, leaseExpiresAt",
+        UpdateExpression: "SET #status = :dispatched, lastErrorCode = :errorCode, lastFailedAt = :failedAt REMOVE workerId, leaseExpiresAt, lastHeartbeatAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
@@ -117,7 +133,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :failed, errorCode = :errorCode, failedAt = :failedAt REMOVE workerId, leaseExpiresAt",
+        UpdateExpression: "SET #status = :failed, errorCode = :errorCode, failedAt = :failedAt REMOVE workerId, leaseExpiresAt, lastHeartbeatAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
@@ -134,7 +150,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET #status = :complete, #result = :result, completedAt = :completedAt REMOVE workerId, leaseExpiresAt, lastErrorCode, lastFailedAt",
+        UpdateExpression: "SET #status = :complete, #result = :result, completedAt = :completedAt REMOVE workerId, leaseExpiresAt, lastHeartbeatAt, lastErrorCode, lastFailedAt",
         ConditionExpression: "#status = :processing AND workerId = :workerId",
         ExpressionAttributeNames: { "#status": "status", "#result": "result" },
         ExpressionAttributeValues: {
