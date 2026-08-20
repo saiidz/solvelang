@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { SolveGraphDocument, SolveGraphEdge, SolveGraphNode } from "./core/contracts";
 import { loadSolveGraphDocumentText, MAX_LOCAL_SOLVE_GRAPH_BYTES } from "./core/document-io";
+import { findLocalUnreachedCandidates } from "./core/unreachable-candidates";
 import { createAffectedValidationCandidates } from "./core/affected-validations";
 import {
   analyzeSolveGraphImpact,
@@ -74,6 +75,7 @@ export default function SolveGraphExplorerApp() {
     if (!loaded || !selected) return { ...emptyTraversal(), direction: "dependents" as const };
     return analyzeSolveGraphImpact(loaded.index, [selected.id], { maxDepth: 4, maxResults: 200 });
   }, [loaded, selected]);
+  const unreached = useMemo(() => !loaded || !selected ? null : findLocalUnreachedCandidates(loaded.index, [selected.id]), [loaded, selected]);
 
   const affectedValidations = useMemo(() => {
     if (!loaded || !selected) return null;
@@ -321,6 +323,7 @@ export default function SolveGraphExplorerApp() {
                     <p className="mt-3 text-xs leading-5 text-slate-500">{affectedValidations.notice}</p>
                   </section>
                 ) : null}
+                {selected && unreached ? <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Structurally unreached candidates</p><p className="mt-2 text-3xl font-semibold text-slate-100">{unreached.candidates.length}</p><p className="mt-1 text-xs leading-5 text-slate-500">From selected local entrypoint · depth 8 / 200 results · panel limit 30.</p><div className="mt-3 max-h-60 space-y-2 overflow-y-auto">{unreached.candidates.map((node) => <button key={node.id} type="button" onClick={() => setSelectedId(node.id)} className="w-full rounded-lg bg-slate-950 p-2.5 text-left hover:bg-slate-800"><span className="block truncate text-xs text-slate-200">{node.label}</span><span className="text-[10px] text-slate-500">{node.kind}</span></button>)}</div><p className="mt-3 text-xs leading-5 text-slate-500">{unreached.notice}</p></section> : null}
 
                 <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Graph identity</p>
