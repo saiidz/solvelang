@@ -413,6 +413,26 @@ fn lint_remaps_warnings_to_imported_source() {
 }
 
 #[test]
+fn imports_report_a_deterministic_root_relative_cycle_chain() {
+    let root = create_temp_workflow_dir("solvelang_import_cycle_chain");
+    let nested = root.join("nested");
+    fs::create_dir_all(&nested).expect("failed to create nested workflow directory");
+    let entry = root.join("entry.solve");
+    let first = nested.join("first.solve");
+    let second = nested.join("second.solve");
+    fs::write(&entry, "import \"nested/first.solve\"\n").expect("failed to write entry");
+    fs::write(&first, "import \"second.solve\"\n").expect("failed to write first import");
+    fs::write(&second, "import \"first.solve\"\n").expect("failed to write second import");
+
+    let stderr = run_solvec_error(&["validate", entry.to_str().unwrap()]);
+
+    assert!(stderr.contains(
+        "circular import detected: nested/first.solve -> nested/second.solve -> nested/first.solve"
+    ));
+    assert!(!stderr.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);

@@ -854,13 +854,13 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
-    let mut visited = HashSet::new();
+    let mut import_stack = Vec::new();
     load_file_recursive(
         &entry,
         &source_root,
         &entry_path,
         hardened,
-        &mut visited,
+        &mut import_stack,
         true,
     )
 }
@@ -870,17 +870,23 @@ fn load_file_recursive(
     source_root: &Path,
     entry_path: &str,
     hardened: bool,
-    visited: &mut HashSet<PathBuf>,
+    import_stack: &mut Vec<PathBuf>,
     is_entry: bool,
 ) -> Result<LoadedSource, CliFailure> {
-    if !visited.insert(canonical.to_path_buf()) {
-        let message = format!("circular import detected for '{}'", canonical.display());
+    if let Some(cycle_start) = import_stack.iter().position(|path| path == canonical) {
+        let mut cycle = import_stack[cycle_start..]
+            .iter()
+            .map(|path| relative_source_path(path, source_root))
+            .collect::<Vec<_>>();
+        cycle.push(relative_source_path(canonical, source_root));
+        let message = format!("circular import detected: {}", cycle.join(" -> "));
         return Err(if hardened && !is_entry {
             CliFailure::import(message)
         } else {
             CliFailure::source(message)
         });
     }
+    import_stack.push(canonical.to_path_buf());
 
     let content = fs::read_to_string(canonical).map_err(|error| {
         let message = format!("failed to read '{}': {}", canonical.display(), error);
@@ -902,8 +908,14 @@ fn load_file_recursive(
         if let Some(import_path) = parse_import_line(trimmed) {
             let imported = resolve_import(parent, source_root, import_path, hardened)?;
             let imported_path = relative_source_path(&imported, source_root);
-            let imported_source =
-                load_file_recursive(&imported, source_root, entry_path, hardened, visited, false)?;
+            let imported_source = load_file_recursive(
+                &imported,
+                source_root,
+                entry_path,
+                hardened,
+                import_stack,
+                false,
+            )?;
             if imported_source.content.is_empty() {
                 output.push_line(&imported_path, 1, "");
             } else {
@@ -914,7 +926,7 @@ fn load_file_recursive(
         }
     }
 
-    visited.remove(canonical);
+    import_stack.pop();
     Ok(output)
 }
 
