@@ -101,6 +101,45 @@ test("scheduled-job relationship findings preserve deterministic partial-scan tr
   assert.equal(JSON.stringify(partial).includes("private-api"), false);
 });
 
+test("partially materialized multi-target fanout remains visible when two relationships were emitted", () => {
+  const input: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-20T20:40:00.000Z",
+    host: { hostname: "audit-host" },
+    services: [{ name: "private-api.service", state: "active" }],
+    processes: [
+      { pid: 10, ppid: 1, uid: 1000, state: "S", name: "private-api" },
+      { pid: 20, ppid: 1, uid: 1000, state: "S", name: "private-worker" },
+    ],
+    scheduledJobs: [{
+      source: "cron:/private/fanout",
+      commandSummary: "private-api.service private-api private-worker",
+    }],
+    metadata: { redactionsApplied: true },
+  };
+
+  const findings = createServerAuditScheduledJobRelationshipFindings(input, { maxRelationships: 2 });
+  const coverage = findings.find(
+    (finding) => finding.title === "Some multi-target scheduled-job mappings are not fully materialized",
+  );
+
+  assert.ok(coverage);
+  assert.deepEqual(coverage.evidence, [
+    { source: "scheduledJobRelationships.summary.jobsWithMultipleRelationships", summary: "1" },
+    { source: "scheduledJobRelationships.output.emittedMultiTargetJobs", summary: "1" },
+    {
+      source: "scheduledJobRelationships.summary.jobsWithPartiallyMaterializedMultipleRelationships",
+      summary: "1",
+    },
+  ]);
+  assert.match(coverage.summary, /1 multi-target record\(s\) had observed fanout/);
+
+  const serialized = JSON.stringify(coverage);
+  for (const sensitive of ["private-api", "private-worker", "cron:/private/fanout"]) {
+    assert.equal(serialized.includes(sensitive), false);
+  }
+});
+
 test("scheduled-job relationship findings are deterministic", () => {
   const first = createServerAuditScheduledJobRelationshipFindings(snapshot());
   const second = createServerAuditScheduledJobRelationshipFindings(structuredClone(snapshot()));
