@@ -383,6 +383,25 @@ fn check_remaps_semantic_diagnostics_to_imported_source() {
 }
 
 #[test]
+fn check_reports_nested_import_diagnostics_with_root_relative_provenance() {
+    let root = create_temp_workflow_dir("solvelang_nested_import_provenance");
+    let nested = root.join("nested");
+    fs::create_dir_all(&nested).expect("failed to create nested import directory");
+    let entry = root.join("entry.solve");
+    let first = nested.join("first.solve");
+    let second = nested.join("second.solve");
+    fs::write(&entry, "import \"nested/first.solve\"\n").expect("failed to write entry");
+    fs::write(&first, "import \"second.solve\"\n").expect("failed to write first import");
+    fs::write(&second, "print(missing)\n").expect("failed to write nested import");
+
+    let stderr = run_solvec_error(&["check", entry.to_str().unwrap()]);
+
+    assert!(stderr.contains("SolveLang Error on line 1, column 7 in nested/second.solve"));
+    assert!(stderr.contains("unknown variable 'missing'"));
+    assert!(!stderr.contains(root.to_string_lossy().as_ref()));
+}
+
+#[test]
 fn lint_reports_source_located_warnings_without_execution() {
     let file = write_temp_solve_file(
         "solvelang_cli_lint_warnings.solve",
