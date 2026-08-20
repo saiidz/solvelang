@@ -82,6 +82,23 @@ test("rejects self-consistent impact artifacts whose traversal evidence is inval
   );
 });
 
+test("rejects self-consistent artifacts that omit default-scope reachable dependents", async () => {
+  const { index, root } = await fixture();
+  const query = analyzeSolveGraphImpact(index, [root.id]);
+  const download = await createSolveGraphImpactDownload("fixture repo", index, query);
+  const incomplete = JSON.parse(download.content) as Record<string, unknown>;
+  const incompleteQuery = incomplete.query as { roots: string[]; entries: Array<{ id: string }>; truncated: boolean; truncationReason?: string };
+  incompleteQuery.entries = incompleteQuery.entries.filter((entry) => entry.id === root.id);
+  incompleteQuery.truncated = false;
+  delete incompleteQuery.truncationReason;
+  await resign(incomplete);
+
+  await assert.rejects(
+    verifySolveGraphImpactArtifact(index, incomplete),
+    /canonical default impact traversal/,
+  );
+});
+
 test("rejects traversal edges outside the default impact scope", async () => {
   const root = await createSolveGraphNode({
     kind: "file",
