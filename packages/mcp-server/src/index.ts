@@ -7,6 +7,7 @@ import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
+import { findSolveGraphCycles } from "./solve-graph-cycles.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { explainSolveGraphShortestPath } from "./solve-graph-shortest-path-explanation.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
@@ -95,6 +96,13 @@ const solveGraphImpactExplanationInputSchema = z.object({
   maxDepth: z.number().int().min(0).max(64).optional(),
   maxResults: z.number().int().min(1).max(10_000).optional(),
   maxRows: z.number().int().min(1).max(256).optional(),
+}).superRefine(requireExactlyOneInput);
+
+const solveGraphCyclesInputSchema = z.object({
+  ...solveGraphInputFields,
+  edgeKinds: z.array(z.enum(solveGraphEdgeKinds)).max(solveGraphEdgeKinds.length).optional(),
+  maxComponents: z.number().int().min(1).max(100).optional(),
+  maxNodesPerComponent: z.number().int().min(1).max(100).optional(),
 }).superRefine(requireExactlyOneInput);
 
 const solveGraphShortestPathInputSchema = z.object({
@@ -357,6 +365,20 @@ server.registerTool(
 );
 
 server.registerTool(
+  "solvelang_graph_cycles",
+  {
+    title: "Find Solve Graph cycles",
+    description: "Find deterministic bounded strongly connected components and representative directed cycles in an integrity-valid analyze-only Solve Graph. Cycles are structural evidence, not automatic defects.",
+    inputSchema: solveGraphCyclesInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ path: inputPath, rawJson, edgeKinds, maxComponents, maxNodesPerComponent }) => textResult(findSolveGraphCycles(
+    await readSolveGraphInput({ path: inputPath, rawJson }),
+    { edgeKinds, maxComponents, maxNodesPerComponent },
+  )),
+);
+
+server.registerTool(
   "solvelang_capabilities",
   {
     title: "List SolveLang capabilities",
@@ -383,6 +405,7 @@ server.registerTool(
       "solvelang_graph_explain_alternative_paths",
       "solvelang_graph_impact",
       "solvelang_graph_explain_impact",
+      "solvelang_graph_cycles",
       "solvelang_capabilities",
     ],
     privacy: [
