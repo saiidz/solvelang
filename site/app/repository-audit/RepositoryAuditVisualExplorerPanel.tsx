@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { SolveGraphQueryIndex } from "../solve-graph/core/query-impact";
 import { RepositoryAuditAffectedValidationPanel } from "./RepositoryAuditAffectedValidationPanel";
 import { RepositoryAuditImpactExplanationPanel } from "./RepositoryAuditImpactExplanationPanel";
+import { createRepositorySelectedNodeIntelligence } from "./core/selectedNodeIntelligence";
 import {
-  createRepositorySelectedNodeIntelligence,
-  type RepositorySelectedNodeIntelligence,
-} from "./core/selectedNodeIntelligence";
+  createRepositorySelectedNodeIntelligenceRequestKey,
+  resolveRepositorySelectedNodeIntelligenceViewState,
+  type RepositorySelectedNodeIntelligenceRequestState,
+} from "./core/selectedNodeIntelligenceController";
 import type {
   RepositoryAuditVisualExplorer,
   RepositoryAuditVisualExplorerNode,
@@ -25,12 +27,6 @@ type RepositoryAuditVisualExplorerPanelProps = {
 
 type ExplorerKindFilter = RepositoryAuditVisualExplorerNode["kind"] | "all";
 
-type SelectedIntelligenceState = {
-  requestKey: string;
-  product?: RepositorySelectedNodeIntelligence;
-  error?: string;
-};
-
 function visibleNodeLabel(node: RepositoryAuditVisualExplorerNode): string {
   return node.path ?? node.label;
 }
@@ -44,7 +40,7 @@ export function RepositoryAuditVisualExplorerPanel({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<ExplorerKindFilter>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
-  const [intelligenceState, setIntelligenceState] = useState<SelectedIntelligenceState>();
+  const [intelligenceState, setIntelligenceState] = useState<RepositorySelectedNodeIntelligenceRequestState>();
 
   const kinds = useMemo(
     () => [...new Set(explorer.nodes.map((node) => node.kind))].sort(),
@@ -72,8 +68,12 @@ export function RepositoryAuditVisualExplorerPanel({
       maxRows: 40,
     });
   }, [explorer, impactIndex, selectedNodeId]);
-  const intelligenceRequestKey = impactIndex && workflowEvidence && selectedNodeId
-    ? `${explorer.graphId}:${workflowEvidence.graphId}:${selectedNodeId}`
+  const intelligenceRequestKey = impactIndex
+    ? createRepositorySelectedNodeIntelligenceRequestKey(
+      explorer.graphId,
+      workflowEvidence?.graphId,
+      selectedNodeId,
+    )
     : undefined;
 
   useEffect(() => {
@@ -108,18 +108,16 @@ export function RepositoryAuditVisualExplorerPanel({
     return () => { cancelled = true; };
   }, [explorer, impactIndex, intelligenceRequestKey, selectedNodeId, workflowEvidence]);
 
-  const activeIntelligenceState = intelligenceRequestKey && intelligenceState?.requestKey === intelligenceRequestKey
-    ? intelligenceState
-    : undefined;
-  const activeProduct = activeIntelligenceState?.product;
-  const activeIntelligence = activeProduct
-    && activeProduct.selectedNodeId === selectedNodeId
-    && activeProduct.graphId === explorer.graphId
-    ? activeProduct
-    : undefined;
+  const intelligenceView = resolveRepositorySelectedNodeIntelligenceViewState(
+    explorer.graphId,
+    selectedNodeId,
+    intelligenceRequestKey,
+    intelligenceState,
+  );
+  const activeIntelligence = intelligenceView.product;
   const selectedImpactProduct = activeIntelligence?.impact ?? impactProduct;
-  const intelligencePending = Boolean(intelligenceRequestKey && intelligenceState?.requestKey !== intelligenceRequestKey);
-  const intelligenceError = activeIntelligenceState?.error ?? "";
+  const intelligencePending = intelligenceView.pending;
+  const intelligenceError = intelligenceView.error;
 
   return (
     <section className={`rounded-[2rem] border border-cyan-200 bg-cyan-50 p-6 shadow-sm sm:p-8 ${className}`.trim()}>
