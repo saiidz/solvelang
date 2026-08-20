@@ -31,6 +31,7 @@ No global install or SolveLang repository clone is required. For `.solve` valida
 - `solvelang_graph_affected_validations` — finds bounded structural test, workflow, and job candidates among a changed node's transitive dependents, with query-versus-presentation truncation truth.
 - `solvelang_graph_cycles` — finds bounded deterministic strongly connected components and representative directed cycles; a cycle is structural evidence, not automatically a defect.
 - `solvelang_graph_hotspots` — ranks bounded structural hotspot candidates by direct and transitive dependents without claiming runtime criticality.
+- `solvelang_graph_entrypoint_candidates` — finds bounded structural route, workflow, job, and `exposes`-related entrypoint candidates without claiming runtime reachability or public exposure.
 - `solvelang_graph_security_summary` — returns bounded structural permission, resource, route, and relationship candidates; it is not a security audit.
 - `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
 
