@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { SolveGraphDocument, SolveGraphEdge, SolveGraphNode } from "./core/contracts";
 import { loadSolveGraphDocumentText, MAX_LOCAL_SOLVE_GRAPH_BYTES } from "./core/document-io";
+import { createAffectedValidationCandidates } from "./core/affected-validations";
 import {
   analyzeSolveGraphImpact,
   findSolveGraphNodes,
@@ -73,6 +74,11 @@ export default function SolveGraphExplorerApp() {
     if (!loaded || !selected) return { ...emptyTraversal(), direction: "dependents" as const };
     return analyzeSolveGraphImpact(loaded.index, [selected.id], { maxDepth: 4, maxResults: 200 });
   }, [loaded, selected]);
+
+  const affectedValidations = useMemo(() => {
+    if (!loaded || !selected) return null;
+    return createAffectedValidationCandidates(loaded.index, impact);
+  }, [loaded, selected, impact]);
 
   const neighborNodes = useMemo(() => {
     if (!loaded || !selected) return [];
@@ -288,6 +294,31 @@ export default function SolveGraphExplorerApp() {
                         ) : null;
                       })}
                     </div>
+                  </section>
+                ) : null}
+
+                {selected && affectedValidations ? (
+                  <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Affected validation candidates</p>
+                      {affectedValidations.queryTruncated || affectedValidations.presentationTruncated ? <span className="text-[10px] font-semibold uppercase text-amber-300">Partial</span> : null}
+                    </div>
+                    <p className="mt-2 text-3xl font-semibold text-slate-100">{affectedValidations.summary.returnedCandidates}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">Tests, workflows, and jobs found within the impact view (depth 4 / 200 results; panel limit 30).</p>
+                    {affectedValidations.candidates.length > 0 ? (
+                      <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
+                        {affectedValidations.candidates.map((candidate) => {
+                          const edge = candidate.viaEdgeId ? loaded.document.edges.find((item) => item.id === candidate.viaEdgeId) : undefined;
+                          return (
+                            <button key={candidate.node.id} type="button" onClick={() => setSelectedId(candidate.node.id)} className="w-full rounded-lg bg-slate-950 p-2.5 text-left hover:bg-slate-800">
+                              <span className="flex items-center justify-between gap-2"><span className="truncate text-xs text-slate-200">{candidate.node.label}</span><span className="rounded bg-slate-800 px-1.5 py-0.5 text-[9px] uppercase text-slate-400">{candidate.node.kind}</span></span>
+                              <span className="mt-1 block text-[10px] text-slate-500">depth {candidate.depth} · {relationLabel(edge)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : <p className="mt-3 text-xs leading-5 text-slate-500">No validation candidates were found within this complete or bounded local impact view.</p>}
+                    <p className="mt-3 text-xs leading-5 text-slate-500">{affectedValidations.notice}</p>
                   </section>
                 ) : null}
 
