@@ -96,3 +96,20 @@ test("explicit observed safe values do not create risk or coverage findings", ()
   }
   assert.equal(findings.some((finding) => finding.title === "Security posture probes are inconclusive"), false);
 });
+
+test("SSH and firewall state parsing does not accept merely similar inactive values as safe", () => {
+  const findings = analyzeServerSnapshot(snapshot({
+    firewall: "not running",
+    automaticUpdates: "enabled",
+    rootSshLogin: "disabled",
+    passwordSshLogin: "off",
+    selinux: "enforcing",
+    apparmor: "enabled",
+  }));
+
+  assert.equal(findings.some((finding) => finding.title === "Host firewall not reported active"), true);
+  assert.equal(findings.some((finding) => finding.title === "Root SSH login is not disabled"), true);
+  assert.equal(findings.some((finding) => finding.title === "SSH password authentication remains enabled"), true);
+  assert.equal(findings.some((finding) => finding.title === "Automatic security updates not confirmed"), false);
+  assert.equal(findings.some((finding) => finding.title === "Security posture probes are inconclusive"), false);
+});
