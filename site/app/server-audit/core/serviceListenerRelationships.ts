@@ -3,6 +3,7 @@ import type { ServerAuditSnapshot } from "./types";
 const MAX_SOURCES_PER_RELATIONSHIP = 32;
 const MAX_ATTRIBUTION_LABEL_BYTES = 128;
 const encoder = new TextEncoder();
+const STABLE_ID_SEPARATOR = "\u001f";
 
 export type ServerAuditServiceListenerRelationshipKind = "service-listener" | "ambiguous-service-listener";
 
@@ -70,26 +71,59 @@ function serviceProcessToken(name: string): string | undefined {
   return normalizedAttributionLabel(token);
 }
 
-function stableId(kind: ServerAuditServiceListenerRelationshipKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
+function updateStableHash(hash: number, value: string): number {
+  let next = hash;
+  for (let index = 0; index < value.length; index += 1) {
+    next ^= value.charCodeAt(index);
+    next = Math.imul(next, 16777619) >>> 0;
   }
+  return next;
+}
+
+function stableAttributionId(
+  kind: ServerAuditServiceListenerRelationshipKind,
+  serviceIndex: number,
+  listenerIndex: number,
+  processIndexes: number[],
+): string {
+  let hash = 2166136261;
+  const updateSource = (source: string, withSeparator: boolean) => {
+    if (withSeparator) hash = updateStableHash(hash, STABLE_ID_SEPARATOR);
+    hash = updateStableHash(hash, source);
+  };
+
+  updateSource(kind, false);
+  updateSource(`services[${serviceIndex}]`, true);
+  updateSource(`listeningSockets[${listenerIndex}]`, true);
+  processIndexes.forEach((index) => updateSource(`processes[${index}]`, true));
+
   return `server-service-listener:${hash.toString(16).padStart(8, "0")}`;
 }
 
 function relationship(
   kind: ServerAuditServiceListenerRelationshipKind,
-  allSources: string[],
+  serviceIndex: number,
+  listenerIndex: number,
+  processIndexes: number[],
 ): ServerAuditServiceListenerRelationship {
-  const truncated = allSources.length > MAX_SOURCES_PER_RELATIONSHIP;
-  const sources = truncated
-    ? [...allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP - 1), allSources[allSources.length - 1]]
-    : allSources;
+  const serviceSource = `services[${serviceIndex}]`;
+  const listenerSource = `listeningSockets[${listenerIndex}]`;
+  const totalSources = 2 + processIndexes.length;
+  const truncated = totalSources > MAX_SOURCES_PER_RELATIONSHIP;
+  const sources = [serviceSource, listenerSource];
+
+  if (truncated) {
+    const processPrefixLength = MAX_SOURCES_PER_RELATIONSHIP - 3;
+    for (let index = 0; index < processPrefixLength; index += 1) {
+      sources.push(`processes[${processIndexes[index]}]`);
+    }
+    sources.push(`processes[${processIndexes[processIndexes.length - 1]}]`);
+  } else {
+    processIndexes.forEach((index) => sources.push(`processes[${index}]`));
+  }
+
   return {
-    id: stableId(kind, allSources),
+    id: stableAttributionId(kind, serviceIndex, listenerIndex, processIndexes),
     kind,
     sources,
     ...(truncated ? { sourcesTruncated: true as const } : {}),
@@ -179,12 +213,7 @@ export function analyzeServerAuditServiceListenerRelationships(
     const remaining = maxRelationships - relationships.length;
     if (remaining <= 0) return;
     for (let offset = 0; offset < Math.min(remaining, serviceIndexes.length); offset += 1) {
-      const serviceIndex = serviceIndexes[offset];
-      relationships.push(relationship(kind, [
-        `services[${serviceIndex}]`,
-        `listeningSockets[${listenerIndex}]`,
-        ...processIndexes.map((index) => `processes[${index}]`),
-      ]));
+      relationships.push(relationship(kind, serviceIndexes[offset], listenerIndex, processIndexes));
     }
   });
 
