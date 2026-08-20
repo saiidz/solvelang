@@ -21,6 +21,7 @@ import { createServerAuditProcessFindings } from "./processFindings";
 import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
+import { createServerAuditScheduledJobRelationshipFindings } from "./scheduledJobRelationshipFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
@@ -126,6 +127,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
     ...createServerAuditScheduledJobCoverageFindings(snapshot),
+    ...createServerAuditScheduledJobRelationshipFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditServiceListenerRelationshipFindings(snapshot),
     ...createServerAuditServiceProcessRelationshipFindings(snapshot),
@@ -181,6 +183,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Process-coverage findings report only an explicit empty process inventory; because the reviewed collector maps failed/unavailable fixed `ps` execution or empty usable output to an empty array, they do not prove that the host has no processes or that process collection was complete or authoritative.",
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
       "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
+      "Scheduled-job relationship findings use only bounded exact-name-token matches over supplied sanitized command summaries and service/process names; multi-target, unresolved, oversized, or truncated results are completeness/integrity signals and do not prove command execution, ownership, job validity, runtime health, or collector authority.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Service-listener relationship findings use only conservative exact static-label matches across supplied service, process, and listener records; ambiguous, unresolved, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, exposure, runtime health, or collector authority.",
       "Service-process relationship findings use only conservative exact static-label matches across supplied service and process records; grouped, unmatched, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, process identity, runtime health, or collector authority.",
