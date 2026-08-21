@@ -46,8 +46,8 @@ test("process state coverage treats normalized non-empty states as usable withou
   ])), []);
 });
 
-test("process state coverage output is deterministic and bounded", () => {
-  const processes = Array.from({ length: 105 }, (_, index) => ({
+test("process state coverage retention stays bounded across 5,000 unusable states", () => {
+  const processes = Array.from({ length: 5_000 }, (_, index) => ({
     pid: index + 1,
     ppid: 0,
     uid: 1000,
@@ -61,11 +61,15 @@ test("process state coverage output is deterministic and bounded", () => {
   assert.equal(first.length, 100);
   const stateFindings = first.filter((finding) => finding.title === "Process record lacks usable state evidence");
   assert.equal(stateFindings.length, 99);
-  assert.equal(first.filter((finding) => finding.title === "Process state coverage findings were truncated").length, 1);
+  const limitation = first.find((finding) => finding.title === "Process state coverage findings were truncated");
+  assert.match(limitation?.summary ?? "", /produced 5000 findings/);
+  assert.match(limitation?.summary ?? "", /first 99 deterministic findings/);
+  assert.equal(limitation?.evidence[0]?.source, "processes");
+  assert.equal(limitation?.evidence[0]?.summary, "finding limit 100 reached");
   const structuralSources = stateFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^processes\[\d+\]\.state$/.test(source)), true);
-  assert.equal(JSON.stringify(first).includes("private-process-104"), false);
+  assert.equal(JSON.stringify(first).includes("private-process-4999"), false);
 });
 
 test("process state coverage emits no finding for absent or explicitly empty process evidence", () => {
