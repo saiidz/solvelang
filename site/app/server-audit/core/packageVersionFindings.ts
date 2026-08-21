@@ -39,6 +39,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditPackageVersionFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditPackageVersionFindingOptions = {},
@@ -47,9 +73,22 @@ export function createServerAuditPackageVersionFindings(
   const packages = snapshot.packages;
   if (packages === undefined) return [];
 
-  const candidates: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
+
   if (packages.length === 0) {
-    candidates.push({
+    recordFinding({
       id: stableId(["package-version-evidence", "empty-inventory"]),
       severity: "info",
       category: "coverage",
@@ -67,7 +106,7 @@ export function createServerAuditPackageVersionFindings(
     if (!missing && !nonSpecific) return;
 
     const kind = missing ? "missing" : "non-specific";
-    candidates.push({
+    recordFinding({
       id: stableId(["package-version-evidence", kind, String(index)]),
       severity: "info",
       category: "version-evidence",
@@ -85,16 +124,16 @@ export function createServerAuditPackageVersionFindings(
     });
   });
 
-  candidates.sort(compareFinding);
-  if (candidates.length <= maxFindings) return candidates;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = candidates.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["package-version-evidence", "findings-truncated", String(maxFindings), String(candidates.length)]),
+    id: stableId(["package-version-evidence", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Package-version evidence findings were truncated",
-    summary: `The package-version evidence stage produced ${candidates.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The package-version evidence stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from package-version evidence.",
     evidence: [{ source: "packages", summary: `finding limit ${maxFindings} reached` }],
   });
