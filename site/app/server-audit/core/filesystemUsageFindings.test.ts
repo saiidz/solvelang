@@ -54,6 +54,25 @@ test("filesystem usage findings are deterministic and bound high-cardinality evi
   assert.ok(first.every((finding) => /^srv_[a-f0-9]{8}$/.test(finding.id)));
 });
 
+test("filesystem usage retention stays bounded across a 5,000-record critical inventory", () => {
+  const filesystems = Array.from({ length: 5_000 }, (_, index) => ({
+    mount: `/private-${index}`,
+    usagePercent: 95,
+  }));
+  const input = snapshot(filesystems);
+  const first = createServerAuditFilesystemUsageFindings(input);
+  const second = createServerAuditFilesystemUsageFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  assert.equal(first.filter((finding) => finding.title === "Filesystem critically full").length, 99);
+  const limitation = first.find((finding) => finding.title === "Filesystem usage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("/private-"), false);
+});
+
 test("filesystem usage findings ignore missing and sub-threshold utilization", () => {
   assert.deepEqual(createServerAuditFilesystemUsageFindings(snapshot([
     { mount: "/private-missing" },
