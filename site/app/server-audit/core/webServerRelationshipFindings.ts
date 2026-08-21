@@ -75,7 +75,17 @@ export function createServerAuditWebServerRelationshipFindings(
 
   const services = snapshot.services;
   const packages = snapshot.packages;
-  const findings: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    retainedFindings.push(finding);
+    retainedFindings.sort(compareFinding);
+    if (retainedFindings.length > maxFindings) {
+      retainedFindings.pop();
+    }
+  };
 
   for (const [index, rawServer] of reportedServers.entries()) {
     const normalized = rawServer.trim().toLowerCase();
@@ -83,11 +93,26 @@ export function createServerAuditWebServerRelationshipFindings(
     const server = normalized as KnownWebServer;
 
     if (services !== undefined) {
-      const matchingServices = services
-        .map((service, serviceIndex) => ({ service, serviceIndex }))
-        .filter(({ service }) => serviceMatches(server, service.name));
-      if (matchingServices.length === 0) {
-        findings.push({
+      let matchingServiceObserved = false;
+      for (const [serviceIndex, service] of services.entries()) {
+        if (!serviceMatches(server, service.name)) continue;
+        matchingServiceObserved = true;
+        if (!/failed|dead|inactive|error/i.test(service.state)) continue;
+        recordFinding({
+          id: stableId(["web-server", server, "service-state-conflict", String(index), String(serviceIndex)]),
+          severity: "medium",
+          category: "evidence-integrity",
+          title: "Web-server probes disagree on service health",
+          summary: `${server} is reported active by the web-server probe while the matching service record reports a non-healthy state. This is contradictory point-in-time evidence, not proof that either source is authoritative.`,
+          recommendation: "Re-collect the service and web-server probes together before taking operational action, then inspect bounded status/log evidence if the contradiction persists.",
+          evidence: [
+            { source: `web.servers[${index}]`, summary: `${server} reported active` },
+            { source: `services[${serviceIndex}].state`, summary: "matching service reports non-healthy state" },
+          ],
+        });
+      }
+      if (!matchingServiceObserved) {
+        recordFinding({
           id: stableId(["web-server", server, "service-not-observed", String(index)]),
           severity: "info",
           category: "evidence-integrity",
@@ -96,27 +121,11 @@ export function createServerAuditWebServerRelationshipFindings(
           recommendation: "Re-collect web-server and service evidence from the same reviewed snapshot before relying on service-manager ownership or health conclusions.",
           evidence: [{ source: `web.servers[${index}]`, summary: `${server} reported active; matching service not observed` }],
         });
-      } else {
-        for (const { service, serviceIndex } of matchingServices) {
-          if (!/failed|dead|inactive|error/i.test(service.state)) continue;
-          findings.push({
-            id: stableId(["web-server", server, "service-state-conflict", String(index), String(serviceIndex)]),
-            severity: "medium",
-            category: "evidence-integrity",
-            title: "Web-server probes disagree on service health",
-            summary: `${server} is reported active by the web-server probe while the matching service record reports a non-healthy state. This is contradictory point-in-time evidence, not proof that either source is authoritative.`,
-            recommendation: "Re-collect the service and web-server probes together before taking operational action, then inspect bounded status/log evidence if the contradiction persists.",
-            evidence: [
-              { source: `web.servers[${index}]`, summary: `${server} reported active` },
-              { source: `services[${serviceIndex}].state`, summary: "matching service reports non-healthy state" },
-            ],
-          });
-        }
       }
     }
 
     if (packages !== undefined && !packages.some((entry) => packageMatches(server, entry.name))) {
-      findings.push({
+      recordFinding({
         id: stableId(["web-server", server, "package-not-observed", String(index)]),
         severity: "info",
         category: "evidence-integrity",
@@ -128,16 +137,15 @@ export function createServerAuditWebServerRelationshipFindings(
     }
   }
 
-  findings.sort(compareFinding);
-  if (findings.length <= maxFindings) return findings;
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = findings.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["web-server", "findings-truncated", String(maxFindings), String(findings.length)]),
+    id: stableId(["web-server", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Web-server relationship findings were truncated",
-    summary: `The web-server relationship stage produced ${findings.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The web-server relationship stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from web-server relationship evidence.",
     evidence: [{ source: "web.servers", summary: `finding limit ${maxFindings} reached` }],
   });
