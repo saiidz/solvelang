@@ -1,4 +1,4 @@
-const FULL_SECRET_ARN = /^arn:(aws|aws-us-gov|aws-cn):secretsmanager:([a-z0-9-]+):([0-9]{12}):secret:([A-Za-z0-9/_+=.@-]{1,512})-([A-Za-z0-9]{6})$/;
+const FULL_SECRET_ARN = /^arn:aws:secretsmanager:([a-z0-9-]+):([0-9]{12}):secret:([A-Za-z0-9/_+=.@-]{1,512})-([A-Za-z0-9]{6})$/;
 const PRODUCTION_SECRET_PREFIX = "solvelang/priority/production/";
 const MAX_SECRET_BYTES = 64 * 1024;
 
@@ -24,12 +24,12 @@ export function parseCustomerPriorityProviderSecretArn(secretArn, { region, acco
   }
   const match = FULL_SECRET_ARN.exec(secretArn);
   if (!match) {
-    throw new Error("Priority provider secret ARN must be a complete Secrets Manager ARN.");
+    throw new Error("Priority provider secret ARN must be a complete production Secrets Manager ARN.");
   }
 
   const expectedRegion = cleanExpectedRegion(region);
   const expectedAccountId = cleanExpectedAccountId(accountId);
-  const [, , secretRegion, secretAccountId, secretName] = match;
+  const [, secretRegion, secretAccountId, secretName] = match;
 
   if (!secretName.startsWith(PRODUCTION_SECRET_PREFIX)) {
     throw new Error("Priority provider secret must use the production priority namespace.");
