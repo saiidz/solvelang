@@ -13,7 +13,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
   if (!documentClient) throw new Error("DynamoDB document client is required.");
   required(jobsTable, "Priority jobs table");
 
-  async function readJob(jobId) {
+  async function readRecord(jobId) {
     const response = await documentClient.send(new GetCommand({
       TableName: jobsTable,
       Key: { jobId },
@@ -37,7 +37,72 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       }
     },
 
-    getJob: readJob,
+    getJob: readRecord,
+
+    async putRequestMarker(marker) {
+      try {
+        await documentClient.send(new PutCommand({
+          TableName: jobsTable,
+          Item: marker,
+          ConditionExpression: "attribute_not_exists(jobId)",
+        }));
+        return "created";
+      } catch (error) {
+        if (conditional(error)) return "exists";
+        throw error;
+      }
+    },
+
+    getRequestMarker: readRecord,
+
+    async markRequestJobReserved(markerId, requestFingerprint, targetJobId) {
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: jobsTable,
+          Key: { jobId: markerId },
+          UpdateExpression: "SET #state = :jobReserved, targetJobId = :targetJobId",
+          ConditionExpression: "recordType = :requestRecord AND requestFingerprint = :requestFingerprint AND (#state = :reserved OR (#state = :jobReserved AND targetJobId = :targetJobId))",
+          ExpressionAttributeNames: { "#state": "state" },
+          ExpressionAttributeValues: {
+            ":requestRecord": "customer_priority_request",
+            ":requestFingerprint": requestFingerprint,
+            ":reserved": "reserved",
+            ":jobReserved": "job_reserved",
+            ":targetJobId": targetJobId,
+          },
+        }));
+        return "updated";
+      } catch (error) {
+        if (conditional(error)) return "conflict";
+        throw error;
+      }
+    },
+
+    async activatePendingJob(jobId, requestFingerprint, usageCommittedAt) {
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: jobsTable,
+          Key: { jobId },
+          UpdateExpression: "SET #status = :queued, usageCommittedAt = :usageCommittedAt",
+          ConditionExpression: "#status = :pendingUsage AND requestFingerprint = :requestFingerprint",
+          ExpressionAttributeNames: { "#status": "status" },
+          ExpressionAttributeValues: {
+            ":pendingUsage": "pending_usage",
+            ":queued": "queued",
+            ":requestFingerprint": requestFingerprint,
+            ":usageCommittedAt": usageCommittedAt,
+          },
+        }));
+        return "updated";
+      } catch (error) {
+        if (!conditional(error)) throw error;
+        const job = await readRecord(jobId);
+        if (job?.requestFingerprint === requestFingerprint && ["queued", "dispatched", "processing", "complete", "failed"].includes(job.status)) {
+          return "already_progressed";
+        }
+        return "conflict";
+      }
+    },
 
     async markDispatched(jobId, queueMessageId, dispatchedAt) {
       try {
@@ -86,7 +151,7 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
         return { status: "claimed", job: response.Attributes };
       } catch (error) {
         if (!conditional(error)) throw error;
-        const job = await readJob(jobId);
+        const job = await readRecord(jobId);
         if (!job || job.priority !== lane) return { status: "invalid" };
         if (job.status === "complete" || job.status === "failed") return { status: "terminal", job };
         if (job.status === "processing" && Number.isSafeInteger(job.leaseExpiresAt) && job.leaseExpiresAt > claimedAt) {
