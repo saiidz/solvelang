@@ -192,12 +192,22 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
     }
   }
 
-  const failedServices = (snapshot.services ?? []).filter((service) => {
-    const tokens = normalize(service.state).split(/\s+/).filter(Boolean);
-    return tokens.includes("failed") || tokens.includes("error");
-  });
-  for (const service of failedServices.slice(0, 50)) {
-    findings.push(finding("medium", "service", "Service is not healthy", `${service.name} reports state ${service.state}.`, "Confirm whether the service is expected to run, then inspect its bounded service status/log evidence before restarting or changing it.", [{ source: service.name, summary: service.state }]));
+  const failedServices = (snapshot.services ?? [])
+    .map((service, index) => ({ service, index }))
+    .filter(({ service }) => {
+      const tokens = normalize(service.state).split(/\s+/).filter(Boolean);
+      return tokens.includes("failed") || tokens.includes("error");
+    });
+  for (const { index } of failedServices.slice(0, 50)) {
+    const source = `services[${index}].state`;
+    findings.push(finding(
+      "medium",
+      "service",
+      "Service is not healthy",
+      `Service evidence at services[${index}] contains an explicit failed or error state token.`,
+      "Confirm whether the service is expected to run, then inspect its bounded service status/log evidence before restarting or changing it.",
+      [{ source, summary: "service state contains explicit failed or error token" }],
+    ));
   }
 
   if (snapshot.metadata?.redactionsApplied !== true) {
