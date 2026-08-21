@@ -20,7 +20,14 @@ test("provider credential reference requires one complete production Secrets Man
       `arn:aws:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:solvelang/priority/production/provider-key`,
       { region: REGION, accountId: ACCOUNT_ID },
     ),
-    /complete Secrets Manager ARN/,
+    /complete production Secrets Manager ARN/,
+  );
+  assert.throws(
+    () => parseCustomerPriorityProviderSecretArn(
+      `arn:aws-cn:secretsmanager:${REGION}:${ACCOUNT_ID}:secret:solvelang/priority/production/provider-key-AbCd12`,
+      { region: REGION, accountId: ACCOUNT_ID },
+    ),
+    /complete production Secrets Manager ARN/,
   );
   assert.throws(
     () => parseCustomerPriorityProviderSecretArn(
