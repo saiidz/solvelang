@@ -1,5 +1,5 @@
 import type { ServerAuditFinding, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
-import { createServerAuditProcessStateCoverageFindings } from "./processStateCoverageFindings";
+import { createServerAuditProcessStateCoverageFinding } from "./processStateCoverageFindings";
 
 export type ServerAuditProcessFindingOptions = {
   maxFindings?: number;
@@ -86,10 +86,6 @@ export function createServerAuditProcessFindings(
     siftWorstFindingDown(retainedFindings);
   };
 
-  for (const finding of createServerAuditProcessStateCoverageFindings(snapshot)) {
-    recordFinding(finding);
-  }
-
   const pids = new Set(processes.map((process) => process.pid));
   const processNames = new Set(processes.map((process) => process.name));
   const indexedProcesses = processes.map((process, index) => ({ process, index }));
@@ -99,6 +95,9 @@ export function createServerAuditProcessFindings(
       || left.process.name.localeCompare(right.process.name)
       || left.index - right.index,
   )) {
+    const stateCoverageFinding = createServerAuditProcessStateCoverageFinding(process, index);
+    if (stateCoverageFinding !== undefined) recordFinding(stateCoverageFinding);
+
     if (/^Z/i.test(process.state)) {
       const source = `processes[${index}].state`;
       recordFinding({
