@@ -78,6 +78,24 @@ test("scheduled-job findings are deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("private-"), false);
 });
 
+test("scheduled-job finding retention stays bounded across 5,000 privacy candidates", () => {
+  const jobs = Array.from({ length: 5_000 }, (_, index) => ({
+    source: `/etc/cron.d/private-${index}`,
+    commandSummary: `secret-command-${index}`,
+  }));
+
+  const findings = createServerAuditScheduledJobFindings(snapshot(jobs), { maxFindings: 1_000 });
+  const limitation = findings.find((finding) => finding.title === "Scheduled-job findings were truncated");
+
+  assert.equal(findings.length, 1_000);
+  assert.equal(findings.filter((finding) => finding.category === "privacy").length, 999);
+  assert.match(limitation?.summary ?? "", /produced 5000 findings/);
+  assert.match(limitation?.summary ?? "", /first 999 deterministic findings/);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("secret-command-4999"), false);
+  assert.equal(serialized.includes("private-4999"), false);
+});
+
 test("scheduled-job option bounds fail closed", () => {
   assert.throws(() => createServerAuditScheduledJobFindings(snapshot([]), { maxFindings: 0 }), /maxFindings/);
   assert.throws(() => createServerAuditScheduledJobFindings(snapshot([]), { maxFindings: 1001 }), /maxFindings/);
