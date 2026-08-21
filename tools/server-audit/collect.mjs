@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import os from "node:os";
 
-const COLLECTOR_VERSION = "0.3.0";
+const COLLECTOR_VERSION = "0.4.0";
 const MAX_OUTPUT = 4 * 1024 * 1024;
 const MAX_ITEMS = 5000;
 const PUBLIC_FILE_MARKERS = [
@@ -109,13 +109,24 @@ function collectProcesses() {
   });
 }
 
+function collectServiceEnablement() {
+  const output = command("systemctl", ["list-unit-files", "--type=service", "--no-legend", "--no-pager"]);
+  if (!output) return new Map();
+  return new Map(output.split("\n").slice(0, MAX_ITEMS).flatMap((line) => {
+    const fields = line.trim().split(/\s+/);
+    if (fields.length < 2 || !fields[0] || !fields[1]) return [];
+    return [[fields[0], fields[1].slice(0, 100)]];
+  }));
+}
+
 function collectServices() {
+  const enablementByName = collectServiceEnablement();
   const output = command("systemctl", ["list-units", "--type=service", "--all", "--no-legend", "--no-pager"]);
   if (!output) return [];
   return output.split("\n").slice(0, 1000).flatMap((line) => {
     const fields = line.trim().split(/\s+/);
     if (fields.length < 4) return [];
-    return [{ name: fields[0], state: `${fields[2]} ${fields[3]}` }];
+    return [{ name: fields[0], state: `${fields[2]} ${fields[3]}`, enabled: enablementByName.get(fields[0]) }];
   });
 }
 
@@ -305,6 +316,7 @@ const snapshot = {
     notes: [
       "Collector runs a fixed read-only command allowlist and accepts no command arguments from user input.",
       "Process inventory contains PID, parent PID, numeric uid, state, and executable comm name only; arguments, command lines, and environment variables are not collected.",
+      "Service inventory combines fixed read-only systemctl runtime and unit-file enablement listings; unmatched units retain unknown enablement evidence.",
       "Sensitive public-file checks record only existence booleans for four fixed marker paths under candidate web roots; file contents are never read.",
       "Environment variables, file contents, database contents, private keys, credentials, process command lines, and cron command bodies are not collected.",
       "Web-root ownership is emitted as numeric uid to avoid unrelated account-directory metadata.",
