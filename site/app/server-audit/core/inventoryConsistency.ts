@@ -54,7 +54,10 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
 }
 
 function stableId(kind: ServerAuditInventoryIssueKind, sources: string[], sourceCount: number): string {
-  const input = `${kind}\u001f${sourceCount}\u001f${sources.join("\u001f")}`;
+  const completeInput = `${kind}\u001f${sources.join("\u001f")}`;
+  const input = sourceCount > sources.length
+    ? `${completeInput}\u001fsources-truncated:${sourceCount}`
+    : completeInput;
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
