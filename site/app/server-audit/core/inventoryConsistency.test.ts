@@ -46,6 +46,9 @@ test("inventory consistency reports conflicting duplicate evidence without raw i
   assert.equal(analysis.execution.networkAccess, false);
   assert.equal(analysis.execution.writeAccess, false);
 
+  const packageIssue = analysis.issues.find((issue) => issue.kind === "conflicting-package-version");
+  assert.equal(packageIssue?.id, "server-inventory:50408c5c");
+
   const serialized = JSON.stringify(analysis.issues);
   assert.equal(serialized.includes("internal-agent"), false);
   assert.equal(serialized.includes("worker.service"), false);
@@ -124,5 +127,45 @@ test("inventory consistency output is deterministic and bounded", () => {
   assert.throws(
     () => analyzeServerAuditInventoryConsistency(snapshot(), { maxIssues: 0 }),
     /inventory maxIssues/,
+  );
+});
+
+test("inventory consistency bounds per-issue structural evidence without losing cardinality truth", () => {
+  const input = snapshot();
+  input.services = [];
+  input.filesystems = [];
+  input.web = { roots: [] };
+  input.packages = Array.from({ length: 200 }, (_, index) => ({
+    name: "private-package",
+    version: index % 2 === 0 ? "1.0.0" : "2.0.0",
+  }));
+
+  const narrow = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 8 });
+  const wider = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 16 });
+  assert.equal(narrow.issues.length, 1);
+  const issue = narrow.issues[0];
+  assert.equal(issue.kind, "conflicting-package-version");
+  assert.equal(issue.id, wider.issues[0].id);
+  assert.equal(issue.sourceCount, 200);
+  assert.equal(issue.sourcesTruncated, true);
+  assert.deepEqual(issue.sources, [
+    "packages[0]",
+    "packages[1]",
+    "packages[2]",
+    "packages[3]",
+    "packages[4]",
+    "packages[5]",
+    "packages[6]",
+    "packages[7]",
+  ]);
+  assert.equal(narrow.execution.maxSourcesPerIssue, 8);
+  assert.equal(narrow.execution.issueSourcesTruncated, true);
+  assert.equal(JSON.stringify(narrow).includes("private-package"), false);
+});
+
+test("inventory consistency rejects invalid per-issue evidence bounds", () => {
+  assert.throws(
+    () => analyzeServerAuditInventoryConsistency(snapshot(), { maxSourcesPerIssue: 0 }),
+    /inventory maxSourcesPerIssue/,
   );
 });

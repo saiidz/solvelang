@@ -42,11 +42,18 @@ function stableId(parts: string[]): string {
 export function createServerAuditInventoryFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   const analysis = analyzeServerAuditInventoryConsistency(snapshot);
   const findings: ServerAuditFinding[] = analysis.issues.map((issue) => ({
-    id: stableId(["inventory", issue.kind, ...issue.sources]),
+    id: stableId([
+      "inventory",
+      issue.kind,
+      ...issue.sources,
+      ...(issue.sourcesTruncated ? [`sources-truncated:${issue.sourceCount}`] : []),
+    ]),
     severity: issue.severity,
     category: "evidence-integrity",
     title: TITLES[issue.kind],
-    summary: issue.summary,
+    summary: issue.sourcesTruncated
+      ? `${issue.summary} Structural evidence references are bounded to ${issue.sources.length} of ${issue.sourceCount} affected records.`
+      : issue.summary,
     recommendation: RECOMMENDATIONS[issue.kind],
     evidence: issue.sources.map((source) => ({ source, summary: issue.kind })),
   }));
