@@ -132,6 +132,15 @@ function compareRelationship(
     || compareText(left.relationshipId, right.relationshipId);
 }
 
+function compareTargetIndexesByName(
+  leftIndex: number,
+  rightIndex: number,
+  targets: readonly { name: string }[],
+): number {
+  return compareText(targets[leftIndex]?.name ?? "", targets[rightIndex]?.name ?? "")
+    || leftIndex - rightIndex;
+}
+
 export function analyzeServerAuditScheduledJobRelationships(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditScheduledJobRelationshipOptions = {},
@@ -207,35 +216,23 @@ export function analyzeServerAuditScheduledJobRelationships(
       jobsWithPartiallyMaterializedMultipleRelationships += 1;
     }
     if (remainingRelationshipCapacity === 0 || jobRelationshipCount === 0) return;
-    const jobRelationships: ServerAuditScheduledJobRelationship[] = [];
 
-    for (const targetIndex of matchedServiceIndexes) {
-      const service = boundedServices[targetIndex];
-      if (!service) continue;
-      const matchedName = exactTokenMatch(tokens, serviceCandidateNames(service.name));
-      if (!matchedName) continue;
-      jobRelationships.push({
-        relationshipId: stableId(["scheduled-job-service", String(jobIndex), String(targetIndex), normalize(service.name)]),
-        kind: "scheduled-job-service",
-        jobIndex,
-        jobSource: job.source,
-        ...(job.schedule === undefined ? {} : { schedule: job.schedule }),
-        targetName: service.name,
-        targetIndex,
-        confidence: "exact-name-token",
-        evidence: {
-          source: `scheduledJobs[${jobIndex}].commandSummary`,
-          summary: `sanitized command summary contains the exact service-name token '${matchedName}'`,
-        },
-      });
-    }
+    // Preserve the historical compareRelationship ordering without constructing every
+    // candidate relationship object first. The matched-index sets are already bounded
+    // by maxTargets; only the configured remaining relationship prefix is materialized.
+    const processTargetIndexes = [...matchedProcessIndexes]
+      .sort((left, right) => compareTargetIndexesByName(left, right, boundedProcesses));
+    const serviceTargetIndexes = [...matchedServiceIndexes]
+      .sort((left, right) => compareTargetIndexesByName(left, right, boundedServices));
+    let remaining = remainingRelationshipCapacity;
 
-    for (const processIndex of matchedProcessIndexes) {
+    for (const processIndex of processTargetIndexes) {
+      if (remaining === 0) break;
       const process = boundedProcesses[processIndex];
       if (!process) continue;
       const normalizedName = normalize(process.name);
       if (!normalizedName) continue;
-      jobRelationships.push({
+      relationships.push({
         relationshipId: stableId(["scheduled-job-process", String(jobIndex), String(processIndex), normalizedName]),
         kind: "scheduled-job-process",
         jobIndex,
@@ -249,10 +246,31 @@ export function analyzeServerAuditScheduledJobRelationships(
           summary: `sanitized command summary contains the exact process-name token '${normalizedName}'`,
         },
       });
+      remaining -= 1;
     }
 
-    jobRelationships.sort(compareRelationship);
-    relationships.push(...jobRelationships.slice(0, remainingRelationshipCapacity));
+    for (const targetIndex of serviceTargetIndexes) {
+      if (remaining === 0) break;
+      const service = boundedServices[targetIndex];
+      if (!service) continue;
+      const matchedName = exactTokenMatch(tokens, serviceCandidateNames(service.name));
+      if (!matchedName) continue;
+      relationships.push({
+        relationshipId: stableId(["scheduled-job-service", String(jobIndex), String(targetIndex), normalize(service.name)]),
+        kind: "scheduled-job-service",
+        jobIndex,
+        jobSource: job.source,
+        ...(job.schedule === undefined ? {} : { schedule: job.schedule }),
+        targetName: service.name,
+        targetIndex,
+        confidence: "exact-name-token",
+        evidence: {
+          source: `scheduledJobs[${jobIndex}].commandSummary`,
+          summary: `sanitized command summary contains the exact service-name token '${matchedName}'`,
+        },
+      });
+      remaining -= 1;
+    }
   });
 
   relationships.sort(compareRelationship);
