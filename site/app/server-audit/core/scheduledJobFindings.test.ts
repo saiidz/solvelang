@@ -89,8 +89,11 @@ test("scheduled-job finding retention stays bounded across 5,000 privacy candida
 
   assert.equal(findings.length, 1_000);
   assert.equal(findings.filter((finding) => finding.category === "privacy").length, 999);
+  assert.equal(findings[findings.length - 1]?.title, "Scheduled-job findings were truncated");
   assert.match(limitation?.summary ?? "", /produced 5000 findings/);
   assert.match(limitation?.summary ?? "", /first 999 deterministic findings/);
+  assert.equal(limitation?.evidence[0]?.source, "scheduledJobs");
+  assert.equal(limitation?.evidence[0]?.summary, "finding limit 1000 reached");
   const serialized = JSON.stringify(findings);
   assert.equal(serialized.includes("secret-command-4999"), false);
   assert.equal(serialized.includes("private-4999"), false);
