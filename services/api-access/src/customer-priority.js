@@ -74,7 +74,10 @@ function publicCustomerJob(record) {
     startedAt: record.startedAt ?? null,
     completedAt: record.completedAt ?? null,
     failedAt: record.failedAt ?? null,
-    result: publicCustomerPriorityReport(record.result),
+    result: publicCustomerPriorityReport(record.result, {
+      jobId: record.jobId,
+      sourceFingerprint: record.sourceFingerprint,
+    }),
     errorCode: record.errorCode ?? null,
   };
 }
