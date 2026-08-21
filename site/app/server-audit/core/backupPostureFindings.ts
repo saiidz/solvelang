@@ -43,6 +43,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditBackupPostureFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditBackupPostureOptions = {},
@@ -52,10 +78,23 @@ export function createServerAuditBackupPostureFindings(
   const backups = snapshot.backups;
   if (backups === undefined) return [];
 
-  const findings: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
+
   backups.forEach((backup, index) => {
     if (backup.ageHours !== undefined && backup.ageHours > staleAfterHours) {
-      findings.push({
+      recordFinding({
         id: stableId(["backup-posture", "stale", String(index), String(backup.ageHours), String(staleAfterHours)]),
         severity: "medium",
         category: "backup",
@@ -67,7 +106,7 @@ export function createServerAuditBackupPostureFindings(
     }
 
     if (backup.sizeBytes === 0) {
-      findings.push({
+      recordFinding({
         id: stableId(["backup-posture", "zero-size", String(index)]),
         severity: "low",
         category: "backup",
@@ -79,16 +118,16 @@ export function createServerAuditBackupPostureFindings(
     }
   });
 
-  findings.sort(compareFinding);
-  if (findings.length <= maxFindings) return findings;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = findings.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["backup-posture", "findings-truncated", String(maxFindings), String(findings.length)]),
+    id: stableId(["backup-posture", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Backup posture findings were truncated",
-    summary: `The backup-posture stage produced ${findings.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The backup-posture stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from backup posture evidence.",
     evidence: [{ source: "backups", summary: `finding limit ${maxFindings} reached` }],
   });
