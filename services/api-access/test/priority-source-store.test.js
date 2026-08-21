@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCustomerPriorityExecutor } from "../src/customer-priority-executor.js";
+import { customerPriorityReportId } from "../src/customer-priority-report.js";
 import { createS3PrioritySourceStore, fingerprintPrioritySource, MAX_PRIORITY_SOURCE_BYTES } from "../src/priority-source-store.js";
 
 function zipBytes(body = "fixture") {
@@ -147,9 +148,11 @@ test("source retrieval rejects oversized stored objects before or while reading 
   assert.equal(streamTransformed, false);
 });
 
-test("executor loads only the account-bound fingerprint, forwards an abort signal, sanitizes result, and deletes source after success", async () => {
+test("executor loads only the account-bound fingerprint, forwards an abort signal, owns report identity, and deletes source after success", async () => {
   const calls = [];
   const source = zipBytes("repo");
+  const jobId = "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const sourceFingerprint = "a".repeat(64);
   const sourceStore = {
     async getSource(input) { calls.push(["get", input]); return source; },
     async deleteSource(input) { calls.push(["delete", input]); },
@@ -161,23 +164,32 @@ test("executor loads only the account-bound fingerprint, forwards an abort signa
       calls.push(["execute", input]);
       assert.deepEqual(input.source, source);
       assert.equal(input.signal instanceof AbortSignal, true);
-      return { reportId: "report_12345678", provider: "provider-v1", secret: "must-not-escape" };
+      return {
+        provider: "provider-v1",
+        reportText: "Repository audit passed with no critical findings.",
+        reportId: "provider-controlled-id",
+        secret: "must-not-escape",
+      };
     },
   });
   const result = await executor({
     accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    jobId: "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    jobId,
     priority: "express",
-    sourceFingerprint: "a".repeat(64),
+    sourceFingerprint,
     weightedCredits: 2,
   });
-  assert.deepEqual(result, { reportId: "report_12345678", provider: "provider-v1" });
+  assert.deepEqual(result, {
+    reportId: customerPriorityReportId({ jobId, sourceFingerprint }),
+    provider: "provider-v1",
+    reportText: "Repository audit passed with no critical findings.",
+  });
   assert.equal(calls[0][0], "get");
   assert.equal(calls[1][0], "execute");
   assert.equal(calls[2][0], "delete");
 });
 
-test("executor keeps source for retry on failure and enforces bounded results", async () => {
+test("executor keeps source for retry and rejects malformed report content", async () => {
   let deleted = false;
   const sourceStore = {
     async getSource() { return zipBytes("repo"); },
@@ -185,8 +197,12 @@ test("executor keeps source for retry on failure and enforces bounded results", 
   };
   const executor = createCustomerPriorityExecutor({
     sourceStore,
-    executeAudit: async () => ({ reportId: "x", provider: "bad provider spaces" }),
+    executeAudit: async () => ({ provider: "bad provider spaces", reportText: "report" }),
   });
-  await assert.rejects(executor({ accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", sourceFingerprint: "a".repeat(64) }), /invalid result/);
+  await assert.rejects(executor({
+    accountId: "acct_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    jobId: "job_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    sourceFingerprint: "a".repeat(64),
+  }), /provider is invalid/);
   assert.equal(deleted, false);
 });
