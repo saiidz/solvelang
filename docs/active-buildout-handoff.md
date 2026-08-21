@@ -8,21 +8,21 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `b928ada4d29e13a0fbac4500778d9d7d587ba80b`, the safe merge of #680.
+At this refresh, reviewed source `main` is `4d5f93171c37caef0651abced540e1c1e30a05a8`, the safe merge of #687.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
 ## Most recent safe integration state
 
-- #674 synchronizes this handoff through #673; exact reviewed head `d9741c9c9ddcff61ecc2b77471314396e137a133` merged after exact-head Hosted CI and Rust/RustSec green validation.
-- #675 adds bounded structural coverage for supplied filesystem records missing `sizeBytes`, `usedBytes`, or `availableBytes`, preserving exact missing-field counts while round-robin bounding structural evidence to 100 references. Exact reviewed head `dd75ff3814eaca2faa780bbc03ffc8f86c80db44` merged safely.
-- #676 composes #675 into canonical Server Audit JSON/HTML, adds an explicit byte-accounting authority limitation, and pins redaction of mount/device values. Exact reviewed head `b02ac121e3fad38f8001880a87e1f03599e06350` merged safely.
-- #677 adds bounded structural coverage for supplied filesystem records missing a usable filesystem source/device identity. Exact reviewed head `ce8572ea24b64eca0c2b6f9e86d443c2287fc32b` merged safely.
-- #678 composes #677 into canonical Server Audit JSON/HTML with structural `filesystems[index].filesystem` evidence and redaction regressions. Exact reviewed head `3ad10ca626823766500192fa320be60398084c73` merged safely.
-- #679 adds bounded structural coverage for supplied service records whose required `state` becomes empty after trim/NFC normalization. It emits only `services[index].state` evidence, treats non-empty state strings as observed evidence without judging health, caps deterministic findings at 100, and withholds service names/state/enablement values. Exact reviewed head `a33769e32b3b0279e96ec015967bd39e8ee04f75` passed Hosted CI and Rust/RustSec and merged as `dfedf5aeeef6acd06778497c090a52484a8dd25b`.
-- #680 composes #679 into canonical Server Audit JSON/HTML, adds an explicit service-state authority limitation, and pins redaction of service names, state values, and enablement values while preserving structural `services[index].state` evidence. Exact reviewed head `24f4dbcf2ee6d2abb6c2781cd87d7951022061f2` passed Hosted CI and Rust/RustSec and merged as current `main` `b928ada4d29e13a0fbac4500778d9d7d587ba80b`.
+- #681 synchronized this handoff through #680; exact reviewed head `9a4f5c55e83c1110470a3f7548f3f2edf688dfd7` passed Hosted CI and Rust/RustSec before merge.
+- #682 added bounded structural coverage for supplied service records whose optional `enabled` evidence is absent or blank and composed that signal into canonical JSON/HTML. Its initial helper-only version was corrected after review so the product report path actually invoked the stage and carried an explicit authority limitation. Exact reviewed head `1a4fc7816403d19ae93348e4f8b45cc3b1e08cca` merged after exact-head Hosted CI and Rust/RustSec green.
+- #683 added bounded structural coverage for supplied process records whose required `state` becomes empty after trim/NFC normalization, preserving structural `processes[index].state` evidence without exposing process identity values. Exact reviewed head `9dc7497361f40fca1eca7b342b0c21c37017693d` merged safely.
+- #684 replaced raw process names, PIDs/parent PIDs, listener addresses/ports, and listener process labels in process-health/relationship findings with structural snapshot references and added canonical JSON/HTML redaction regressions. Exact reviewed head `80ae59533966aaf56bde3fa35f85a78517457fac` merged as `107b330652d9f220ab9ca2d52e82f90893204069` after exact-head Hosted CI and Rust/RustSec green.
+- #685 extended the fixed argument-free read-only collector with `systemctl list-unit-files --type=service --no-legend --no-pager`, joining exact runtime unit names to optional `services[].enabled` evidence while keeping unmatched enablement unknown. Collector metadata advanced to `0.4.0`; command-surface QA pins the literal read-only invocation. Exact reviewed head `1ac07c93796ae59e8c4d2fc441a110bf92660b5d` passed exact-head Hosted CI and Rust/RustSec and merged as `a51e1cbfd1fe55ed554f31599d4cfc6cc0af0b50`.
+- #686 removed raw failed-service names/state values from baseline health findings, preserving explicit `failed`/`error` token detection while emitting only structural `services[index].state` evidence. Helper and canonical JSON/HTML regressions pin redaction of service name, raw state, and enablement values. Exact reviewed head `5910515ba9845f6e11fe5282e45e00d6aa3a306a` passed exact-head Hosted CI and Rust/RustSec and merged as `32079532efdbfb7b28b986f202b1d640edbf254b`.
+- #687 removed raw public-listener addresses, numeric ports, and process labels from baseline public-listener findings while preserving wildcard-binding, sensitive-service classification, severity, and unexpected-public-port logic. Findings now use structural `listeningSockets[index].port` / `.localAddress` evidence and canonical JSON/HTML regressions pin the privacy boundary. Exact reviewed head `5bb01c41193ac6a8a7f8a55a84915cd8debd1031` passed exact-head Hosted CI and Rust/RustSec and merged as current `main` `4d5f93171c37caef0651abced540e1c1e30a05a8`.
 
-Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #674–#680 and neither self-hosted lane was substituted for Hosted validation.
+Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #681–#687 and neither self-hosted lane was substituted for Hosted validation.
 
 ## Major merged work that must not be recreated
 
@@ -47,7 +47,7 @@ Ordinary branches in this recent Server Audit train used exact-head GitHub-hoste
 
 ### Server Audit
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, scheduled-job→service/process, recognized web-server→service/package, and filesystem→artifact structural relationships; ambiguity/unresolved/truncation/partial-fanout findings; stale/large-log evidence; local web/TLS/listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-inventory coverage; identity coverage; missing filesystem utilization/byte/source evidence; incomplete system telemetry/load-vector coverage; incomplete web-root owner/mode coverage; blank service-state coverage; and canonical JSON/HTML composition for those states.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, scheduled-job→service/process, recognized web-server→service/package, and filesystem→artifact structural relationships; ambiguity/unresolved/truncation/partial-fanout findings; stale/large-log evidence; local web/TLS/listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-inventory coverage; identity coverage; missing filesystem utilization/byte/source evidence; incomplete system telemetry/load-vector coverage; incomplete web-root owner/mode coverage; service/process state and service enablement coverage; structurally redacted process/service/public-listener findings; and canonical JSON/HTML composition for those states.
 
 Key trains that must not be recreated:
 
@@ -68,6 +68,9 @@ Key trains that must not be recreated:
 - #675/#676 — missing filesystem byte-accounting evidence and canonical report composition.
 - #677/#678 — missing filesystem source/device identity evidence and canonical report composition.
 - #679/#680 — blank normalized service-state evidence and canonical report composition.
+- #682/#685 — service enablement coverage/report composition plus fixed read-only collector population of optional unit-file enablement evidence.
+- #683/#684 — process-state coverage plus structural redaction of process/listener relationship findings.
+- #686/#687 — structural redaction of baseline failed-service and public-listener findings.
 
 Automatic remote remediation execution remains out of scope.
 
@@ -88,7 +91,7 @@ With the queue at zero, the strongest safe continuations are:
 
 1. keep `ROADMAP.md`, this handoff, Issue #157, and production truth synchronized;
 2. continue bounded Repository Audit / Solve Graph reference, path, impact, affected-validation, MCP/Codex, and visual-explorer quality without executing repository source;
-3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic redaction, and cross-platform report tests;
+3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic structural redaction, and cross-platform report tests;
 4. continue language/runtime and DX through conservative semantics, diagnostics, package/module design, pure-core extraction, and non-executing editor support;
 5. continue dormant customer-priority engineering only while queue/customer/provider gates remain OFF: source integrity, leases/retries/DLQ/observability, account/entitlement enforcement, report retention, credential boundaries, preflight validation, and safe browser/API readiness;
 6. continue TOTP account-enrollment/login/backup-code preparation without repeating already-live infrastructure rollout or mutating accounts absent explicit approval;
