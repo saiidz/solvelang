@@ -42,7 +42,12 @@ function stableId(parts: string[]): string {
 export function createServerAuditInventoryFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   const analysis = analyzeServerAuditInventoryConsistency(snapshot);
   const findings: ServerAuditFinding[] = analysis.issues.map((issue) => ({
-    id: stableId(["inventory", issue.kind, String(issue.sourceCount), ...issue.sources]),
+    id: stableId([
+      "inventory",
+      issue.kind,
+      ...issue.sources,
+      ...(issue.sourcesTruncated ? [`sources-truncated:${issue.sourceCount}`] : []),
+    ]),
     severity: issue.severity,
     category: "evidence-integrity",
     title: TITLES[issue.kind],
