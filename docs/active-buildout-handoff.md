@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `8070d2500bf5c91676ccedbb8fd86a67751e53c0`, the safe merge of #659.
+At this refresh, reviewed source `main` is `5596acfb7ecc1695b6fd684900b1fc38672fb2f8`, the safe merge of #662.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
@@ -28,8 +28,11 @@ Recent safe integration state:
 - #657 was closed unmerged as a verified duplicate because `main` already contains the stronger package-version findings stage and canonical report composition.
 - #658 composes bounded duplicate-listener ownership consistency into canonical JSON/HTML with structural-only evidence and an explicit ownership/reachability limitation.
 - #659 composes recognized web-server ↔ service/package relationship findings into canonical JSON/HTML with redaction regression coverage and an explicit authority limitation.
+- #660 synchronizes this handoff through #659 after exact-head Hosted CI and Rust/RustSec validation.
+- #661 adds bounded coverage for supplied filesystem records that omit `usagePercent`, with structural `filesystems[index].usagePercent` evidence and deterministic truncation truth. A P1 review posted immediately after merge correctly identified that canonical report composition was still missing.
+- #662 fixes that #661 P1 by composing filesystem-capacity coverage into canonical Server Audit JSON/HTML reports, adding an explicit authority limitation and redaction regression coverage.
 
-All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659.
+All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659/#660/#661/#662.
 
 ## Customer-priority production truth
 
@@ -70,7 +73,7 @@ Repository merges #644/#646/#649 remain preparation only. They do not create or 
 
 ### Server Audit
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem/scheduled-job identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; conservative systemd service-state classification; local TLS-certificate/port-443 consistency; duplicate-listener ownership consistency; and recognized web-server ↔ service/package relationship findings with canonical report composition.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem/scheduled-job identity coverage; missing filesystem `usagePercent` coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; conservative systemd service-state classification; local TLS-certificate/port-443 consistency; duplicate-listener ownership consistency; and recognized web-server ↔ service/package relationship findings with canonical report composition.
 
 Key recent trains that must not be recreated:
 
@@ -84,6 +87,7 @@ Key recent trains that must not be recreated:
 - #655/#656 — local TLS-certificate/port-443 listener consistency and canonical report composition.
 - #658 — duplicate-listener ownership consistency canonical report composition.
 - #659 — recognized web-server/service/package relationship canonical report composition.
+- #661/#662 — filesystem `usagePercent` coverage and canonical report composition, including the post-merge P1 correction.
 
 Automatic remote remediation execution remains out of scope.
 
