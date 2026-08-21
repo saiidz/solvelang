@@ -163,9 +163,29 @@ test("inventory consistency bounds per-issue structural evidence without losing 
   assert.equal(JSON.stringify(narrow).includes("private-package"), false);
 });
 
+test("inventory consistency retains a conflicting witness beyond the bounded prefix", () => {
+  const input = snapshot();
+  input.services = [];
+  input.filesystems = [];
+  input.web = { roots: [] };
+  input.packages = [
+    { name: "private-package", version: "1.0.0" },
+    { name: "private-package", version: "1.0.0" },
+    { name: "private-package", version: "1.0.0" },
+    { name: "private-package", version: "2.0.0" },
+  ];
+
+  const analysis = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 2 });
+  assert.equal(analysis.issues.length, 1);
+  assert.deepEqual(analysis.issues[0].sources, ["packages[0]", "packages[3]"]);
+  assert.equal(analysis.issues[0].sourceCount, 4);
+  assert.equal(analysis.issues[0].sourcesTruncated, true);
+  assert.equal(JSON.stringify(analysis).includes("private-package"), false);
+});
+
 test("inventory consistency rejects invalid per-issue evidence bounds", () => {
   assert.throws(
-    () => analyzeServerAuditInventoryConsistency(snapshot(), { maxSourcesPerIssue: 0 }),
-    /inventory maxSourcesPerIssue/,
+    () => analyzeServerAuditInventoryConsistency(snapshot(), { maxSourcesPerIssue: 1 }),
+    /inventory maxSourcesPerIssue.*2 through 256/,
   );
 });
