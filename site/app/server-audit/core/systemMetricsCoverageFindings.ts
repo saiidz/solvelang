@@ -15,6 +15,11 @@ type SystemMetric = {
   value: unknown;
 };
 
+type CoverageGap = {
+  key: SystemMetric["key"];
+  summary: "metric missing" | "load vector incomplete";
+};
+
 export function createServerAuditSystemMetricsCoverageFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
@@ -27,25 +32,32 @@ export function createServerAuditSystemMetricsCoverageFindings(
     { key: "memoryTotalBytes", value: system.memoryTotalBytes },
     { key: "memoryAvailableBytes", value: system.memoryAvailableBytes },
   ];
-  const missing = metrics.filter((metric) => metric.value === undefined);
-  if (missing.length === 0) return [];
+  const gaps: CoverageGap[] = metrics
+    .filter((metric) => metric.value === undefined)
+    .map((metric) => ({ key: metric.key, summary: "metric missing" }));
+  const partialLoad = system.load !== undefined && system.load.length !== 3;
+  if (partialLoad) gaps.push({ key: "load", summary: "load vector incomplete" });
+  if (gaps.length === 0) return [];
 
-  const evidence = missing.map((metric) => ({
-    source: `system.${metric.key}`,
-    summary: "metric missing",
+  const evidence = gaps.map((gap) => ({
+    source: `system.${gap.key}`,
+    summary: gap.summary,
   }));
 
   return [{
     id: stableId([
       "system-metrics-coverage",
-      String(missing.length),
+      String(gaps.length),
       ...evidence.map((item) => item.source),
+      ...(partialLoad ? ["load-arity"] : []),
     ]),
     severity: "info",
     category: "coverage",
     title: "System telemetry evidence is incomplete",
-    summary: `${missing.length} of ${metrics.length} bounded system metric(s) are absent, so uptime, load, and memory posture cannot be treated as complete from this snapshot.`,
-    recommendation: "Re-collect the bounded system telemetry with the reviewed read-only collector before treating absent uptime, load, or memory evidence as healthy or authoritative.",
+    summary: partialLoad
+      ? `${gaps.length} of ${metrics.length} bounded system metric(s) are missing or incomplete, so uptime, load, and memory posture cannot be treated as complete from this snapshot.`
+      : `${gaps.length} of ${metrics.length} bounded system metric(s) are absent, so uptime, load, and memory posture cannot be treated as complete from this snapshot.`,
+    recommendation: "Re-collect the bounded system telemetry with the reviewed read-only collector before treating absent or incomplete uptime, load, or memory evidence as healthy or authoritative.",
     evidence,
   }];
 }
