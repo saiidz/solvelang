@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCustomerPriorityProviderAdapter } from "../src/customer-priority-provider-adapter.js";
+import { MAX_PRIORITY_REPORT_BYTES } from "../src/customer-priority-report.js";
 
 const ACCOUNT_ID = `acct_${"a".repeat(32)}`;
 const JOB_ID = `job_${"b".repeat(32)}`;
@@ -27,7 +28,8 @@ test("provider adapter stamps the server-owned provider and forwards only the au
     execute: async (input) => {
       received = input;
       return {
-        reportId: "report-123",
+        reportText: "Repository audit passed with no critical findings.",
+        reportId: "provider-controlled-id",
         provider: "spoofed-provider",
         credentials: "must-not-escape",
       };
@@ -42,8 +44,8 @@ test("provider adapter stamps the server-owned provider and forwards only the au
   const result = await adapter(input);
 
   assert.deepEqual(result, {
-    reportId: "report-123",
     provider: "fixture-provider",
+    reportText: "Repository audit passed with no critical findings.",
   });
   assert.deepEqual(Object.keys(received).sort(), [
     "accountId",
@@ -84,7 +86,7 @@ test("provider adapter rejects invalid provider identities before an executor ca
 test("provider adapter requires the worker timeout abort signal", async () => {
   const adapter = createCustomerPriorityProviderAdapter({
     provider: "fixture-provider",
-    execute: async () => ({ reportId: "report-123" }),
+    execute: async () => ({ reportText: "valid report" }),
   });
 
   await assert.rejects(
@@ -93,16 +95,18 @@ test("provider adapter requires the worker timeout abort signal", async () => {
   );
 });
 
-test("provider adapter rejects malformed provider results and never trusts provider metadata", async () => {
-  const adapter = createCustomerPriorityProviderAdapter({
-    provider: "fixture-provider",
-    execute: async () => ({ reportId: "bad", provider: "spoofed-provider" }),
-  });
-
-  await assert.rejects(
-    adapter(executionInput()),
-    /invalid report ID/,
-  );
+test("provider adapter rejects empty, control-character, and oversized report text", async () => {
+  for (const reportText of [
+    "",
+    "bad\u0000text",
+    "x".repeat(MAX_PRIORITY_REPORT_BYTES + 1),
+  ]) {
+    const adapter = createCustomerPriorityProviderAdapter({
+      provider: "fixture-provider",
+      execute: async () => ({ reportText, provider: "spoofed-provider" }),
+    });
+    await assert.rejects(adapter(executionInput()), /report text is invalid/);
+  }
 });
 
 test("provider adapter propagates executor failures for queue retry handling", async () => {
