@@ -81,6 +81,25 @@ test("package-version findings are deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("private-package"), false);
 });
 
+test("package-version retention stays bounded at maximum supported finding output", () => {
+  const packages = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-package-${index}`,
+    version: "unknown",
+  }));
+  const input = snapshot(packages);
+  const first = createServerAuditPackageVersionFindings(input, { maxFindings: 1_000 });
+  const second = createServerAuditPackageVersionFindings(structuredClone(input), { maxFindings: 1_000 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 1_000);
+  assert.equal(first.filter((finding) => finding.category === "version-evidence").length, 999);
+  const limitation = first.find((finding) => finding.title === "Package-version evidence findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-package"), false);
+});
+
 test("package-version option bounds fail closed", () => {
   const input = snapshot([]);
   assert.throws(() => createServerAuditPackageVersionFindings(input, { maxFindings: 0 }), /maxFindings/);
