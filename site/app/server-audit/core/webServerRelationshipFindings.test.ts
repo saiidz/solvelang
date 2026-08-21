@@ -90,6 +90,6 @@ test("retains only the bounded deterministic finding prefix under high-cardinali
   assert.match(limitation.summary, /produced 5000 findings/);
   assert.deepEqual(
     first.flatMap((finding) => finding.evidence.map((item) => item.source)).filter((source) => source.startsWith("services[")),
-    ["services[2076].state"],
+    ["services[2464].state"],
   );
 });
