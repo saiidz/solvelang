@@ -57,7 +57,9 @@ export function createServerAuditSystemMetricsCoverageFindings(
     summary: partialLoad
       ? `${gaps.length} of ${metrics.length} bounded system metric(s) are missing or incomplete, so uptime, load, and memory posture cannot be treated as complete from this snapshot.`
       : `${gaps.length} of ${metrics.length} bounded system metric(s) are absent, so uptime, load, and memory posture cannot be treated as complete from this snapshot.`,
-    recommendation: "Re-collect the bounded system telemetry with the reviewed read-only collector before treating absent or incomplete uptime, load, or memory evidence as healthy or authoritative.",
+    recommendation: partialLoad
+      ? "Re-collect the bounded system telemetry with the reviewed read-only collector before treating absent or incomplete uptime, load, or memory evidence as healthy or authoritative."
+      : "Re-collect the bounded system telemetry with the reviewed read-only collector before treating absent uptime, load, or memory evidence as healthy or authoritative.",
     evidence,
   }];
 }
