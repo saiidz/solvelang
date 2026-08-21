@@ -47,7 +47,9 @@ test("reports conflicting duplicate backup and log evidence without exposing nam
     rawBackupPathsExposed: false,
     rawLogPathsExposed: false,
     maxIssues: 250,
+    maxSourcesPerIssue: 32,
     issuesTruncated: false,
+    issueSourcesTruncated: false,
   });
 });
 
@@ -88,9 +90,65 @@ test("applies a deterministic issue bound after analysis", () => {
   assert.equal(result.execution.issuesTruncated, true);
 });
 
-test("rejects invalid issue bounds", () => {
+test("bounds per-issue backup evidence without exposing identities or making IDs output-limit dependent", () => {
+  const input = snapshot({
+    backups: Array.from({ length: 120 }, (_, index) => ({
+      name: "private-backup",
+      path: `/private/backups/${index}.dump`,
+      ageHours: index,
+      sizeBytes: 10_000 + index,
+    })),
+    logs: [],
+  });
+
+  const narrow = analyzeServerAuditBackupLogConsistency(input, { maxSourcesPerIssue: 8 });
+  const wider = analyzeServerAuditBackupLogConsistency(input, { maxSourcesPerIssue: 16 });
+  assert.equal(narrow.issues.length, 1);
+  const issue = narrow.issues[0];
+  assert.equal(issue.kind, "conflicting-backup-record");
+  assert.equal(issue.id, wider.issues[0].id);
+  assert.equal(issue.sourceCount, 120);
+  assert.equal(issue.sourcesTruncated, true);
+  assert.deepEqual(issue.sources, [
+    "backups[0]",
+    "backups[1]",
+    "backups[2]",
+    "backups[3]",
+    "backups[4]",
+    "backups[5]",
+    "backups[6]",
+    "backups[7]",
+  ]);
+  assert.equal(narrow.execution.maxSourcesPerIssue, 8);
+  assert.equal(narrow.execution.issueSourcesTruncated, true);
+  assert.equal(JSON.stringify(narrow).includes("private-backup"), false);
+  assert.equal(JSON.stringify(narrow).includes("/private/backups"), false);
+});
+
+test("retains two conflicting metadata witnesses when the conflict falls beyond the prefix bound", () => {
+  const result = analyzeServerAuditBackupLogConsistency(snapshot({
+    backups: [
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/conflict.dump", ageHours: 2, sizeBytes: 11 },
+    ],
+  }), { maxSourcesPerIssue: 2 });
+
+  assert.equal(result.issues.length, 1);
+  assert.deepEqual(result.issues[0].sources, ["backups[0]", "backups[3]"]);
+  assert.equal(result.issues[0].sourceCount, 4);
+  assert.equal(result.issues[0].sourcesTruncated, true);
+  assert.equal(JSON.stringify(result).includes("/private/backups"), false);
+});
+
+test("rejects invalid issue and evidence bounds", () => {
   assert.throws(
     () => analyzeServerAuditBackupLogConsistency(snapshot(), { maxIssues: 0 }),
     /maxIssues must be an integer from 1 through 2000/,
+  );
+  assert.throws(
+    () => analyzeServerAuditBackupLogConsistency(snapshot(), { maxSourcesPerIssue: 1 }),
+    /maxSourcesPerIssue must be an integer from 2 through 256/,
   );
 });

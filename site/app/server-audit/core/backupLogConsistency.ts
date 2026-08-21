@@ -9,11 +9,14 @@ export type ServerAuditBackupLogConsistencyIssue = {
   kind: ServerAuditBackupLogConsistencyIssueKind;
   severity: "low" | "info";
   sources: string[];
+  sourceCount: number;
+  sourcesTruncated: boolean;
   summary: string;
 };
 
 export type ServerAuditBackupLogConsistencyOptions = {
   maxIssues?: number;
+  maxSourcesPerIssue?: number;
 };
 
 export type ServerAuditBackupLogConsistencyAnalysis = {
@@ -33,9 +36,13 @@ export type ServerAuditBackupLogConsistencyAnalysis = {
     rawBackupPathsExposed: false;
     rawLogPathsExposed: false;
     maxIssues: number;
+    maxSourcesPerIssue: number;
     issuesTruncated: boolean;
+    issueSourcesTruncated: boolean;
   };
 };
+
+const IDENTITY_SOURCE_LIMIT = 32;
 
 function boundedInteger(
   value: number | undefined,
@@ -52,7 +59,12 @@ function boundedInteger(
 }
 
 function stableId(kind: ServerAuditBackupLogConsistencyIssueKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
+  const sourceCount = sources.length;
+  const identitySources = sources.slice(0, IDENTITY_SOURCE_LIMIT);
+  const completeInput = `${kind}\u001f${identitySources.join("\u001f")}`;
+  const input = sourceCount > identitySources.length
+    ? `${completeInput}\u001fsources-truncated:${sourceCount}`
+    : completeInput;
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
@@ -83,6 +95,47 @@ function distinctCount(values: string[]): number {
   return new Set(values).size;
 }
 
+function selectBoundedConflictSources(
+  sources: string[],
+  metadataVariants: string[],
+  maxSourcesPerIssue: number,
+): string[] {
+  const firstVariant = metadataVariants[0];
+  const conflictingIndex = metadataVariants.findIndex((variant) => variant !== firstVariant);
+  if (conflictingIndex < 1) {
+    throw new Error("Server Audit backup/log consistency conflict evidence requires two distinct metadata variants.");
+  }
+
+  const selectedIndexes = [0, conflictingIndex];
+  for (let index = 1; index < sources.length && selectedIndexes.length < maxSourcesPerIssue; index += 1) {
+    if (index === conflictingIndex) continue;
+    selectedIndexes.push(index);
+  }
+  selectedIndexes.sort((left, right) => left - right);
+  return selectedIndexes.map((index) => sources[index]!);
+}
+
+function issueWithBoundedSources(
+  kind: ServerAuditBackupLogConsistencyIssueKind,
+  severity: "low" | "info",
+  sources: string[],
+  metadataVariants: string[],
+  summary: string,
+  maxSourcesPerIssue: number,
+): ServerAuditBackupLogConsistencyIssue {
+  const sourceCount = sources.length;
+  const boundedSources = selectBoundedConflictSources(sources, metadataVariants, maxSourcesPerIssue);
+  return {
+    id: stableId(kind, sources),
+    kind,
+    severity,
+    sources: boundedSources,
+    sourceCount,
+    sourcesTruncated: sourceCount > boundedSources.length,
+    summary,
+  };
+}
+
 export function analyzeServerAuditBackupLogConsistency(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditBackupLogConsistencyOptions = {},
@@ -93,6 +146,13 @@ export function analyzeServerAuditBackupLogConsistency(
     1,
     2_000,
     "Server Audit backup/log consistency maxIssues",
+  );
+  const maxSourcesPerIssue = boundedInteger(
+    options.maxSourcesPerIssue,
+    32,
+    2,
+    256,
+    "Server Audit backup/log consistency maxSourcesPerIssue",
   );
   const backups = snapshot.backups ?? [];
   const logs = snapshot.logs ?? [];
@@ -109,13 +169,14 @@ export function analyzeServerAuditBackupLogConsistency(
     if (distinctCount(metadata) < 2) continue;
     conflictingBackupGroups += 1;
     const sources = indexes.map((index) => `backups[${index}]`);
-    issues.push({
-      id: stableId("conflicting-backup-record", sources),
-      kind: "conflicting-backup-record",
-      severity: "low",
+    issues.push(issueWithBoundedSources(
+      "conflicting-backup-record",
+      "low",
       sources,
-      summary: "Multiple collected entries for the same backup identity report different path, age, or size metadata. Raw backup names and paths are intentionally withheld from this consistency evidence.",
-    });
+      metadata,
+      "Multiple collected entries for the same backup identity report different path, age, or size metadata. Raw backup names and paths are intentionally withheld from this consistency evidence.",
+      maxSourcesPerIssue,
+    ));
   }
 
   for (const indexes of groupIndexes(logs, (entry) => entry.path).values()) {
@@ -127,20 +188,22 @@ export function analyzeServerAuditBackupLogConsistency(
     if (distinctCount(metadata) < 2) continue;
     conflictingLogGroups += 1;
     const sources = indexes.map((index) => `logs[${index}]`);
-    issues.push({
-      id: stableId("conflicting-log-record", sources),
-      kind: "conflicting-log-record",
-      severity: "info",
+    issues.push(issueWithBoundedSources(
+      "conflicting-log-record",
+      "info",
       sources,
-      summary: "Multiple collected entries for the same log path report different size or modification-time metadata. The raw log path is intentionally withheld from this consistency evidence.",
-    });
+      metadata,
+      "Multiple collected entries for the same log path report different size or modification-time metadata. The raw log path is intentionally withheld from this consistency evidence.",
+      maxSourcesPerIssue,
+    ));
   }
 
   issues.sort(compareIssue);
+  const boundedIssues = issues.slice(0, maxIssues);
   return {
     schema: "solvelang.server-audit.backup-log-consistency.v0",
     mode: "analyze-only",
-    issues: issues.slice(0, maxIssues),
+    issues: boundedIssues,
     summary: {
       backupsChecked: backups.length,
       logsChecked: logs.length,
@@ -154,7 +217,9 @@ export function analyzeServerAuditBackupLogConsistency(
       rawBackupPathsExposed: false,
       rawLogPathsExposed: false,
       maxIssues,
+      maxSourcesPerIssue,
       issuesTruncated: issues.length > maxIssues,
+      issueSourcesTruncated: boundedIssues.some((issue) => issue.sourcesTruncated),
     },
   };
 }
