@@ -14,11 +14,14 @@ export type ServerAuditInventoryIssue = {
   kind: ServerAuditInventoryIssueKind;
   severity: "low" | "info";
   sources: string[];
+  sourceCount: number;
+  sourcesTruncated: boolean;
   summary: string;
 };
 
 export type ServerAuditInventoryConsistencyOptions = {
   maxIssues?: number;
+  maxSourcesPerIssue?: number;
 };
 
 export type ServerAuditInventoryConsistencyAnalysis = {
@@ -36,7 +39,9 @@ export type ServerAuditInventoryConsistencyAnalysis = {
     networkAccess: false;
     writeAccess: false;
     maxIssues: number;
+    maxSourcesPerIssue: number;
     issuesTruncated: boolean;
+    issueSourcesTruncated: boolean;
   };
 };
 
@@ -48,8 +53,8 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   return resolved;
 }
 
-function stableId(kind: ServerAuditInventoryIssueKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
+function stableId(kind: ServerAuditInventoryIssueKind, sources: string[], sourceCount: number): string {
+  const input = `${kind}\u001f${sourceCount}\u001f${sources.join("\u001f")}`;
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
@@ -77,11 +82,38 @@ function distinct(values: Array<string | number | undefined>): number {
   return new Set(values.map((value) => value === undefined ? "<undefined>" : String(value))).size;
 }
 
+function issueWithBoundedSources(
+  kind: ServerAuditInventoryIssueKind,
+  severity: "low" | "info",
+  sources: string[],
+  summary: string,
+  maxSourcesPerIssue: number,
+): ServerAuditInventoryIssue {
+  const sourceCount = sources.length;
+  const boundedSources = sources.slice(0, maxSourcesPerIssue);
+  return {
+    id: stableId(kind, boundedSources, sourceCount),
+    kind,
+    severity,
+    sources: boundedSources,
+    sourceCount,
+    sourcesTruncated: sourceCount > boundedSources.length,
+    summary,
+  };
+}
+
 export function analyzeServerAuditInventoryConsistency(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditInventoryConsistencyOptions = {},
 ): ServerAuditInventoryConsistencyAnalysis {
   const maxIssues = boundedInteger(options.maxIssues, 500, 1, 5_000, "Server Audit inventory maxIssues");
+  const maxSourcesPerIssue = boundedInteger(
+    options.maxSourcesPerIssue,
+    32,
+    1,
+    256,
+    "Server Audit inventory maxSourcesPerIssue",
+  );
   const issues: ServerAuditInventoryIssue[] = [];
   const packages = snapshot.packages ?? [];
   const services = snapshot.services ?? [];
@@ -94,13 +126,13 @@ export function analyzeServerAuditInventoryConsistency(
     const versions = indexes.map((index) => packages[index].version);
     if (distinct(versions) < 2) continue;
     const sources = indexes.map((index) => `packages[${index}]`);
-    issues.push({
-      id: stableId("conflicting-package-version", sources),
-      kind: "conflicting-package-version",
-      severity: "low",
+    issues.push(issueWithBoundedSources(
+      "conflicting-package-version",
+      "low",
       sources,
-      summary: "Multiple entries for the same package name report different versions; package posture is internally inconsistent.",
-    });
+      "Multiple entries for the same package name report different versions; package posture is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   for (const indexes of groupIndexes(services, (entry) => entry.name).values()) {
@@ -108,13 +140,13 @@ export function analyzeServerAuditInventoryConsistency(
     const states = indexes.map((index) => `${services[index].state}\u001f${services[index].enabled ?? ""}`);
     if (distinct(states) < 2) continue;
     const sources = indexes.map((index) => `services[${index}]`);
-    issues.push({
-      id: stableId("conflicting-service-state", sources),
-      kind: "conflicting-service-state",
-      severity: "info",
+    issues.push(issueWithBoundedSources(
+      "conflicting-service-state",
+      "info",
       sources,
-      summary: "Multiple entries for the same service name report different state or enablement values; service posture is internally inconsistent.",
-    });
+      "Multiple entries for the same service name report different state or enablement values; service posture is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   for (const indexes of groupIndexes(filesystems, (entry) => entry.mount).values()) {
@@ -125,13 +157,13 @@ export function analyzeServerAuditInventoryConsistency(
     });
     if (distinct(capacityTuples) < 2) continue;
     const sources = indexes.map((index) => `filesystems[${index}]`);
-    issues.push({
-      id: stableId("conflicting-filesystem-capacity", sources),
-      kind: "conflicting-filesystem-capacity",
-      severity: "low",
+    issues.push(issueWithBoundedSources(
+      "conflicting-filesystem-capacity",
+      "low",
       sources,
-      summary: "Multiple entries for the same filesystem mount report different capacity or utilization values; storage posture is internally inconsistent.",
-    });
+      "Multiple entries for the same filesystem mount report different capacity or utilization values; storage posture is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   for (const indexes of groupIndexes(roots, (entry) => entry.path).values()) {
@@ -139,13 +171,13 @@ export function analyzeServerAuditInventoryConsistency(
     const metadata = indexes.map((index) => `${roots[index].owner ?? ""}\u001f${roots[index].mode ?? ""}`);
     if (distinct(metadata) < 2) continue;
     const sources = indexes.map((index) => `web.roots[${index}]`);
-    issues.push({
-      id: stableId("conflicting-web-root-metadata", sources),
-      kind: "conflicting-web-root-metadata",
-      severity: "info",
+    issues.push(issueWithBoundedSources(
+      "conflicting-web-root-metadata",
+      "info",
       sources,
-      summary: "Multiple entries for the same web-root path report different ownership or mode metadata; permission posture is internally inconsistent.",
-    });
+      "Multiple entries for the same web-root path report different ownership or mode metadata; permission posture is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   const processGroups = groupIndexes(processes, (entry) => String(entry.pid));
@@ -157,25 +189,25 @@ export function analyzeServerAuditInventoryConsistency(
     });
     if (distinct(identities) < 2) continue;
     const sources = indexes.map((index) => `processes[${index}]`);
-    issues.push({
-      id: stableId("conflicting-process-identity", sources),
-      kind: "conflicting-process-identity",
-      severity: "low",
+    issues.push(issueWithBoundedSources(
+      "conflicting-process-identity",
+      "low",
       sources,
-      summary: "Multiple process entries report the same PID with different parent, owner, state, or executable identity; process evidence is internally inconsistent.",
-    });
+      "Multiple process entries report the same PID with different parent, owner, state, or executable identity; process evidence is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   processes.forEach((entry, index) => {
     if (entry.pid !== entry.ppid) return;
     const sources = [`processes[${index}]`];
-    issues.push({
-      id: stableId("self-parent-process", sources),
-      kind: "self-parent-process",
-      severity: "low",
+    issues.push(issueWithBoundedSources(
+      "self-parent-process",
+      "low",
       sources,
-      summary: "A collected process reports itself as its own parent; process topology is internally inconsistent.",
-    });
+      "A collected process reports itself as its own parent; process topology is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   });
 
   const uniqueProcessIndex = new Map<number, number>();
@@ -202,13 +234,13 @@ export function analyzeServerAuditInventoryConsistency(
             const sources = cycle
               .map((pid) => `processes[${uniqueProcessIndex.get(pid)!}]`)
               .sort();
-            issues.push({
-              id: stableId("cyclic-process-parentage", sources),
-              kind: "cyclic-process-parentage",
-              severity: "low",
+            issues.push(issueWithBoundedSources(
+              "cyclic-process-parentage",
+              "low",
               sources,
-              summary: "Collected parent-process relationships form a cycle; process topology is internally inconsistent and may reflect collection-time churn or malformed evidence.",
-            });
+              "Collected parent-process relationships form a cycle; process topology is internally inconsistent and may reflect collection-time churn or malformed evidence.",
+              maxSourcesPerIssue,
+            ));
           }
         }
         break;
@@ -225,10 +257,11 @@ export function analyzeServerAuditInventoryConsistency(
   }
 
   issues.sort(compareIssue);
+  const boundedIssues = issues.slice(0, maxIssues);
   return {
     schema: "solvelang.server-audit.inventory-consistency.v0",
     mode: "analyze-only",
-    issues: issues.slice(0, maxIssues),
+    issues: boundedIssues,
     summary: {
       packagesChecked: packages.length,
       servicesChecked: services.length,
@@ -240,7 +273,9 @@ export function analyzeServerAuditInventoryConsistency(
       networkAccess: false,
       writeAccess: false,
       maxIssues,
+      maxSourcesPerIssue,
       issuesTruncated: issues.length > maxIssues,
+      issueSourcesTruncated: boundedIssues.some((issue) => issue.sourcesTruncated),
     },
   };
 }
