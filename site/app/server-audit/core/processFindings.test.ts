@@ -93,6 +93,29 @@ test("keeps deterministic ordering for the same snapshot and emits a bounded tru
   assert.ok(first.some((finding) => finding.title === "Process relationship findings were truncated"));
 });
 
+test("process finding retention stays bounded across 5,000 missing-parent candidates", () => {
+  const processes = Array.from({ length: 5_000 }, (_, index) => ({
+    pid: index + 1,
+    ppid: 1_000_000 + index,
+    uid: 1000,
+    state: "S",
+    name: `private-process-${index}`,
+  }));
+
+  const findings = createServerAuditProcessFindings(snapshot({ processes }), { maxFindings: 1_000 });
+  const limitation = findings.find((finding) => finding.title === "Process relationship findings were truncated");
+
+  assert.equal(findings.length, 1_000);
+  assert.equal(findings.filter((finding) => finding.title === "Process parent is outside collected inventory").length, 999);
+  assert.match(limitation?.summary ?? "", /produced 5000 findings/);
+  assert.match(limitation?.summary ?? "", /first 999 deterministic findings/);
+  assert.equal(limitation?.evidence[0]?.source, "processes");
+  assert.equal(limitation?.evidence[0]?.summary, "finding limit 1000 reached");
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-process-4999"), false);
+  assert.equal(serialized.includes("1004999"), false);
+});
+
 test("rejects invalid process finding bounds", () => {
   assert.throws(() => createServerAuditProcessFindings(snapshot({ processes: [] }), { maxFindings: 0 }), /maxFindings/);
   assert.throws(() => createServerAuditProcessFindings(snapshot({ processes: [] }), { maxFindings: 1001 }), /maxFindings/);
