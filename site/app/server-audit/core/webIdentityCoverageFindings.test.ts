@@ -73,6 +73,27 @@ test("web identity coverage output is deterministic and bounded across server an
   assert.equal(structuralSources.every((source) => /^web\.(servers\[\d+\]|roots\[\d+\]\.path)$/.test(source)), true);
 });
 
+test("web identity coverage retention stays bounded across 10,000 unusable identities", () => {
+  const input = snapshot({
+    servers: Array.from({ length: 5_000 }, () => " "),
+    roots: Array.from({ length: 5_000 }, () => ({ path: " " })),
+  });
+  const first = createServerAuditWebIdentityCoverageFindings(input);
+  const second = createServerAuditWebIdentityCoverageFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  const limitation = first.find((finding) => finding.title === "Web identity coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 10000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  const structuralSources = first
+    .filter((finding) => finding.title !== "Web identity coverage findings were truncated")
+    .flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
+  assert.equal(structuralSources.length, 99);
+  assert.equal(structuralSources.every((source) => /^web\.(servers\[\d+\]|roots\[\d+\]\.path)$/.test(source)), true);
+});
+
 test("web identity coverage emits no finding without web identity evidence", () => {
   assert.deepEqual(createServerAuditWebIdentityCoverageFindings({
     schemaVersion: "1",
