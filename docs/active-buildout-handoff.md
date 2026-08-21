@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `28f3e8fe28ac0e0ff185da09e8986269ff1ef94d`, the safe merge of #700.
+At this refresh, reviewed source `main` is `47cd39ebcddab09113f40412b980c6ce3aa100d9`, the safe merge of #706.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
@@ -23,9 +23,15 @@ The safe non-production open-PR queue is **zero** at this checkpoint. The histor
 - #697 bounded ambiguous listener→process relationship source construction. The analyzer now streams complete stable identity while materializing at most the reviewed structural-source prefix; a 5,000-process regression pins historical identity, ordering, and truncation truth.
 - #698 applied the same streaming-identity/bounded-source rule to grouped service→process relationships, again preserving historical IDs/order and bounding materialized structural evidence under 5,000-process ambiguity.
 - #699 applied the same rule to filesystem→log/backup relationships while deliberately retaining the log/backup artifact witness as the final bounded source; a 5,000-filesystem ambiguity regression pins the historical relationship identity.
-- #700 bounded scheduled-job→service/process relationship object construction itself. Exact reviewed head `7ba50ce07c67604bdfb2a2fcaeabb40935755a64` stops constructing every matched relationship object before applying `maxRelationships`; it preserves exact bounded candidate counts, existing stable IDs, and historical deterministic process-before-service ordering. A 10,000-target mixed service/process regression proves one-row materialization, exact candidate cardinality, relationship truncation, and partial-multi-target truth. #700 passed exact-head Hosted CI and Rust/RustSec and merged as current `main` `28f3e8fe28ac0e0ff185da09e8986269ff1ef94d`.
+- #700 bounded scheduled-job→service/process relationship object construction itself. Exact reviewed head `7ba50ce07c67604bdfb2a2fcaeabb40935755a64` stops constructing every matched relationship object before applying `maxRelationships`; it preserves exact bounded candidate counts, existing stable IDs, and historical deterministic process-before-service ordering. A 10,000-target mixed service/process regression proves one-row materialization, exact candidate cardinality, relationship truncation, and partial-multi-target truth.
+- #701 synchronized this handoff through #700.
+- #702 bounded recognized web-server relationship finding materialization and service matching while preserving exact total finding cardinality and deterministic top-`maxFindings` output.
+- #703, exact reviewed head `752a2cbf2c557ce9912a8876fd9232866ac9c7c1`, fixed the post-merge #702 Codex P2 by replacing per-observation retained-prefix sorting with bounded worst-first heap retention. A maximum 50-web-server × 5,000-service regression pins 250,000 observed findings at `maxFindings: 500`. Exact-head Hosted CI/Rust passed and the original #702 review thread was resolved with verified successor evidence.
+- #704, exact reviewed head `9e4201678a81b8497edae0b9167bede8d17caea8`, removed full large-log finding-array materialization in favor of bounded heap retention while preserving exact total cardinality, deterministic ordering, truncation truth, and structural redaction. A 5,000-log regression pins the supported `maxFindings: 1000` boundary.
+- #705, exact reviewed head `8926e782424ad728a4dfe2b83ca9ce6514feb2f5`, applied the same bounded retention rule to stale-log candidates, preserving exact candidate cardinality and the existing truncation marker under a 5,000-log regression.
+- #706, exact reviewed head `0f26a20d7bdf11e1e8e0a36d2400f7e8db33bcb8`, applied bounded retention to backup-posture findings. A 5,000-backup regression where every record yields stale and zero-byte findings pins exact 10,000-finding truth while materializing only the bounded output prefix plus limitation marker. #706 passed exact-head Hosted CI and Rust/RustSec and merged as current `main` `47cd39ebcddab09113f40412b980c6ce3aa100d9`.
 
-Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #691–#700 and neither self-hosted lane was substituted for Hosted validation.
+Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #691–#706 and neither self-hosted lane was substituted for Hosted validation.
 
 ## Major merged work that must not be recreated
 
@@ -75,7 +81,7 @@ Key trains that must not be recreated:
 - #683/#684 — process-state coverage plus structural redaction of process/listener relationship findings.
 - #686/#687/#689 — structural redaction of baseline failed-service, public-listener, and security-posture findings.
 - #690/#692→#696 — bounded inventory/artifact contradiction evidence with limit-independent deterministic identity, exact source cardinality, explicit truncation truth, two-witness preservation, report regressions, and preferred-vs-legacy deduplication.
-- #697→#700 — bounded high-cardinality relationship construction for listener→process, service→process, filesystem→artifact, and scheduled-job→service/process paths while preserving exact bounded counts, stable identity, deterministic ordering, and structural evidence/truncation truth.
+- #697→#706 — bounded high-cardinality relationship/finding construction for listener→process, service→process, filesystem→artifact, scheduled-job→service/process, web-server relationships, large/stale-log candidates, and backup posture while preserving exact bounded counts, stable identity, deterministic ordering, structural evidence, and truncation truth.
 
 Automatic remote remediation execution remains out of scope.
 
@@ -96,7 +102,7 @@ With the queue at zero, the strongest safe continuations are:
 
 1. keep `ROADMAP.md`, this handoff, Issue #157, and production truth synchronized;
 2. continue bounded Repository Audit / Solve Graph reference, path, impact, affected-validation, MCP/Codex, and visual-explorer quality without executing repository source;
-3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic structural redaction, bounded source/object construction, and cross-platform report tests;
+3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic structural redaction, bounded source/object/finding construction, and cross-platform report tests;
 4. continue language/runtime and DX through conservative semantics, diagnostics, package/module design, pure-core extraction, and non-executing editor support;
 5. continue dormant customer-priority engineering only while queue/customer/provider gates remain OFF: source integrity, leases/retries/DLQ/observability, account/entitlement enforcement, report retention, credential boundaries, preflight validation, and safe browser/API readiness;
 6. continue TOTP account-enrollment/login/backup-code preparation without repeating already-live infrastructure rollout or mutating accounts absent explicit approval;
