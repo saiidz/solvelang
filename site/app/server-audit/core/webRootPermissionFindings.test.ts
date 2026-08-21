@@ -72,3 +72,26 @@ test("web-root permission finding order and bounds are deterministic", () => {
   assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
   assert.equal(JSON.stringify(first).includes("/srv/private/"), false);
 });
+
+test("web-root permission retention stays bounded across a 5,000-root dual-finding inventory", () => {
+  const roots = Array.from({ length: 5_000 }, (_, index) => ({
+    path: `/srv/private/${index}`,
+    owner: "root",
+    mode: "777",
+    frameworkHints: ["Laravel"],
+  }));
+  const input = snapshotWithRoots(roots);
+  const first = createServerAuditWebRootPermissionFindings(input);
+  const second = createServerAuditWebRootPermissionFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  assert.equal(first.filter((finding) => finding.title === "Candidate web root is world-writable").length, 99);
+  const limitation = first.find((finding) => finding.title === "Web-root permission findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 10000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  const serialized = JSON.stringify(first);
+  assert.equal(serialized.includes("/srv/private/"), false);
+  assert.equal(serialized.includes("Laravel"), false);
+});

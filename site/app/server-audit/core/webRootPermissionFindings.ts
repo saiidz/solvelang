@@ -19,6 +19,38 @@ function stableId(parts: string[]): string {
   return `srv_${hash.toString(16).padStart(8, "0")}`;
 }
 
+function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): number {
+  return SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
+    || left.category.localeCompare(right.category)
+    || left.id.localeCompare(right.id);
+}
+
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function permissionDigits(mode: string): [number, number, number] | undefined {
   if (!/^[0-7]{3,4}$/.test(mode)) return undefined;
   const digits = mode.slice(-3).split("").map((digit) => Number(digit));
@@ -40,13 +72,26 @@ function privilegedOwnerEvidence(index: number) {
 
 export function createServerAuditWebRootPermissionFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
   const roots = snapshot.web?.roots ?? [];
-  const candidates: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
   roots.forEach((root, index) => {
     if (root.mode !== undefined) {
       const digits = permissionDigits(root.mode);
       if (!digits) {
-        candidates.push({
+        recordFinding({
           id: stableId(["web-root-permissions", "unparseable-mode", String(index)]),
           severity: "info",
           category: "evidence-integrity",
@@ -59,7 +104,7 @@ export function createServerAuditWebRootPermissionFindings(snapshot: ServerAudit
         const [, group, other] = digits;
         const ownerEvidencePresent = root.owner !== undefined;
         if ((other & 0b010) !== 0) {
-          candidates.push({
+          recordFinding({
             id: stableId(["web-root-permissions", "world-writable", String(index)]),
             severity: "high",
             category: "permissions",
@@ -69,7 +114,7 @@ export function createServerAuditWebRootPermissionFindings(snapshot: ServerAudit
             evidence: permissionEvidence(index, ownerEvidencePresent),
           });
         } else if ((group & 0b010) !== 0) {
-          candidates.push({
+          recordFinding({
             id: stableId(["web-root-permissions", "group-writable", String(index)]),
             severity: "low",
             category: "permissions",
@@ -85,7 +130,7 @@ export function createServerAuditWebRootPermissionFindings(snapshot: ServerAudit
     const normalizedOwner = root.owner?.trim().toLowerCase();
     const applicationRoot = root.frameworkHints?.some((hint) => /laravel|node|next|wordpress/i.test(hint)) === true;
     if ((normalizedOwner === "root" || normalizedOwner === "0") && applicationRoot) {
-      candidates.push({
+      recordFinding({
         id: stableId(["web-root-permissions", "privileged-owner", String(index)]),
         severity: "low",
         category: "permissions",
@@ -97,29 +142,18 @@ export function createServerAuditWebRootPermissionFindings(snapshot: ServerAudit
     }
   });
 
-  const sorted = candidates.sort(
-    (left, right) =>
-      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-      || left.category.localeCompare(right.category)
-      || left.id.localeCompare(right.id),
-  );
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
 
-  if (sorted.length <= MAX_FINDINGS) return sorted;
-
-  const bounded = sorted.slice(0, MAX_FINDINGS - 1);
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["web-root-permissions", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
     category: "coverage",
     title: "Web-root permission findings were truncated",
-    summary: "The deterministic web-root permission stage reached its finding limit, so additional candidate roots may require review outside the emitted evidence.",
+    summary: `The deterministic web-root permission stage produced ${findingsObserved} findings and emitted only the first ${MAX_FINDINGS - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Review the bounded findings first, then split or narrow the read-only snapshot before drawing a repository-wide permission conclusion.",
     evidence: [{ source: "web.roots", summary: `finding limit ${MAX_FINDINGS} reached` }],
   });
-  return bounded.sort(
-    (left, right) =>
-      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-      || left.category.localeCompare(right.category)
-      || left.id.localeCompare(right.id),
-  );
+  return bounded.sort(compareFinding);
 }
