@@ -1,6 +1,6 @@
 # Production customer-priority dormant foundation rollout
 
-Status: **prepared for review; not deployed by this branch**.
+Status: **deployed dormant in production from commit `4bb26ab1802d2fbffbb82a5807a1db00b3954820` by workflow run `32431853270`; queue processing, customer priority, provider execution, and billing remain disabled.**
 
 This rollout intentionally separates durable infrastructure provisioning from customer/worker activation.
 
@@ -48,6 +48,8 @@ The workflow verifies:
 - four queue outputs resolve and are readable;
 - termination protection is enabled;
 - no source upload, customer job, credit consumption, email, Stripe use, or charge occurs.
+
+Production run `32431853270` completed those checks successfully on the commit named above.
 
 ## What this still does not authorize
 

@@ -7,6 +7,12 @@ on:
       - ".github/workflows/deploy-customer-priority-production-foundation.yml"
       - ".github/workflows/customer-priority-foundation-rollout-ci.yml"
       - "ops/aws/production-priority-foundation-deploy-supplemental-policy.json"
+      - "services/api-access/src/customer-priority-provider-adapter.js"
+      - "services/api-access/src/customer-priority-executor.js"
+      - "services/api-access/src/priority-worker.js"
+      - "services/api-access/src/priority-worker-handler.js"
+      - "services/api-access/test/customer-priority-provider-adapter.test.js"
+      - "services/api-access/test/customer-priority-worker.test.js"
       - "services/api-access/test/customer-priority-production-foundation-rollout.test.js"
   push:
     branches: [main]
@@ -15,6 +21,12 @@ on:
       - ".github/workflows/deploy-customer-priority-production-foundation.yml"
       - ".github/workflows/customer-priority-foundation-rollout-ci.yml"
       - "ops/aws/production-priority-foundation-deploy-supplemental-policy.json"
+      - "services/api-access/src/customer-priority-provider-adapter.js"
+      - "services/api-access/src/customer-priority-executor.js"
+      - "services/api-access/src/priority-worker.js"
+      - "services/api-access/src/priority-worker-handler.js"
+      - "services/api-access/test/customer-priority-provider-adapter.test.js"
+      - "services/api-access/test/customer-priority-worker.test.js"
       - "services/api-access/test/customer-priority-production-foundation-rollout.test.js"
 
 permissions:
