@@ -34,6 +34,7 @@ import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindi
 import { createServerAuditServiceIdentityCoverageFindings } from "./serviceIdentityCoverageFindings";
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
+import { createServerAuditSystemMetricsCoverageFindings } from "./systemMetricsCoverageFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
 import { createServerAuditTlsListenerFindings } from "./tlsListenerFindings";
 import { createServerAuditWebIdentityCoverageFindings } from "./webIdentityCoverageFindings";
@@ -134,6 +135,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditBackupPostureFindings(snapshot),
     ...createServerAuditTemporalFindings(snapshot),
     ...createServerAuditInventoryFindings(snapshot),
+    ...createServerAuditSystemMetricsCoverageFindings(snapshot),
     ...createServerAuditFilesystemCoverageFindings(snapshot),
     ...createServerAuditFilesystemCapacityCoverageFindings(snapshot),
     ...createServerAuditFilesystemIdentityCoverageFindings(snapshot),
@@ -194,6 +196,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     limitations: [
       "This report analyzes only the supplied read-only snapshot; absence of evidence is not proof of secure configuration.",
       "Coverage-gap findings report structurally absent snapshot sections only; a present section does not prove that collection was complete or authoritative.",
+      "System-telemetry coverage findings report only supplied system sections that omit reviewed uptime, load, or memory metrics; they do not prove host health, collector completeness, authoritative telemetry, or absence of resource pressure.",
       "Timestamp-integrity findings are based only on the supplied snapshot collection time and bounded consistency checks; they do not prove host clock correctness.",
       "Inventory-consistency findings identify only contradictions inside the supplied snapshot; they do not determine which duplicate value is authoritative.",
       "Backup/log consistency findings identify only contradictory duplicate artifact evidence; collection-time churn can explain some log differences and the stage does not determine which value is authoritative.",
