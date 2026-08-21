@@ -89,6 +89,30 @@ test("ambiguous listener evidence caps structural sources without losing ambigui
   assert.equal(JSON.stringify(analysis).includes("shared-private-worker"), false);
 });
 
+test("high-cardinality ambiguity preserves legacy identity while materializing only bounded sources", () => {
+  const input = snapshot();
+  input.processes = Array.from({ length: 5_000 }, (_, index) => ({
+    pid: 10_000 + index,
+    ppid: 1,
+    uid: 1000,
+    state: "S",
+    name: "shared-private-worker",
+  }));
+  input.listeningSockets = [{ protocol: "tcp", localAddress: "127.0.0.1", port: 4000, process: "shared-private-worker" }];
+
+  const analysis = analyzeServerAuditProcessRelationships(input);
+  assert.equal(analysis.relationships.length, 1);
+  assert.equal(analysis.relationships[0].id, "server-process:6692bf28");
+  assert.equal(analysis.relationships[0].sources.length, 32);
+  assert.deepEqual(analysis.relationships[0].sources.slice(0, 4), [
+    "listeningSockets[0]",
+    "processes[0]",
+    "processes[1000]",
+    "processes[1001]",
+  ]);
+  assert.equal(analysis.relationships[0].sourcesTruncated, true);
+});
+
 test("listener attribution normalizes bounded NFC labels without serializing them", () => {
   const input = snapshot();
   input.processes = [
