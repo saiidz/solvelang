@@ -8,19 +8,21 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `33f53bbdd4e49ebfad759f529c9a54a54cc52277`, the safe merge of #673.
+At this refresh, reviewed source `main` is `b928ada4d29e13a0fbac4500778d9d7d587ba80b`, the safe merge of #680.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
 ## Most recent safe integration state
 
-- #669 adds bounded structural coverage for candidate web roots whose owner or mode evidence is missing, with fair interleaving across evidence dimensions under the 100-reference cap.
-- #670 composes #669 into canonical Server Audit JSON/HTML reports with an explicit authority limitation and redaction coverage.
-- #671 synchronizes this handoff through #670; exact reviewed head `b6ed6b8b2381e4f29b7fa362570dd9de00c2541d` merged as `57367a407d70f462e4e9ab8144a3b1d75c9112ef`.
-- #672 adds bounded structural filesystem-utilization findings using `filesystems[index].usagePercent` evidence instead of raw mount paths. It preserves the existing 80/90/95 percent thresholds, caps findings at 100, and keeps private mount identities out of finding payloads. Exact reviewed head `499516a044fc427f4fa3947933f8befb81ffe24f` merged as `6811d820812f8c40ba3566f8608982bd283fd447`.
-- #673 composes #672 into canonical Server Audit JSON/HTML reports and filters the three legacy raw-mount filesystem-usage findings from report composition. It preserves severity semantics, adds an authority limitation, and pins redaction of private mount/device identities while retaining structural usage evidence. Exact reviewed head `4cb8fe663be993503ad9a526fb2a819091c533e1` merged as current `main` `33f53bbdd4e49ebfad759f529c9a54a54cc52277`.
+- #674 synchronizes this handoff through #673; exact reviewed head `d9741c9c9ddcff61ecc2b77471314396e137a133` merged after exact-head Hosted CI and Rust/RustSec green validation.
+- #675 adds bounded structural coverage for supplied filesystem records missing `sizeBytes`, `usedBytes`, or `availableBytes`, preserving exact missing-field counts while round-robin bounding structural evidence to 100 references. Exact reviewed head `dd75ff3814eaca2faa780bbc03ffc8f86c80db44` merged safely.
+- #676 composes #675 into canonical Server Audit JSON/HTML, adds an explicit byte-accounting authority limitation, and pins redaction of mount/device values. Exact reviewed head `b02ac121e3fad38f8001880a87e1f03599e06350` merged safely.
+- #677 adds bounded structural coverage for supplied filesystem records missing a usable filesystem source/device identity. Exact reviewed head `ce8572ea24b64eca0c2b6f9e86d443c2287fc32b` merged safely.
+- #678 composes #677 into canonical Server Audit JSON/HTML with structural `filesystems[index].filesystem` evidence and redaction regressions. Exact reviewed head `3ad10ca626823766500192fa320be60398084c73` merged safely.
+- #679 adds bounded structural coverage for supplied service records whose required `state` becomes empty after trim/NFC normalization. It emits only `services[index].state` evidence, treats non-empty state strings as observed evidence without judging health, caps deterministic findings at 100, and withholds service names/state/enablement values. Exact reviewed head `a33769e32b3b0279e96ec015967bd39e8ee04f75` passed Hosted CI and Rust/RustSec and merged as `dfedf5aeeef6acd06778497c090a52484a8dd25b`.
+- #680 composes #679 into canonical Server Audit JSON/HTML, adds an explicit service-state authority limitation, and pins redaction of service names, state values, and enablement values while preserving structural `services[index].state` evidence. Exact reviewed head `24f4dbcf2ee6d2abb6c2781cd87d7951022061f2` passed Hosted CI and Rust/RustSec and merged as current `main` `b928ada4d29e13a0fbac4500778d9d7d587ba80b`.
 
-Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #669–#673 and neither self-hosted lane was substituted for Hosted validation.
+Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #674–#680 and neither self-hosted lane was substituted for Hosted validation.
 
 ## Major merged work that must not be recreated
 
@@ -45,7 +47,7 @@ Ordinary branches in this recent Server Audit train used exact-head GitHub-hoste
 
 ### Server Audit
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, scheduled-job→service/process, recognized web-server→service/package, and filesystem→artifact structural relationships; ambiguity/unresolved/truncation/partial-fanout findings; stale/large-log evidence; local web/TLS/listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-inventory coverage; identity coverage; missing filesystem-utilization coverage; incomplete system telemetry/load-vector coverage; incomplete web-root owner/mode coverage; and canonical JSON/HTML composition for those states.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, scheduled-job→service/process, recognized web-server→service/package, and filesystem→artifact structural relationships; ambiguity/unresolved/truncation/partial-fanout findings; stale/large-log evidence; local web/TLS/listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-inventory coverage; identity coverage; missing filesystem utilization/byte/source evidence; incomplete system telemetry/load-vector coverage; incomplete web-root owner/mode coverage; blank service-state coverage; and canonical JSON/HTML composition for those states.
 
 Key trains that must not be recreated:
 
@@ -63,6 +65,9 @@ Key trains that must not be recreated:
 - #666/#668 — incomplete supplied system telemetry/load-vector coverage and canonical report composition.
 - #669/#670 — bounded web-root ownership/permission evidence coverage and canonical report composition.
 - #672/#673 — structural filesystem-utilization findings and canonical report composition replacing legacy raw-mount evidence.
+- #675/#676 — missing filesystem byte-accounting evidence and canonical report composition.
+- #677/#678 — missing filesystem source/device identity evidence and canonical report composition.
+- #679/#680 — blank normalized service-state evidence and canonical report composition.
 
 Automatic remote remediation execution remains out of scope.
 
