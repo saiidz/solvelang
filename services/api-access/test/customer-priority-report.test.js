@@ -11,11 +11,11 @@ import {
 
 const JOB_ID = `job_${"a".repeat(32)}`;
 const FINGERPRINT = "b".repeat(64);
+const IDENTITY = { jobId: JOB_ID, sourceFingerprint: FINGERPRINT };
 
 function report(overrides = {}) {
   return createCustomerPriorityReport({
-    jobId: JOB_ID,
-    sourceFingerprint: FINGERPRINT,
+    ...IDENTITY,
     provider: "fixture-provider",
     reportText: "Audit summary\n- No critical findings.",
     ...overrides,
@@ -23,8 +23,8 @@ function report(overrides = {}) {
 }
 
 test("report identity is deterministic and owned by SolveLang job/source identity", () => {
-  const first = customerPriorityReportId({ jobId: JOB_ID, sourceFingerprint: FINGERPRINT });
-  const second = customerPriorityReportId({ jobId: JOB_ID, sourceFingerprint: FINGERPRINT });
+  const first = customerPriorityReportId(IDENTITY);
+  const second = customerPriorityReportId(IDENTITY);
   assert.equal(first, second);
   assert.match(first, /^report_[a-f0-9]{32}$/);
   assert.notEqual(
@@ -42,15 +42,14 @@ test("report text accepts plain text/newlines but rejects control bytes and over
 
 test("worker validation rejects a mismatched report ID or malformed provider", () => {
   const good = report();
-  assert.deepEqual(validateCustomerPriorityReport(good, { jobId: JOB_ID, sourceFingerprint: FINGERPRINT }), good);
+  assert.deepEqual(validateCustomerPriorityReport(good, IDENTITY), good);
   assert.throws(
-    () => validateCustomerPriorityReport({ ...good, reportId: `report_${"f".repeat(32)}` }, { jobId: JOB_ID, sourceFingerprint: FINGERPRINT }),
+    () => validateCustomerPriorityReport({ ...good, reportId: `report_${"f".repeat(32)}` }, IDENTITY),
     /report ID is invalid/,
   );
   assert.throws(
     () => createCustomerPriorityReport({
-      jobId: JOB_ID,
-      sourceFingerprint: FINGERPRINT,
+      ...IDENTITY,
       provider: "provider with spaces",
       reportText: "report",
     }),
@@ -58,14 +57,15 @@ test("worker validation rejects a mismatched report ID or malformed provider", (
   );
 });
 
-test("public report exposes only customer-safe report fields and fails closed on malformed stored data", () => {
+test("public report exposes only customer-safe report fields and revalidates stored identity", () => {
   const good = report();
   assert.deepEqual(publicCustomerPriorityReport({
     ...good,
     processedBy: "internal-worker-id",
     sourceFingerprint: FINGERPRINT,
     secret: "must-not-escape",
-  }), good);
-  assert.equal(publicCustomerPriorityReport({ ...good, reportText: "bad\u0000text" }), null);
-  assert.equal(publicCustomerPriorityReport({ reportId: good.reportId }), null);
+  }, IDENTITY), good);
+  assert.equal(publicCustomerPriorityReport({ ...good, reportText: "bad\u0000text" }, IDENTITY), null);
+  assert.equal(publicCustomerPriorityReport({ ...good, reportId: `report_${"f".repeat(32)}` }, IDENTITY), null);
+  assert.equal(publicCustomerPriorityReport({ reportId: good.reportId }, IDENTITY), null);
 });
