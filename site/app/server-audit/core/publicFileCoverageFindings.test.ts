@@ -51,6 +51,7 @@ test("conflicting duplicate marker checks are explicit and structural", () => {
   }));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_66715ce8");
   assert.equal(findings[0].severity, "low");
   assert.equal(findings[0].category, "evidence-integrity");
   assert.deepEqual(findings[0].evidence.map((item) => item.source), [
@@ -123,6 +124,7 @@ test("high-cardinality contradictory marker evidence is bounded while retaining 
   }));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_2fe6a8d7");
   assert.equal(findings[0].title, "Sensitive-file marker checks contradict each other");
   assert.equal(findings[0].evidence.length, 32);
   assert.equal(findings[0].evidence.at(-2)?.source, "web.publicFileChecks[5003].present");
