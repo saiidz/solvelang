@@ -102,10 +102,15 @@ export function createPriorityWorker({
           if (!executeCustomerJob) throw new Error("Customer priority job executor is unavailable.");
           if (typeof jobStore.renewLease !== "function") throw new Error("Priority job lease renewal is unavailable.");
           let heartbeatFailure;
+          let heartbeatPending = Promise.resolve();
           const heartbeat = setInterval(() => {
             if (heartbeatFailure) return;
-            const renewedAt = now();
-            Promise.resolve(jobStore.renewLease(message.jobId, leaseOwner, renewedAt, renewedAt + leaseMs))
+            heartbeatPending = heartbeatPending
+              .then(async () => {
+                if (heartbeatFailure) return;
+                const renewedAt = now();
+                await jobStore.renewLease(message.jobId, leaseOwner, renewedAt, renewedAt + leaseMs);
+              })
               .catch((error) => { heartbeatFailure = error; });
           }, heartbeatMs);
           try {
@@ -116,6 +121,8 @@ export function createPriorityWorker({
               sourceFingerprint: job.sourceFingerprint,
               weightedCredits: job.weightedCredits,
             });
+            clearInterval(heartbeat);
+            await heartbeatPending;
             if (heartbeatFailure) throw new Error("Priority job lease renewal failed.");
             const report = validateCustomerPriorityReport(execution, {
               jobId: message.jobId,
@@ -132,6 +139,7 @@ export function createPriorityWorker({
             };
           } finally {
             clearInterval(heartbeat);
+            await heartbeatPending;
           }
         } else {
           throw new Error("Unsupported priority job type.");
