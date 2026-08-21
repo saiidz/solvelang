@@ -60,3 +60,23 @@ test("listener identity coverage is deterministic and bounded", () => {
   assert.equal(first.filter((finding) => finding.title === "Listening socket identity coverage findings were truncated").length, 1);
   assert.equal(JSON.stringify(first).includes("private-process-"), false);
 });
+
+test("listener identity coverage retention stays bounded across 5,000 dual-gap records", () => {
+  const listeners = Array.from({ length: 5_000 }, (_, index) => ({
+    protocol: " ",
+    localAddress: "\t",
+    port: 20_000 + (index % 40_000),
+    process: `private-process-${index}`,
+  }));
+  const input = snapshot(listeners);
+  const first = createServerAuditListenerIdentityCoverageFindings(input);
+  const second = createServerAuditListenerIdentityCoverageFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  const limitation = first.find((finding) => finding.title === "Listening socket identity coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 10000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-process-"), false);
+});
