@@ -45,12 +45,23 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   return resolved;
 }
 
-function stableId(kind: ServerAuditServiceProcessRelationshipKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
+function hashStableText(hash: number, value: string): number {
+  let next = hash;
+  for (let index = 0; index < value.length; index += 1) {
+    next ^= value.charCodeAt(index);
+    next = Math.imul(next, 16777619) >>> 0;
+  }
+  return next;
+}
+
+function stableIdFromSources(kind: ServerAuditServiceProcessRelationshipKind, sources: Iterable<string>): string {
+  let hash = hashStableText(2166136261, kind);
+  hash = hashStableText(hash, "\u001f");
+  let first = true;
+  for (const source of sources) {
+    if (!first) hash = hashStableText(hash, "\u001f");
+    hash = hashStableText(hash, source);
+    first = false;
   }
   return `server-service-process:${hash.toString(16).padStart(8, "0")}`;
 }
@@ -62,16 +73,29 @@ function compareRelationship(
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
-function relationship(
-  kind: ServerAuditServiceProcessRelationshipKind,
-  allSources: string[],
+function serviceProcessRelationship(
+  serviceIndex: number,
+  sortedProcessIndexes: number[],
 ): ServerAuditServiceProcessRelationship {
-  const sources = allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP);
+  const kind: ServerAuditServiceProcessRelationshipKind =
+    sortedProcessIndexes.length === 1 ? "service-process" : "service-process-group";
+  const serviceSource = `services[${serviceIndex}]`;
+  const sources = [serviceSource];
+  for (const processIndex of sortedProcessIndexes) {
+    if (sources.length >= MAX_SOURCES_PER_RELATIONSHIP) break;
+    sources.push(`processes[${processIndex}]`);
+  }
+
+  function* allSources(): IterableIterator<string> {
+    yield serviceSource;
+    for (const processIndex of sortedProcessIndexes) yield `processes[${processIndex}]`;
+  }
+
   return {
-    id: stableId(kind, allSources),
+    id: stableIdFromSources(kind, allSources()),
     kind,
     sources,
-    ...(allSources.length > sources.length ? { sourcesTruncated: true as const } : {}),
+    ...(1 + sortedProcessIndexes.length > sources.length ? { sourcesTruncated: true as const } : {}),
   };
 }
 
@@ -127,18 +151,8 @@ export function analyzeServerAuditServiceProcessRelationships(
 
     matchedServices += 1;
     const sortedProcessIndexes = [...processIndexes].sort((left, right) => left - right);
-    const sources = [
-      `services[${serviceIndex}]`,
-      ...sortedProcessIndexes.map((index) => `processes[${index}]`),
-    ];
-
-    if (sortedProcessIndexes.length === 1) {
-      relationships.push(relationship("service-process", sources));
-      return;
-    }
-
-    groupedProcessMatches += 1;
-    relationships.push(relationship("service-process-group", sources));
+    if (sortedProcessIndexes.length > 1) groupedProcessMatches += 1;
+    relationships.push(serviceProcessRelationship(serviceIndex, sortedProcessIndexes));
   });
 
   relationships.sort(compareRelationship);
