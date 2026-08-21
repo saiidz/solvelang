@@ -1,4 +1,5 @@
 import type { ServerAuditFinding, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
+import { createServerAuditProcessStateCoverageFindings } from "./processStateCoverageFindings";
 
 export type ServerAuditProcessFindingOptions = {
   maxFindings?: number;
@@ -44,7 +45,9 @@ export function createServerAuditProcessFindings(
   const processes = snapshot.processes;
   if (processes === undefined) return [];
 
-  const findings: ServerAuditFinding[] = [];
+  const findings: ServerAuditFinding[] = [
+    ...createServerAuditProcessStateCoverageFindings(snapshot),
+  ];
   const pids = new Set(processes.map((process) => process.pid));
   const processNames = new Set(processes.map((process) => process.name));
 
