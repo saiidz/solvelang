@@ -26,6 +26,7 @@ import { createServerAuditProcessIdentityCoverageFindings } from "./processIdent
 import { createServerAuditPublicFileCoverageFindings } from "./publicFileCoverageFindings";
 import { createServerAuditPublicFileFindings } from "./publicFileFindings";
 import { createServerAuditScheduledJobCoverageFindings } from "./scheduledJobCoverageFindings";
+import { createServerAuditScheduledJobIdentityCoverageFindings } from "./scheduledJobIdentityCoverageFindings";
 import { createServerAuditScheduledJobRelationshipFindings } from "./scheduledJobRelationshipFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditServiceIdentityCoverageFindings } from "./serviceIdentityCoverageFindings";
@@ -137,6 +138,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditServiceCoverageFindings(snapshot),
     ...createServerAuditServiceIdentityCoverageFindings(snapshot),
     ...createServerAuditScheduledJobCoverageFindings(snapshot),
+    ...createServerAuditScheduledJobIdentityCoverageFindings(snapshot),
     ...createServerAuditScheduledJobRelationshipFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditListenerIdentityCoverageFindings(snapshot),
@@ -200,6 +202,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
       "Service-identity coverage findings report only supplied service records whose identity is empty after trim and NFC normalization; they do not prove service absence, service ownership, runtime health, or collector authority.",
       "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
+      "Scheduled-job identity coverage findings report only supplied scheduled-job records whose source or command-summary identity is empty after trim and NFC normalization; they do not prove job absence, provenance authority, command validity, runtime execution, or collector completeness.",
       "Scheduled-job relationship findings use only bounded exact-name-token matches over supplied sanitized command summaries and service/process names; multi-target, unresolved, oversized, or truncated results are completeness/integrity signals and do not prove command execution, ownership, job validity, runtime health, or collector authority.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Listener-identity coverage findings report only supplied listening-socket records whose protocol or local-address identity is empty after trim and NFC normalization; they do not prove listener absence, endpoint ownership, public reachability, runtime health, or collector authority.",
