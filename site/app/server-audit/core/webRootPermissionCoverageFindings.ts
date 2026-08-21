@@ -12,6 +12,36 @@ function stableId(parts: string[]): string {
   return `srv_${hash.toString(16).padStart(8, "0")}`;
 }
 
+function boundedCoverageEvidence(ownerIndexes: number[], modeIndexes: number[]) {
+  const evidence: Array<{ source: string; summary: string }> = [];
+  let ownerCursor = 0;
+  let modeCursor = 0;
+
+  while (
+    evidence.length < MAX_WEB_ROOT_PERMISSION_COVERAGE_EVIDENCE
+    && (ownerCursor < ownerIndexes.length || modeCursor < modeIndexes.length)
+  ) {
+    if (ownerCursor < ownerIndexes.length && evidence.length < MAX_WEB_ROOT_PERMISSION_COVERAGE_EVIDENCE) {
+      const index = ownerIndexes[ownerCursor];
+      ownerCursor += 1;
+      evidence.push({
+        source: `web.roots[${index}].owner`,
+        summary: "owner missing or blank",
+      });
+    }
+    if (modeCursor < modeIndexes.length && evidence.length < MAX_WEB_ROOT_PERMISSION_COVERAGE_EVIDENCE) {
+      const index = modeIndexes[modeCursor];
+      modeCursor += 1;
+      evidence.push({
+        source: `web.roots[${index}].mode`,
+        summary: "mode missing",
+      });
+    }
+  }
+
+  return evidence;
+}
+
 export function createServerAuditWebRootPermissionCoverageFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
@@ -27,25 +57,7 @@ export function createServerAuditWebRootPermissionCoverageFindings(
 
   if (missingOwnerIndexes.length === 0 && missingModeIndexes.length === 0) return [];
 
-  const missingOwners = new Set(missingOwnerIndexes);
-  const missingModes = new Set(missingModeIndexes);
-  const evidence = roots.flatMap((_, index) => {
-    const entries: Array<{ source: string; summary: string }> = [];
-    if (missingOwners.has(index)) {
-      entries.push({
-        source: `web.roots[${index}].owner`,
-        summary: "owner missing or blank",
-      });
-    }
-    if (missingModes.has(index)) {
-      entries.push({
-        source: `web.roots[${index}].mode`,
-        summary: "mode missing",
-      });
-    }
-    return entries;
-  }).slice(0, MAX_WEB_ROOT_PERMISSION_COVERAGE_EVIDENCE);
-
+  const evidence = boundedCoverageEvidence(missingOwnerIndexes, missingModeIndexes);
   const totalMissingEvidence = missingOwnerIndexes.length + missingModeIndexes.length;
   const evidenceTruncated = totalMissingEvidence > evidence.length;
 
