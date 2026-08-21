@@ -108,16 +108,38 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
     }
   }
 
-  for (const socket of snapshot.listeningSockets ?? []) {
-    if (!PUBLIC_BINDINGS.has(socket.localAddress)) continue;
+  (snapshot.listeningSockets ?? []).forEach((socket, index) => {
+    if (!PUBLIC_BINDINGS.has(socket.localAddress)) return;
     const name = SENSITIVE_PUBLIC_PORTS.get(socket.port);
+    const addressSource = `listeningSockets[${index}].localAddress`;
+    const portSource = `listeningSockets[${index}].port`;
     if (name) {
       const severity: ServerAuditSeverity = socket.port === 23 || socket.port === 6379 || socket.port === 3306 || socket.port === 5432 ? "high" : "medium";
-      findings.push(finding(severity, "network", `${name} listens on all interfaces`, `Port ${socket.port} is bound to ${socket.localAddress}${socket.process ? ` by ${socket.process}` : ""}.`, "Confirm this service must be internet/reachability exposed; otherwise bind it privately and enforce network-level filtering.", [{ source: `${socket.protocol}/${socket.port}`, summary: `binding ${socket.localAddress}` }]));
+      findings.push(finding(
+        severity,
+        "network",
+        `${name} listens on all interfaces`,
+        `Listening socket evidence at listeningSockets[${index}] matches the reviewed ${name} service class and is bound to a wildcard/all-interface address.`,
+        "Confirm this service must be internet/reachability exposed; otherwise bind it privately and enforce network-level filtering.",
+        [
+          { source: portSource, summary: "port matches reviewed sensitive service class" },
+          { source: addressSource, summary: "address is wildcard or all-interface" },
+        ],
+      ));
     } else if (!EXPECTED_PUBLIC_PORTS.has(socket.port)) {
-      findings.push(finding("low", "network", "Unexpected public listener", `Port ${socket.port} is bound to all interfaces.`, "Confirm ownership and intended exposure, then restrict the listener or firewall if it is not required.", [{ source: `${socket.protocol}/${socket.port}`, summary: socket.process ?? "unknown process" }]));
+      findings.push(finding(
+        "low",
+        "network",
+        "Unexpected public listener",
+        `Listening socket evidence at listeningSockets[${index}] uses a port outside the reviewed expected-public set and is bound to a wildcard/all-interface address.`,
+        "Confirm ownership and intended exposure, then restrict the listener or firewall if it is not required.",
+        [
+          { source: portSource, summary: "port is outside reviewed expected-public set" },
+          { source: addressSource, summary: "address is wildcard or all-interface" },
+        ],
+      ));
     }
-  }
+  });
 
   const securityProbeCoverage = createSecurityProbeCoverageFinding(snapshot);
   if (securityProbeCoverage) findings.push(securityProbeCoverage);
