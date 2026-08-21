@@ -93,3 +93,22 @@ test("retains only the bounded deterministic finding prefix under high-cardinali
     ["services[2464].state"],
   );
 });
+
+test("keeps maximum finding retention bounded under the maximum web-service cross product", () => {
+  const services = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `nginx@worker-${index}.service`,
+    state: "loaded failed failed",
+  }));
+  const input = snapshot({ web: { servers: Array.from({ length: 50 }, () => "nginx") }, services });
+
+  const first = createServerAuditWebServerRelationshipFindings(input, { maxFindings: 500 });
+  const second = createServerAuditWebServerRelationshipFindings(structuredClone(input), { maxFindings: 500 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 500);
+  assert.equal(first.filter((finding) => finding.title === "Web-server probes disagree on service health").length, 499);
+  const limitation = first.find((finding) => finding.title === "Web-server relationship findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 250000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+});
