@@ -8,6 +8,8 @@ const ACCOUNT_ID = /^acct_[a-f0-9]{32}$/;
 const REQUEST_ID = /^[A-Za-z0-9_.:-]{8,128}$/;
 const FINGERPRINT = /^[a-f0-9]{64}$/;
 const JOB_ID = /^job_[a-f0-9]{32}$/;
+const JOB_RETENTION_SECONDS = 60 * 60 * 24 * 7;
+const REQUEST_RETENTION_SECONDS = 60 * 60 * 24 * 400;
 
 function cleanAccountId(value) {
   if (typeof value !== "string" || !ACCOUNT_ID.test(value)) throw new PriorityJobError(400, "invalid_account_id", "Account ID is invalid.");
@@ -59,6 +61,37 @@ function customerJobId(accountId, requestId) {
   return `job_${createHash("sha256").update(`${accountId}\u001f${requestId}`).digest("hex").slice(0, 32)}`;
 }
 
+function customerRequestMarkerId(accountId, requestId) {
+  return `request_${createHash("sha256").update(`${accountId}\u001f${requestId}`).digest("hex").slice(0, 32)}`;
+}
+
+function idempotencyConflict() {
+  return new PriorityJobError(409, "job_idempotency_conflict", "The job request ID was already used with different inputs.");
+}
+
+function expiredRequest() {
+  return new PriorityJobError(409, "job_request_expired", "The job request ID belongs to a prior job that is no longer retained. Submit a new request ID.");
+}
+
+function assertMatchingJob(job, { accountId, requestFingerprint }) {
+  if (!job || job.requestFingerprint !== requestFingerprint || job.accountId !== accountId) throw idempotencyConflict();
+  return job;
+}
+
+function assertMatchingMarker(marker, { accountId, jobId, requestFingerprint }) {
+  if (
+    !marker
+    || marker.recordType !== "customer_priority_request"
+    || marker.accountId !== accountId
+    || marker.targetJobId !== jobId
+    || marker.requestFingerprint !== requestFingerprint
+    || (marker.state !== "reserved" && marker.state !== "job_reserved")
+  ) {
+    throw idempotencyConflict();
+  }
+  return marker;
+}
+
 function publicCustomerJob(record) {
   return {
     jobId: record.jobId,
@@ -94,7 +127,17 @@ export function createCustomerPriorityService({
 }) {
   if (!accountAccess || typeof accountAccess.assertActive !== "function") throw new Error("Customer account access verifier is required.");
   if (!apiAccessService || typeof apiAccessService.consumeUsage !== "function") throw new Error("API access service is required.");
-  if (!jobStore || typeof jobStore.putJob !== "function" || typeof jobStore.getJob !== "function") throw new Error("Priority job store is required.");
+  if (
+    !jobStore
+    || typeof jobStore.putJob !== "function"
+    || typeof jobStore.getJob !== "function"
+    || typeof jobStore.putRequestMarker !== "function"
+    || typeof jobStore.getRequestMarker !== "function"
+    || typeof jobStore.markRequestJobReserved !== "function"
+    || typeof jobStore.activatePendingJob !== "function"
+  ) {
+    throw new Error("Priority job store is required.");
+  }
   if (providerExecutionEnabled && (!sourceStore || typeof sourceStore.assertSource !== "function")) {
     throw new Error("Priority source verifier is required when provider execution is enabled.");
   }
@@ -123,43 +166,128 @@ export function createCustomerPriorityService({
     await accountAccess.assertActive(accountId);
     const quote = quoteWorkload(input.workload ?? input);
     const jobId = customerJobId(accountId, requestId);
+    const markerId = customerRequestMarkerId(accountId, requestId);
     const requestFingerprint = createHash("sha256")
       .update(JSON.stringify({ accountId, requestId, sourceFingerprint, priority: quote.priority, weightedCredits: quote.weightedCredits }))
       .digest("hex");
-    const existing = await jobStore.getJob(jobId);
-    if (existing) {
-      if (existing.requestFingerprint !== requestFingerprint || existing.accountId !== accountId) throw new PriorityJobError(409, "job_idempotency_conflict", "The job request ID was already used with different inputs.");
-      return { ...publicCustomerJob(existing), duplicate: true };
+    const timestamp = now();
+    const createdAt = new Date(timestamp).toISOString();
+
+    let job = await jobStore.getJob(jobId);
+    if (job) assertMatchingJob(job, { accountId, requestFingerprint });
+
+    let marker = await jobStore.getRequestMarker(markerId);
+    if (marker) assertMatchingMarker(marker, { accountId, jobId, requestFingerprint });
+
+    if (job && !marker) {
+      const outcome = await jobStore.putRequestMarker({
+        jobId: markerId,
+        recordType: "customer_priority_request",
+        accountId,
+        targetJobId: jobId,
+        requestFingerprint,
+        state: "job_reserved",
+        createdAt,
+        expiresAt: Math.floor(timestamp / 1_000) + REQUEST_RETENTION_SECONDS,
+      });
+      if (outcome !== "created") {
+        marker = assertMatchingMarker(await jobStore.getRequestMarker(markerId), { accountId, jobId, requestFingerprint });
+      } else {
+        marker = { state: "job_reserved" };
+      }
     }
 
+    if (job && marker?.state === "reserved") {
+      const outcome = await jobStore.markRequestJobReserved(markerId, requestFingerprint, jobId);
+      if (outcome !== "updated") throw idempotencyConflict();
+      marker = { ...marker, state: "job_reserved" };
+    }
+
+    if (job && job.status !== "pending_usage") {
+      return { ...publicCustomerJob(job), duplicate: true };
+    }
+
+    if (!job && marker?.state === "job_reserved") throw expiredRequest();
+
     await sourceStore.assertSource({ accountId, fingerprint: sourceFingerprint });
+
+    if (!marker) {
+      const markerRecord = {
+        jobId: markerId,
+        recordType: "customer_priority_request",
+        accountId,
+        targetJobId: jobId,
+        requestFingerprint,
+        state: "reserved",
+        createdAt,
+        expiresAt: Math.floor(timestamp / 1_000) + REQUEST_RETENTION_SECONDS,
+      };
+      const markerOutcome = await jobStore.putRequestMarker(markerRecord);
+      if (markerOutcome === "created") {
+        marker = markerRecord;
+      } else {
+        marker = assertMatchingMarker(await jobStore.getRequestMarker(markerId), { accountId, jobId, requestFingerprint });
+        if (marker.state === "job_reserved") {
+          job = await jobStore.getJob(jobId);
+          if (!job) throw expiredRequest();
+          assertMatchingJob(job, { accountId, requestFingerprint });
+          if (job.status !== "pending_usage") return { ...publicCustomerJob(job), duplicate: true };
+        }
+      }
+    }
+
+    let createdJob = false;
+    if (!job) {
+      const pendingJob = {
+        jobId,
+        accountId,
+        requestId,
+        requestFingerprint,
+        jobType: "repository_audit",
+        priority: quote.priority,
+        capacityWeight: quote.capacityWeight,
+        weightedCredits: quote.weightedCredits,
+        sourceFingerprint,
+        status: "pending_usage",
+        createdAt,
+        expiresAt: Math.floor(timestamp / 1_000) + JOB_RETENTION_SECONDS,
+      };
+      const jobOutcome = await jobStore.putJob(pendingJob);
+      if (jobOutcome === "created") {
+        job = pendingJob;
+        createdJob = true;
+      } else {
+        job = assertMatchingJob(await jobStore.getJob(jobId), { accountId, requestFingerprint });
+        if (job.status !== "pending_usage") return { ...publicCustomerJob(job), duplicate: true };
+      }
+    }
+
+    if (marker.state !== "job_reserved") {
+      const markerOutcome = await jobStore.markRequestJobReserved(markerId, requestFingerprint, jobId);
+      if (markerOutcome !== "updated") throw idempotencyConflict();
+      marker = { ...marker, state: "job_reserved" };
+    }
+
     const usage = await apiAccessService.consumeUsage({
       accountId,
       credits: quote.weightedCredits,
       idempotencyKey: `priority:${requestId}`,
     });
-    const timestamp = now();
-    const job = {
-      jobId,
-      accountId,
-      requestId,
-      requestFingerprint,
-      jobType: "repository_audit",
-      priority: quote.priority,
-      capacityWeight: quote.capacityWeight,
-      weightedCredits: quote.weightedCredits,
-      sourceFingerprint,
-      status: "queued",
-      createdAt: new Date(timestamp).toISOString(),
-      expiresAt: Math.floor(timestamp / 1_000) + 60 * 60 * 24 * 7,
-    };
-    const outcome = await jobStore.putJob(job);
-    if (outcome !== "created") {
-      const raced = await jobStore.getJob(jobId);
-      if (raced?.requestFingerprint === requestFingerprint && raced.accountId === accountId) return { ...publicCustomerJob(raced), usage, duplicate: true };
-      throw new PriorityJobError(409, "job_idempotency_conflict", "The job request ID was already used with different inputs.");
+    const usageCommittedAt = new Date(now()).toISOString();
+    const activation = await jobStore.activatePendingJob(jobId, requestFingerprint, usageCommittedAt);
+    if (activation === "conflict") throw idempotencyConflict();
+    if (activation !== "updated" && activation !== "already_progressed") {
+      throw new Error("Priority job activation returned an invalid result.");
     }
-    return { ...publicCustomerJob(job), usage, duplicate: false };
+
+    const queued = activation === "updated"
+      ? { ...job, status: "queued", usageCommittedAt }
+      : assertMatchingJob(await jobStore.getJob(jobId), { accountId, requestFingerprint });
+    return {
+      ...publicCustomerJob(queued),
+      usage,
+      duplicate: !createdJob || usage?.duplicate === true || activation === "already_progressed",
+    };
   }
 
   async function getJob(input = {}) {
