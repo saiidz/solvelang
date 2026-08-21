@@ -65,18 +65,39 @@ function hasNonBlankLabel(value: string | undefined): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function stableId(kind: ServerAuditProcessRelationshipKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
+function hashStableText(hash: number, value: string): number {
+  let next = hash;
+  for (let index = 0; index < value.length; index += 1) {
+    next ^= value.charCodeAt(index);
+    next = Math.imul(next, 16777619) >>> 0;
+  }
+  return next;
+}
+
+function stableIdFromSources(kind: ServerAuditProcessRelationshipKind, sources: Iterable<string>): string {
+  let hash = hashStableText(2166136261, kind);
+  hash = hashStableText(hash, "\u001f");
+  let first = true;
+  for (const source of sources) {
+    if (!first) hash = hashStableText(hash, "\u001f");
+    hash = hashStableText(hash, source);
+    first = false;
   }
   return `server-process:${hash.toString(16).padStart(8, "0")}`;
 }
 
+function stableId(kind: ServerAuditProcessRelationshipKind, sources: string[]): string {
+  return stableIdFromSources(kind, sources);
+}
+
 function compareRelationship(left: ServerAuditProcessRelationship, right: ServerAuditProcessRelationship): number {
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function compareProcessSourceIndex(left: number, right: number): number {
+  const leftSource = `processes[${left}]`;
+  const rightSource = `processes[${right}]`;
+  return leftSource < rightSource ? -1 : leftSource > rightSource ? 1 : 0;
 }
 
 function relationship(kind: ServerAuditProcessRelationshipKind, allSources: string[]): ServerAuditProcessRelationship {
@@ -86,6 +107,28 @@ function relationship(kind: ServerAuditProcessRelationshipKind, allSources: stri
     kind,
     sources,
     ...(allSources.length > sources.length ? { sourcesTruncated: true as const } : {}),
+  };
+}
+
+function ambiguousListenerRelationship(listenerIndex: number, processIndexes: number[]): ServerAuditProcessRelationship {
+  const listenerSource = `listeningSockets[${listenerIndex}]`;
+  const sortedProcessIndexes = processIndexes.slice().sort(compareProcessSourceIndex);
+  const sources = [listenerSource];
+  for (const processIndex of sortedProcessIndexes) {
+    if (sources.length >= MAX_SOURCES_PER_RELATIONSHIP) break;
+    sources.push(`processes[${processIndex}]`);
+  }
+
+  function* allSources(): IterableIterator<string> {
+    yield listenerSource;
+    for (const processIndex of sortedProcessIndexes) yield `processes[${processIndex}]`;
+  }
+
+  return {
+    id: stableIdFromSources("ambiguous-listener-process", allSources()),
+    kind: "ambiguous-listener-process",
+    sources,
+    ...(1 + sortedProcessIndexes.length > sources.length ? { sourcesTruncated: true as const } : {}),
   };
 }
 
@@ -155,11 +198,7 @@ export function analyzeServerAuditProcessRelationships(
     }
 
     ambiguousListenerAttributions += 1;
-    const allSources = [
-      `listeningSockets[${listenerIndex}]`,
-      ...processIndexes.map((index) => `processes[${index}]`).sort(),
-    ];
-    relationships.push(relationship("ambiguous-listener-process", allSources));
+    relationships.push(ambiguousListenerRelationship(listenerIndex, processIndexes));
   });
 
   relationships.sort(compareRelationship);
