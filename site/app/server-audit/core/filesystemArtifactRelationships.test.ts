@@ -126,3 +126,22 @@ test("relationship sources are capped while retaining the artifact source and tr
   assert.equal(analysis.relationships[0].sourcesTruncated, true);
   assert.equal(analysis.summary.relationshipsWithTruncatedSources, 1);
 });
+
+test("high-cardinality ambiguity preserves legacy identity while materializing bounded filesystem sources", () => {
+  const input = snapshot();
+  input.filesystems = Array.from({ length: 5_000 }, () => ({ mount: "/var" }));
+  input.logs = [{ path: "/var/log/app.log" }];
+  input.backups = [];
+
+  const analysis = analyzeServerAuditFilesystemArtifactRelationships(input);
+  assert.equal(analysis.relationships.length, 1);
+  assert.equal(analysis.relationships[0].id, "server-filesystem-artifact:220c2a0e");
+  assert.equal(analysis.relationships[0].sources.length, 32);
+  assert.deepEqual(analysis.relationships[0].sources.slice(0, 3), [
+    "filesystems[0]",
+    "filesystems[1]",
+    "filesystems[2]",
+  ]);
+  assert.equal(analysis.relationships[0].sources.at(-1), "logs[0]");
+  assert.equal(analysis.relationships[0].sourcesTruncated, true);
+});

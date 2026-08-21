@@ -59,12 +59,23 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function stableId(kind: ServerAuditFilesystemArtifactRelationshipKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
-  let hash = 2166136261;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
+function hashStableText(hash: number, value: string): number {
+  let next = hash;
+  for (let index = 0; index < value.length; index += 1) {
+    next ^= value.charCodeAt(index);
+    next = Math.imul(next, 16777619) >>> 0;
+  }
+  return next;
+}
+
+function stableIdFromSources(kind: ServerAuditFilesystemArtifactRelationshipKind, sources: Iterable<string>): string {
+  let hash = hashStableText(2166136261, kind);
+  hash = hashStableText(hash, "\u001f");
+  let first = true;
+  for (const source of sources) {
+    if (!first) hash = hashStableText(hash, "\u001f");
+    hash = hashStableText(hash, source);
+    first = false;
   }
   return `server-filesystem-artifact:${hash.toString(16).padStart(8, "0")}`;
 }
@@ -90,14 +101,24 @@ function pathIsWithinMount(path: string, mount: string): boolean {
 
 function relationship(
   kind: ServerAuditFilesystemArtifactRelationshipKind,
-  allSources: string[],
+  filesystemIndexes: number[],
+  artifactSource: string,
 ): ServerAuditFilesystemArtifactRelationship {
-  const truncated = allSources.length > MAX_SOURCES_PER_RELATIONSHIP;
-  const sources = truncated
-    ? [...allSources.slice(0, MAX_SOURCES_PER_RELATIONSHIP - 1), allSources[allSources.length - 1]]
-    : allSources;
+  const sourceCount = filesystemIndexes.length + 1;
+  const truncated = sourceCount > MAX_SOURCES_PER_RELATIONSHIP;
+  const filesystemSourceLimit = truncated ? MAX_SOURCES_PER_RELATIONSHIP - 1 : filesystemIndexes.length;
+  const sources = filesystemIndexes
+    .slice(0, filesystemSourceLimit)
+    .map((index) => `filesystems[${index}]`);
+  sources.push(artifactSource);
+
+  function* allSources(): IterableIterator<string> {
+    for (const index of filesystemIndexes) yield `filesystems[${index}]`;
+    yield artifactSource;
+  }
+
   return {
-    id: stableId(kind, allSources),
+    id: stableIdFromSources(kind, allSources()),
     kind,
     sources,
     ...(truncated ? { sourcesTruncated: true as const } : {}),
@@ -159,14 +180,15 @@ export function analyzeServerAuditFilesystemArtifactRelationships(
       .filter((entry) => entry.path.length === longest)
       .sort((left, right) => left.index - right.index);
     const artifactSource = kind === "log" ? `logs[${artifactIndex}]` : `backups[${artifactIndex}]`;
-    const filesystemSources = best.map((entry) => `filesystems[${entry.index}]`);
+    const filesystemIndexes = best.map((entry) => entry.index);
 
     if (best.length === 1) {
       if (kind === "log") mappedLogs += 1;
       else mappedBackups += 1;
       relationships.push(relationship(
         kind === "log" ? "filesystem-log" : "filesystem-backup",
-        [...filesystemSources, artifactSource],
+        filesystemIndexes,
+        artifactSource,
       ));
       return;
     }
@@ -175,7 +197,8 @@ export function analyzeServerAuditFilesystemArtifactRelationships(
     else ambiguousBackups += 1;
     relationships.push(relationship(
       kind === "log" ? "ambiguous-filesystem-log" : "ambiguous-filesystem-backup",
-      [...filesystemSources, artifactSource],
+      filesystemIndexes,
+      artifactSource,
     ));
   }
 
