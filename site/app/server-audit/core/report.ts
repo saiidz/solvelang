@@ -14,6 +14,7 @@ import { createServerAuditFilesystemByteCoverageFindings } from "./filesystemByt
 import { createServerAuditFilesystemCapacityCoverageFindings } from "./filesystemCapacityCoverageFindings";
 import { createServerAuditFilesystemCoverageFindings } from "./filesystemCoverageFindings";
 import { createServerAuditFilesystemIdentityCoverageFindings } from "./filesystemIdentityCoverageFindings";
+import { createServerAuditFilesystemSourceCoverageFindings } from "./filesystemSourceCoverageFindings";
 import { createServerAuditFilesystemUsageFindings } from "./filesystemUsageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
@@ -150,6 +151,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditFilesystemCapacityCoverageFindings(snapshot),
     ...createServerAuditFilesystemByteCoverageFindings(snapshot),
     ...createServerAuditFilesystemIdentityCoverageFindings(snapshot),
+    ...createServerAuditFilesystemSourceCoverageFindings(snapshot),
     ...createServerAuditFilesystemUsageFindings(snapshot),
     ...createServerAuditProcessCoverageFindings(snapshot),
     ...createServerAuditProcessIdentityCoverageFindings(snapshot),
@@ -222,6 +224,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Filesystem byte-accounting coverage findings report only supplied filesystem records that omit sizeBytes, usedBytes, or availableBytes; they do not prove filesystem health, allocation semantics, collector completeness, authoritative byte accounting, or absence of capacity pressure.",
       "Filesystem-usage findings compare only supplied usagePercent values against bounded 80/90/95 percent review thresholds; they do not prove filesystem identity, growth cause, future exhaustion, or collector authority.",
       "Filesystem-identity coverage findings report only supplied filesystem records whose mount identity is empty after trim and NFC normalization; they do not prove filesystem absence, mount authority, collector completeness, or the correctness of capacity and filesystem-artifact relationship attribution.",
+      "Filesystem-source coverage findings report only supplied filesystem records whose filesystem source/device identity is absent or empty after trim and NFC normalization; they do not prove filesystem absence, device authority, collector completeness, mount provenance, allocation semantics, or underlying storage ownership.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
       "Process-coverage findings report only an explicit empty process inventory; because the reviewed collector maps failed/unavailable fixed `ps` execution or empty usable output to an empty array, they do not prove that the host has no processes or that process collection was complete or authoritative.",
