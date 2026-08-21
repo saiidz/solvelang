@@ -71,16 +71,10 @@ export function validateCustomerPriorityReport(report, { jobId, sourceFingerprin
   };
 }
 
-export function publicCustomerPriorityReport(result) {
+export function publicCustomerPriorityReport(result, identity) {
   if (result === undefined || result === null) return null;
-  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
   try {
-    if (typeof result.reportId !== "string" || !REPORT_ID.test(result.reportId)) return null;
-    return {
-      reportId: result.reportId,
-      provider: cleanProvider(result.provider),
-      reportText: cleanCustomerPriorityReportText(result.reportText),
-    };
+    return validateCustomerPriorityReport(result, identity);
   } catch {
     return null;
   }
