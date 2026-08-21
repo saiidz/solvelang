@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `0489e26c66db967233ff8d68128872c411540748`, the safe merge of #664.
+At this refresh, reviewed source `main` is `32903ac97c2aea58691edf37aeb1df3326df8fd8`, the safe merge of #666.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
@@ -33,8 +33,10 @@ Recent safe integration state:
 - #662 fixes that #661 P1 by composing filesystem-capacity coverage into canonical Server Audit JSON/HTML reports, adding an explicit authority limitation and redaction regression coverage.
 - #663 synchronizes this handoff and Issue #157 tracking through #662 after exact-head Hosted CI and Rust/RustSec validation.
 - #664 closes both unresolved lease-safety findings that survived #478: DynamoDB lease renewal now compares numeric epoch-millisecond values while storing a separate ISO heartbeat timestamp, and the dormant customer-priority worker serializes/awaits in-flight renewals before report acceptance or completion. Exact-head Hosted CI, Rust/RustSec, API Access CI, and Customer Priority Foundation Rollout CI all passed.
+- #665 synchronizes this handoff through #664 after exact-head Hosted CI and Rust/RustSec validation.
+- #666 adds bounded structural coverage for a supplied `system` section missing reviewed uptime/load/memory telemetry. Codex correctly identified that the initial helper was not composed into canonical reports; exact head `715a15074ee2062c2e81731c1bf2a42e05056095` fixes that by wiring the stage into `createServerAuditReport`, adding an explicit system-telemetry authority limitation, and adding canonical JSON/HTML regression coverage that withholds supplied metric values. Exact-head Hosted CI and Rust/RustSec passed and the review thread was resolved before merge as `32903ac97c2aea58691edf37aeb1df3326df8fd8`.
 
-All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659/#660/#661/#662/#663/#664.
+All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659/#660/#661/#662/#663/#664/#665/#666.
 
 ## Customer-priority production truth
 
@@ -75,7 +77,7 @@ Repository merges #644/#646/#649/#664 remain preparation/hardening only. They do
 
 ### Server Audit
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem/scheduled-job identity coverage; missing filesystem `usagePercent` coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; conservative systemd service-state classification; local TLS-certificate/port-443 consistency; duplicate-listener ownership consistency; and recognized web-server ↔ service/package relationship findings with canonical report composition.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem/scheduled-job identity coverage; missing filesystem `usagePercent` coverage; incomplete supplied system telemetry coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; conservative systemd service-state classification; local TLS-certificate/port-443 consistency; duplicate-listener ownership consistency; and recognized web-server ↔ service/package relationship findings with canonical report composition.
 
 Key recent trains that must not be recreated:
 
@@ -90,6 +92,7 @@ Key recent trains that must not be recreated:
 - #658 — duplicate-listener ownership consistency canonical report composition.
 - #659 — recognized web-server/service/package relationship canonical report composition.
 - #661/#662 — filesystem `usagePercent` coverage and canonical report composition, including the post-merge P1 correction.
+- #666 — incomplete supplied system telemetry coverage and canonical report composition, including the pre-merge P1 correction.
 
 Automatic remote remediation execution remains out of scope.
 
