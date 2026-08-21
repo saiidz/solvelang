@@ -25,18 +25,57 @@ function compareFindings(left: ServerAuditFinding, right: ServerAuditFinding): n
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFindings(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFindings(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFindings(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function usable(value: string): boolean {
   return value.trim().normalize("NFC").length > 0;
 }
 
 export function createServerAuditWebIdentityCoverageFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
-  const candidates: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFindings(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
   for (let index = 0; index < (snapshot.web?.servers?.length ?? 0); index += 1) {
     const server = snapshot.web!.servers![index] as unknown;
     if (typeof server !== "string" || usable(server)) continue;
     const source = `web.servers[${index}]`;
-    candidates.push({
+    recordFinding({
       id: stableId(["web-identity-coverage", "server", source]),
       severity: "info",
       category: "coverage",
@@ -53,7 +92,7 @@ export function createServerAuditWebIdentityCoverageFindings(snapshot: ServerAud
     const path = (root as { path?: unknown }).path;
     if (typeof path !== "string" || usable(path)) continue;
     const source = `web.roots[${index}].path`;
-    candidates.push({
+    recordFinding({
       id: stableId(["web-identity-coverage", "root", source]),
       severity: "info",
       category: "coverage",
@@ -64,16 +103,16 @@ export function createServerAuditWebIdentityCoverageFindings(snapshot: ServerAud
     });
   }
 
-  const sorted = candidates.sort(compareFindings);
-  if (sorted.length <= MAX_FINDINGS) return sorted;
+  retainedFindings.sort(compareFindings);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
 
-  const bounded = sorted.slice(0, MAX_FINDINGS - 1);
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["web-identity-coverage", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
     category: "coverage",
     title: "Web identity coverage findings were truncated",
-    summary: "The deterministic web-identity coverage stage reached its finding limit, so additional supplied web-server or web-root records may lack usable identities outside the emitted findings.",
+    summary: `The deterministic web-identity coverage stage produced ${findingsObserved} findings and emitted only the first ${MAX_FINDINGS - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Review the bounded findings first, then narrow or split the read-only snapshot before treating web identity coverage as complete.",
     evidence: [{ source: "web", summary: `finding limit ${MAX_FINDINGS} reached` }],
   });
