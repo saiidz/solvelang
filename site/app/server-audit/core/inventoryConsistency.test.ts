@@ -46,6 +46,9 @@ test("inventory consistency reports conflicting duplicate evidence without raw i
   assert.equal(analysis.execution.networkAccess, false);
   assert.equal(analysis.execution.writeAccess, false);
 
+  const packageIssue = analysis.issues.find((issue) => issue.kind === "conflicting-package-version");
+  assert.equal(packageIssue?.id, "server-inventory:50408c5c");
+
   const serialized = JSON.stringify(analysis.issues);
   assert.equal(serialized.includes("internal-agent"), false);
   assert.equal(serialized.includes("worker.service"), false);
@@ -137,10 +140,12 @@ test("inventory consistency bounds per-issue structural evidence without losing 
     version: index % 2 === 0 ? "1.0.0" : "2.0.0",
   }));
 
-  const analysis = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 8 });
-  assert.equal(analysis.issues.length, 1);
-  const issue = analysis.issues[0];
+  const narrow = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 8 });
+  const wider = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 16 });
+  assert.equal(narrow.issues.length, 1);
+  const issue = narrow.issues[0];
   assert.equal(issue.kind, "conflicting-package-version");
+  assert.equal(issue.id, wider.issues[0].id);
   assert.equal(issue.sourceCount, 200);
   assert.equal(issue.sourcesTruncated, true);
   assert.deepEqual(issue.sources, [
@@ -153,9 +158,9 @@ test("inventory consistency bounds per-issue structural evidence without losing 
     "packages[6]",
     "packages[7]",
   ]);
-  assert.equal(analysis.execution.maxSourcesPerIssue, 8);
-  assert.equal(analysis.execution.issueSourcesTruncated, true);
-  assert.equal(JSON.stringify(analysis).includes("private-package"), false);
+  assert.equal(narrow.execution.maxSourcesPerIssue, 8);
+  assert.equal(narrow.execution.issueSourcesTruncated, true);
+  assert.equal(JSON.stringify(narrow).includes("private-package"), false);
 });
 
 test("inventory consistency rejects invalid per-issue evidence bounds", () => {
