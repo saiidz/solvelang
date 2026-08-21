@@ -12,11 +12,7 @@ function stableId(parts: string[]): string {
 
 type SystemMetric = {
   key: "uptimeSeconds" | "load" | "memoryTotalBytes" | "memoryAvailableBytes";
-  value: ServerAuditSnapshot["system"] extends infer System
-    ? System extends Record<string, unknown>
-      ? System[keyof System]
-      : never
-    : never;
+  value: unknown;
 };
 
 export function createServerAuditSystemMetricsCoverageFindings(
