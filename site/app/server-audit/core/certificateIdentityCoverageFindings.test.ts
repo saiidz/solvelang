@@ -56,6 +56,22 @@ test("certificate identity coverage output is deterministic and bounded", () => 
   assert.equal(structuralSources.every((source) => /^web\.certificates\[\d+\]\.name$/.test(source)), true);
 });
 
+test("certificate identity coverage retention stays bounded across 5,000 unusable identities", () => {
+  const input = snapshot(Array.from({ length: 5_000 }, () => ({ name: "   " })));
+  const first = createServerAuditCertificateIdentityCoverageFindings(input);
+  const second = createServerAuditCertificateIdentityCoverageFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  const identityFindings = first.filter((finding) => finding.title === "TLS certificate record lacks a usable identity");
+  assert.equal(identityFindings.length, 99);
+  const limitation = first.find((finding) => finding.title === "Certificate identity coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(identityFindings.every((finding) => /^web\.certificates\[\d+\]\.name$/.test(finding.evidence[0]?.source ?? "")), true);
+});
+
 test("certificate identity coverage emits no finding when certificate evidence is absent", () => {
   assert.deepEqual(createServerAuditCertificateIdentityCoverageFindings({
     schemaVersion: "1",
