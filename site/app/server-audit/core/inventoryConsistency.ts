@@ -109,6 +109,48 @@ function issueWithBoundedSources(
   };
 }
 
+function selectBoundedConflictSources(
+  sources: string[],
+  variants: Array<string | number | undefined>,
+  maxSourcesPerIssue: number,
+): string[] {
+  const normalizedVariants = variants.map((value) => value === undefined ? "<undefined>" : String(value));
+  const firstVariant = normalizedVariants[0];
+  const conflictingIndex = normalizedVariants.findIndex((variant) => variant !== firstVariant);
+  if (conflictingIndex < 1) {
+    throw new Error("Server Audit inventory conflict evidence requires two distinct metadata variants.");
+  }
+
+  const selectedIndexes = [0, conflictingIndex];
+  for (let index = 1; index < sources.length && selectedIndexes.length < maxSourcesPerIssue; index += 1) {
+    if (index === conflictingIndex) continue;
+    selectedIndexes.push(index);
+  }
+  selectedIndexes.sort((left, right) => left - right);
+  return selectedIndexes.map((index) => sources[index]!);
+}
+
+function conflictIssueWithBoundedSources(
+  kind: ServerAuditInventoryIssueKind,
+  severity: "low" | "info",
+  sources: string[],
+  variants: Array<string | number | undefined>,
+  summary: string,
+  maxSourcesPerIssue: number,
+): ServerAuditInventoryIssue {
+  const sourceCount = sources.length;
+  const boundedSources = selectBoundedConflictSources(sources, variants, maxSourcesPerIssue);
+  return {
+    id: stableId(kind, sources),
+    kind,
+    severity,
+    sources: boundedSources,
+    sourceCount,
+    sourcesTruncated: sourceCount > boundedSources.length,
+    summary,
+  };
+}
+
 export function analyzeServerAuditInventoryConsistency(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditInventoryConsistencyOptions = {},
@@ -117,7 +159,7 @@ export function analyzeServerAuditInventoryConsistency(
   const maxSourcesPerIssue = boundedInteger(
     options.maxSourcesPerIssue,
     32,
-    1,
+    2,
     256,
     "Server Audit inventory maxSourcesPerIssue",
   );
@@ -133,10 +175,11 @@ export function analyzeServerAuditInventoryConsistency(
     const versions = indexes.map((index) => packages[index].version);
     if (distinct(versions) < 2) continue;
     const sources = indexes.map((index) => `packages[${index}]`);
-    issues.push(issueWithBoundedSources(
+    issues.push(conflictIssueWithBoundedSources(
       "conflicting-package-version",
       "low",
       sources,
+      versions,
       "Multiple entries for the same package name report different versions; package posture is internally inconsistent.",
       maxSourcesPerIssue,
     ));
@@ -147,10 +190,11 @@ export function analyzeServerAuditInventoryConsistency(
     const states = indexes.map((index) => `${services[index].state}\u001f${services[index].enabled ?? ""}`);
     if (distinct(states) < 2) continue;
     const sources = indexes.map((index) => `services[${index}]`);
-    issues.push(issueWithBoundedSources(
+    issues.push(conflictIssueWithBoundedSources(
       "conflicting-service-state",
       "info",
       sources,
+      states,
       "Multiple entries for the same service name report different state or enablement values; service posture is internally inconsistent.",
       maxSourcesPerIssue,
     ));
@@ -164,10 +208,11 @@ export function analyzeServerAuditInventoryConsistency(
     });
     if (distinct(capacityTuples) < 2) continue;
     const sources = indexes.map((index) => `filesystems[${index}]`);
-    issues.push(issueWithBoundedSources(
+    issues.push(conflictIssueWithBoundedSources(
       "conflicting-filesystem-capacity",
       "low",
       sources,
+      capacityTuples,
       "Multiple entries for the same filesystem mount report different capacity or utilization values; storage posture is internally inconsistent.",
       maxSourcesPerIssue,
     ));
@@ -178,10 +223,11 @@ export function analyzeServerAuditInventoryConsistency(
     const metadata = indexes.map((index) => `${roots[index].owner ?? ""}\u001f${roots[index].mode ?? ""}`);
     if (distinct(metadata) < 2) continue;
     const sources = indexes.map((index) => `web.roots[${index}]`);
-    issues.push(issueWithBoundedSources(
+    issues.push(conflictIssueWithBoundedSources(
       "conflicting-web-root-metadata",
       "info",
       sources,
+      metadata,
       "Multiple entries for the same web-root path report different ownership or mode metadata; permission posture is internally inconsistent.",
       maxSourcesPerIssue,
     ));
@@ -196,10 +242,11 @@ export function analyzeServerAuditInventoryConsistency(
     });
     if (distinct(identities) < 2) continue;
     const sources = indexes.map((index) => `processes[${index}]`);
-    issues.push(issueWithBoundedSources(
+    issues.push(conflictIssueWithBoundedSources(
       "conflicting-process-identity",
       "low",
       sources,
+      identities,
       "Multiple process entries report the same PID with different parent, owner, state, or executable identity; process evidence is internally inconsistent.",
       maxSourcesPerIssue,
     ));
