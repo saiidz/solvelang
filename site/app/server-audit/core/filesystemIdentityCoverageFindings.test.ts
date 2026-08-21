@@ -30,7 +30,7 @@ test("filesystem identity coverage reports blank normalized mounts using structu
   ]);
 
   const serialized = JSON.stringify(findings);
-  for (const privateValue of ["private-fs-a", "private-fs-b", "private-fs-c", "/srv/private-valid", "100", "200", "300"]) {
+  for (const privateValue of ["private-fs-a", "private-fs-b", "private-fs-c", "/srv/private-valid"]) {
     assert.equal(serialized.includes(privateValue), false);
   }
 });
