@@ -36,6 +36,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditLogCoverageFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditLogCoverageOptions = {},
@@ -44,9 +70,22 @@ export function createServerAuditLogCoverageFindings(
   const logs = snapshot.logs;
   if (logs === undefined) return [];
 
-  const candidates: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
+
   if (logs.length === 0) {
-    candidates.push({
+    recordFinding({
       id: stableId(["log-coverage", "empty-inventory"]),
       severity: "info",
       category: "coverage",
@@ -59,7 +98,7 @@ export function createServerAuditLogCoverageFindings(
 
   logs.forEach((log, index) => {
     if (log.modifiedAt === undefined) {
-      candidates.push({
+      recordFinding({
         id: stableId(["log-coverage", "missing-modified-at", String(index)]),
         severity: "info",
         category: "coverage",
@@ -70,7 +109,7 @@ export function createServerAuditLogCoverageFindings(
       });
     }
     if (log.sizeBytes === undefined) {
-      candidates.push({
+      recordFinding({
         id: stableId(["log-coverage", "missing-size", String(index)]),
         severity: "info",
         category: "coverage",
@@ -82,16 +121,16 @@ export function createServerAuditLogCoverageFindings(
     }
   });
 
-  candidates.sort(compareFinding);
-  if (candidates.length <= maxFindings) return candidates;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = candidates.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["log-coverage", "findings-truncated", String(maxFindings), String(candidates.length)]),
+    id: stableId(["log-coverage", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Log evidence coverage findings were truncated",
-    summary: `The log-coverage stage produced ${candidates.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The log-coverage stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from log activity or size evidence.",
     evidence: [{ source: "logs", summary: `finding limit ${maxFindings} reached` }],
   });
