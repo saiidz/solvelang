@@ -33,6 +33,7 @@ import { createServerAuditServiceIdentityCoverageFindings } from "./serviceIdent
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
 import { createServerAuditTemporalFindings } from "./temporalFindings";
+import { createServerAuditTlsListenerFindings } from "./tlsListenerFindings";
 import { createServerAuditWebIdentityCoverageFindings } from "./webIdentityCoverageFindings";
 import { createServerAuditWebInventoryCoverageFindings } from "./webInventoryCoverageFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
@@ -142,6 +143,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditScheduledJobRelationshipFindings(snapshot),
     ...createServerAuditListenerCoverageFindings(snapshot),
     ...createServerAuditListenerIdentityCoverageFindings(snapshot),
+    ...createServerAuditTlsListenerFindings(snapshot),
     ...createServerAuditServiceListenerRelationshipFindings(snapshot),
     ...createServerAuditServiceProcessRelationshipFindings(snapshot),
     ...createServerAuditPackageIdentityCoverageFindings(snapshot),
@@ -206,6 +208,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Scheduled-job relationship findings use only bounded exact-name-token matches over supplied sanitized command summaries and service/process names; multi-target, unresolved, oversized, or truncated results are completeness/integrity signals and do not prove command execution, ownership, job validity, runtime health, or collector authority.",
       "Listener-coverage findings report only an explicit empty listening-socket inventory; because the reviewed collector maps both empty `ss` output and command failure/unavailability to an empty array, they do not prove that the host has no listeners or that socket collection was complete or authoritative.",
       "Listener-identity coverage findings report only supplied listening-socket records whose protocol or local-address identity is empty after trim and NFC normalization; they do not prove listener absence, endpoint ownership, public reachability, runtime health, or collector authority.",
+      "TLS-listener consistency findings compare only supplied local TLS certificate inventory with collected TCP port-443 listener evidence; mismatches are completeness/integrity signals and do not prove endpoint reachability, TLS termination location, certificate serving state, or ownership.",
       "Service-listener relationship findings use only conservative exact static-label matches across supplied service, process, and listener records; ambiguous, unresolved, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, exposure, runtime health, or collector authority.",
       "Service-process relationship findings use only conservative exact static-label matches across supplied service and process records; grouped, unmatched, skipped, or truncated mappings are completeness/integrity signals and do not prove service ownership, process identity, runtime health, or collector authority.",
       "Package-identity coverage findings report only supplied package records whose identity is empty after trim and NFC normalization; they do not prove package absence, package discovery completeness, collector authority, or vulnerability status.",
