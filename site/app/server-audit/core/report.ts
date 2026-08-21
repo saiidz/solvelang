@@ -39,6 +39,7 @@ import { createServerAuditWebIdentityCoverageFindings } from "./webIdentityCover
 import { createServerAuditWebInventoryCoverageFindings } from "./webInventoryCoverageFindings";
 import { createServerAuditWebRootPermissionFindings } from "./webRootPermissionFindings";
 import { createServerAuditWebListenerFindings } from "./webListenerFindings";
+import { createServerAuditWebServerRelationshipFindings } from "./webServerRelationshipFindings";
 
 const HTML_ESCAPES: Record<string, string> = {
   "&": "&amp;",
@@ -163,6 +164,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditWebInventoryCoverageFindings(snapshot),
     ...createServerAuditWebRootPermissionFindings(snapshot),
     ...createServerAuditWebListenerFindings(snapshot),
+    ...createServerAuditWebServerRelationshipFindings(snapshot),
     ...createServerAuditFilesystemArtifactRelationshipFindings(snapshot),
     ...createServerAuditCoverageFindings(snapshot),
   ]);
@@ -226,6 +228,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Web-identity coverage findings report only supplied web-server labels or web-root paths that are empty after trim and NFC normalization; they do not prove service absence, root absence, public reachability, or collector authority.",
       "Web-inventory coverage findings report only explicit empty web-server, web-root, or TLS-certificate inventories from the fixed local probes; they do not prove those surfaces are absent, that discovery was complete or authoritative, or that any endpoint is publicly reachable.",
       "Web-listener consistency findings compare only supplied local web-server and TCP listener evidence; they do not identify application ownership, prove public reachability, or perform network scanning.",
+      "Web-server relationship findings compare only recognized static web-server labels with supplied service and package inventory evidence; missing or contradictory matches are completeness/integrity signals and do not prove installation source, service ownership, runtime health, public reachability, or collector authority.",
       "Web-root permission findings emit structural snapshot references instead of raw root paths or owner values; group-writable and privileged-owner states are review candidates rather than proof of exploitable exposure.",
       "No package or CVE database lookup is performed in v0, so version strings are inventory evidence rather than vulnerability determinations.",
       "No remediation command is executed or generated for automatic execution.",
