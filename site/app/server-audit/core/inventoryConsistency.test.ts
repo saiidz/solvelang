@@ -126,3 +126,41 @@ test("inventory consistency output is deterministic and bounded", () => {
     /inventory maxIssues/,
   );
 });
+
+test("inventory consistency bounds per-issue structural evidence without losing cardinality truth", () => {
+  const input = snapshot();
+  input.services = [];
+  input.filesystems = [];
+  input.web = { roots: [] };
+  input.packages = Array.from({ length: 200 }, (_, index) => ({
+    name: "private-package",
+    version: index % 2 === 0 ? "1.0.0" : "2.0.0",
+  }));
+
+  const analysis = analyzeServerAuditInventoryConsistency(input, { maxSourcesPerIssue: 8 });
+  assert.equal(analysis.issues.length, 1);
+  const issue = analysis.issues[0];
+  assert.equal(issue.kind, "conflicting-package-version");
+  assert.equal(issue.sourceCount, 200);
+  assert.equal(issue.sourcesTruncated, true);
+  assert.deepEqual(issue.sources, [
+    "packages[0]",
+    "packages[1]",
+    "packages[2]",
+    "packages[3]",
+    "packages[4]",
+    "packages[5]",
+    "packages[6]",
+    "packages[7]",
+  ]);
+  assert.equal(analysis.execution.maxSourcesPerIssue, 8);
+  assert.equal(analysis.execution.issueSourcesTruncated, true);
+  assert.equal(JSON.stringify(analysis).includes("private-package"), false);
+});
+
+test("inventory consistency rejects invalid per-issue evidence bounds", () => {
+  assert.throws(
+    () => analyzeServerAuditInventoryConsistency(snapshot(), { maxSourcesPerIssue: 0 }),
+    /inventory maxSourcesPerIssue/,
+  );
+});
