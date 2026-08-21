@@ -79,3 +79,40 @@ test("canonical reports deduplicate overlapping legacy and backup/log consistenc
     ...finding.evidence.map((item) => item.source).sort(),
   ].join("\u001f"))).size, 2);
 });
+
+test("canonical reports preserve bounded backup conflict cardinality and a conflicting structural witness", () => {
+  const backups = Array.from({ length: 40 }, (_, index) => ({
+    name: "private-backup",
+    path: index === 39 ? "/private/backups/conflict.dump" : "/private/backups/same.dump",
+    ageHours: index === 39 ? 2 : 1,
+    sizeBytes: index === 39 ? 11 : 10,
+  }));
+  const snapshot: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-20T12:00:00.000Z",
+    host: { hostname: "audit-host" },
+    backups,
+    logs: [],
+    metadata: { redactionsApplied: true },
+  };
+  const report = createServerAuditReport(snapshot, "2026-08-20T12:01:00.000Z");
+  const consistency = consistencyFindings(snapshot);
+
+  assert.equal(consistency.length, 1);
+  const finding = consistency[0];
+  assert.equal(finding.title, "Backup inventory reports conflicting metadata");
+  assert.equal(finding.evidence.length, 32);
+  assert.equal(finding.evidence[0].source, "backups[0]");
+  assert.equal(finding.evidence.at(-1)?.source, "backups[39]");
+  assert.ok(finding.summary.includes("bounded to 32 of 40 affected records"));
+
+  const json = serverAuditReportJson(report);
+  const html = serverAuditReportHtml(report);
+  for (const output of [json, html]) {
+    assert.ok(output.includes("backups[39]"));
+    assert.equal(output.includes("backups[31]"), false);
+    assert.equal(output.includes("private-backup"), false);
+    assert.equal(output.includes("/private/backups/same.dump"), false);
+    assert.equal(output.includes("/private/backups/conflict.dump"), false);
+  }
+});
