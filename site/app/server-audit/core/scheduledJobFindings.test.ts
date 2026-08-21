@@ -56,9 +56,32 @@ test("conflicting duplicate job sources use structural evidence only", () => {
   ]));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_f315db38");
   assert.equal(findings[0].category, "evidence-integrity");
   assert.deepEqual(findings[0].evidence.map((item) => item.source), ["scheduledJobs[0]", "scheduledJobs[1]"]);
   assert.equal(JSON.stringify(findings).includes("private-job"), false);
+});
+
+test("conflicting duplicate job evidence stays bounded and preserves a late witness", () => {
+  const jobs = Array.from({ length: 5_000 }, (_, index) => ({
+    source: "/etc/cron.d/private-high-cardinality-job",
+    schedule: index === 4_999 ? "15 * * * *" : "0 * * * *",
+    commandSummary: "command content intentionally not collected",
+  }));
+
+  const findings = createServerAuditScheduledJobFindings(snapshot(jobs));
+  const conflict = findings.find((finding) => finding.title === "Scheduled-job inventory reports conflicting duplicate evidence");
+
+  assert.equal(findings.length, 1);
+  assert.equal(conflict?.id, "srv_fc5bc2a7");
+  assert.equal(conflict?.evidence.length, 32);
+  assert.equal(conflict?.evidence[0]?.source, "scheduledJobs[0]");
+  assert.equal(conflict?.evidence[31]?.source, "scheduledJobs[4999]");
+  assert.match(conflict?.summary ?? "", /retains 32 of 5000 structural witness references/);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-high-cardinality-job"), false);
+  assert.equal(serialized.includes("15 * * * *"), false);
+  assert.equal(serialized.includes("0 * * * *"), false);
 });
 
 test("scheduled-job findings are deterministic and bounded", () => {

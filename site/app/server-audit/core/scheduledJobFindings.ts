@@ -5,6 +5,7 @@ export type ServerAuditScheduledJobFindingOptions = {
 };
 
 const REDACTED_COMMAND_SUMMARY = "command content intentionally not collected";
+const MAX_CONFLICT_EVIDENCE = 32;
 const SEVERITY_ORDER: Record<ServerAuditSeverity, number> = {
   critical: 0,
   high: 1,
@@ -63,6 +64,30 @@ function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
   }
 }
 
+function jobSignature(job: { schedule?: string; commandSummary: string }): string {
+  return `${job.schedule ?? ""}\u001f${job.commandSummary}`;
+}
+
+function selectConflictEvidenceIndexes(
+  indexes: readonly number[],
+  jobs: NonNullable<ServerAuditSnapshot["scheduledJobs"]>,
+): number[] {
+  const firstIndex = indexes[0];
+  if (firstIndex === undefined) return [];
+  const firstSignature = jobSignature(jobs[firstIndex]!);
+  const conflictingIndex = indexes.find((index) => jobSignature(jobs[index]!) !== firstSignature);
+  if (conflictingIndex === undefined) return [];
+
+  const selected = [firstIndex, conflictingIndex];
+  for (const index of indexes) {
+    if (selected.length >= MAX_CONFLICT_EVIDENCE) break;
+    if (index === firstIndex || index === conflictingIndex) continue;
+    selected.push(index);
+  }
+  selected.sort((left, right) => left - right);
+  return selected;
+}
+
 export function createServerAuditScheduledJobFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditScheduledJobFindingOptions = {},
@@ -107,20 +132,17 @@ export function createServerAuditScheduledJobFindings(
 
   for (const indexes of sourceIndexes.values()) {
     if (indexes.length < 2) continue;
-    const signatures = new Set(indexes.map((index) => {
-      const job = jobs[index];
-      return `${job.schedule ?? ""}\u001f${job.commandSummary}`;
-    }));
-    if (signatures.size < 2) continue;
-    const [firstIndex, ...rest] = indexes;
+    const evidenceIndexes = selectConflictEvidenceIndexes(indexes, jobs);
+    if (evidenceIndexes.length < 2) continue;
+    const evidenceBounded = evidenceIndexes.length < indexes.length;
     recordFinding({
       id: stableId(["scheduled-job", "conflicting-duplicate-source", ...indexes.map(String)]),
       severity: "info",
       category: "evidence-integrity",
       title: "Scheduled-job inventory reports conflicting duplicate evidence",
-      summary: "Multiple scheduled-job records refer to the same collected source but disagree on schedule or redacted command-summary metadata. The source value is intentionally withheld from the finding.",
+      summary: `Multiple scheduled-job records refer to the same collected source but disagree on schedule or redacted command-summary metadata. The source value is intentionally withheld from the finding.${evidenceBounded ? ` The finding retains ${evidenceIndexes.length} of ${indexes.length} structural witness references while preserving both observed metadata variants.` : ""}`,
       recommendation: "Re-collect scheduled-job inventory with the reviewed collector before relying on the duplicated record for operational conclusions.",
-      evidence: [firstIndex, ...rest].map((index) => ({
+      evidence: evidenceIndexes.map((index) => ({
         source: `scheduledJobs[${index}]`,
         summary: "conflicting duplicate source record",
       })),
