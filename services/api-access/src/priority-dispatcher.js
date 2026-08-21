@@ -7,9 +7,10 @@ function stringAttribute(image, name) {
 }
 
 function queuedJob(record) {
-  if (record?.eventName !== "INSERT") return null;
+  if (record?.eventName !== "INSERT" && record?.eventName !== "MODIFY") return null;
   const image = record?.dynamodb?.NewImage;
   if (stringAttribute(image, "status") !== "queued") return null;
+  if (record.eventName === "MODIFY" && stringAttribute(record?.dynamodb?.OldImage, "status") === "queued") return null;
   const jobId = stringAttribute(image, "jobId");
   const priority = stringAttribute(image, "priority");
   if (!jobId || !priority) throw new Error("Priority job stream record is invalid.");
