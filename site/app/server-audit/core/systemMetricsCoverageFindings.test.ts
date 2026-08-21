@@ -32,6 +32,38 @@ test("system metric coverage reports missing bounded telemetry using structural 
   assert.equal(serialized.includes("0.5"), false);
 });
 
+test("system metric coverage reports an incomplete load vector without echoing load values", () => {
+  const findings = createServerAuditSystemMetricsCoverageFindings(snapshot({
+    uptimeSeconds: 3600,
+    load: [0.5, 0.4],
+    memoryTotalBytes: 4096,
+    memoryAvailableBytes: 2048,
+  }));
+
+  assert.equal(findings.length, 1);
+  assert.deepEqual(findings[0].evidence, [
+    { source: "system.load", summary: "load vector incomplete" },
+  ]);
+  assert.match(findings[0].summary, /missing or incomplete/);
+  const serialized = JSON.stringify(findings);
+  for (const privateMetricValue of ["3600", "0.5", "0.4", "4096", "2048"]) {
+    assert.equal(serialized.includes(privateMetricValue), false);
+  }
+});
+
+test("system metric coverage treats an empty supplied load vector as incomplete evidence", () => {
+  const findings = createServerAuditSystemMetricsCoverageFindings(snapshot({
+    uptimeSeconds: 0,
+    load: [],
+    memoryTotalBytes: 0,
+    memoryAvailableBytes: 0,
+  }));
+
+  assert.deepEqual(findings[0]?.evidence, [
+    { source: "system.load", summary: "load vector incomplete" },
+  ]);
+});
+
 test("system metric coverage reports an explicitly sparse system section without inventing health", () => {
   const findings = createServerAuditSystemMetricsCoverageFindings(snapshot({}));
 

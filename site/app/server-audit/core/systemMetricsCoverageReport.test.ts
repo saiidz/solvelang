@@ -40,3 +40,32 @@ test("canonical reports compose incomplete system telemetry with structural evid
 
   assert.ok(report.limitations.some((item) => item.includes("System-telemetry coverage findings")));
 });
+
+test("canonical reports preserve partial load-vector uncertainty without exposing values", () => {
+  const report = createServerAuditReport({
+    schemaVersion: "1",
+    collectedAt: "2026-08-21T03:17:00.000Z",
+    host: { hostname: "audit-host" },
+    system: {
+      uptimeSeconds: 7200,
+      load: [0.91, 0.73],
+      memoryTotalBytes: 8192,
+      memoryAvailableBytes: 4096,
+    },
+    metadata: { redactionsApplied: true },
+  }, "2026-08-21T03:18:00.000Z");
+
+  const finding = report.findings.find(
+    (candidate) => candidate.title === "System telemetry evidence is incomplete",
+  );
+  assert.deepEqual(finding?.evidence, [
+    { source: "system.load", summary: "load vector incomplete" },
+  ]);
+
+  const json = serverAuditReportJson(report);
+  const html = serverAuditReportHtml(report);
+  for (const suppliedMetricValue of ["7200", "0.91", "0.73", "8192", "4096"]) {
+    assert.equal(json.includes(suppliedMetricValue), false);
+    assert.equal(html.includes(suppliedMetricValue), false);
+  }
+});
