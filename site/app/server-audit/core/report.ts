@@ -13,6 +13,7 @@ import { createServerAuditFilesystemArtifactRelationshipFindings } from "./files
 import { createServerAuditFilesystemCapacityCoverageFindings } from "./filesystemCapacityCoverageFindings";
 import { createServerAuditFilesystemCoverageFindings } from "./filesystemCoverageFindings";
 import { createServerAuditFilesystemIdentityCoverageFindings } from "./filesystemIdentityCoverageFindings";
+import { createServerAuditFilesystemUsageFindings } from "./filesystemUsageFindings";
 import { createServerAuditInventoryFindings } from "./inventoryFindings";
 import { createServerAuditLargeLogFindings } from "./largeLogFindings";
 import { createServerAuditListenerCoverageFindings } from "./listenerCoverageFindings";
@@ -66,6 +67,12 @@ const LEGACY_WEB_ROOT_PERMISSION_TITLES = new Set([
   "Application web root owned by root",
 ]);
 
+const LEGACY_FILESYSTEM_USAGE_TITLES = new Set([
+  "Filesystem critically full",
+  "Filesystem nearly full",
+  "Filesystem usage elevated",
+]);
+
 const LEGACY_LARGE_LOG_TITLES = new Set([
   "Very large log file",
 ]);
@@ -106,6 +113,7 @@ function createBaselineFindings(snapshot: ServerAuditSnapshot): ServerAuditFindi
   return analyzeServerSnapshot(snapshot).filter(
     (finding) =>
       !LEGACY_WEB_ROOT_PERMISSION_TITLES.has(finding.title)
+      && !LEGACY_FILESYSTEM_USAGE_TITLES.has(finding.title)
       && !LEGACY_LARGE_LOG_TITLES.has(finding.title)
       && !LEGACY_BACKUP_POSTURE_TITLES.has(finding.title),
   );
@@ -140,6 +148,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditFilesystemCoverageFindings(snapshot),
     ...createServerAuditFilesystemCapacityCoverageFindings(snapshot),
     ...createServerAuditFilesystemIdentityCoverageFindings(snapshot),
+    ...createServerAuditFilesystemUsageFindings(snapshot),
     ...createServerAuditProcessCoverageFindings(snapshot),
     ...createServerAuditProcessIdentityCoverageFindings(snapshot),
     ...createServerAuditProcessFindings(snapshot),
@@ -208,6 +217,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-coverage findings report only an explicit empty filesystem inventory; because the reviewed collector maps failed/unavailable fixed `df -P -B1` execution or empty usable output to an empty array, they do not prove that the host has no mounted filesystems or that filesystem collection was complete or authoritative.",
       "Filesystem-capacity coverage findings report only supplied filesystem records that omit usagePercent; they do not prove filesystem health, collector completeness, authoritative disk utilization, or absence of capacity pressure.",
+      "Filesystem-usage findings compare only supplied usagePercent values against bounded 80/90/95 percent review thresholds; they do not prove filesystem identity, growth cause, future exhaustion, or collector authority.",
       "Filesystem-identity coverage findings report only supplied filesystem records whose mount identity is empty after trim and NFC normalization; they do not prove filesystem absence, mount authority, collector completeness, or the correctness of capacity and filesystem-artifact relationship attribution.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
       "Process relationship findings are point-in-time evidence; process churn, visibility limits, or bounded collection may explain missing parents or listener-name mismatches, and a single zombie observation does not prove persistence.",
