@@ -84,6 +84,28 @@ test("conflicting duplicate job evidence stays bounded and preserves a late witn
   assert.equal(serialized.includes("0 * * * *"), false);
 });
 
+test("bounded duplicate evidence promises only two conflicting variants when three are observed", () => {
+  const jobs = Array.from({ length: 33 }, (_, index) => ({
+    source: "/etc/cron.d/private-three-variant-job",
+    schedule: index === 31 ? "15 * * * *" : index === 32 ? "30 * * * *" : "0 * * * *",
+    commandSummary: "command content intentionally not collected",
+  }));
+
+  const findings = createServerAuditScheduledJobFindings(snapshot(jobs));
+  const conflict = findings.find((finding) => finding.title === "Scheduled-job inventory reports conflicting duplicate evidence");
+
+  assert.equal(findings.length, 1);
+  assert.equal(conflict?.evidence.length, 32);
+  assert.equal(conflict?.evidence[0]?.source, "scheduledJobs[0]");
+  assert.equal(conflict?.evidence[31]?.source, "scheduledJobs[31]");
+  assert.equal(conflict?.evidence.some((item) => item.source === "scheduledJobs[32]"), false);
+  assert.match(conflict?.summary ?? "", /preserving at least two conflicting metadata variants/);
+  assert.equal((conflict?.summary ?? "").includes("preserving all observed metadata variants"), false);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-three-variant-job"), false);
+  assert.equal(serialized.includes("30 * * * *"), false);
+});
+
 test("scheduled-job findings are deterministic and bounded", () => {
   const jobs = Array.from({ length: 10 }, (_, index) => ({
     source: `/etc/cron.d/private-${index}`,
