@@ -12,7 +12,7 @@ function snapshot(overrides: Partial<ServerAuditSnapshot> = {}): ServerAuditSnap
   };
 }
 
-test("reports zombie processes without claiming persistence", () => {
+test("reports zombie processes using structural evidence without claiming persistence", () => {
   const findings = createServerAuditProcessFindings(snapshot({
     processes: [
       { pid: 1, ppid: 0, uid: 0, state: "Ss", name: "systemd" },
@@ -24,10 +24,15 @@ test("reports zombie processes without claiming persistence", () => {
   assert.equal(findings[0].title, "Zombie process observed");
   assert.equal(findings[0].severity, "low");
   assert.match(findings[0].summary, /single snapshot does not prove/i);
-  assert.deepEqual(findings[0].evidence, [{ source: "pid:42", summary: "worker state Z+" }]);
+  assert.deepEqual(findings[0].evidence, [{
+    source: "processes[1].state",
+    summary: "process state begins with a zombie marker",
+  }]);
+  assert.equal(JSON.stringify(findings).includes("worker"), false);
+  assert.equal(JSON.stringify(findings).includes("Z+"), false);
 });
 
-test("reports missing parent references as evidence gaps but ignores init parentage", () => {
+test("reports missing parent references as structural evidence gaps but ignores init parentage", () => {
   const findings = createServerAuditProcessFindings(snapshot({
     processes: [
       { pid: 10, ppid: 1, uid: 1000, state: "S", name: "safe-child" },
@@ -39,9 +44,15 @@ test("reports missing parent references as evidence gaps but ignores init parent
   assert.equal(findings[0].title, "Process parent is outside collected inventory");
   assert.equal(findings[0].severity, "info");
   assert.match(findings[0].summary, /process churn/i);
+  assert.deepEqual(findings[0].evidence, [{
+    source: "processes[1].ppid",
+    summary: "referenced parent PID was not collected",
+  }]);
+  assert.equal(JSON.stringify(findings).includes("orphaned-view"), false);
+  assert.equal(JSON.stringify(findings).includes("999"), false);
 });
 
-test("cross-checks literal listener process names only when process inventory is present", () => {
+test("cross-checks literal listener process names internally but emits structural mismatch evidence only", () => {
   const withInventory = createServerAuditProcessFindings(snapshot({
     processes: [{ pid: 100, ppid: 1, uid: 1000, state: "S", name: "nginx" }],
     listeningSockets: [
@@ -51,14 +62,22 @@ test("cross-checks literal listener process names only when process inventory is
   }));
   assert.equal(withInventory.length, 1);
   assert.equal(withInventory[0].title, "Listener process is outside collected process inventory");
-  assert.match(withInventory[0].summary, /php-fpm/);
+  assert.match(withInventory[0].summary, /collection timing or visibility/i);
+  assert.deepEqual(withInventory[0].evidence, [{
+    source: "listeningSockets[1].process",
+    summary: "listener process identity was not collected in process inventory",
+  }]);
+  const serialized = JSON.stringify(withInventory);
+  assert.equal(serialized.includes("php-fpm"), false);
+  assert.equal(serialized.includes("127.0.0.1"), false);
+  assert.equal(serialized.includes("9000"), false);
 
   assert.deepEqual(createServerAuditProcessFindings(snapshot({
     listeningSockets: [{ protocol: "tcp", localAddress: "127.0.0.1", port: 9000, process: "php-fpm" }],
   })), []);
 });
 
-test("keeps deterministic ordering and emits a bounded truncation marker", () => {
+test("keeps deterministic ordering for the same snapshot and emits a bounded truncation marker", () => {
   const input = snapshot({
     processes: [
       { pid: 30, ppid: 9030, uid: 1000, state: "S", name: "c" },
@@ -67,7 +86,7 @@ test("keeps deterministic ordering and emits a bounded truncation marker", () =>
     ],
   });
   const first = createServerAuditProcessFindings(input, { maxFindings: 3 });
-  const second = createServerAuditProcessFindings(snapshot({ processes: [...input.processes!].reverse() }), { maxFindings: 3 });
+  const second = createServerAuditProcessFindings(snapshot({ processes: input.processes!.map((process) => ({ ...process })) }), { maxFindings: 3 });
 
   assert.deepEqual(first, second);
   assert.equal(first.length, 3);
