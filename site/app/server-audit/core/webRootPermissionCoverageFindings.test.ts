@@ -29,8 +29,8 @@ test("web-root permission coverage reports missing ownership and mode evidence s
   assert.ok(findings[0].summary.includes("1 lack mode evidence"));
   assert.deepEqual(findings[0].evidence, [
     { source: "web.roots[1].owner", summary: "owner missing or blank" },
-    { source: "web.roots[2].owner", summary: "owner missing or blank" },
     { source: "web.roots[3].mode", summary: "mode missing" },
+    { source: "web.roots[2].owner", summary: "owner missing or blank" },
   ]);
 
   const serialized = JSON.stringify(findings);
@@ -95,4 +95,34 @@ test("web-root permission coverage is deterministic and bounds interleaved struc
   assert.ok(first[0].summary.includes("Only the first 100 structural reference(s) are included."));
   assert.equal(JSON.stringify(first).includes("web.roots[50].owner"), false);
   assert.equal(JSON.stringify(first).includes("private-149"), false);
+});
+
+test("web-root permission coverage preserves both evidence dimensions when their gaps occur in disjoint ranges", () => {
+  const roots = Array.from({ length: 200 }, (_, index) => index < 100
+    ? { path: `/srv/private-owner-${index}`, mode: "0755" }
+    : { path: `/srv/private-mode-${index}`, owner: "app" });
+
+  const findings = createServerAuditWebRootPermissionCoverageFindings(snapshot(roots));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].evidence.length, 100);
+  assert.deepEqual(findings[0].evidence.slice(0, 4), [
+    { source: "web.roots[0].owner", summary: "owner missing or blank" },
+    { source: "web.roots[100].mode", summary: "mode missing" },
+    { source: "web.roots[1].owner", summary: "owner missing or blank" },
+    { source: "web.roots[101].mode", summary: "mode missing" },
+  ]);
+  assert.deepEqual(findings[0].evidence.at(-2), {
+    source: "web.roots[49].owner",
+    summary: "owner missing or blank",
+  });
+  assert.deepEqual(findings[0].evidence.at(-1), {
+    source: "web.roots[149].mode",
+    summary: "mode missing",
+  });
+  assert.ok(findings[0].summary.includes("100 of 200 supplied web-root record(s) lack usable owner evidence"));
+  assert.ok(findings[0].summary.includes("100 lack mode evidence"));
+  assert.ok(findings[0].summary.includes("Only the first 100 structural reference(s) are included."));
+  assert.equal(JSON.stringify(findings).includes("private-owner"), false);
+  assert.equal(JSON.stringify(findings).includes("private-mode"), false);
 });
