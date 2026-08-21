@@ -48,6 +48,25 @@ test("stale log candidates are deterministic and bounded", () => {
   assert.equal(first.filter((entry) => entry.title === "Stale-log candidates were truncated").length, 1);
 });
 
+test("stale log retention stays bounded at maximum supported finding output", () => {
+  const input = snapshot();
+  input.logs = Array.from({ length: 5_000 }, (_, index) => ({
+    path: `/var/log/private-${index}.log`,
+    modifiedAt: "2026-08-01T00:00:00.000Z",
+  }));
+
+  const first = createServerAuditStaleLogFindings(input, { staleAfterHours: 1, maxFindings: 1_000 });
+  const second = createServerAuditStaleLogFindings(structuredClone(input), { staleAfterHours: 1, maxFindings: 1_000 });
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 1_000);
+  assert.equal(first.filter((entry) => entry.title === "Log activity appears stale relative to the snapshot").length, 999);
+  const limitation = first.find((entry) => entry.title === "Stale-log candidates were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 candidates/);
+  assert.equal(new Set(first.map((entry) => entry.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-"), false);
+});
+
 test("stale log options fail closed and canonical reports compose the redacted candidates", () => {
   const input = snapshot();
   assert.throws(() => createServerAuditStaleLogFindings(input, { maxFindings: 0 }), /stale-log maxFindings/);
