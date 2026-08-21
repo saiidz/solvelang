@@ -147,26 +147,54 @@ export function analyzeServerSnapshot(snapshot: ServerAuditSnapshot): ServerAudi
   if (snapshot.security?.rootSshLogin
     && !isUnknownSecurityValue(snapshot.security.rootSshLogin)
     && !sshLoginDisabled(snapshot.security.rootSshLogin)) {
-    findings.push(finding("high", "ssh", "Root SSH login is not disabled", `Collected SSH posture reports root login as ${snapshot.security.rootSshLogin}.`, "Disable direct root SSH login after confirming a tested privileged-access alternative and recovery path.", [{ source: "sshd", summary: `PermitRootLogin=${snapshot.security.rootSshLogin}` }]));
+    findings.push(finding(
+      "high",
+      "ssh",
+      "Root SSH login is not disabled",
+      "Supplied root-SSH posture does not report the reviewed disabled state.",
+      "Disable direct root SSH login after confirming a tested privileged-access alternative and recovery path.",
+      [{ source: "security.rootSshLogin", summary: "observed value does not indicate disabled root login" }],
+    ));
   }
 
   if (snapshot.security?.passwordSshLogin
     && !isUnknownSecurityValue(snapshot.security.passwordSshLogin)
     && !sshLoginDisabled(snapshot.security.passwordSshLogin)) {
-    findings.push(finding("medium", "ssh", "SSH password authentication remains enabled", `Collected SSH posture reports password login as ${snapshot.security.passwordSshLogin}.`, "Prefer key-based or centrally managed authentication after verifying operators will not be locked out.", [{ source: "sshd", summary: `PasswordAuthentication=${snapshot.security.passwordSshLogin}` }]));
+    findings.push(finding(
+      "medium",
+      "ssh",
+      "SSH password authentication remains enabled",
+      "Supplied SSH password-authentication posture does not report the reviewed disabled state.",
+      "Prefer key-based or centrally managed authentication after verifying operators will not be locked out.",
+      [{ source: "security.passwordSshLogin", summary: "observed value does not indicate disabled password login" }],
+    ));
   }
 
   const firewall = normalize(snapshot.security?.firewall);
   if (firewall
     && !isUnknownSecurityValue(snapshot.security?.firewall)
     && !firewallActive(snapshot.security?.firewall)) {
-    findings.push(finding("high", "network", "Host firewall not reported active", `Firewall posture was reported as ${snapshot.security?.firewall}.`, "Verify the effective host/network firewall policy and enable an allowlist-based policy if the host is otherwise exposed.", [{ source: "firewall", summary: snapshot.security?.firewall ?? "unknown" }]));
+    findings.push(finding(
+      "high",
+      "network",
+      "Host firewall not reported active",
+      "Supplied firewall posture does not match a reviewed active-state token.",
+      "Verify the effective host/network firewall policy and enable an allowlist-based policy if the host is otherwise exposed.",
+      [{ source: "security.firewall", summary: "observed value does not match reviewed active-state tokens" }],
+    ));
   }
 
   if (snapshot.security?.automaticUpdates
     && !isUnknownSecurityValue(snapshot.security.automaticUpdates)
     && !isYes(snapshot.security.automaticUpdates)) {
-    findings.push(finding("medium", "patching", "Automatic security updates not confirmed", `Automatic update posture was reported as ${snapshot.security.automaticUpdates}.`, "Define a tested patch cadence or enable controlled automatic security updates with maintenance and rollback procedures.", [{ source: "updates", summary: snapshot.security.automaticUpdates }]));
+    findings.push(finding(
+      "medium",
+      "patching",
+      "Automatic security updates not confirmed",
+      "Supplied automatic-update posture does not match a reviewed enabled-state token.",
+      "Define a tested patch cadence or enable controlled automatic security updates with maintenance and rollback procedures.",
+      [{ source: "security.automaticUpdates", summary: "observed value does not match reviewed enabled-state tokens" }],
+    ));
   }
 
   (snapshot.web?.certificates ?? []).forEach((certificate, index) => {
