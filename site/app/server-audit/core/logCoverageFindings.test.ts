@@ -65,3 +65,19 @@ test("log coverage output is deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("/private/log-104.log"), false);
   assert.throws(() => createServerAuditLogCoverageFindings(snapshot(logs), { maxFindings: 0 }), /log-coverage maxFindings/);
 });
+
+test("log coverage retention stays bounded at maximum supported finding output", () => {
+  const logs = Array.from({ length: 5_000 }, (_, index) => ({ path: `/private/log-${index}.log` }));
+  const input = snapshot(logs);
+  const first = createServerAuditLogCoverageFindings(input, { maxFindings: 1_000 });
+  const second = createServerAuditLogCoverageFindings(structuredClone(input), { maxFindings: 1_000 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 1_000);
+  assert.equal(first.filter((finding) => finding.category === "coverage").length, 1_000);
+  const limitation = first.find((finding) => finding.title === "Log evidence coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 10000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("/private/log-"), false);
+});
