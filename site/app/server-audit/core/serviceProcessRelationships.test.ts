@@ -94,6 +94,30 @@ test("grouped matches cap structural sources while preserving truncation truth",
   assert.equal(JSON.stringify(analysis).includes("many-workers"), false);
 });
 
+test("high-cardinality grouped matches preserve legacy identity with bounded source materialization", () => {
+  const input = snapshot();
+  input.services = [{ name: "many-workers.service", state: "active" }];
+  input.processes = Array.from({ length: 5_000 }, (_, index) => ({
+    pid: 10_000 + index,
+    ppid: 1,
+    uid: 1000,
+    state: "S",
+    name: "many-workers",
+  }));
+
+  const analysis = analyzeServerAuditServiceProcessRelationships(input);
+  assert.equal(analysis.relationships.length, 1);
+  assert.equal(analysis.relationships[0].id, "server-service-process:bb0223b1");
+  assert.equal(analysis.relationships[0].sources.length, 32);
+  assert.deepEqual(analysis.relationships[0].sources.slice(0, 4), [
+    "services[0]",
+    "processes[0]",
+    "processes[1]",
+    "processes[2]",
+  ]);
+  assert.equal(analysis.relationships[0].sourcesTruncated, true);
+});
+
 test("service-process output is deterministic and bounded", () => {
   const input = snapshot();
   const first = analyzeServerAuditServiceProcessRelationships(input, { maxRelationships: 1 });
