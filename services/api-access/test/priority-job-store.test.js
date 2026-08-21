@@ -77,16 +77,22 @@ test("completion and retry cleanup remove worker leases", async () => {
   assert.equal(client.steps.length, 0);
 });
 
-test("heartbeat renews only the current unexpired worker lease", async () => {
+test("heartbeat compares numeric lease timestamps and stores a separate ISO heartbeat timestamp", async () => {
+  const renewedAt = Date.UTC(2026, 6, 29, 20, 0, 0);
+  const leaseExpiresAt = Date.UTC(2026, 6, 29, 20, 1, 0);
   const client = new ScriptedClient([{
     command: "UpdateCommand",
     inspect(input) {
-      assert.match(input.ConditionExpression, /#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAt/);
-      assert.equal(input.ExpressionAttributeValues[":renewedAt"], "2026-07-29T20:00:00.000Z");
-      assert.equal(input.ExpressionAttributeValues[":leaseExpiresAt"], Date.UTC(2026, 6, 29, 20, 1, 0));
+      assert.match(input.ConditionExpression, /#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAtEpochMs/);
+      assert.equal(input.ExpressionAttributeValues[":renewedAtEpochMs"], renewedAt);
+      assert.equal(typeof input.ExpressionAttributeValues[":renewedAtEpochMs"], "number");
+      assert.equal(input.ExpressionAttributeValues[":renewedAtIso"], "2026-07-29T20:00:00.000Z");
+      assert.equal(typeof input.ExpressionAttributeValues[":renewedAtIso"], "string");
+      assert.equal(input.ExpressionAttributeValues[":leaseExpiresAt"], leaseExpiresAt);
+      assert.match(input.UpdateExpression, /lastHeartbeatAt = :renewedAtIso/);
     },
   }]);
   const store = createDynamoPriorityJobStore(client, { jobsTable: "jobs" });
-  await store.renewLease("job_" + "a".repeat(32), "worker", Date.UTC(2026, 6, 29, 20, 0, 0), Date.UTC(2026, 6, 29, 20, 1, 0));
+  await store.renewLease("job_" + "a".repeat(32), "worker", renewedAt, leaseExpiresAt);
   assert.equal(client.steps.length, 0);
 });

@@ -156,6 +156,48 @@ test("customer execution is retried when its lease heartbeat fails", async () =>
   assert.equal(store.calls.some((call) => call[0] === "release"), true);
 });
 
+test("customer execution waits for an in-flight heartbeat before completing", async () => {
+  const store = storeWith({
+    jobId: JOB_ID,
+    accountId: ACCOUNT_ID,
+    jobType: "repository_audit",
+    priority: "express",
+    sourceFingerprint: SOURCE_FINGERPRINT,
+  });
+  let finishExecution;
+  const execution = new Promise((resolve) => { finishExecution = resolve; });
+  let rejectRenewal;
+  let markRenewalStarted;
+  const renewalStarted = new Promise((resolve) => { markRenewalStarted = resolve; });
+  store.renewLease = (...args) => {
+    store.calls.push(["renew", ...args]);
+    markRenewalStarted();
+    return new Promise((resolve, reject) => { rejectRenewal = reject; });
+  };
+  const worker = createPriorityWorker({
+    laneName: "express",
+    jobStore: store,
+    accountAccess: { async assertActive() {} },
+    executeCustomerJob: async () => execution,
+    workerId: "worker",
+    now: () => 1_000,
+    leaseMs: 1_000,
+    heartbeatMs: 10,
+    logger: { error() {} },
+  });
+
+  const work = worker({ Records: [record()] });
+  await renewalStarted;
+  finishExecution(customerReport());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(store.calls.some((call) => call[0] === "complete"), false);
+
+  rejectRenewal(new Error("lease lost after execution"));
+  assert.deepEqual(await work, { batchItemFailures: [{ itemIdentifier: "message-1" }] });
+  assert.equal(store.calls.some((call) => call[0] === "complete"), false);
+  assert.equal(store.calls.some((call) => call[0] === "release"), true);
+});
+
 test("customer-owned jobs fail closed when no provider executor is configured", async () => {
   const store = storeWith({
     jobId: JOB_ID,
