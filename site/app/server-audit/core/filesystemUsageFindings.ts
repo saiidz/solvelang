@@ -25,6 +25,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function usageFinding(index: number, usagePercent: number): ServerAuditFinding | undefined {
   let severity: ServerAuditSeverity;
   let title: string;
@@ -58,24 +84,37 @@ function usageFinding(index: number, usagePercent: number): ServerAuditFinding |
 }
 
 export function createServerAuditFilesystemUsageFindings(snapshot: ServerAuditSnapshot): ServerAuditFinding[] {
-  const candidates: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
   for (const [index, filesystem] of (snapshot.filesystems ?? []).entries()) {
     if (filesystem.usagePercent === undefined) continue;
     const candidate = usageFinding(index, filesystem.usagePercent);
-    if (candidate) candidates.push(candidate);
+    if (candidate) recordFinding(candidate);
   }
 
-  candidates.sort(compareFinding);
-  if (candidates.length <= MAX_FINDINGS) return candidates;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
 
-  const bounded = candidates.slice(0, MAX_FINDINGS - 1);
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
-    id: stableId(["filesystem-usage", "findings-truncated", String(MAX_FINDINGS), String(candidates.length)]),
+    id: stableId(["filesystem-usage", "findings-truncated", String(MAX_FINDINGS), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Filesystem usage findings were truncated",
-    summary: `The filesystem-usage stage produced ${candidates.length} findings and emitted only the first ${MAX_FINDINGS - 1} deterministic findings plus this limitation marker.`,
+    summary: `The filesystem-usage stage produced ${findingsObserved} findings and emitted only the first ${MAX_FINDINGS - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from filesystem-usage evidence.",
     evidence: [{ source: "filesystems", summary: `finding limit ${MAX_FINDINGS} reached` }],
   });
