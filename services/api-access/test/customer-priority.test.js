@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCustomerPriorityService } from "../src/customer-priority.js";
+import { customerPriorityReportId } from "../src/customer-priority-report.js";
 
 const ACCOUNT_ID = `acct_${"a".repeat(32)}`;
 const SOURCE = "b".repeat(64);
@@ -135,4 +136,38 @@ test("invalid account, request id, fingerprint, or workload is rejected before s
   assert.equal(jobs.size, 0);
   assert.equal(usageCalls.length, 0);
   assert.equal(sourceCalls.length, 0);
+});
+
+test("account-bound job reads expose only the sanitized SolveLang-owned report", async () => {
+  const { service, jobs } = fixture();
+  const jobId = `job_${"d".repeat(32)}`;
+  const reportId = customerPriorityReportId({ jobId, sourceFingerprint: SOURCE });
+  jobs.set(jobId, {
+    jobId,
+    accountId: ACCOUNT_ID,
+    jobType: "repository_audit",
+    priority: "express",
+    capacityWeight: 2,
+    weightedCredits: 4,
+    sourceFingerprint: SOURCE,
+    status: "complete",
+    createdAt: "2026-08-15T06:00:00.000Z",
+    result: {
+      schemaVersion: 1,
+      reportId,
+      provider: "fixture-provider",
+      reportText: "Repository audit report.",
+      processedBy: "internal-worker-id",
+      secret: "must-not-escape",
+    },
+  });
+
+  const job = await service.getJob({ accountId: ACCOUNT_ID, jobId });
+  assert.deepEqual(job.result, {
+    reportId,
+    provider: "fixture-provider",
+    reportText: "Repository audit report.",
+  });
+  assert.equal("processedBy" in job.result, false);
+  assert.equal("secret" in job.result, false);
 });
