@@ -9,6 +9,8 @@ const SEVERITY_ORDER: Record<ServerAuditSeverity, number> = {
   info: 4,
 };
 
+type ServerAuditProcess = NonNullable<ServerAuditSnapshot["processes"]>[number];
+
 function stableId(parts: string[]): string {
   const input = parts.join("\u001f");
   let hash = 2166136261;
@@ -55,6 +57,23 @@ function hasUsableState(state: string): boolean {
   return state.trim().normalize("NFC").length > 0;
 }
 
+export function createServerAuditProcessStateCoverageFinding(
+  process: ServerAuditProcess,
+  index: number,
+): ServerAuditFinding | undefined {
+  if (hasUsableState(process.state)) return undefined;
+  const source = `processes[${index}].state`;
+  return {
+    id: stableId(["process-state-coverage", "unusable-state", source]),
+    severity: "info",
+    category: "coverage",
+    title: "Process record lacks usable state evidence",
+    summary: `Process evidence at processes[${index}] has no non-whitespace state value, so process-state conclusions cannot treat this record as having observed runtime state.`,
+    recommendation: "Re-collect the bounded process inventory with the reviewed read-only collector before relying on process-state or lifecycle conclusions for this record.",
+    evidence: [{ source, summary: "process state is empty after normalization" }],
+  };
+}
+
 export function createServerAuditProcessStateCoverageFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
@@ -74,17 +93,8 @@ export function createServerAuditProcessStateCoverageFindings(
   };
 
   for (const [index, process] of (snapshot.processes ?? []).entries()) {
-    if (hasUsableState(process.state)) continue;
-    const source = `processes[${index}].state`;
-    recordFinding({
-      id: stableId(["process-state-coverage", "unusable-state", source]),
-      severity: "info",
-      category: "coverage",
-      title: "Process record lacks usable state evidence",
-      summary: `Process evidence at processes[${index}] has no non-whitespace state value, so process-state conclusions cannot treat this record as having observed runtime state.`,
-      recommendation: "Re-collect the bounded process inventory with the reviewed read-only collector before relying on process-state or lifecycle conclusions for this record.",
-      evidence: [{ source, summary: "process state is empty after normalization" }],
-    });
+    const finding = createServerAuditProcessStateCoverageFinding(process, index);
+    if (finding !== undefined) recordFinding(finding);
   }
 
   retainedFindings.sort(compareFindings);
