@@ -65,6 +65,25 @@ test("service state coverage output is deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("service-104.service"), false);
 });
 
+test("service state coverage retention stays bounded across 5,000 unusable states", () => {
+  const input = snapshot(Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-service-${index}.service`,
+    state: "   ",
+  })));
+  const first = createServerAuditServiceStateCoverageFindings(input);
+  const second = createServerAuditServiceStateCoverageFindings(structuredClone(input));
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 100);
+  const stateFindings = first.filter((finding) => finding.title === "Service record lacks usable state evidence");
+  assert.equal(stateFindings.length, 99);
+  const limitation = first.find((finding) => finding.title === "Service state coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-service-"), false);
+});
+
 test("service state coverage emits no finding for absent or explicitly empty service evidence", () => {
   assert.deepEqual(createServerAuditServiceStateCoverageFindings({
     schemaVersion: "1",
