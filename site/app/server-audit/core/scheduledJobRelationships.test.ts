@@ -116,6 +116,41 @@ test("bounds materialized relationships while preserving exact candidate counts 
   );
 });
 
+test("materializes only the bounded mixed-target prefix while preserving historical relationship ordering", () => {
+  const services = Array.from({ length: 5_000 }, () => ({ name: "shared.service", state: "running" }));
+  const processes = Array.from({ length: 5_000 }, (_, index) => ({
+    pid: index + 1,
+    ppid: 0,
+    uid: 0,
+    state: "S",
+    name: "shared",
+  }));
+  const input: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-19T00:00:00Z",
+    host: { hostname: "example" },
+    services,
+    processes,
+    scheduledJobs: [{ source: "job", commandSummary: "shared" }],
+  };
+
+  const result = analyzeServerAuditScheduledJobRelationships(input, {
+    maxJobs: 1,
+    maxTargets: 10_000,
+    maxRelationships: 1,
+  });
+
+  assert.equal(result.summary.relationshipsObserved, 10_000);
+  assert.equal(result.summary.jobsWithMultipleRelationships, 1);
+  assert.equal(result.summary.jobsWithPartiallyMaterializedMultipleRelationships, 1);
+  assert.equal(result.execution.relationshipsTruncated, true);
+  assert.equal(result.relationships.length, 1);
+  assert.deepEqual(
+    result.relationships.map((relationship) => [relationship.kind, relationship.targetName, relationship.targetIndex]),
+    [["scheduled-job-process", "shared", 0]],
+  );
+});
+
 test("is deterministic and fails closed on invalid bounds", () => {
   const first = analyzeServerAuditScheduledJobRelationships(snapshot());
   const second = analyzeServerAuditScheduledJobRelationships(structuredClone(snapshot()));
