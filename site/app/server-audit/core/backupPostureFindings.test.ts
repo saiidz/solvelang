@@ -61,6 +61,27 @@ test("backup posture findings are deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("private-"), false);
 });
 
+test("backup posture retention stays bounded when every backup produces two findings", () => {
+  const backups = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-${index}`,
+    path: `/backup/private-${index}`,
+    ageHours: 100 + index,
+    sizeBytes: 0,
+  }));
+  const input = snapshot(backups);
+  const first = createServerAuditBackupPostureFindings(input, { maxFindings: 1_000 });
+  const second = createServerAuditBackupPostureFindings(structuredClone(input), { maxFindings: 1_000 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 1_000);
+  assert.equal(first.filter((finding) => finding.title === "Backup evidence is older than the configured freshness threshold").length, 999);
+  const limitation = first.find((finding) => finding.title === "Backup posture findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 10000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-"), false);
+});
+
 test("backup posture option bounds fail closed", () => {
   const input = snapshot([]);
   assert.throws(() => createServerAuditBackupPostureFindings(input, { maxFindings: 0 }), /maxFindings/);
