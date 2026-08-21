@@ -71,3 +71,25 @@ test("relationship finding bounds fail closed and truncate deterministically", (
   assert.throws(() => createServerAuditWebServerRelationshipFindings(input, { maxFindings: 0 }), /maxFindings/);
   assert.throws(() => createServerAuditWebServerRelationshipFindings(input, { maxFindings: 501 }), /maxFindings/);
 });
+
+test("retains only the bounded deterministic finding prefix under high-cardinality service contradictions", () => {
+  const services = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `nginx@worker-${index}.service`,
+    state: "loaded failed failed",
+  }));
+  const input = snapshot({ web: { servers: ["nginx"] }, services });
+
+  const first = createServerAuditWebServerRelationshipFindings(input, { maxFindings: 2 });
+  const second = createServerAuditWebServerRelationshipFindings(structuredClone(input), { maxFindings: 2 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 2);
+  assert.equal(first.filter((finding) => finding.title === "Web-server probes disagree on service health").length, 1);
+  const limitation = first.find((finding) => finding.title === "Web-server relationship findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.deepEqual(
+    first.flatMap((finding) => finding.evidence.map((item) => item.source)).filter((source) => source.startsWith("services[")),
+    ["services[2076].state"],
+  );
+});
