@@ -100,13 +100,14 @@ export function createDynamoPriorityJobStore(documentClient, { jobsTable }) {
       await documentClient.send(new UpdateCommand({
         TableName: jobsTable,
         Key: { jobId },
-        UpdateExpression: "SET leaseExpiresAt = :leaseExpiresAt, lastHeartbeatAt = :renewedAt",
-        ConditionExpression: "#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAt",
+        UpdateExpression: "SET leaseExpiresAt = :leaseExpiresAt, lastHeartbeatAt = :renewedAtIso",
+        ConditionExpression: "#status = :processing AND workerId = :workerId AND leaseExpiresAt > :renewedAtEpochMs",
         ExpressionAttributeNames: { "#status": "status" },
         ExpressionAttributeValues: {
           ":processing": "processing",
           ":workerId": workerId,
-          ":renewedAt": new Date(renewedAt).toISOString(),
+          ":renewedAtEpochMs": renewedAt,
+          ":renewedAtIso": new Date(renewedAt).toISOString(),
           ":leaseExpiresAt": leaseExpiresAt,
         },
       }));
