@@ -8,101 +8,95 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `86a8a1d0bca542181a5e0eafbc3981210feec8c6`, the merge of #638 after #637's bounded Server Audit identity-report composition and the repository-only production-preflight read-policy correction.
+At this refresh, reviewed source `main` is `b4cf937e9996cd6b600808e32ac95dec1c628297`.
 
-The safe non-production open-PR queue is **zero** at this checkpoint. Historical PRs #161/#164/#169 are merged repository-state facts only; their former approval gates are not standing authorization for live production action. #638 is also a merged repository-policy/test change only: its merge did not apply IAM or retry a deployment, and any live production IAM/deployment action remains separately owner-approved.
+The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
-The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated.
+Recent safe integration state:
 
-## Latest queue-drain checkpoint
+- #643 composes listener-identity coverage into canonical Server Audit JSON/HTML reports with structural/redacted evidence and an explicit authority limitation.
+- #644 defines a provider-neutral customer-priority executor boundary. It is not wired into the production worker handler and does not select or call a provider.
+- #646 defines provider credential-reference isolation around a production-namespaced Secrets Manager ARN and injected reader, without adding a live SDK client, secret read, IAM/KMS authority, provider call, or worker wiring.
+- #648 adds bounded filesystem mount-identity coverage with structural `filesystems[index].mount` evidence and deterministic truncation truth.
+- #649 adds SolveLang-owned customer-priority report retention: deterministic server-owned report IDs, bounded plain-text report content, worker/account-bound validation, and public-field filtering. It does not wire provider execution or change production gates.
+- #650 composes #648 filesystem-identity coverage into canonical Server Audit JSON/HTML reports and adds an explicit filesystem-identity authority limitation plus redaction regression coverage.
 
-The latest Server Audit truth-hardening train is merged:
+All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650.
 
-- #602/#603 — explicit-empty scheduled-job inventory remains unknown coverage because fixed cron-directory scans can yield no records when directories are missing, unreadable, or contain no qualifying entries; the signal is composed into canonical JSON/HTML reports with structural evidence only.
-- #604 was closed unmerged after newer `main` invalidated its validation; verified successor #606 preserved the reviewed filesystem-coverage scope.
-- #606/#608 — explicit-empty filesystem inventory remains unknown coverage rather than proof that the host has no mounted filesystems; canonical report composition preserves the fixed `df -P -B1` collector authority boundary.
-- #605/#607 were closed unmerged only after verified successors existed; #609 preserved the reviewed web-inventory coverage payload on then-current `main`.
-- #609/#610 — explicit-empty web-server, web-root, and TLS-certificate inventories become bounded coverage signals and are composed into canonical JSON/HTML reports without endpoint reachability claims or private web evidence.
-- #611 — unavailable/unknown security probes no longer become SSH/firewall/update configuration-risk findings. A Codex review caught additional `N/A` / `not applicable` sentinels; corrected exact head `5d496cceafe163439d228297e7181ca0f163dba7` passed Hosted CI + Rust/RustSec and merged as `d28aad4b5b8476e23ac179c50dc37aa5809ddf8b`.
-- #612 — documentation-only sync through #611 merged after exact-head Hosted CI + Rust/RustSec.
-- #614 — systemd inventory states such as `inactive dead`, `active exited`, `inactive exited`, and normal running units are no longer treated as service failures; only explicit `failed` / `error` state tokens produce the medium unhealthy-service finding. Exact head `65d25315cf221143b25ff6af6f0fdca928e1df22` passed Hosted CI + Rust/RustSec and merged as `17406bc43c33746b053684a06da68e4bc96650f0`.
-- #613 was closed unmerged after #614 advanced `main`; current-main successor #615 preserved the corrected canonical JSON/HTML regression test.
-- #615 — report-level tests pin the #611 behavior so common unknown security-probe sentinels stay structural coverage evidence, raw sentinel spellings do not leak, and configuration-risk titles are not reintroduced by report composition. Exact head `7471a0732247f7659caf841e04cbe90197ceb1fe` passed Hosted CI + Rust/RustSec and merged as `fa8c669e73d7ef6d764af877513d9cf7558143d5`.
-- #617/#618/#619 — service→process→listener ambiguity/unresolved/truncation findings are composed into canonical reports, with the relationship constructor and per-relationship structural-source evidence bounded against large Cartesian products and large ambiguity sets.
-- #620/#621 — bounded service→process relationship findings and canonical report composition preserve grouped/unmatched/skipped/truncated structural truth without exposing service/process labels.
-- #622/#623 — bounded scheduled-job→service/process relationship findings and canonical report composition preserve multi-target, unresolved, skipped-summary, and truncation truth without exposing cron sources, schedules, summaries, service names, or process names.
-- #624/#625 — scheduled-job relationship construction is bounded before materialization and exact-token targets are indexed once, preserving deterministic IDs/order and exact observed counts while avoiding repeated full target scans.
-- #626/#627 — multi-target scheduled-job truth remains explicit even when the relationship output cap partially materializes fanout; findings preserve observed-vs-materialized counts with structural evidence only.
-- #628 — canonical JSON/HTML regression coverage pins the partial-fanout evidence and verifies raw scheduled-job/service values remain absent from report output.
-- #629 — documentation-only production truth correction records that the production authenticator-app TOTP infrastructure is already deployed and environment-enabled; it does not authorize customer-account enrollment or any new production mutation.
-- #630/#631 — blank normalized TLS-certificate identities become bounded structural coverage findings and are composed into canonical JSON/HTML reports with explicit endpoint/collector authority limits.
-- #632/#633 — blank normalized web-server labels and web-root paths become bounded structural coverage findings and are composed into canonical reports without exposing valid private web identities.
-- #634/#635/#636 — blank normalized service, process, and package identities become deterministic bounded structural coverage findings with no collector or remediation changes.
-- #637 — canonical JSON/HTML reports now compose the #634–#636 service/process/package identity coverage findings, include explicit authority limitations, and pin redaction of valid private identities/version evidence. Exact reviewed head `c8e10c7ab4ffa7c7f21a0d4dd51dc0dcbf7eb799` passed exact-head Hosted CI + Rust/RustSec and merged as `a50e723abb14bd0cf90f02189bbc5a6e30498128`.
-- #638 — repository-only production preflight policy/test now includes read-only `cloudformation:Describe/Get/List` access to the dormant priority stack ARN. Hosted CI, Rust/RustSec, API Access CI, and Customer Priority Foundation Rollout CI were green before an independent merge as `86a8a1d0bca542181a5e0eafbc3981210feec8c6`. This repository merge is not evidence that live IAM was changed or that the dormant foundation deployment was retried.
+## Customer-priority production truth
 
-All ordinary branches in the Server Audit train used GitHub-hosted validation. No Trusted Mac or Trusted Windows result was required or substituted, and no runner registration, service, labels, or routing changed.
+A separately triggered production workflow run `32431853270` successfully deployed the durable customer-priority foundation in **dormant** mode.
 
-## Post-scan security verification
+That deployment does **not** authorize or establish live customer-priority execution. The preserved boundary is:
 
-The last completed full standard security scan previously covered exact `main` `5d39a38ba43364e597da4f8f94cb6a7a05f21800` and reported no remaining findings after #577 symlink-confinement remediation.
+- durable queue/foundation resources: deployed;
+- queue processing gate: OFF;
+- customer-priority gate: OFF;
+- provider-execution gate: OFF;
+- production billing: OFF;
+- customer source upload / job submission through the new provider path: not established;
+- credit consumption through the new provider path: not established.
 
-A source-backed security diff review was then completed for the exact range:
-
-`5d39a38ba43364e597da4f8f94cb6a7a05f21800..fa8c669e73d7ef6d764af877513d9cf7558143d5`
-
-The range is 122 commits and 47 changed files. Every changed production source file in that exact range was reviewed, including Repository Audit Compose product wiring and all changed Server Audit analysis/report/coverage modules. Review focused on untrusted snapshot handling, redaction/privacy, HTML/JSON output safety, bounds/DoS, path/reference handling, and accidental capability/network/write expansion. No reportable security regression was found. Changed tests were also checked for shell/network/environment access and no such new CI-side capability was found.
-
-This is a **security diff review**, not a replacement claim that a new full Codex Security standard repository scan ran on later `main`. Later #617→#638 work is covered by exact-head Hosted/specialized CI and PR review evidence, not by that older full-range security-diff statement. If a fresh full standard scan is required for a production gate, run it separately on the then-current exact `main` and record that exact SHA.
+Repository merges #644/#646/#649 remain preparation only. They do not create or read live provider credentials, wire a provider into the production worker handler, call a provider, activate processing, expose customer priority, or enable billing.
 
 ## Major merged work that must not be recreated
 
-- #288 → #301 — deterministic Python imports plus Repository Audit dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow relationships, and bounded report integration.
+### Repository Audit / Solve Graph
+
+- #288 → #301 — deterministic Python imports plus dependency consistency, direct test/documentation mapping, conservative dead-code candidates, configuration/workflow relationships, and bounded report integration.
 - #311/#313/#314 — affected-test/workflow intelligence and report composition.
 - #317/#319/#322/#327/#332 — architecture/security-boundary analysis, integrity-covered artifacts, bounded presentation, and browser export.
 - #329/#335 — deterministic ranked Solve Graph node search and MCP exposure.
 - #333 — bounded local TypeScript `extends` and project-reference relationships.
 - #337/#348/#349 — bounded visual-explorer model, presentation model, and browser panel.
-- #340 — bounded Server Audit scheduled-job relationships from sanitized summaries only.
 - #341 — conservative repository-local PHP literal `require`/`include` relationships.
-- #350→#371 — deployment-path, Angular/Nest framework-path, and Angular target-config evidence/artifact/presentation/browser integrations.
+- #350→#371 — deployment-path, Angular/Nest framework-path, and Angular target-config evidence/artifact/presentation/browser integration.
 - #372/#373 and #432→#448 — bounded shortest paths, product/browser verification, deterministic explanations, and additive read-only MCP exposure.
 - #450→#456 — deterministic alternative-path and dependent-impact explanations across core/browser/MCP.
 - #457→#472 — selected-node impact/affected-validation browser intelligence, cancellation-safe request state, stale-selection protection, workflow-evidence identity, and deterministic interaction coverage.
-- #480/#481 — Repository Audit reusable-workflow references and redacted Server Audit large-log evidence.
-- #482/#485/#488/#492/#517/#520/#523/#525/#527/#543 — language loop control, conservative semantic checking, formatter/linter work, and deterministic pure collection/object helpers without widening capability gates.
-- #498/#500/#508/#544 — billing-readiness correctness work only; production billing remains disabled.
-- #502/#503/#504/#506/#510/#512/#518/#521/#526/#529/#548 — bounded MCP/LSP/editor surfaces and review fixes. LSP remains local, didOpen-cached, non-executing, and without workspace/network access.
+- #480 — bounded GitHub reusable-workflow reference evidence.
 - #513/#519/#530/#534/#542 — bounded entrypoint/unreached-candidate graph intelligence and local explorer filtering; these are structural candidates, not runtime reachability claims.
-- #531/#538/#546/#550/#553/#554 — repository-only operational/readiness contracts; none authorize live provider, billing, credential, restore, routing, or production mutation.
-- #533/#545 — deterministic imported `.solve` cycle/provenance hardening while imports remain compatibility includes rather than package/module semantics.
 - #535/#539 — bounded Node workspace metadata/snapshot evidence.
-- #537 — browser/WASM parity ADR; pure-core extraction is still required before browser runtime work.
 - #549/#552/#556/#557 — bounded static Cargo, Go, .NET, and Maven evidence adapters. They parse explicit local files only and never evaluate build tools or resolve registries.
 - #562→#578 — bounded static Docker Compose service/image and `depends_on` evidence, snapshot/artifact/presentation/browser surfaces, quoted static service keys, dependency panel, and top-level product wiring. Compose evaluation, interpolation/anchors/profiles, image resolution, container starts, network access, and writes remain disabled.
-- #575/#576/#579 — bounded backup/log consistency evidence/findings and canonical report composition with exact-overlap deduplication.
+
+### Server Audit
+
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
+
+Key recent trains that must not be recreated:
+
+- #575/#576/#579 — backup/log consistency evidence, findings, and canonical report composition with exact-overlap deduplication.
+- #581→#615 — certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web coverage, security-probe truth, normal systemd state truth, and canonical report regression coverage.
+- #617→#628 — bounded/redacted service→process→listener, service→process, and scheduled-job→service/process relationship findings/report composition plus relationship construction/index/fanout hardening.
+- #630→#637 — certificate/web/service/process/package identity coverage and canonical report composition.
+- #641/#643 — listener identity coverage and report composition.
+- #648/#650 — filesystem identity coverage and report composition.
+
+Automatic remote remediation execution remains out of scope.
+
+### Language/runtime and DX
+
+- #482/#485/#488/#492 — loop control, conservative semantic checking, formatter/linter work.
+- #517/#520/#523/#525/#527/#543 — deterministic pure collection/object helpers while hardened execution continues to deny capability-bearing builtins.
+- #503/#510/#512/#518/#521/#526/#529 — local stdio-only LSP diagnostics/symbols/definition/hover/highlights/completion/semantic tokens/formatting.
+- #515/#516 — opt-in VS Code package with executable launch disabled by default.
 - #577 — root-confined writes reject an existing symbolic-link final component.
-- #581→#615 — bounded Server Audit certificate/public-file/backup/log/service/package/listener/process/scheduled-job/filesystem/web coverage, report-truth hardening, security-probe truth, normal systemd service-state truth, and canonical report regression coverage described above.
-- #617→#637 — bounded/redacted service→process→listener, service→process, and scheduled-job→service/process relationship findings/report composition; relationship construction/index/fanout hardening; certificate/web/service/process/package identity-coverage findings; and canonical identity-coverage report composition. No collector or remediation capability was widened.
-- #638 — production-preflight repository policy/test correction for read-only priority-stack inspection only; it does not authorize or prove a live IAM update or deployment retry.
+- #537 — browser/WASM parity ADR; pure-core extraction is still required before browser runtime work.
 
-## Repository Audit / Solve Graph state
+## Current safe engineering order
 
-Repository Audit and Solve Graph remain deterministic, bounded, local/analyze-only surfaces. Merged capabilities include repository ingestion/inventory; JavaScript/TypeScript, Python, conservative local PHP, TypeScript config, Angular/Nest, deployment/config, Node workspace, static Cargo/Go/.NET/Maven, and static Docker Compose evidence; dependency consistency; conservative dead-code evidence; test/documentation/workflow mapping; architecture/security-boundary summaries; ranked, shortest-path, alternative-path, dependent-impact, entrypoint, unreachable-candidate, cycle, hotspot, affected-validation, and security-summary queries; deterministic path/impact explanations; integrity-covered artifacts; local browser exploration; redaction; explicit complete/partial/truncation truth; and additive read-only MCP query/explanation surfaces.
+Re-evaluate live state before every run. When the safe non-production PR queue exceeds six, drain it before unrelated feature work.
 
-Repository source is not executed to improve graph coverage. Gradle remains deferred because faithful build-script handling requires evaluation. Prefer conservative parser/config evidence and explicit unknown/partial states over guessed relationships. Repository Audit write/remediation mode remains disabled.
+With the queue at zero, the strongest safe continuations are:
 
-## Server Audit state
-
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
-
-Continue package/service/port/process/scheduled-job relationship quality, cache/log/backup posture, domain/TLS/public-file evidence, ownership/permission/version findings, deterministic evidence, and cross-platform parser/report tests. Do not add remote mutation/remediation execution.
-
-## Language/runtime and DX state
-
-The Rust language/runtime includes lexer/parser/AST/runtime values and control flow, functions, arrays/objects, relative `.solve` compatibility imports, source locations/structured diagnostics, conservative semantic checking, `break`/`continue`, deterministic formatter/linter commands, and pure collection/object helpers. Root-restricted writes reject an existing symbolic-link final component.
-
-The `solvelsp` surface is intentionally local and stdio-only with didOpen-cached diagnostics/symbols/definition/hover/highlights/completion/semantic tokens/formatting. Incremental sync, workspace indexing/access, repository execution, and network access remain unsupported. The opt-in VS Code package bundles no executable and defaults executable launch settings to false.
+1. keep `ROADMAP.md`, this handoff, Issue #157, and production truth synchronized;
+2. continue bounded Repository Audit / Solve Graph reference, path, impact, affected-validation, MCP/Codex, and visual-explorer quality without executing repository source;
+3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic redaction, and cross-platform report tests;
+4. continue language/runtime and DX through conservative semantics, diagnostics, package/module design, pure-core extraction, and non-executing editor support;
+5. continue dormant customer-priority engineering only while queue/customer/provider gates remain OFF: source integrity, leases/retries/DLQ/observability, account/entitlement enforcement, report retention, credential boundaries, preflight validation, and safe browser/API readiness;
+6. continue TOTP account-enrollment/login/backup-code preparation without repeating already-live infrastructure rollout or mutating accounts absent explicit approval;
+7. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized.
 
 ## Self-hosted validation policy
 
@@ -116,47 +110,31 @@ The `solvelsp` surface is intentionally local and stdio-only with didOpen-cached
 
 ## Authoritative production truth
 
-`docs/current-production-status-2026-08-20.md` is authoritative for the TOTP/KMS/IAM facts explicitly re-verified on 2026-08-20 and supersedes contradictory 2026-08-19 TOTP-infrastructure text. Unrelated production facts remain governed by the relevant prior verified records unless separately re-probed.
+`docs/current-production-status-2026-08-20.md` is authoritative for the TOTP/KMS/IAM facts explicitly re-verified on 2026-08-20. Later verified production facts must be layered on explicitly rather than inferred from repository merges.
 
-Current boundaries include:
+Current production boundaries include:
 
-- API access and customer accounts/password authentication: **enabled**;
-- Admin CRM backend/private Admin Gateway/static Admin UI behind Cloudflare Access: **live from separately approved production work**;
-- authenticator-app TOTP environment feature flag: **enabled**;
-- dedicated production TOTP KMS stack/key/alias: **live and re-verified**;
-- expected TOTP preflight/deploy OIDC supplemental policies: **attached and re-verified**;
-- specific customer-account authenticator enrollment: **separate account-level state; not established by the 2026-08-20 infrastructure audit**;
-- subscription billing: **disabled**;
-- production billing webhook path: **disabled by feature boundary**;
-- paid customer priority: **disabled**;
-- queue/customer/provider activation: **not established by repository merges**;
-- real charge authorization: **none**;
-- general managed hosted SolveLang workflow execution: **not live**;
-- Repository Audit write/remediation mode: **disabled**;
-- Server Audit mutation/remediation mode: **disabled**.
+- API access and customer accounts/password authentication: enabled;
+- private Admin Gateway/static Admin UI behind Cloudflare Access: live from separately approved production work;
+- authenticator-app TOTP environment feature flag: enabled;
+- dedicated production TOTP KMS stack/key/alias: live and re-verified;
+- expected TOTP preflight/deploy OIDC supplemental policies: attached and re-verified;
+- specific customer-account authenticator enrollment: separate account-level state; not established by infrastructure state;
+- durable customer-priority foundation: deployed dormant;
+- queue processing: OFF;
+- customer priority: OFF;
+- provider execution: OFF;
+- subscription billing and production billing webhook: disabled;
+- paid priority: disabled;
+- real-charge authorization: none;
+- general managed hosted SolveLang workflow execution: not live;
+- Repository Audit write/remediation mode: disabled;
+- Server Audit mutation/remediation mode: disabled.
 
-Repository merges do not change those live-state facts by themselves. The #638 repository merge did not apply production IAM or retry the dormant priority deployment. The already-live TOTP infrastructure must not be redeployed merely because older documentation described it as pending; any account enrollment/login/backup-code canary or future infrastructure mutation requires fresh owner approval.
+Repository merges do not change those live-state facts by themselves.
 
-## Safe queue and integration policy
+## Hard production boundary
 
-When more than six safe non-production PRs are open, drain the existing queue before starting unrelated feature work. Refresh stale branches, retarget dependency stacks, fix CI/review findings, close verified superseded predecessors, and merge only exact-head green, mergeable, review-clean non-production work.
+Do not automatically live-apply AWS/IAM/KMS changes, deploy production, change DNS/private ingress/Cloudflare Access, publish or mutate the production Admin UI, enroll customer TOTP, activate queue/customer/provider processing, enable customer priority, enable billing, use live Stripe/provider credentials, create charges/refunds, send email, mutate production customer/CRM data, execute uploaded customer source in production, or bypass protected environments/owner approvals.
 
-When the safe queue is six or fewer, new safe work may proceed only after live repository state is reconciled and merged scopes are checked to avoid duplication.
-
-## Current safe engineering order
-
-1. Keep Hosted CI/Rust/RustSec blockers clear and drain any safe queue first.
-2. Keep `ROADMAP.md`, this handoff, Issue #157 integration truth, and production truth aligned with live repository state.
-3. Continue Repository Audit/Solve Graph bounded query/path/impact, affected-validation, MCP/Codex, visual-explorer, artifact verification, and conservative reference quality.
-4. Continue Server Audit read-only relationship/posture/report quality and deterministic cross-platform tests, especially package/service/port/process/scheduled-job relationships, cache/backup/log posture, and domain/TLS/public-file evidence.
-5. Continue language/runtime/DX with conservative semantic/type checks, formatter/linter/module/package work, diagnostics, and editor support; keep LSP behavior local and non-executing.
-6. Keep security/account hardening, rollback preservation, least privilege, launch readiness, and operations current.
-7. Keep customer-account TOTP enrollment/login/backup-code canaries, customer-priority activation, billing activation, provider execution, email, and charge/refund work dormant behind fresh production approvals. Do not repeat the already-live TOTP IAM/KMS/API rollout.
-
-## Hard safety boundary
-
-Safe automation may create/refresh isolated branches, implement code/tests/docs, create/update PRs, fix review findings or CI regressions, rerun safe CI, close/supersede duplicates with evidence, and merge non-production PRs only after exact-head required checks are green, mergeability is confirmed, and review threads are clean.
-
-Do **not** automatically apply live AWS/IAM/KMS changes, deploy production, change DNS/private ingress, rotate credentials, publish/alter the production Admin UI, enroll/activate customer-account TOTP or mutate the live TOTP infrastructure, enable customer priority/billing, use live Stripe/providers, create charges/refunds, send email, mutate production customer/CRM data, upload/execute customer source in production, or bypass fresh owner/protected approvals for live actions.
-
-If a production gate or self-hosted validation blocks one track, record it and immediately continue another safe engineering task rather than idling.
+If a production-sensitive track reaches an approval gate, stop that track and continue safe repository-only work elsewhere.
