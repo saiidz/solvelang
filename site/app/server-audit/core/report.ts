@@ -10,6 +10,7 @@ import { createServerAuditCertificateIdentityCoverageFindings } from "./certific
 import { createServerAuditCertificateExpiryFallbackFindings } from "./certificateExpiryFindings";
 import { createServerAuditCoverageFindings } from "./coverageFindings";
 import { createServerAuditFilesystemArtifactRelationshipFindings } from "./filesystemArtifactRelationshipFindings";
+import { createServerAuditFilesystemByteCoverageFindings } from "./filesystemByteCoverageFindings";
 import { createServerAuditFilesystemCapacityCoverageFindings } from "./filesystemCapacityCoverageFindings";
 import { createServerAuditFilesystemCoverageFindings } from "./filesystemCoverageFindings";
 import { createServerAuditFilesystemIdentityCoverageFindings } from "./filesystemIdentityCoverageFindings";
@@ -147,6 +148,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditSystemMetricsCoverageFindings(snapshot),
     ...createServerAuditFilesystemCoverageFindings(snapshot),
     ...createServerAuditFilesystemCapacityCoverageFindings(snapshot),
+    ...createServerAuditFilesystemByteCoverageFindings(snapshot),
     ...createServerAuditFilesystemIdentityCoverageFindings(snapshot),
     ...createServerAuditFilesystemUsageFindings(snapshot),
     ...createServerAuditProcessCoverageFindings(snapshot),
@@ -217,6 +219,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Stale-log candidates compare only supplied log modification times to the supplied snapshot time; they do not prove log rotation failure, service health, workload activity, or complete log coverage.",
       "Filesystem-coverage findings report only an explicit empty filesystem inventory; because the reviewed collector maps failed/unavailable fixed `df -P -B1` execution or empty usable output to an empty array, they do not prove that the host has no mounted filesystems or that filesystem collection was complete or authoritative.",
       "Filesystem-capacity coverage findings report only supplied filesystem records that omit usagePercent; they do not prove filesystem health, collector completeness, authoritative disk utilization, or absence of capacity pressure.",
+      "Filesystem byte-accounting coverage findings report only supplied filesystem records that omit sizeBytes, usedBytes, or availableBytes; they do not prove filesystem health, allocation semantics, collector completeness, authoritative byte accounting, or absence of capacity pressure.",
       "Filesystem-usage findings compare only supplied usagePercent values against bounded 80/90/95 percent review thresholds; they do not prove filesystem identity, growth cause, future exhaustion, or collector authority.",
       "Filesystem-identity coverage findings report only supplied filesystem records whose mount identity is empty after trim and NFC normalization; they do not prove filesystem absence, mount authority, collector completeness, or the correctness of capacity and filesystem-artifact relationship attribution.",
       "Filesystem-artifact relationship findings use lexical absolute POSIX path evidence only; ambiguous, invalid, unresolved, or truncated mappings are completeness/integrity signals and do not identify an authoritative filesystem.",
