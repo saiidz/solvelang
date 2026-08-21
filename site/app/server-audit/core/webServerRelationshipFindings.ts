@@ -51,6 +51,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function normalizedServiceName(value: string): string {
   return value.trim().toLowerCase().replace(/\.service$/, "");
 }
@@ -80,11 +106,14 @@ export function createServerAuditWebServerRelationshipFindings(
 
   const recordFinding = (finding: ServerAuditFinding): void => {
     findingsObserved += 1;
-    retainedFindings.push(finding);
-    retainedFindings.sort(compareFinding);
-    if (retainedFindings.length > maxFindings) {
-      retainedFindings.pop();
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
     }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
   };
 
   for (const [index, rawServer] of reportedServers.entries()) {
@@ -137,6 +166,7 @@ export function createServerAuditWebServerRelationshipFindings(
     }
   }
 
+  retainedFindings.sort(compareFinding);
   if (findingsObserved <= maxFindings) return retainedFindings;
 
   const bounded = retainedFindings.slice(0, maxFindings - 1);
