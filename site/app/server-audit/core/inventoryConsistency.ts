@@ -45,6 +45,8 @@ export type ServerAuditInventoryConsistencyAnalysis = {
   };
 };
 
+const IDENTITY_SOURCE_LIMIT = 32;
+
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number, label: string): number {
   const resolved = value ?? fallback;
   if (!Number.isSafeInteger(resolved) || resolved < minimum || resolved > maximum) {
@@ -53,9 +55,11 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
   return resolved;
 }
 
-function stableId(kind: ServerAuditInventoryIssueKind, sources: string[], sourceCount: number): string {
-  const completeInput = `${kind}\u001f${sources.join("\u001f")}`;
-  const input = sourceCount > sources.length
+function stableId(kind: ServerAuditInventoryIssueKind, sources: string[]): string {
+  const sourceCount = sources.length;
+  const identitySources = sources.slice(0, IDENTITY_SOURCE_LIMIT);
+  const completeInput = `${kind}\u001f${identitySources.join("\u001f")}`;
+  const input = sourceCount > identitySources.length
     ? `${completeInput}\u001fsources-truncated:${sourceCount}`
     : completeInput;
   let hash = 2166136261;
@@ -95,7 +99,7 @@ function issueWithBoundedSources(
   const sourceCount = sources.length;
   const boundedSources = sources.slice(0, maxSourcesPerIssue);
   return {
-    id: stableId(kind, boundedSources, sourceCount),
+    id: stableId(kind, sources),
     kind,
     severity,
     sources: boundedSources,
