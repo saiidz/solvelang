@@ -9,11 +9,14 @@ export type ServerAuditArtifactConsistencyIssue = {
   kind: ServerAuditArtifactConsistencyIssueKind;
   severity: "low" | "info";
   sources: string[];
+  sourceCount: number;
+  sourcesTruncated: boolean;
   summary: string;
 };
 
 export type ServerAuditArtifactConsistencyOptions = {
   maxIssues?: number;
+  maxSourcesPerIssue?: number;
 };
 
 export type ServerAuditArtifactConsistencyAnalysis = {
@@ -28,9 +31,13 @@ export type ServerAuditArtifactConsistencyAnalysis = {
     networkAccess: false;
     writeAccess: false;
     maxIssues: number;
+    maxSourcesPerIssue: number;
     issuesTruncated: boolean;
+    issueSourcesTruncated: boolean;
   };
 };
+
+const IDENTITY_SOURCE_LIMIT = 32;
 
 function boundedInteger(value: number | undefined, fallback: number, minimum: number, maximum: number, label: string): number {
   const resolved = value ?? fallback;
@@ -41,7 +48,12 @@ function boundedInteger(value: number | undefined, fallback: number, minimum: nu
 }
 
 function stableId(kind: ServerAuditArtifactConsistencyIssueKind, sources: string[]): string {
-  const input = `${kind}\u001f${sources.join("\u001f")}`;
+  const sourceCount = sources.length;
+  const identitySources = sources.slice(0, IDENTITY_SOURCE_LIMIT);
+  const completeInput = `${kind}\u001f${identitySources.join("\u001f")}`;
+  const input = sourceCount > identitySources.length
+    ? `${completeInput}\u001fsources-truncated:${sourceCount}`
+    : completeInput;
   let hash = 2166136261;
   for (let index = 0; index < input.length; index += 1) {
     hash ^= input.charCodeAt(index);
@@ -66,11 +78,58 @@ function distinct(values: Array<string | number | undefined>): number {
   return new Set(values.map((value) => value === undefined ? "<undefined>" : String(value))).size;
 }
 
+function selectBoundedConflictSources(
+  sources: string[],
+  metadataVariants: string[],
+  maxSourcesPerIssue: number,
+): string[] {
+  const firstVariant = metadataVariants[0];
+  const conflictingIndex = metadataVariants.findIndex((variant) => variant !== firstVariant);
+  if (conflictingIndex < 1) {
+    throw new Error("Server Audit artifact consistency conflict evidence requires two distinct metadata variants.");
+  }
+
+  const selectedIndexes = [0, conflictingIndex];
+  for (let index = 1; index < sources.length && selectedIndexes.length < maxSourcesPerIssue; index += 1) {
+    if (index === conflictingIndex) continue;
+    selectedIndexes.push(index);
+  }
+  selectedIndexes.sort((left, right) => left - right);
+  return selectedIndexes.map((index) => sources[index]!);
+}
+
+function conflictIssueWithBoundedSources(
+  kind: ServerAuditArtifactConsistencyIssueKind,
+  severity: "low" | "info",
+  sources: string[],
+  metadataVariants: string[],
+  summary: string,
+  maxSourcesPerIssue: number,
+): ServerAuditArtifactConsistencyIssue {
+  const boundedSources = selectBoundedConflictSources(sources, metadataVariants, maxSourcesPerIssue);
+  return {
+    id: stableId(kind, sources),
+    kind,
+    severity,
+    sources: boundedSources,
+    sourceCount: sources.length,
+    sourcesTruncated: boundedSources.length < sources.length,
+    summary,
+  };
+}
+
 export function analyzeServerAuditArtifactConsistency(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditArtifactConsistencyOptions = {},
 ): ServerAuditArtifactConsistencyAnalysis {
   const maxIssues = boundedInteger(options.maxIssues, 250, 1, 5_000, "Server Audit artifact maxIssues");
+  const maxSourcesPerIssue = boundedInteger(
+    options.maxSourcesPerIssue,
+    32,
+    2,
+    256,
+    "Server Audit artifact maxSourcesPerIssue",
+  );
   const issues: ServerAuditArtifactConsistencyIssue[] = [];
   const backups = snapshot.backups ?? [];
   const logs = snapshot.logs ?? [];
@@ -78,42 +137,45 @@ export function analyzeServerAuditArtifactConsistency(
   for (const indexes of groupIndexes(backups, (entry) => entry.path).values()) {
     if (indexes.length < 2) continue;
     const metadata = indexes.map((index) => {
-      const entry = backups[index];
+      const entry = backups[index]!;
       return `${entry.name}\u001f${entry.ageHours ?? ""}\u001f${entry.sizeBytes ?? ""}`;
     });
     if (distinct(metadata) < 2) continue;
-    const sources = indexes.map((index) => `backups[${index}]`).sort();
-    issues.push({
-      id: stableId("conflicting-backup-metadata", sources),
-      kind: "conflicting-backup-metadata",
-      severity: "low",
+    const sources = indexes.map((index) => `backups[${index}]`);
+    issues.push(conflictIssueWithBoundedSources(
+      "conflicting-backup-metadata",
+      "low",
       sources,
-      summary: "Multiple backup entries for the same collected path report different identity, age, or size metadata; backup evidence is internally inconsistent.",
-    });
+      metadata,
+      "Multiple backup entries for the same collected path report different identity, age, or size metadata; backup evidence is internally inconsistent.",
+      maxSourcesPerIssue,
+    ));
   }
 
   for (const indexes of groupIndexes(logs, (entry) => entry.path).values()) {
     if (indexes.length < 2) continue;
     const metadata = indexes.map((index) => {
-      const entry = logs[index];
+      const entry = logs[index]!;
       return `${entry.sizeBytes ?? ""}\u001f${entry.modifiedAt ?? ""}`;
     });
     if (distinct(metadata) < 2) continue;
-    const sources = indexes.map((index) => `logs[${index}]`).sort();
-    issues.push({
-      id: stableId("conflicting-log-metadata", sources),
-      kind: "conflicting-log-metadata",
-      severity: "info",
+    const sources = indexes.map((index) => `logs[${index}]`);
+    issues.push(conflictIssueWithBoundedSources(
+      "conflicting-log-metadata",
+      "info",
       sources,
-      summary: "Multiple log entries for the same collected path report different size or modification metadata; log evidence is internally inconsistent and may reflect collection-time churn.",
-    });
+      metadata,
+      "Multiple log entries for the same collected path report different size or modification metadata; log evidence is internally inconsistent and may reflect collection-time churn.",
+      maxSourcesPerIssue,
+    ));
   }
 
   issues.sort((left, right) => left.id.localeCompare(right.id));
+  const boundedIssues = issues.slice(0, maxIssues);
   return {
     schema: "solvelang.server-audit.artifact-consistency.v0",
     mode: "analyze-only",
-    issues: issues.slice(0, maxIssues),
+    issues: boundedIssues,
     summary: {
       backupsChecked: backups.length,
       logsChecked: logs.length,
@@ -122,7 +184,9 @@ export function analyzeServerAuditArtifactConsistency(
       networkAccess: false,
       writeAccess: false,
       maxIssues,
+      maxSourcesPerIssue,
       issuesTruncated: issues.length > maxIssues,
+      issueSourcesTruncated: boundedIssues.some((issue) => issue.sourcesTruncated),
     },
   };
 }

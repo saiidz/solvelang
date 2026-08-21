@@ -80,3 +80,28 @@ test("artifact consistency output is deterministic and bounded", () => {
     /artifact maxIssues/,
   );
 });
+
+test("artifact consistency bounds structural sources while retaining a late conflicting witness", () => {
+  const input = snapshot();
+  input.logs = [];
+  input.backups = Array.from({ length: 40 }, (_, index) => ({
+    name: "private-backup",
+    path: "/private/backups/same.dump",
+    ageHours: index === 39 ? 2 : 1,
+    sizeBytes: index === 39 ? 11 : 10,
+  }));
+
+  const analysis = analyzeServerAuditArtifactConsistency(input, { maxSourcesPerIssue: 2 });
+
+  assert.equal(analysis.issues.length, 1);
+  assert.deepEqual(analysis.issues[0].sources, ["backups[0]", "backups[39]"]);
+  assert.equal(analysis.issues[0].sourceCount, 40);
+  assert.equal(analysis.issues[0].sourcesTruncated, true);
+  assert.equal(analysis.execution.issueSourcesTruncated, true);
+  assert.equal(JSON.stringify(analysis).includes("private-backup"), false);
+  assert.equal(JSON.stringify(analysis).includes("/private/backups/same.dump"), false);
+  assert.throws(
+    () => analyzeServerAuditArtifactConsistency(input, { maxSourcesPerIssue: 1 }),
+    /artifact maxSourcesPerIssue.*2 through 256/,
+  );
+});

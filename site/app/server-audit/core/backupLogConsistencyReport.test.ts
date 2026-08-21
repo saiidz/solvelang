@@ -116,3 +116,27 @@ test("canonical reports preserve bounded backup conflict cardinality and a confl
     assert.equal(output.includes("/private/backups/conflict.dump"), false);
   }
 });
+
+test("canonical reports deduplicate high-cardinality preferred and legacy artifact evidence after bounding", () => {
+  const backups = Array.from({ length: 40 }, (_, index) => ({
+    name: "private-backup",
+    path: "/private/backups/same.dump",
+    ageHours: index === 39 ? 2 : 1,
+    sizeBytes: index === 39 ? 11 : 10,
+  }));
+  const snapshot: ServerAuditSnapshot = {
+    schemaVersion: "1",
+    collectedAt: "2026-08-20T12:00:00.000Z",
+    host: { hostname: "audit-host" },
+    backups,
+    logs: [],
+    metadata: { redactionsApplied: true },
+  };
+  const consistency = consistencyFindings(snapshot);
+
+  assert.equal(consistency.length, 1);
+  assert.equal(consistency[0].evidence.length, 32);
+  assert.equal(consistency[0].evidence[0].source, "backups[0]");
+  assert.equal(consistency[0].evidence.at(-1)?.source, "backups[39]");
+  assert.ok(consistency[0].summary.includes("bounded to 32 of 40 affected records"));
+});
