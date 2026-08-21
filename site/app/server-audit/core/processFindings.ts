@@ -50,48 +50,58 @@ export function createServerAuditProcessFindings(
   ];
   const pids = new Set(processes.map((process) => process.pid));
   const processNames = new Set(processes.map((process) => process.name));
+  const indexedProcesses = processes.map((process, index) => ({ process, index }));
 
-  for (const process of [...processes].sort((left, right) => left.pid - right.pid || left.name.localeCompare(right.name))) {
+  for (const { process, index } of [...indexedProcesses].sort(
+    (left, right) => left.process.pid - right.process.pid
+      || left.process.name.localeCompare(right.process.name)
+      || left.index - right.index,
+  )) {
     if (/^Z/i.test(process.state)) {
+      const source = `processes[${index}].state`;
       findings.push({
-        id: stableId(["process", "zombie", String(process.pid), process.name, process.state]),
+        id: stableId(["process", "zombie", source]),
         severity: "low",
         category: "process",
         title: "Zombie process observed",
-        summary: `PID ${process.pid} (${process.name}) was collected in state ${process.state}. A single snapshot does not prove the condition is persistent.`,
+        summary: `Process evidence at processes[${index}] was collected in a zombie-prefixed state. A single snapshot does not prove the condition is persistent.`,
         recommendation: "Confirm the process remains in a zombie state across repeated read-only snapshots, then inspect its parent or owning service before making any change.",
-        evidence: [{ source: `pid:${process.pid}`, summary: `${process.name} state ${process.state}` }],
+        evidence: [{ source, summary: "process state begins with a zombie marker" }],
       });
     }
 
     if (process.ppid > 1 && !pids.has(process.ppid)) {
+      const source = `processes[${index}].ppid`;
       findings.push({
-        id: stableId(["process", "parent-missing", String(process.pid), String(process.ppid)]),
+        id: stableId(["process", "parent-missing", source]),
         severity: "info",
         category: "evidence-integrity",
         title: "Process parent is outside collected inventory",
-        summary: `PID ${process.pid} references parent PID ${process.ppid}, which is not present in the supplied process inventory. Collection limits or process churn may explain the gap.`,
+        summary: `Process evidence at processes[${index}] references a parent PID that is not present in the supplied process inventory. Collection limits or process churn may explain the gap.`,
         recommendation: "Re-collect the bounded process inventory before using this parent relationship for operational or security conclusions.",
-        evidence: [{ source: `pid:${process.pid}`, summary: `parent pid ${process.ppid} not collected` }],
+        evidence: [{ source, summary: "referenced parent PID was not collected" }],
       });
     }
   }
 
-  for (const socket of [...(snapshot.listeningSockets ?? [])].sort(
-    (left, right) => left.protocol.localeCompare(right.protocol)
-      || left.localAddress.localeCompare(right.localAddress)
-      || left.port - right.port
-      || (left.process ?? "").localeCompare(right.process ?? ""),
+  const indexedSockets = (snapshot.listeningSockets ?? []).map((socket, index) => ({ socket, index }));
+  for (const { socket, index } of [...indexedSockets].sort(
+    (left, right) => left.socket.protocol.localeCompare(right.socket.protocol)
+      || left.socket.localAddress.localeCompare(right.socket.localAddress)
+      || left.socket.port - right.socket.port
+      || (left.socket.process ?? "").localeCompare(right.socket.process ?? "")
+      || left.index - right.index,
   )) {
     if (!socket.process || processNames.has(socket.process)) continue;
+    const source = `listeningSockets[${index}].process`;
     findings.push({
-      id: stableId(["process", "listener-name-missing", socket.protocol, socket.localAddress, String(socket.port), socket.process]),
+      id: stableId(["process", "listener-name-missing", source]),
       severity: "info",
       category: "evidence-integrity",
       title: "Listener process is outside collected process inventory",
-      summary: `${socket.protocol}/${socket.port} reports process ${socket.process}, but that executable name is not present in the supplied process inventory. Collection timing or visibility may explain the mismatch.`,
+      summary: `Listener evidence at listeningSockets[${index}] names a process that is not present in the supplied process inventory. Collection timing or visibility may explain the mismatch.`,
       recommendation: "Re-collect socket and process evidence from the same reviewed collector run before attributing ownership of this listener.",
-      evidence: [{ source: `${socket.protocol}/${socket.port}`, summary: `listener process ${socket.process} not collected` }],
+      evidence: [{ source, summary: "listener process identity was not collected in process inventory" }],
     });
   }
 
