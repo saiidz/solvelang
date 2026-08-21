@@ -35,6 +35,7 @@ import { createServerAuditScheduledJobIdentityCoverageFindings } from "./schedul
 import { createServerAuditScheduledJobRelationshipFindings } from "./scheduledJobRelationshipFindings";
 import { createServerAuditServiceCoverageFindings } from "./serviceCoverageFindings";
 import { createServerAuditServiceIdentityCoverageFindings } from "./serviceIdentityCoverageFindings";
+import { createServerAuditServiceStateCoverageFindings } from "./serviceStateCoverageFindings";
 import { createServerAuditServiceListenerRelationshipFindings } from "./serviceListenerRelationshipFindings";
 import { createServerAuditServiceProcessRelationshipFindings } from "./serviceProcessRelationshipFindings";
 import { createServerAuditSystemMetricsCoverageFindings } from "./systemMetricsCoverageFindings";
@@ -158,6 +159,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
     ...createServerAuditProcessFindings(snapshot),
     ...createServerAuditServiceCoverageFindings(snapshot),
     ...createServerAuditServiceIdentityCoverageFindings(snapshot),
+    ...createServerAuditServiceStateCoverageFindings(snapshot),
     ...createServerAuditScheduledJobCoverageFindings(snapshot),
     ...createServerAuditScheduledJobIdentityCoverageFindings(snapshot),
     ...createServerAuditScheduledJobRelationshipFindings(snapshot),
@@ -231,6 +233,7 @@ export function createServerAuditReport(snapshot: ServerAuditSnapshot, generated
       "Process-identity coverage findings report only supplied process records whose executable identity is empty after trim and NFC normalization; they do not prove process absence, process ownership, runtime health, or collector authority.",
       "Service-coverage findings report only an explicit empty service inventory; they do not prove service discovery completeness, boot enablement, runtime health, or collector authority.",
       "Service-identity coverage findings report only supplied service records whose identity is empty after trim and NFC normalization; they do not prove service absence, service ownership, runtime health, or collector authority.",
+      "Service-state coverage findings report only supplied service records whose required state value is empty after trim and NFC normalization; they do not prove service absence, service health, enablement, ownership, relationship authority, or collector completeness.",
       "Scheduled-job coverage findings report only an explicit empty scheduled-job inventory; because the reviewed collector scans a fixed set of cron directories and missing, unreadable, or empty directories can all yield no records, they do not prove that the host has no scheduled jobs or that scheduled-job collection was complete or authoritative.",
       "Scheduled-job identity coverage findings report only supplied scheduled-job records whose source or command-summary identity is empty after trim and NFC normalization; they do not prove job absence, provenance authority, command validity, runtime execution, or collector completeness.",
       "Scheduled-job relationship findings use only bounded exact-name-token matches over supplied sanitized command summaries and service/process names; multi-target, unresolved, oversized, or truncated results are completeness/integrity signals and do not prove command execution, ownership, job validity, runtime health, or collector authority.",
