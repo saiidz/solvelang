@@ -178,7 +178,7 @@ export function createServerAuditScheduledJobFindings(
       severity: "info",
       category: "evidence-integrity",
       title: "Scheduled-job inventory reports conflicting duplicate evidence",
-      summary: `Multiple scheduled-job records refer to the same collected source but disagree on schedule or redacted command-summary metadata. The source value is intentionally withheld from the finding.${evidenceBounded ? ` The finding retains ${group.evidenceIndexes.length} of ${group.entriesObserved} structural witness references while preserving both observed metadata variants.` : ""}`,
+      summary: `Multiple scheduled-job records refer to the same collected source but disagree on schedule or redacted command-summary metadata. The source value is intentionally withheld from the finding.${evidenceBounded ? ` The finding retains ${group.evidenceIndexes.length} of ${group.entriesObserved} structural witness references while preserving at least two conflicting metadata variants.` : ""}`,
       recommendation: "Re-collect scheduled-job inventory with the reviewed collector before relying on the duplicated record for operational conclusions.",
       evidence: group.evidenceIndexes.map((index) => ({
         source: `scheduledJobs[${index}]`,
