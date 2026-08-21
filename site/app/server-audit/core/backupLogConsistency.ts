@@ -95,15 +95,36 @@ function distinctCount(values: string[]): number {
   return new Set(values).size;
 }
 
+function selectBoundedConflictSources(
+  sources: string[],
+  metadataVariants: string[],
+  maxSourcesPerIssue: number,
+): string[] {
+  const firstVariant = metadataVariants[0];
+  const conflictingIndex = metadataVariants.findIndex((variant) => variant !== firstVariant);
+  if (conflictingIndex < 1) {
+    throw new Error("Server Audit backup/log consistency conflict evidence requires two distinct metadata variants.");
+  }
+
+  const selectedIndexes = [0, conflictingIndex];
+  for (let index = 1; index < sources.length && selectedIndexes.length < maxSourcesPerIssue; index += 1) {
+    if (index === conflictingIndex) continue;
+    selectedIndexes.push(index);
+  }
+  selectedIndexes.sort((left, right) => left - right);
+  return selectedIndexes.map((index) => sources[index]!);
+}
+
 function issueWithBoundedSources(
   kind: ServerAuditBackupLogConsistencyIssueKind,
   severity: "low" | "info",
   sources: string[],
+  metadataVariants: string[],
   summary: string,
   maxSourcesPerIssue: number,
 ): ServerAuditBackupLogConsistencyIssue {
   const sourceCount = sources.length;
-  const boundedSources = sources.slice(0, maxSourcesPerIssue);
+  const boundedSources = selectBoundedConflictSources(sources, metadataVariants, maxSourcesPerIssue);
   return {
     id: stableId(kind, sources),
     kind,
@@ -129,7 +150,7 @@ export function analyzeServerAuditBackupLogConsistency(
   const maxSourcesPerIssue = boundedInteger(
     options.maxSourcesPerIssue,
     32,
-    1,
+    2,
     256,
     "Server Audit backup/log consistency maxSourcesPerIssue",
   );
@@ -152,6 +173,7 @@ export function analyzeServerAuditBackupLogConsistency(
       "conflicting-backup-record",
       "low",
       sources,
+      metadata,
       "Multiple collected entries for the same backup identity report different path, age, or size metadata. Raw backup names and paths are intentionally withheld from this consistency evidence.",
       maxSourcesPerIssue,
     ));
@@ -170,6 +192,7 @@ export function analyzeServerAuditBackupLogConsistency(
       "conflicting-log-record",
       "info",
       sources,
+      metadata,
       "Multiple collected entries for the same log path report different size or modification-time metadata. The raw log path is intentionally withheld from this consistency evidence.",
       maxSourcesPerIssue,
     ));
