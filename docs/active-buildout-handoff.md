@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `5596acfb7ecc1695b6fd684900b1fc38672fb2f8`, the safe merge of #662.
+At this refresh, reviewed source `main` is `0489e26c66db967233ff8d68128872c411540748`, the safe merge of #664.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
@@ -31,8 +31,10 @@ Recent safe integration state:
 - #660 synchronizes this handoff through #659 after exact-head Hosted CI and Rust/RustSec validation.
 - #661 adds bounded coverage for supplied filesystem records that omit `usagePercent`, with structural `filesystems[index].usagePercent` evidence and deterministic truncation truth. A P1 review posted immediately after merge correctly identified that canonical report composition was still missing.
 - #662 fixes that #661 P1 by composing filesystem-capacity coverage into canonical Server Audit JSON/HTML reports, adding an explicit authority limitation and redaction regression coverage.
+- #663 synchronizes this handoff and Issue #157 tracking through #662 after exact-head Hosted CI and Rust/RustSec validation.
+- #664 closes both unresolved lease-safety findings that survived #478: DynamoDB lease renewal now compares numeric epoch-millisecond values while storing a separate ISO heartbeat timestamp, and the dormant customer-priority worker serializes/awaits in-flight renewals before report acceptance or completion. Exact-head Hosted CI, Rust/RustSec, API Access CI, and Customer Priority Foundation Rollout CI all passed.
 
-All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659/#660/#661/#662.
+All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653/#654/#655/#656/#658/#659/#660/#661/#662/#663/#664.
 
 ## Customer-priority production truth
 
@@ -48,7 +50,7 @@ That deployment does **not** authorize or establish live customer-priority execu
 - customer source upload / job submission through the new provider path: not established;
 - credit consumption through the new provider path: not established.
 
-Repository merges #644/#646/#649 remain preparation only. They do not create or read live provider credentials, wire a provider into the production worker handler, call a provider, activate processing, expose customer priority, or enable billing.
+Repository merges #644/#646/#649/#664 remain preparation/hardening only. They do not create or read live provider credentials, wire a provider into the production worker handler, call a provider, activate processing, expose customer priority, or enable billing. #664 corrects dormant lease-renewal safety only and does not dispatch or execute a production job.
 
 ## Major merged work that must not be recreated
 
