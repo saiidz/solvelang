@@ -8,23 +8,24 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `0df1e02440841e21c30ca0badf07d869d7f96700`, the safe merge of #690.
+At this refresh, reviewed source `main` is `28f3e8fe28ac0e0ff185da09e8986269ff1ef94d`, the safe merge of #700.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
 ## Most recent safe integration state
 
-- #682 added bounded structural coverage for supplied service records whose optional `enabled` evidence is absent or blank and composed that signal into canonical JSON/HTML. Its initial helper-only version was corrected after review so the product report path actually invoked the stage and carried an explicit authority limitation. Exact reviewed head `1a4fc7816403d19ae93348e4f8b45cc3b1e08cca` merged after exact-head Hosted CI and Rust/RustSec green.
-- #683 added bounded structural coverage for supplied process records whose required `state` becomes empty after trim/NFC normalization, preserving structural `processes[index].state` evidence without exposing process identity values. Exact reviewed head `9dc7497361f40fca1eca7b342b0c21c37017693d` merged safely.
-- #684 replaced raw process names, PIDs/parent PIDs, listener addresses/ports, and listener process labels in process-health/relationship findings with structural snapshot references and added canonical JSON/HTML redaction regressions. Exact reviewed head `80ae59533966aaf56bde3fa35f85a78517457fac` merged as `107b330652d9f220ab9ca2d52e82f90893204069` after exact-head Hosted CI and Rust/RustSec green.
-- #685 extended the fixed argument-free read-only collector with `systemctl list-unit-files --type=service --no-legend --no-pager`, joining exact runtime unit names to optional `services[].enabled` evidence while keeping unmatched enablement unknown. Collector metadata advanced to `0.4.0`; command-surface QA pins the literal read-only invocation. Exact reviewed head `1ac07c93796ae59e8c4d2fc441a110bf92660b5d` passed exact-head Hosted CI and Rust/RustSec and merged as `a51e1cbfd1fe55ed554f31599d4cfc6cc0af0b50`.
-- #686 removed raw failed-service names/state values from baseline health findings, preserving explicit `failed`/`error` token detection while emitting only structural `services[index].state` evidence. Helper and canonical JSON/HTML regressions pin redaction of service name, raw state, and enablement values. Exact reviewed head `5910515ba9845f6e11fe5282e45e00d6aa3a306a` passed exact-head Hosted CI and Rust/RustSec and merged as `32079532efdbfb7b28b986f202b1d640edbf254b`.
-- #687 removed raw public-listener addresses, numeric ports, and process labels from baseline public-listener findings while preserving wildcard-binding, sensitive-service classification, severity, and unexpected-public-port logic. Findings now use structural `listeningSockets[index].port` / `.localAddress` evidence and canonical JSON/HTML regressions pin the privacy boundary. Exact reviewed head `5bb01c41193ac6a8a7f8a55a84915cd8debd1031` passed exact-head Hosted CI and Rust/RustSec and merged as `4d5f93171c37caef0651abced540e1c1e30a05a8`.
-- #688 synchronized this handoff through #687. Exact reviewed head `00a72a31bc1d75808fca6d7c57c03a54b52000b4` passed Hosted CI and Rust/RustSec before merge.
-- #689 structurally redacted baseline firewall/SSH/password-authentication/automatic-update security-posture findings so arbitrary supplied probe values no longer leak through findings while existing safe/insecure/unknown classification semantics remain intact. Exact reviewed head `6fddf04ac4348d937f1ca1bd48bd79e77d7f767d` passed Hosted CI and Rust/RustSec and merged as `f62c221085c576febcbff291d499b4d3c97ce020`.
-- #690 bounded per-issue inventory-consistency structural evidence to a reviewed default of 32 references with hard maximum 256, while preserving exact affected-record `sourceCount` and explicit source-truncation truth. Codex correctly flagged an initial P2 in which issue identity depended on caller-selected `maxSourcesPerIssue`; exact head `319e27a2ac624a34aa8b0a5dd598c57c3a92255c` fixes identity to a fixed 32-reference structural fingerprint plus exact cardinality only when the underlying contradiction exceeds that fixed identity bound. A regression proves identical IDs under 8- versus 16-reference output limits and pins the legacy ID for a complete small issue. The review thread was resolved; exact-head Hosted CI and Rust/RustSec passed; #690 merged as current `main` `0df1e02440841e21c30ca0badf07d869d7f96700`.
+- #691 synchronized this handoff through #690.
+- #692 pinned canonical JSON/HTML behavior for bounded inventory-consistency evidence.
+- #693 bounded backup/log contradiction evidence to a reviewed default of 32 structural references while preserving exact affected-record cardinality and explicit truncation truth. Its review correction ensures a late conflicting witness survives a tight evidence bound instead of emitting a misleading prefix.
+- #694 pinned canonical JSON/HTML behavior for that bounded backup/log evidence, including 32-of-40 cardinality truth, late-witness retention, and redaction of raw backup names/paths.
+- #695 applied the same two-distinct-witness preservation rule to package, service, filesystem, web-root, and duplicate-process inventory contradictions while keeping topology findings independently bounded.
+- #696 bounded the legacy artifact-consistency compatibility path to a reviewed default of 32 and hard maximum of 256 structural references per issue, preserved exact `sourceCount` plus truncation truth, bounded high-cardinality issue identity independently of caller-selected output limits, and kept preferred-vs-legacy canonical deduplication stable.
+- #697 bounded ambiguous listener→process relationship source construction. The analyzer now streams complete stable identity while materializing at most the reviewed structural-source prefix; a 5,000-process regression pins historical identity, ordering, and truncation truth.
+- #698 applied the same streaming-identity/bounded-source rule to grouped service→process relationships, again preserving historical IDs/order and bounding materialized structural evidence under 5,000-process ambiguity.
+- #699 applied the same rule to filesystem→log/backup relationships while deliberately retaining the log/backup artifact witness as the final bounded source; a 5,000-filesystem ambiguity regression pins the historical relationship identity.
+- #700 bounded scheduled-job→service/process relationship object construction itself. Exact reviewed head `7ba50ce07c67604bdfb2a2fcaeabb40935755a64` stops constructing every matched relationship object before applying `maxRelationships`; it preserves exact bounded candidate counts, existing stable IDs, and historical deterministic process-before-service ordering. A 10,000-target mixed service/process regression proves one-row materialization, exact candidate cardinality, relationship truncation, and partial-multi-target truth. #700 passed exact-head Hosted CI and Rust/RustSec and merged as current `main` `28f3e8fe28ac0e0ff185da09e8986269ff1ef94d`.
 
-Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #682–#690 and neither self-hosted lane was substituted for Hosted validation.
+Ordinary branches in this recent Server Audit train used exact-head GitHub-hosted CI and Rust/RustSec. Trusted Mac or Trusted Windows was not required for #691–#700 and neither self-hosted lane was substituted for Hosted validation.
 
 ## Major merged work that must not be recreated
 
@@ -73,7 +74,8 @@ Key trains that must not be recreated:
 - #682/#685 — service enablement coverage/report composition plus fixed read-only collector population of optional unit-file enablement evidence.
 - #683/#684 — process-state coverage plus structural redaction of process/listener relationship findings.
 - #686/#687/#689 — structural redaction of baseline failed-service, public-listener, and security-posture findings.
-- #690 — bounded inventory-consistency structural evidence with limit-independent deterministic identity and explicit source-cardinality/truncation truth.
+- #690/#692→#696 — bounded inventory/artifact contradiction evidence with limit-independent deterministic identity, exact source cardinality, explicit truncation truth, two-witness preservation, report regressions, and preferred-vs-legacy deduplication.
+- #697→#700 — bounded high-cardinality relationship construction for listener→process, service→process, filesystem→artifact, and scheduled-job→service/process paths while preserving exact bounded counts, stable identity, deterministic ordering, and structural evidence/truncation truth.
 
 Automatic remote remediation execution remains out of scope.
 
@@ -94,7 +96,7 @@ With the queue at zero, the strongest safe continuations are:
 
 1. keep `ROADMAP.md`, this handoff, Issue #157, and production truth synchronized;
 2. continue bounded Repository Audit / Solve Graph reference, path, impact, affected-validation, MCP/Codex, and visual-explorer quality without executing repository source;
-3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic structural redaction, bounded source construction, and cross-platform report tests;
+3. continue Server Audit read-only relationship/posture hardening: package/service/port/process/scheduled-job relationships, cache/log/backup consistency, domain/TLS/public-file evidence, ownership/permission/version truth, deterministic structural redaction, bounded source/object construction, and cross-platform report tests;
 4. continue language/runtime and DX through conservative semantics, diagnostics, package/module design, pure-core extraction, and non-executing editor support;
 5. continue dormant customer-priority engineering only while queue/customer/provider gates remain OFF: source integrity, leases/retries/DLQ/observability, account/entitlement enforcement, report retention, credential boundaries, preflight validation, and safe browser/API readiness;
 6. continue TOTP account-enrollment/login/backup-code preparation without repeating already-live infrastructure rollout or mutating accounts absent explicit approval;
