@@ -27,7 +27,10 @@ test("server audit collector accepts no user command arguments and contains no m
   assert.match(source, /redactionsApplied:\s*true/);
   assert.match(source, /command content intentionally not collected/);
   assert.match(source, /command\("ps", \["-eo", "pid=,ppid=,uid=,stat=,comm="\]\)/);
+  assert.match(source, /command\("systemctl", \["list-unit-files", "--type=service", "--no-legend", "--no-pager"\]\)/);
+  assert.match(source, /enabled:\s*enablementByName\.get\(fields\[0\]\)/);
   assert.match(source, /Process inventory contains PID, parent PID, numeric uid, state, and executable comm name only/);
+  assert.match(source, /Service inventory combines fixed read-only systemctl runtime and unit-file enablement listings/);
   assert.match(source, /Environment variables, file contents, database contents, private keys, credentials, process command lines, and cron command bodies are not collected/);
 });
 
