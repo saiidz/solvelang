@@ -1,4 +1,5 @@
-const REPORT_ID = /^[A-Za-z0-9_.:-]{8,128}$/;
+import { cleanCustomerPriorityReportText } from "./customer-priority-report.js";
+
 const PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 
 function validAbortSignal(signal) {
@@ -34,19 +35,13 @@ export function createCustomerPriorityProviderAdapter({ provider, execute }) {
       signal: input.signal,
     });
 
-    if (
-      !result
-      || typeof result !== "object"
-      || Array.isArray(result)
-      || typeof result.reportId !== "string"
-      || !REPORT_ID.test(result.reportId)
-    ) {
-      throw new Error("Priority provider returned an invalid report ID.");
+    if (!result || typeof result !== "object" || Array.isArray(result)) {
+      throw new Error("Priority provider returned an invalid report.");
     }
 
     return {
-      reportId: result.reportId,
       provider,
+      reportText: cleanCustomerPriorityReportText(result.reportText),
     };
   };
 }

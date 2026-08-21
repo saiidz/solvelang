@@ -1,4 +1,5 @@
 import { getPriorityLane } from "./priority-lanes.js";
+import { validateCustomerPriorityReport } from "./customer-priority-report.js";
 
 const WORKER_LEASE_MS = 60_000;
 
@@ -27,14 +28,6 @@ function customerAccountId(job) {
     throw new Error("Priority job account is invalid.");
   }
   return job.accountId;
-}
-
-function cleanExecutorField(value, label) {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string" || value.length < 1 || value.length > 128 || /[\u0000-\u001f\u007f]/.test(value)) {
-    throw new Error(`Priority executor ${label} is invalid.`);
-  }
-  return value;
 }
 
 export function createPriorityWorker({
@@ -124,9 +117,10 @@ export function createPriorityWorker({
               weightedCredits: job.weightedCredits,
             });
             if (heartbeatFailure) throw new Error("Priority job lease renewal failed.");
-            if (!execution || typeof execution !== "object" || Array.isArray(execution)) {
-              throw new Error("Customer priority executor result is invalid.");
-            }
+            const report = validateCustomerPriorityReport(execution, {
+              jobId: message.jobId,
+              sourceFingerprint: job.sourceFingerprint,
+            });
             result = {
               schemaVersion: 1,
               jobType: job.jobType,
@@ -134,8 +128,7 @@ export function createPriorityWorker({
               capacityWeight: lane.capacityWeight,
               sourceFingerprint: job.sourceFingerprint,
               processedBy: leaseOwner,
-              ...(cleanExecutorField(execution.reportId, "report ID") ? { reportId: cleanExecutorField(execution.reportId, "report ID") } : {}),
-              ...(cleanExecutorField(execution.provider, "provider") ? { provider: cleanExecutorField(execution.provider, "provider") } : {}),
+              ...report,
             };
           } finally {
             clearInterval(heartbeat);

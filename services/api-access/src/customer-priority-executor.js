@@ -1,17 +1,5 @@
 import { PriorityJobError } from "./priority-jobs.js";
-
-const REPORT_ID = /^[A-Za-z0-9_.:-]{8,128}$/;
-const PROVIDER = /^[A-Za-z0-9_.:-]{1,64}$/;
-
-function validResult(result) {
-  return result
-    && typeof result === "object"
-    && !Array.isArray(result)
-    && typeof result.reportId === "string"
-    && REPORT_ID.test(result.reportId)
-    && typeof result.provider === "string"
-    && PROVIDER.test(result.provider);
-}
+import { createCustomerPriorityReport } from "./customer-priority-report.js";
 
 export function createCustomerPriorityExecutor({
   sourceStore,
@@ -51,11 +39,16 @@ export function createCustomerPriorityExecutor({
         signal: controller.signal,
       }));
       const result = await Promise.race([execution, timeout]);
-      if (!validResult(result)) throw new Error("Priority audit executor returned an invalid result.");
+      const report = createCustomerPriorityReport({
+        jobId: input.jobId,
+        sourceFingerprint: input.sourceFingerprint,
+        provider: result?.provider,
+        reportText: result?.reportText,
+      });
       if (deleteSourceOnSuccess) {
         await sourceStore.deleteSource({ accountId: input.accountId, fingerprint: input.sourceFingerprint });
       }
-      return { reportId: result.reportId, provider: result.provider };
+      return report;
     } finally {
       if (timer) clearTimeout(timer);
     }

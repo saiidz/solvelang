@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createPriorityWorker } from "../src/priority-worker.js";
+import { customerPriorityReportId } from "../src/customer-priority-report.js";
 
 const ACCOUNT_ID = `acct_${"a".repeat(32)}`;
 const JOB_ID = `job_${"b".repeat(32)}`;
+const SOURCE_FINGERPRINT = "c".repeat(64);
+const REPORT_TEXT = "Repository audit completed with no critical findings.";
 
 function record(priority = "express", receiveCount = "1") {
   return {
@@ -25,13 +28,22 @@ function storeWith(job) {
   };
 }
 
+function customerReport(overrides = {}) {
+  return {
+    reportId: customerPriorityReportId({ jobId: JOB_ID, sourceFingerprint: SOURCE_FINGERPRINT }),
+    provider: "test-fixture",
+    reportText: REPORT_TEXT,
+    ...overrides,
+  };
+}
+
 test("customer-owned repository audit invokes only an explicitly supplied executor after account verification", async () => {
   const store = storeWith({
     jobId: JOB_ID,
     accountId: ACCOUNT_ID,
     jobType: "repository_audit",
     priority: "express",
-    sourceFingerprint: "c".repeat(64),
+    sourceFingerprint: SOURCE_FINGERPRINT,
     weightedCredits: 4,
   });
   const order = [];
@@ -41,7 +53,7 @@ test("customer-owned repository audit invokes only an explicitly supplied execut
     accountAccess: { async assertActive(accountId) { order.push(["account", accountId]); } },
     executeCustomerJob: async (input) => {
       order.push(["execute", input]);
-      return { reportId: "report-123", provider: "test-fixture" };
+      return customerReport();
     },
     workerId: "worker",
     now: () => 1000,
@@ -51,7 +63,7 @@ test("customer-owned repository audit invokes only an explicitly supplied execut
   assert.equal(order[0][0], "account");
   assert.equal(order[1][0], "execute");
   assert.equal(order[1][1].accountId, ACCOUNT_ID);
-  assert.equal(order[1][1].sourceFingerprint, "c".repeat(64));
+  assert.equal(order[1][1].sourceFingerprint, SOURCE_FINGERPRINT);
   const completed = store.calls.find((call) => call[0] === "complete");
   assert.equal(completed[1], JOB_ID);
   assert.deepEqual(completed[3], {
@@ -59,11 +71,34 @@ test("customer-owned repository audit invokes only an explicitly supplied execut
     jobType: "repository_audit",
     priority: "express",
     capacityWeight: 2,
-    sourceFingerprint: "c".repeat(64),
+    sourceFingerprint: SOURCE_FINGERPRINT,
     processedBy: "worker:request-1",
-    reportId: "report-123",
-    provider: "test-fixture",
+    ...customerReport(),
   });
+});
+
+test("worker rejects a provider-controlled or mismatched report ID", async () => {
+  const store = storeWith({
+    jobId: JOB_ID,
+    accountId: ACCOUNT_ID,
+    jobType: "repository_audit",
+    priority: "express",
+    sourceFingerprint: SOURCE_FINGERPRINT,
+  });
+  const worker = createPriorityWorker({
+    laneName: "express",
+    jobStore: store,
+    accountAccess: { async assertActive() {} },
+    executeCustomerJob: async () => customerReport({ reportId: "report_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }),
+    workerId: "worker",
+    now: () => 1_000,
+    logger: { error() {} },
+  });
+  assert.deepEqual(await worker({ Records: [record()] }), {
+    batchItemFailures: [{ itemIdentifier: "message-1" }],
+  });
+  assert.equal(store.calls.some((call) => call[0] === "complete"), false);
+  assert.equal(store.calls.some((call) => call[0] === "release"), true);
 });
 
 test("customer execution renews its lease while running and fails closed if renewal is lost", async () => {
@@ -72,7 +107,7 @@ test("customer execution renews its lease while running and fails closed if rene
     accountId: ACCOUNT_ID,
     jobType: "repository_audit",
     priority: "express",
-    sourceFingerprint: "c".repeat(64),
+    sourceFingerprint: SOURCE_FINGERPRINT,
   });
   let tick = 1_000;
   const worker = createPriorityWorker({
@@ -81,7 +116,7 @@ test("customer execution renews its lease while running and fails closed if rene
     accountAccess: { async assertActive() {} },
     executeCustomerJob: async () => {
       await new Promise((resolve) => setTimeout(resolve, 35));
-      return { reportId: "report-123", provider: "test-fixture" };
+      return customerReport();
     },
     workerId: "worker",
     now: () => (tick += 1),
@@ -99,7 +134,7 @@ test("customer execution is retried when its lease heartbeat fails", async () =>
     accountId: ACCOUNT_ID,
     jobType: "repository_audit",
     priority: "express",
-    sourceFingerprint: "c".repeat(64),
+    sourceFingerprint: SOURCE_FINGERPRINT,
   });
   store.renewLease = async () => { throw new Error("lease lost"); };
   const worker = createPriorityWorker({
@@ -108,7 +143,7 @@ test("customer execution is retried when its lease heartbeat fails", async () =>
     accountAccess: { async assertActive() {} },
     executeCustomerJob: async () => {
       await new Promise((resolve) => setTimeout(resolve, 35));
-      return { reportId: "report-123", provider: "test-fixture" };
+      return customerReport();
     },
     workerId: "worker",
     now: () => 1_000,

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { calculateCreditCharge } from "./credits.js";
 import { getPriorityLane } from "./priority-lanes.js";
 import { PriorityJobError } from "./priority-jobs.js";
+import { publicCustomerPriorityReport } from "./customer-priority-report.js";
 
 const ACCOUNT_ID = /^acct_[a-f0-9]{32}$/;
 const REQUEST_ID = /^[A-Za-z0-9_.:-]{8,128}$/;
@@ -73,7 +74,10 @@ function publicCustomerJob(record) {
     startedAt: record.startedAt ?? null,
     completedAt: record.completedAt ?? null,
     failedAt: record.failedAt ?? null,
-    result: record.result ?? null,
+    result: publicCustomerPriorityReport(record.result, {
+      jobId: record.jobId,
+      sourceFingerprint: record.sourceFingerprint,
+    }),
     errorCode: record.errorCode ?? null,
   };
 }

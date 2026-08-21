@@ -15,9 +15,26 @@ The provider adapter defines the narrow boundary that a future reviewed provider
 - forwards only the repository audit source, account/job identifiers, priority lane, weighted credits, source fingerprint, and abort signal;
 - does not forward arbitrary caller fields, credentials, or a caller/provider-supplied provider identity;
 - requires the worker timeout abort signal;
-- accepts only a bounded report identifier from the injected executor;
-- stamps the configured provider identifier onto the sanitized result;
+- accepts only bounded plain-text report content from the injected provider executor;
+- stamps the configured provider identifier onto the sanitized provider result;
+- does not accept a provider-controlled report identifier;
 - propagates execution failures so the queue/lease retry contract remains authoritative.
+
+## SolveLang-owned report contract
+
+`services/api-access/src/customer-priority-report.js` keeps report ownership inside SolveLang instead of making customer retrieval depend on provider-side response retention.
+
+The contract:
+
+- derives a deterministic `report_<32 hex>` identifier from the validated SolveLang job ID and source fingerprint;
+- accepts only a bounded provider identifier and plain-text report body;
+- caps report text at 32 KiB and rejects unsafe control characters;
+- revalidates the deterministic report identity before the worker persists a completed result;
+- stores the report with the existing seven-day customer-priority job record;
+- revalidates report identity again on account-bound reads;
+- exposes only `reportId`, `provider`, and `reportText` to the customer, never `processedBy`, worker lease identity, provider credentials, or arbitrary stored metadata.
+
+The public workload policy already caps provider output at 1,000 output tokens per call, so the 32 KiB report ceiling remains comfortably bounded while preserving room for plain-text formatting. The report expires with the job record; no extra long-lived report bucket or provider response retention is required.
 
 ## Credential isolation contract
 
@@ -25,7 +42,7 @@ The provider adapter defines the narrow boundary that a future reviewed provider
 
 The contract:
 
-- accepts only a complete Secrets Manager ARN, not a secret value or partial ARN;
+- accepts only a complete commercial-AWS Secrets Manager ARN, not a secret value or partial ARN;
 - requires the secret name to remain under `solvelang/priority/production/`;
 - can bind the ARN to the expected production Region and AWS account;
 - gives an explicitly injected secret reader only the immutable secret ARN;
