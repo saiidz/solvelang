@@ -125,13 +125,30 @@ test("bounds per-issue backup evidence without exposing identities or making IDs
   assert.equal(JSON.stringify(narrow).includes("/private/backups"), false);
 });
 
+test("retains two conflicting metadata witnesses when the conflict falls beyond the prefix bound", () => {
+  const result = analyzeServerAuditBackupLogConsistency(snapshot({
+    backups: [
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/same.dump", ageHours: 1, sizeBytes: 10 },
+      { name: "private-backup", path: "/private/backups/conflict.dump", ageHours: 2, sizeBytes: 11 },
+    ],
+  }), { maxSourcesPerIssue: 2 });
+
+  assert.equal(result.issues.length, 1);
+  assert.deepEqual(result.issues[0].sources, ["backups[0]", "backups[3]"]);
+  assert.equal(result.issues[0].sourceCount, 4);
+  assert.equal(result.issues[0].sourcesTruncated, true);
+  assert.equal(JSON.stringify(result).includes("/private/backups"), false);
+});
+
 test("rejects invalid issue and evidence bounds", () => {
   assert.throws(
     () => analyzeServerAuditBackupLogConsistency(snapshot(), { maxIssues: 0 }),
     /maxIssues must be an integer from 1 through 2000/,
   );
   assert.throws(
-    () => analyzeServerAuditBackupLogConsistency(snapshot(), { maxSourcesPerIssue: 0 }),
-    /maxSourcesPerIssue must be an integer from 1 through 256/,
+    () => analyzeServerAuditBackupLogConsistency(snapshot(), { maxSourcesPerIssue: 1 }),
+    /maxSourcesPerIssue must be an integer from 2 through 256/,
   );
 });
