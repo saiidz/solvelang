@@ -8,7 +8,7 @@ Before every build/integration run, reconcile current `main`, all open PRs, rece
 
 ## Current repository checkpoint
 
-At this refresh, reviewed source `main` is `b4cf937e9996cd6b600808e32ac95dec1c628297`.
+At this refresh, reviewed source `main` is `5b6370dbfad3f907e7a894ee5fbf2d7f5b73199d`.
 
 The safe non-production open-PR queue is **zero** at this checkpoint. The historical Repository Audit Python-import/dependency train #288 → #290 → #291 → #298 → #299 → #300 → #301 is merged and must not be recreated. Historical #161/#164/#169 are merged repository-state facts only; their former approval phrases are not standing authorization for live production actions.
 
@@ -20,8 +20,10 @@ Recent safe integration state:
 - #648 adds bounded filesystem mount-identity coverage with structural `filesystems[index].mount` evidence and deterministic truncation truth.
 - #649 adds SolveLang-owned customer-priority report retention: deterministic server-owned report IDs, bounded plain-text report content, worker/account-bound validation, and public-field filtering. It does not wire provider execution or change production gates.
 - #650 composes #648 filesystem-identity coverage into canonical Server Audit JSON/HTML reports and adds an explicit filesystem-identity authority limitation plus redaction regression coverage.
+- #652 adds bounded scheduled-job source/command identity coverage using structural `scheduledJobs[index].source` / `.commandSummary` evidence with deterministic truncation truth.
+- #653 composes #652 into canonical Server Audit JSON/HTML reports, adds an explicit scheduled-job identity authority limitation, and pins redaction regression coverage.
 
-All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650.
+All ordinary branches above used exact-head GitHub-hosted CI and Rust/RustSec. Customer-priority repository changes also used the applicable API Access / Customer Priority CI lanes. No Trusted Mac or Trusted Windows result was required or substituted for #643/#644/#646/#648/#649/#650/#652/#653.
 
 ## Customer-priority production truth
 
@@ -62,7 +64,7 @@ Repository merges #644/#646/#649 remain preparation only. They do not create or 
 
 ### Server Audit
 
-Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
+Server Audit remains read-only and non-remediating. Merged capabilities include a fixed allowlisted collector surface; bounded snapshot/schema parsing; OS/system/filesystem/socket/service/package/scheduled-job/process/web/backup/log/security/certificate evidence; deterministic findings; redaction; JSON/HTML reporting; process/listener/package/certificate/permission/inventory consistency checks; bounded service→process, service→process→listener, and scheduled-job→service/process structural relationships; relationship ambiguity/unresolved/truncation/partial-fanout findings and canonical report coverage; stale/large-log evidence; local web-server/conventional HTTP(S)-listener consistency; backup/log contradiction findings; certificate-expiry fallback and coverage; fail-closed public-file reference/coverage integrity; backup posture plus freshness/size coverage; log inventory/metadata coverage; explicit empty-service/package/listener/process/scheduled-job/filesystem/web coverage; blank certificate/web/service/process/package/listener/filesystem/scheduled-job identity coverage; canonical JSON/HTML composition for those coverage states; conservative handling of unavailable security posture probes; and conservative systemd service-state classification.
 
 Key recent trains that must not be recreated:
 
@@ -72,6 +74,7 @@ Key recent trains that must not be recreated:
 - #630→#637 — certificate/web/service/process/package identity coverage and canonical report composition.
 - #641/#643 — listener identity coverage and report composition.
 - #648/#650 — filesystem identity coverage and report composition.
+- #652/#653 — scheduled-job source/command identity coverage and canonical report composition.
 
 Automatic remote remediation execution remains out of scope.
 
