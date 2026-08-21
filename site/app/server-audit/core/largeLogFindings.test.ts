@@ -44,6 +44,25 @@ test("large-log findings are deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("private-"), false);
 });
 
+test("large-log retention stays bounded at maximum supported finding output", () => {
+  const logs = Array.from({ length: 5_000 }, (_, index) => ({
+    path: `/var/log/private-${index}.log`,
+    sizeBytes: 10_000 + index,
+  }));
+  const input = snapshot(logs);
+  const first = createServerAuditLargeLogFindings(input, { thresholdBytes: 1, maxFindings: 1_000 });
+  const second = createServerAuditLargeLogFindings(structuredClone(input), { thresholdBytes: 1, maxFindings: 1_000 });
+
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 1_000);
+  assert.equal(first.filter((finding) => finding.title === "Very large log file").length, 999);
+  const limitation = first.find((finding) => finding.title === "Large-log findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
+  assert.equal(JSON.stringify(first).includes("private-"), false);
+});
+
 test("large-log option bounds fail closed", () => {
   const input = snapshot([]);
   assert.throws(() => createServerAuditLargeLogFindings(input, { maxFindings: 0 }), /maxFindings/);
