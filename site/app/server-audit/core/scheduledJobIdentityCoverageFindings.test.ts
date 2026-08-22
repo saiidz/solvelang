@@ -59,6 +59,24 @@ test("scheduled-job identity coverage is deterministic and bounded across both i
   assert.equal(new Set(identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source))).size, 99);
 });
 
+test("scheduled-job identity coverage retains only bounded findings under high-cardinality gaps", () => {
+  const scheduledJobs = Array.from({ length: 5_000 }, (_, index) => ({
+    source: " ",
+    schedule: `private-schedule-${index}`,
+    commandSummary: "\t",
+  }));
+  const findings = createServerAuditScheduledJobIdentityCoverageFindings(snapshot(scheduledJobs));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Scheduled-job identity coverage findings were truncated").length, 1);
+
+  const identityFindings = findings.filter((finding) => finding.title !== "Scheduled-job identity coverage findings were truncated");
+  assert.equal(identityFindings.length, 99);
+  assert.equal(identityFindings.every((finding) => finding.evidence.every((evidence) => /^scheduledJobs\[\d+\]\.(source|commandSummary)$/.test(evidence.source))), true);
+  assert.equal(new Set(identityFindings.map((finding) => finding.id)).size, 99);
+  assert.equal(JSON.stringify(findings).includes("private-schedule-"), false);
+});
+
 test("scheduled-job identity coverage emits no finding when scheduled-job evidence is absent", () => {
   assert.deepEqual(createServerAuditScheduledJobIdentityCoverageFindings({
     schemaVersion: "1",
