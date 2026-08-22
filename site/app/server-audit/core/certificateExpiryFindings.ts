@@ -26,6 +26,38 @@ function parseTimestamp(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): number {
+  return SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
+    || left.category.localeCompare(right.category)
+    || left.id.localeCompare(right.id);
+}
+
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function derivedFinding(
   index: number,
   deltaMs: number,
@@ -78,23 +110,32 @@ export function createServerAuditCertificateExpiryFallbackFindings(
   const collectedAt = parseTimestamp(snapshot.collectedAt);
   if (collectedAt === undefined) return [];
 
-  const candidates = (snapshot.web?.certificates ?? [])
-    .map((certificate, index) => {
-      if (certificate.daysRemaining !== undefined || certificate.notAfter === undefined) return undefined;
-      const notAfter = parseTimestamp(certificate.notAfter);
-      return notAfter === undefined ? undefined : derivedFinding(index, notAfter - collectedAt);
-    })
-    .filter((finding): finding is ServerAuditFinding => finding !== undefined)
-    .sort(
-      (left, right) =>
-        SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-        || left.category.localeCompare(right.category)
-        || left.id.localeCompare(right.id),
-    );
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
-  if (candidates.length <= MAX_FINDINGS) return candidates;
+  for (const [index, certificate] of (snapshot.web?.certificates ?? []).entries()) {
+    if (certificate.daysRemaining !== undefined || certificate.notAfter === undefined) continue;
+    const notAfter = parseTimestamp(certificate.notAfter);
+    if (notAfter === undefined) continue;
+    const finding = derivedFinding(index, notAfter - collectedAt);
+    if (finding !== undefined) recordFinding(finding);
+  }
 
-  const bounded = candidates.slice(0, MAX_FINDINGS - 1);
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
+
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["certificate-expiry-fallback", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
@@ -104,10 +145,5 @@ export function createServerAuditCertificateExpiryFallbackFindings(
     recommendation: "Review the bounded findings first, then narrow or split the read-only snapshot before treating certificate-expiry coverage as complete.",
     evidence: [{ source: "web.certificates", summary: `finding limit ${MAX_FINDINGS} reached` }],
   });
-  return bounded.sort(
-    (left, right) =>
-      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-      || left.category.localeCompare(right.category)
-      || left.id.localeCompare(right.id),
-  );
+  return bounded.sort(compareFinding);
 }
