@@ -23,6 +23,7 @@ test("certificate coverage reports records with no supplied expiry evidence with
   ]));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_2b1c75ef");
   assert.equal(findings[0].severity, "info");
   assert.equal(findings[0].category, "coverage");
   assert.equal(findings[0].title, "TLS certificate record lacks expiry evidence");
