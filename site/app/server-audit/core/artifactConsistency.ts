@@ -62,6 +62,36 @@ function stableId(kind: ServerAuditArtifactConsistencyIssueKind, sources: string
   return `server-artifact:${hash.toString(16).padStart(8, "0")}`;
 }
 
+function compareIssue(left: ServerAuditArtifactConsistencyIssue, right: ServerAuditArtifactConsistencyIssue): number {
+  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+}
+
+function siftWorstIssueUp(heap: ServerAuditArtifactConsistencyIssue[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareIssue(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstIssueDown(heap: ServerAuditArtifactConsistencyIssue[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareIssue(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareIssue(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function groupIndexes<T>(items: T[], key: (item: T) => string | undefined): Map<string, number[]> {
   const groups = new Map<string, number[]>();
   items.forEach((item, index) => {
@@ -130,7 +160,20 @@ export function analyzeServerAuditArtifactConsistency(
     256,
     "Server Audit artifact maxSourcesPerIssue",
   );
-  const issues: ServerAuditArtifactConsistencyIssue[] = [];
+  const retainedIssues: ServerAuditArtifactConsistencyIssue[] = [];
+  let issuesObserved = 0;
+  const recordIssue = (issue: ServerAuditArtifactConsistencyIssue): void => {
+    issuesObserved += 1;
+    if (retainedIssues.length < maxIssues) {
+      retainedIssues.push(issue);
+      siftWorstIssueUp(retainedIssues, retainedIssues.length - 1);
+      return;
+    }
+    if (compareIssue(issue, retainedIssues[0]) >= 0) return;
+    retainedIssues[0] = issue;
+    siftWorstIssueDown(retainedIssues);
+  };
+
   const backups = snapshot.backups ?? [];
   const logs = snapshot.logs ?? [];
 
@@ -142,7 +185,7 @@ export function analyzeServerAuditArtifactConsistency(
     });
     if (distinct(metadata) < 2) continue;
     const sources = indexes.map((index) => `backups[${index}]`);
-    issues.push(conflictIssueWithBoundedSources(
+    recordIssue(conflictIssueWithBoundedSources(
       "conflicting-backup-metadata",
       "low",
       sources,
@@ -160,7 +203,7 @@ export function analyzeServerAuditArtifactConsistency(
     });
     if (distinct(metadata) < 2) continue;
     const sources = indexes.map((index) => `logs[${index}]`);
-    issues.push(conflictIssueWithBoundedSources(
+    recordIssue(conflictIssueWithBoundedSources(
       "conflicting-log-metadata",
       "info",
       sources,
@@ -170,12 +213,11 @@ export function analyzeServerAuditArtifactConsistency(
     ));
   }
 
-  issues.sort((left, right) => left.id.localeCompare(right.id));
-  const boundedIssues = issues.slice(0, maxIssues);
+  retainedIssues.sort(compareIssue);
   return {
     schema: "solvelang.server-audit.artifact-consistency.v0",
     mode: "analyze-only",
-    issues: boundedIssues,
+    issues: retainedIssues,
     summary: {
       backupsChecked: backups.length,
       logsChecked: logs.length,
@@ -185,8 +227,8 @@ export function analyzeServerAuditArtifactConsistency(
       writeAccess: false,
       maxIssues,
       maxSourcesPerIssue,
-      issuesTruncated: issues.length > maxIssues,
-      issueSourcesTruncated: boundedIssues.some((issue) => issue.sourcesTruncated),
+      issuesTruncated: issuesObserved > maxIssues,
+      issueSourcesTruncated: retainedIssues.some((issue) => issue.sourcesTruncated),
     },
   };
 }
