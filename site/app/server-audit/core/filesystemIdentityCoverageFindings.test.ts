@@ -21,6 +21,7 @@ test("filesystem identity coverage reports blank normalized mounts using structu
   ]));
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0]?.id, "srv_45bd35e2");
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Filesystem record lacks a usable mount identity"), true);
@@ -60,6 +61,21 @@ test("filesystem identity coverage output is deterministic and bounded", () => {
   const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^filesystems\[\d+\]\.mount$/.test(source)), true);
+});
+
+test("filesystem identity coverage materializes only bounded findings for high-cardinality identity gaps", () => {
+  const filesystems = Array.from({ length: 5_000 }, (_, index) => ({
+    mount: "   ",
+    filesystem: `private-filesystem-${index}`,
+    sizeBytes: index + 1,
+  }));
+
+  const findings = createServerAuditFilesystemIdentityCoverageFindings(snapshot(filesystems));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Filesystem record lacks a usable mount identity").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Filesystem identity coverage findings were truncated").length, 1);
+  assert.equal(JSON.stringify(findings).includes("private-filesystem-"), false);
 });
 
 test("filesystem identity coverage emits no finding when filesystem evidence is absent", () => {
