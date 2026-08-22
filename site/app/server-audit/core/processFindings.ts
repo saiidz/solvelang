@@ -1,5 +1,5 @@
 import type { ServerAuditFinding, ServerAuditSeverity, ServerAuditSnapshot } from "./types";
-import { createServerAuditProcessStateCoverageFindings } from "./processStateCoverageFindings";
+import { createServerAuditProcessStateCoverageFinding } from "./processStateCoverageFindings";
 
 export type ServerAuditProcessFindingOptions = {
   maxFindings?: number;
@@ -37,6 +37,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditProcessFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditProcessFindingOptions = {},
@@ -45,9 +71,21 @@ export function createServerAuditProcessFindings(
   const processes = snapshot.processes;
   if (processes === undefined) return [];
 
-  const findings: ServerAuditFinding[] = [
-    ...createServerAuditProcessStateCoverageFindings(snapshot),
-  ];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
+
   const pids = new Set(processes.map((process) => process.pid));
   const processNames = new Set(processes.map((process) => process.name));
   const indexedProcesses = processes.map((process, index) => ({ process, index }));
@@ -57,9 +95,12 @@ export function createServerAuditProcessFindings(
       || left.process.name.localeCompare(right.process.name)
       || left.index - right.index,
   )) {
+    const stateCoverageFinding = createServerAuditProcessStateCoverageFinding(process, index);
+    if (stateCoverageFinding !== undefined) recordFinding(stateCoverageFinding);
+
     if (/^Z/i.test(process.state)) {
       const source = `processes[${index}].state`;
-      findings.push({
+      recordFinding({
         id: stableId(["process", "zombie", source]),
         severity: "low",
         category: "process",
@@ -72,7 +113,7 @@ export function createServerAuditProcessFindings(
 
     if (process.ppid > 1 && !pids.has(process.ppid)) {
       const source = `processes[${index}].ppid`;
-      findings.push({
+      recordFinding({
         id: stableId(["process", "parent-missing", source]),
         severity: "info",
         category: "evidence-integrity",
@@ -94,7 +135,7 @@ export function createServerAuditProcessFindings(
   )) {
     if (!socket.process || processNames.has(socket.process)) continue;
     const source = `listeningSockets[${index}].process`;
-    findings.push({
+    recordFinding({
       id: stableId(["process", "listener-name-missing", source]),
       severity: "info",
       category: "evidence-integrity",
@@ -105,16 +146,16 @@ export function createServerAuditProcessFindings(
     });
   }
 
-  findings.sort(compareFinding);
-  if (findings.length <= maxFindings) return findings;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = findings.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["process", "findings-truncated", String(maxFindings), String(findings.length)]),
+    id: stableId(["process", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Process relationship findings were truncated",
-    summary: `The process health stage produced ${findings.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The process health stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from process relationship evidence.",
     evidence: [{ source: "processes", summary: `finding limit ${maxFindings} reached` }],
   });
