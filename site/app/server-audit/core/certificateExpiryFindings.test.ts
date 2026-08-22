@@ -66,6 +66,26 @@ test("certificate expiry fallback is deterministic and truncates with explicit c
   assert.ok(first.every((finding) => /^srv_[a-f0-9]{8}$/.test(finding.id)));
 });
 
+test("certificate expiry fallback retains only the bounded severity-first prefix for high-cardinality evidence", () => {
+  const input = snapshot();
+  input.web!.certificates = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-bulk-${index}.example`,
+    notAfter: index % 3 === 0
+      ? "2026-08-19T12:00:00.000Z"
+      : index % 3 === 1
+        ? "2026-08-25T12:00:00.000Z"
+        : "2026-09-09T12:00:00.000Z",
+  }));
+
+  const findings = createServerAuditCertificateExpiryFallbackFindings(input);
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.severity === "critical").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Certificate expiry fallback findings were truncated").length, 1);
+  assert.equal(findings.some((finding) => finding.severity === "high" || finding.severity === "medium"), false);
+  assert.equal(JSON.stringify(findings).includes("private-bulk-"), false);
+});
+
 test("canonical reports include structural certificate expiry fallback without certificate identities", () => {
   const report = createServerAuditReport(snapshot(), "2026-08-20T12:01:00.000Z");
   const fallback = report.findings.filter((finding) => finding.evidence.some((item) => item.summary.includes("derived from notAfter")));
