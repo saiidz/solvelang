@@ -21,7 +21,7 @@ test("process identity coverage reports blank normalized names using structural 
   ]));
 
   assert.equal(findings.length, 2);
-  assert.equal(findings[0]?.id, "srv_fdf6a4af");
+  assert.deepEqual(new Set(findings.map((finding) => finding.id)), new Set(["srv_fdf6a4af", "srv_88889518"]));
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Process record lacks a usable identity"), true);
