@@ -25,6 +25,32 @@ function compareFindings(left: ServerAuditFinding, right: ServerAuditFinding): n
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFindings(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFindings(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFindings(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 function hasUsableIdentity(name: string): boolean {
   return name.trim().normalize("NFC").length > 0;
 }
@@ -32,26 +58,38 @@ function hasUsableIdentity(name: string): boolean {
 export function createServerAuditPackageIdentityCoverageFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
-  const candidates = (snapshot.packages ?? [])
-    .map((entry, index): ServerAuditFinding | undefined => {
-      if (hasUsableIdentity(entry.name)) return undefined;
-      const source = `packages[${index}].name`;
-      return {
-        id: stableId(["package-identity-coverage", "unusable-name", source]),
-        severity: "info",
-        category: "coverage",
-        title: "Package record lacks a usable identity",
-        summary: `Package evidence at packages[${index}] has no non-whitespace identity, so duplicate-version consistency and package-version posture cannot use this record reliably.`,
-        recommendation: "Re-collect the bounded package inventory with a stable package identity before relying on duplicate-version or package-version conclusions. No advisory or CVE database is consulted by this stage.",
-        evidence: [{ source, summary: "package identity is empty after normalization" }],
-      };
-    })
-    .filter((finding): finding is ServerAuditFinding => finding !== undefined)
-    .sort(compareFindings);
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFindings(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
-  if (candidates.length <= MAX_FINDINGS) return candidates;
+  (snapshot.packages ?? []).forEach((entry, index) => {
+    if (hasUsableIdentity(entry.name)) return;
+    const source = `packages[${index}].name`;
+    recordFinding({
+      id: stableId(["package-identity-coverage", "unusable-name", source]),
+      severity: "info",
+      category: "coverage",
+      title: "Package record lacks a usable identity",
+      summary: `Package evidence at packages[${index}] has no non-whitespace identity, so duplicate-version consistency and package-version posture cannot use this record reliably.`,
+      recommendation: "Re-collect the bounded package inventory with a stable package identity before relying on duplicate-version or package-version conclusions. No advisory or CVE database is consulted by this stage.",
+      evidence: [{ source, summary: "package identity is empty after normalization" }],
+    });
+  });
 
-  const bounded = candidates.slice(0, MAX_FINDINGS - 1);
+  retainedFindings.sort(compareFindings);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
+
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["package-identity-coverage", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
