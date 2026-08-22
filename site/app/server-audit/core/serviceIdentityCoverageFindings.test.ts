@@ -21,6 +21,7 @@ test("service identity coverage reports blank normalized identities using struct
   ]));
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0]?.id, "srv_4c176e4e");
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Service record lacks a usable identity"), true);
@@ -55,6 +56,23 @@ test("service identity coverage output is deterministic and bounded", () => {
   const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^services\[\d+\]\.name$/.test(source)), true);
+});
+
+test("service identity coverage materializes only bounded findings for high-cardinality identity gaps", () => {
+  const services = Array.from({ length: 5_000 }, (_, index) => ({
+    name: "   ",
+    state: `private-state-${index}`,
+    enabled: `private-enabled-${index}`,
+  }));
+
+  const findings = createServerAuditServiceIdentityCoverageFindings(snapshot(services));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Service record lacks a usable identity").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Service identity coverage findings were truncated").length, 1);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-state-"), false);
+  assert.equal(serialized.includes("private-enabled-"), false);
 });
 
 test("service identity coverage emits no finding when service evidence is absent", () => {
