@@ -21,6 +21,7 @@ test("service identity coverage reports blank normalized identities using struct
   ]));
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0]?.id, "srv_4c176e4e");
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Service record lacks a usable identity"), true);
