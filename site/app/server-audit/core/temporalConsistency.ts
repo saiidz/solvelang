@@ -87,6 +87,32 @@ function compareText(left: ServerAuditTemporalIssue, right: ServerAuditTemporalI
   return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
 }
 
+function siftWorstIssueUp(heap: ServerAuditTemporalIssue[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareText(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstIssueDown(heap: ServerAuditTemporalIssue[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareText(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareText(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function analyzeServerAuditTemporalConsistency(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditTemporalConsistencyOptions = {},
@@ -112,7 +138,20 @@ export function analyzeServerAuditTemporalConsistency(
     throw new Error("Server Audit temporal analysis requires a valid snapshot collectedAt timestamp.");
   }
 
-  const issues: ServerAuditTemporalIssue[] = [];
+  const retainedIssues: ServerAuditTemporalIssue[] = [];
+  let issuesObserved = 0;
+  const recordIssue = (issue: ServerAuditTemporalIssue): void => {
+    issuesObserved += 1;
+    if (retainedIssues.length < maxIssues) {
+      retainedIssues.push(issue);
+      siftWorstIssueUp(retainedIssues, retainedIssues.length - 1);
+      return;
+    }
+    if (compareText(issue, retainedIssues[0]) >= 0) return;
+    retainedIssues[0] = issue;
+    siftWorstIssueDown(retainedIssues);
+  };
+
   let certificatesChecked = 0;
   let logsChecked = 0;
   let invalidTimestamps = 0;
@@ -127,7 +166,7 @@ export function analyzeServerAuditTemporalConsistency(
     const notAfterMs = timestamp(certificate.notAfter);
     if (notAfterMs === undefined) {
       invalidTimestamps += 1;
-      issues.push({
+      recordIssue({
         id: issueId("invalid-certificate-timestamp", source),
         kind: "invalid-certificate-timestamp",
         severity: "low",
@@ -141,7 +180,7 @@ export function analyzeServerAuditTemporalConsistency(
       const expectedDays = (notAfterMs - collectedAtMs) / DAY_MS;
       if (Math.abs(expectedDays - certificate.daysRemaining) > maxCertificateDayDifference) {
         certificateDayMismatches += 1;
-        issues.push({
+        recordIssue({
           id: issueId("certificate-days-remaining-mismatch", `web.certificates[${index}]`),
           kind: "certificate-days-remaining-mismatch",
           severity: "info",
@@ -161,7 +200,7 @@ export function analyzeServerAuditTemporalConsistency(
     const modifiedAtMs = timestamp(log.modifiedAt);
     if (modifiedAtMs === undefined) {
       invalidTimestamps += 1;
-      issues.push({
+      recordIssue({
         id: issueId("invalid-log-timestamp", source),
         kind: "invalid-log-timestamp",
         severity: "low",
@@ -172,7 +211,7 @@ export function analyzeServerAuditTemporalConsistency(
     }
     if (modifiedAtMs > futureCutoff) {
       futureLogTimestamps += 1;
-      issues.push({
+      recordIssue({
         id: issueId("future-log-timestamp", source),
         kind: "future-log-timestamp",
         severity: "info",
@@ -182,14 +221,13 @@ export function analyzeServerAuditTemporalConsistency(
     }
   }
 
-  issues.sort(compareText);
-  const boundedIssues = issues.slice(0, maxIssues);
+  retainedIssues.sort(compareText);
 
   return {
     schema: "solvelang.server-audit.temporal-consistency.v0",
     mode: "analyze-only",
     snapshotCollectedAt: new Date(collectedAtMs).toISOString(),
-    issues: boundedIssues,
+    issues: retainedIssues,
     summary: {
       certificatesChecked,
       logsChecked,
@@ -203,7 +241,7 @@ export function analyzeServerAuditTemporalConsistency(
       maxIssues,
       maxFutureSkewMinutes,
       maxCertificateDayDifference,
-      issuesTruncated: issues.length > maxIssues,
+      issuesTruncated: issuesObserved > maxIssues,
     },
   };
 }
