@@ -81,20 +81,22 @@ function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
   }
 }
 
-function observeValue<T>(
-  state: CertificateGroupState,
-  index: number,
-  value: T | undefined,
-  firstKey: "firstNotAfter" | "firstDaysRemaining",
-  conflictKey: "notAfterConflict" | "daysRemainingConflict",
-): void {
-  if (value === undefined || state[conflictKey] !== undefined) return;
-  const first = state[firstKey] as ObservedValue<T> | undefined;
-  if (first === undefined) {
-    (state as Record<string, unknown>)[firstKey] = { index, value };
+function observeNotAfter(state: CertificateGroupState, index: number, value: string | undefined): void {
+  if (value === undefined || state.notAfterConflict !== undefined) return;
+  if (state.firstNotAfter === undefined) {
+    state.firstNotAfter = { index, value };
     return;
   }
-  if (first.value !== value) state[conflictKey] = [first.index, index];
+  if (state.firstNotAfter.value !== value) state.notAfterConflict = [state.firstNotAfter.index, index];
+}
+
+function observeDaysRemaining(state: CertificateGroupState, index: number, value: number | undefined): void {
+  if (value === undefined || state.daysRemainingConflict !== undefined) return;
+  if (state.firstDaysRemaining === undefined) {
+    state.firstDaysRemaining = { index, value };
+    return;
+  }
+  if (state.firstDaysRemaining.value !== value) state.daysRemainingConflict = [state.firstDaysRemaining.index, index];
 }
 
 export function createServerAuditCertificateConsistencyFindings(
@@ -106,8 +108,8 @@ export function createServerAuditCertificateConsistencyFindings(
     const key = normalizedCertificateName(certificate.name);
     if (!key) return;
     const state = groups.get(key) ?? {};
-    observeValue(state, index, certificate.notAfter?.trim(), "firstNotAfter", "notAfterConflict");
-    observeValue(state, index, certificate.daysRemaining, "firstDaysRemaining", "daysRemainingConflict");
+    observeNotAfter(state, index, certificate.notAfter?.trim());
+    observeDaysRemaining(state, index, certificate.daysRemaining);
     groups.set(key, state);
   });
 
