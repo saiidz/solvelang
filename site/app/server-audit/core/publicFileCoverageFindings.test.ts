@@ -51,6 +51,7 @@ test("conflicting duplicate marker checks are explicit and structural", () => {
   }));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_66715ce8");
   assert.equal(findings[0].severity, "low");
   assert.equal(findings[0].category, "evidence-integrity");
   assert.deepEqual(findings[0].evidence.map((item) => item.source), [
@@ -94,6 +95,42 @@ test("public-file coverage findings are deterministic and bounded", () => {
   assert.equal(first.filter((finding) => finding.title === "Public-file coverage findings were truncated").length, 1);
   assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
   assert.equal(JSON.stringify(first).includes("private-"), false);
+});
+
+test("high-cardinality missing-marker findings retain only the bounded deterministic prefix", () => {
+  const roots = Array.from({ length: 5_000 }, (_, index) => ({ path: `/var/www/private-high-cardinality-${index}` }));
+  const findings = createServerAuditPublicFileCoverageFindings(snapshot({ roots, publicFileChecks: [] }), { maxFindings: 1_000 });
+
+  assert.equal(findings.length, 1_000);
+  const limitation = findings.find((finding) => finding.title === "Public-file coverage findings were truncated");
+  assert.ok(limitation);
+  assert.match(limitation.summary, /produced 5000 findings/);
+  assert.equal(JSON.stringify(findings).includes("private-high-cardinality"), false);
+});
+
+test("high-cardinality contradictory marker evidence is bounded while retaining the late opposing witness", () => {
+  const duplicateAbsentChecks = Array.from({ length: 4_999 }, () => ({
+    rootIndex: 0,
+    marker: "env-file" as const,
+    present: false,
+  }));
+  const findings = createServerAuditPublicFileCoverageFindings(snapshot({
+    roots: [{ path: "/var/www/private-contradiction" }],
+    publicFileChecks: [
+      ...completeChecks,
+      ...duplicateAbsentChecks,
+      { rootIndex: 0, marker: "env-file", present: true },
+    ],
+  }));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_2fe6a8d7");
+  assert.equal(findings[0].title, "Sensitive-file marker checks contradict each other");
+  assert.equal(findings[0].evidence.length, 32);
+  assert.equal(findings[0].evidence.at(-2)?.source, "web.publicFileChecks[5003].present");
+  assert.equal(findings[0].evidence.at(-1)?.source, "web.publicFileChecks");
+  assert.match(findings[0].evidence.at(-1)?.summary ?? "", /bounded to 31 of 5001 structural witnesses/);
+  assert.equal(JSON.stringify(findings).includes("private-contradiction"), false);
 });
 
 test("public-file coverage option bounds fail closed", () => {
