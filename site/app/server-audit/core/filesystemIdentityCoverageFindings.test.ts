@@ -21,7 +21,7 @@ test("filesystem identity coverage reports blank normalized mounts using structu
   ]));
 
   assert.equal(findings.length, 2);
-  assert.equal(findings[0]?.id, "srv_45bd35e2");
+  assert.deepEqual(new Set(findings.map((finding) => finding.id)), new Set(["srv_45bd35e2", "srv_2a2332f7"]));
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Filesystem record lacks a usable mount identity"), true);
