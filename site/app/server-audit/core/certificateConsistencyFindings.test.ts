@@ -53,6 +53,20 @@ test("streaming contradiction detection preserves the first historical conflicti
   ]);
 });
 
+test("blank explicit expiry text remains contradictory evidence rather than missing evidence", () => {
+  const findings = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
+    { name: "api.example.com", notAfter: "   " },
+    { name: "API.EXAMPLE.COM", notAfter: "2026-10-01T00:00:00Z" },
+  ]));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.title, "Duplicate certificate identity has conflicting expiry evidence");
+  assert.deepEqual(findings[0]?.evidence.map((item) => item.source), [
+    "web.certificates[0].notAfter",
+    "web.certificates[1].notAfter",
+  ]);
+});
+
 test("matching duplicate records and missing fields do not create false conflicts", () => {
   const findings = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
     { name: "api.example.com", notAfter: "2026-10-01T00:00:00Z", daysRemaining: 44 },
