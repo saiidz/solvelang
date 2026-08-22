@@ -20,6 +20,7 @@ test("conflicting duplicate listener ownership is reported with structural evide
   ]));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_edbfd7dc");
   assert.equal(findings[0].title, "Listener inventory reports conflicting ownership");
   assert.deepEqual(findings[0].evidence.map((item) => item.source), [
     "listeningSockets[0]",
@@ -71,6 +72,55 @@ test("listener-consistency findings are deterministic and bounded", () => {
   assert.equal(serialized.includes("10.0.0."), false);
   assert.equal(serialized.includes("a-"), false);
   assert.equal(serialized.includes("b-"), false);
+});
+
+test("high-cardinality conflicting ownership evidence stays bounded and retains a late opposing witness", () => {
+  const sockets = Array.from({ length: 5_000 }, (_, index) => ({
+    protocol: "tcp",
+    localAddress: "10.42.0.99",
+    port: 9443,
+    process: index === 9 ? "private-late-owner" : "private-first-owner",
+  }));
+  const findings = createServerAuditListenerConsistencyFindings(snapshot(sockets));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_b05d8d8d");
+  assert.equal(findings[0].title, "Listener inventory reports conflicting ownership");
+  assert.equal(findings[0].evidence.length, 32);
+  assert.equal(findings[0].evidence.at(-2)?.source, "listeningSockets[9]");
+  assert.equal(findings[0].evidence.at(-1)?.source, "listeningSockets");
+  assert.match(findings[0].evidence.at(-1)?.summary ?? "", /bounded to 31 of 5000 structural witnesses/);
+  assert.match(findings[0].summary, /preserving at least two conflicting ownership states/);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("10.42.0.99"), false);
+  assert.equal(serialized.includes("9443"), false);
+  assert.equal(serialized.includes("private-late-owner"), false);
+  assert.equal(serialized.includes("private-first-owner"), false);
+});
+
+test("high-cardinality listener conflicts retain only the bounded deterministic finding prefix", () => {
+  const sockets: NonNullable<ServerAuditSnapshot["listeningSockets"]> = [];
+  for (let index = 0; index < 2_500; index += 1) {
+    const address = `10.99.${Math.floor(index / 256)}.${index % 256}`;
+    sockets.push(
+      { protocol: "tcp", localAddress: address, port: 10_000 + index, process: `private-a-${index}` },
+      { protocol: "tcp", localAddress: address, port: 10_000 + index, process: `private-b-${index}` },
+    );
+  }
+
+  const findings = createServerAuditListenerConsistencyFindings(snapshot(sockets), { maxFindings: 1_000 });
+  const limitation = findings.find((finding) => finding.title === "Listener-consistency findings were truncated");
+
+  assert.equal(findings.length, 1_000);
+  assert.equal(findings.filter((finding) => finding.title === "Listener inventory reports conflicting ownership").length, 999);
+  assert.match(limitation?.summary ?? "", /produced 2500 findings/);
+  assert.match(limitation?.summary ?? "", /first 999 deterministic findings/);
+  assert.equal(limitation?.evidence[0]?.source, "listeningSockets");
+  assert.equal(limitation?.evidence[0]?.summary, "finding limit 1000 reached");
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("10.99."), false);
+  assert.equal(serialized.includes("private-a-"), false);
+  assert.equal(serialized.includes("private-b-"), false);
 });
 
 test("listener-consistency option bounds fail closed", () => {
