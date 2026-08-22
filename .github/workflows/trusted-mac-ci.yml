@@ -9,14 +9,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: trusted-mac-${{ github.ref }}
+  group: trusted-mac-hosted-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   repository-audit-site:
     name: Repository Audit on Mac
     if: github.repository == 'saiidz/solvelang'
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-14
     defaults:
       run:
         working-directory: site
