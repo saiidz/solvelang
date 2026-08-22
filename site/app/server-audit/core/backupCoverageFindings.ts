@@ -36,6 +36,32 @@ function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): nu
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditBackupCoverageFindings(
   snapshot: ServerAuditSnapshot,
   options: ServerAuditBackupCoverageOptions = {},
@@ -44,10 +70,23 @@ export function createServerAuditBackupCoverageFindings(
   const backups = snapshot.backups;
   if (backups === undefined || backups.length === 0) return [];
 
-  const candidates = backups.flatMap((backup, index): ServerAuditFinding[] => {
-    const findings: ServerAuditFinding[] = [];
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < maxFindings) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
+
+  backups.forEach((backup, index) => {
     if (backup.ageHours === undefined) {
-      findings.push({
+      recordFinding({
         id: stableId(["backup-coverage", "missing-age", String(index)]),
         severity: "info",
         category: "coverage",
@@ -58,7 +97,7 @@ export function createServerAuditBackupCoverageFindings(
       });
     }
     if (backup.sizeBytes === undefined) {
-      findings.push({
+      recordFinding({
         id: stableId(["backup-coverage", "missing-size", String(index)]),
         severity: "info",
         category: "coverage",
@@ -68,18 +107,18 @@ export function createServerAuditBackupCoverageFindings(
         evidence: [{ source: `backups[${index}].sizeBytes`, summary: "size evidence is absent" }],
       });
     }
-    return findings;
-  }).sort(compareFinding);
+  });
 
-  if (candidates.length <= maxFindings) return candidates;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= maxFindings) return retainedFindings;
 
-  const bounded = candidates.slice(0, maxFindings - 1);
+  const bounded = retainedFindings.slice(0, maxFindings - 1);
   bounded.push({
-    id: stableId(["backup-coverage", "findings-truncated", String(maxFindings), String(candidates.length)]),
+    id: stableId(["backup-coverage", "findings-truncated", String(maxFindings), String(findingsObserved)]),
     severity: "info",
     category: "coverage",
     title: "Backup evidence coverage findings were truncated",
-    summary: `The backup-coverage stage produced ${candidates.length} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
+    summary: `The backup-coverage stage produced ${findingsObserved} findings and emitted only the first ${maxFindings - 1} deterministic findings plus this limitation marker.`,
     recommendation: "Narrow or split the read-only snapshot before drawing a completeness conclusion from backup freshness or size evidence.",
     evidence: [{ source: "backups", summary: `finding limit ${maxFindings} reached` }],
   });
