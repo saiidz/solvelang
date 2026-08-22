@@ -8,11 +8,15 @@ on:
 permissions:
   contents: read
 
-# SolveLang has one owner-allocated self-hosted Mac runner slot. Do not use a
-# shared GitHub Actions concurrency group here: a group retains only one
-# pending run and can replace an independent branch's exact-head validation.
-# The single allocated runner provides execution serialization; automation
-# must avoid stacking duplicate pushes while that slot is busy.
+# SolveLang has one owner-allocated self-hosted Mac runner slot. Serialize
+# validation per trusted branch so a newer push can replace only stale pending
+# work from that same branch without dropping another branch's exact-head run.
+# Automation must still avoid intentionally stacking multiple agent/mac-* jobs
+# while the single SolveLang Mac slot is busy.
+concurrency:
+  group: trusted-mac-solvelang-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   repository-audit-site:
     name: Repository Audit on Mac
