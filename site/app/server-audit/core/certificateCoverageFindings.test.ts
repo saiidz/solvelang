@@ -23,6 +23,7 @@ test("certificate coverage reports records with no supplied expiry evidence with
   ]));
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].id, "srv_2b1c75ef");
   assert.equal(findings[0].severity, "info");
   assert.equal(findings[0].category, "coverage");
   assert.equal(findings[0].title, "TLS certificate record lacks expiry evidence");
@@ -43,6 +44,19 @@ test("certificate coverage output is deterministic and bounded", () => {
   assert.equal(first.filter((finding) => finding.title === "TLS certificate record lacks expiry evidence").length, 99);
   assert.equal(first.filter((finding) => finding.title === "Certificate expiry coverage findings were truncated").length, 1);
   assert.equal(JSON.stringify(first).includes("private-104.example.internal"), false);
+});
+
+test("certificate coverage materializes only the bounded finding prefix for high-cardinality gaps", () => {
+  const certificates = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-bulk-${index}.example.internal`,
+  }));
+
+  const findings = createServerAuditCertificateCoverageFindings(snapshot(certificates));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "TLS certificate record lacks expiry evidence").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Certificate expiry coverage findings were truncated").length, 1);
+  assert.equal(JSON.stringify(findings).includes("private-bulk-"), false);
 });
 
 test("certificate coverage emits no finding when expiry evidence is supplied", () => {
