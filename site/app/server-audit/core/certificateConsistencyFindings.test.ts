@@ -28,6 +28,7 @@ test("duplicate certificate identities surface only contradictory explicit evide
       "Duplicate certificate identity has conflicting remaining-days evidence",
     ].sort(),
   );
+  assert.deepEqual(findings.map((finding) => finding.id).sort(), ["srv_70a8022e", "srv_d4d6f842"].sort());
   assert.ok(findings.every((finding) => finding.severity === "info"));
   assert.ok(findings.every((finding) => finding.category === "evidence-integrity"));
   const serialized = JSON.stringify(findings);
@@ -35,6 +36,35 @@ test("duplicate certificate identities surface only contradictory explicit evide
   assert.equal(serialized.includes("API.Example.com"), false);
   assert.ok(serialized.includes("web.certificates[0].notAfter"));
   assert.ok(serialized.includes("web.certificates[1].daysRemaining"));
+});
+
+test("streaming contradiction detection preserves the first historical conflicting pair", () => {
+  const findings = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
+    { name: "api.example.com", notAfter: "2026-10-01T00:00:00Z" },
+    { name: "API.EXAMPLE.COM", notAfter: "2026-10-01T00:00:00Z" },
+    { name: " api.example.com ", notAfter: "2026-10-02T00:00:00Z" },
+  ]));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.id, "srv_6fa8009b");
+  assert.deepEqual(findings[0]?.evidence.map((item) => item.source), [
+    "web.certificates[0].notAfter",
+    "web.certificates[2].notAfter",
+  ]);
+});
+
+test("blank explicit expiry text remains contradictory evidence rather than missing evidence", () => {
+  const findings = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates([
+    { name: "api.example.com", notAfter: "   " },
+    { name: "API.EXAMPLE.COM", notAfter: "2026-10-01T00:00:00Z" },
+  ]));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.title, "Duplicate certificate identity has conflicting expiry evidence");
+  assert.deepEqual(findings[0]?.evidence.map((item) => item.source), [
+    "web.certificates[0].notAfter",
+    "web.certificates[1].notAfter",
+  ]);
 });
 
 test("matching duplicate records and missing fields do not create false conflicts", () => {
@@ -89,4 +119,26 @@ test("certificate consistency ordering and bounds are deterministic and redact i
   assert.equal(first.filter((finding) => finding.title === "Certificate consistency findings were truncated").length, 1);
   assert.equal(new Set(first.map((finding) => finding.id)).size, first.length);
   assert.equal(JSON.stringify(first).includes("example.internal"), false);
+});
+
+test("certificate consistency retains only bounded findings for thousands of contradictory groups", () => {
+  const certificates = Array.from({ length: 5_000 }, (_, index) => [
+    {
+      name: `private-bulk-${index}.example.internal`,
+      notAfter: "2026-10-01T00:00:00Z",
+      daysRemaining: 44,
+    },
+    {
+      name: `PRIVATE-BULK-${index}.EXAMPLE.INTERNAL`,
+      notAfter: "2026-10-02T00:00:00Z",
+      daysRemaining: 45,
+    },
+  ]).flat();
+
+  const findings = createServerAuditCertificateConsistencyFindings(snapshotWithCertificates(certificates));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Certificate consistency findings were truncated").length, 1);
+  assert.equal(findings.filter((finding) => finding.category === "evidence-integrity").length, 99);
+  assert.equal(JSON.stringify(findings).includes("private-bulk-"), false);
 });
