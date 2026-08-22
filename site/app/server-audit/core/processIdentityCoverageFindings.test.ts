@@ -58,7 +58,9 @@ test("process identity coverage output is deterministic and bounded", () => {
   assert.equal(first.length, 100);
   const identityFindings = first.filter((finding) => finding.title === "Process record lacks a usable identity");
   assert.equal(identityFindings.length, 99);
-  assert.equal(first.filter((finding) => finding.title === "Process identity coverage findings were truncated").length, 1);
+  const truncation = first.filter((finding) => finding.title === "Process identity coverage findings were truncated");
+  assert.equal(truncation.length, 1);
+  assert.equal(truncation[0]?.id, "srv_da0e5de4");
   const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^processes\[\d+\]\.name$/.test(source)), true);
