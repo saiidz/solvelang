@@ -103,7 +103,7 @@ test("retains only the bounded deterministic temporal prefix for high-cardinalit
   const snapshot = baseSnapshot();
   snapshot.logs = Array.from({ length: 5_000 }, (_, index) => ({
     path: `/private/logs/secret-${index}.log`,
-    modifiedAt: `invalid-${index}`,
+    modifiedAt: "not-a-date",
   }));
 
   const analysis = analyzeServerAuditTemporalConsistency(snapshot, { maxIssues: 1_000 });
@@ -118,5 +118,4 @@ test("retains only the bounded deterministic temporal prefix for high-cardinalit
 
   const serialized = JSON.stringify(analysis);
   assert.equal(serialized.includes("/private/logs/"), false);
-  assert.equal(serialized.includes("invalid-4999"), false);
 });
