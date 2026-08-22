@@ -98,3 +98,25 @@ test("bounds deterministic issue output and rejects invalid collection time or o
     /maxCertificateDayDifference/,
   );
 });
+
+test("retains only the bounded deterministic temporal prefix for high-cardinality invalid evidence", () => {
+  const snapshot = baseSnapshot();
+  snapshot.logs = Array.from({ length: 5_000 }, (_, index) => ({
+    path: `/private/logs/secret-${index}.log`,
+    modifiedAt: `invalid-${index}`,
+  }));
+
+  const analysis = analyzeServerAuditTemporalConsistency(snapshot, { maxIssues: 1_000 });
+
+  assert.equal(analysis.issues.length, 1_000);
+  assert.equal(analysis.execution.maxIssues, 1_000);
+  assert.equal(analysis.execution.issuesTruncated, true);
+  assert.equal(analysis.summary.logsChecked, 5_000);
+  assert.equal(analysis.summary.invalidTimestamps, 5_000);
+  assert.equal(analysis.issues[0].source, "logs[0].modifiedAt");
+  assert.equal(new Set(analysis.issues.map((issue) => issue.id)).size, 1_000);
+
+  const serialized = JSON.stringify(analysis);
+  assert.equal(serialized.includes("/private/logs/"), false);
+  assert.equal(serialized.includes("invalid-4999"), false);
+});
