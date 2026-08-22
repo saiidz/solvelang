@@ -9,10 +9,6 @@ const SEVERITY_ORDER: Record<ServerAuditSeverity, number> = {
   info: 4,
 };
 
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
 function stableId(parts: string[]): string {
   const input = parts.join("\u001f");
   let hash = 2166136261;
@@ -27,66 +23,112 @@ function normalizedCertificateName(value: string): string {
   return value.trim().normalize("NFC").toLowerCase();
 }
 
-type CertificateEntry = NonNullable<NonNullable<ServerAuditSnapshot["web"]>["certificates"]>[number];
-
-type IndexedCertificate = {
+type ObservedValue<T> = {
   index: number;
-  certificate: CertificateEntry;
+  value: T;
 };
 
-function firstConflictingPair<T>(
-  entries: IndexedCertificate[],
-  read: (entry: CertificateEntry) => T | undefined,
-): [IndexedCertificate, IndexedCertificate] | undefined {
-  for (let leftIndex = 0; leftIndex < entries.length; leftIndex += 1) {
-    const left = entries[leftIndex];
-    const leftValue = read(left.certificate);
-    if (leftValue === undefined) continue;
-    for (let rightIndex = leftIndex + 1; rightIndex < entries.length; rightIndex += 1) {
-      const right = entries[rightIndex];
-      const rightValue = read(right.certificate);
-      if (rightValue === undefined) continue;
-      if (leftValue !== rightValue) return [left, right];
-    }
-  }
-  return undefined;
-}
+type CertificateGroupState = {
+  firstNotAfter?: ObservedValue<string>;
+  notAfterConflict?: [number, number];
+  firstDaysRemaining?: ObservedValue<number>;
+  daysRemainingConflict?: [number, number];
+};
 
-function structuralPairKey(pair: [IndexedCertificate, IndexedCertificate]): string {
-  return `${pair[0].index}:${pair[1].index}`;
+function structuralPairKey(pair: [number, number]): string {
+  return `${pair[0]}:${pair[1]}`;
 }
 
 function structuralEvidence(
-  pair: [IndexedCertificate, IndexedCertificate],
+  pair: [number, number],
   field: "notAfter" | "daysRemaining",
 ) {
-  return pair.map(({ index }) => ({
+  return pair.map((index) => ({
     source: `web.certificates[${index}].${field}`,
     summary: `duplicate certificate identity ${field} evidence`,
   }));
 }
 
+function compareFinding(left: ServerAuditFinding, right: ServerAuditFinding): number {
+  return SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
+    || left.category.localeCompare(right.category)
+    || left.id.localeCompare(right.id);
+}
+
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFinding(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFinding(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFinding(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
+function observeValue<T>(
+  state: CertificateGroupState,
+  index: number,
+  value: T | undefined,
+  firstKey: "firstNotAfter" | "firstDaysRemaining",
+  conflictKey: "notAfterConflict" | "daysRemainingConflict",
+): void {
+  if (value === undefined || state[conflictKey] !== undefined) return;
+  const first = state[firstKey] as ObservedValue<T> | undefined;
+  if (first === undefined) {
+    (state as Record<string, unknown>)[firstKey] = { index, value };
+    return;
+  }
+  if (first.value !== value) state[conflictKey] = [first.index, index];
+}
+
 export function createServerAuditCertificateConsistencyFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
-  const certificates = snapshot.web?.certificates ?? [];
-  const groups = new Map<string, IndexedCertificate[]>();
+  const groups = new Map<string, CertificateGroupState>();
 
-  certificates.forEach((certificate, index) => {
+  (snapshot.web?.certificates ?? []).forEach((certificate, index) => {
     const key = normalizedCertificateName(certificate.name);
     if (!key) return;
-    const entries = groups.get(key) ?? [];
-    entries.push({ index, certificate });
-    groups.set(key, entries);
+    const state = groups.get(key) ?? {};
+    observeValue(state, index, certificate.notAfter?.trim(), "firstNotAfter", "notAfterConflict");
+    observeValue(state, index, certificate.daysRemaining, "firstDaysRemaining", "daysRemainingConflict");
+    groups.set(key, state);
   });
 
-  const candidates: ServerAuditFinding[] = [];
-  for (const [, entries] of [...groups.entries()].sort(([left], [right]) => compareText(left, right))) {
-    if (entries.length < 2) continue;
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFinding(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
-    const expiryConflict = firstConflictingPair(entries, (entry) => entry.notAfter?.trim());
+  for (const state of groups.values()) {
+    const expiryConflict = state.notAfterConflict;
     if (expiryConflict) {
-      candidates.push({
+      recordFinding({
         id: stableId(["certificate-consistency", "not-after", structuralPairKey(expiryConflict)]),
         severity: "info",
         category: "evidence-integrity",
@@ -97,9 +139,9 @@ export function createServerAuditCertificateConsistencyFindings(
       });
     }
 
-    const daysConflict = firstConflictingPair(entries, (entry) => entry.daysRemaining);
+    const daysConflict = state.daysRemainingConflict;
     if (daysConflict) {
-      candidates.push({
+      recordFinding({
         id: stableId(["certificate-consistency", "days-remaining", structuralPairKey(daysConflict)]),
         severity: "info",
         category: "evidence-integrity",
@@ -111,15 +153,10 @@ export function createServerAuditCertificateConsistencyFindings(
     }
   }
 
-  const sorted = candidates.sort(
-    (left, right) =>
-      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-      || left.category.localeCompare(right.category)
-      || left.id.localeCompare(right.id),
-  );
-  if (sorted.length <= MAX_FINDINGS) return sorted;
+  retainedFindings.sort(compareFinding);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
 
-  const bounded = sorted.slice(0, MAX_FINDINGS - 1);
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["certificate-consistency", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
@@ -129,10 +166,5 @@ export function createServerAuditCertificateConsistencyFindings(
     recommendation: "Review the bounded findings first, then narrow or split the read-only snapshot before drawing a complete certificate-inventory conclusion.",
     evidence: [{ source: "web.certificates", summary: `finding limit ${MAX_FINDINGS} reached` }],
   });
-  return bounded.sort(
-    (left, right) =>
-      SEVERITY_ORDER[left.severity] - SEVERITY_ORDER[right.severity]
-      || left.category.localeCompare(right.category)
-      || left.id.localeCompare(right.id),
-  );
+  return bounded.sort(compareFinding);
 }
