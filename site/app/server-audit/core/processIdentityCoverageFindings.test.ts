@@ -21,6 +21,7 @@ test("process identity coverage reports blank normalized names using structural 
   ]));
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0]?.id, "srv_fdf6a4af");
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Process record lacks a usable identity"), true);
@@ -61,6 +62,25 @@ test("process identity coverage output is deterministic and bounded", () => {
   const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^processes\[\d+\]\.name$/.test(source)), true);
+});
+
+test("process identity coverage materializes only bounded findings for high-cardinality identity gaps", () => {
+  const processes = Array.from({ length: 5_000 }, (_, index) => ({
+    pid: 10_000 + index,
+    ppid: 1,
+    uid: 1000,
+    state: `private-state-${index}`,
+    name: "   ",
+  }));
+
+  const findings = createServerAuditProcessIdentityCoverageFindings(snapshot(processes));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Process record lacks a usable identity").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Process identity coverage findings were truncated").length, 1);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-state-"), false);
+  assert.equal(serialized.includes("10000"), false);
 });
 
 test("process identity coverage emits no finding when process evidence is absent", () => {
