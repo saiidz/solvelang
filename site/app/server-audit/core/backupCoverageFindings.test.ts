@@ -64,3 +64,22 @@ test("backup coverage output is deterministic and bounded", () => {
   assert.equal(JSON.stringify(first).includes("private-104"), false);
   assert.throws(() => createServerAuditBackupCoverageFindings(snapshot(backups), { maxFindings: 0 }), /backup-coverage maxFindings/);
 });
+
+test("high-cardinality backup coverage retains only the bounded deterministic finding prefix", () => {
+  const backups = Array.from({ length: 5_000 }, (_, index) => ({
+    name: `private-backup-${index}`,
+    path: `/private/backups/${index}`,
+  }));
+  const findings = createServerAuditBackupCoverageFindings(snapshot(backups), { maxFindings: 1_000 });
+  const limitation = findings.find((finding) => finding.title === "Backup evidence coverage findings were truncated");
+
+  assert.equal(findings.length, 1_000);
+  assert.equal(findings.filter((finding) => finding.title !== "Backup evidence coverage findings were truncated").length, 999);
+  assert.match(limitation?.summary ?? "", /produced 10000 findings/);
+  assert.match(limitation?.summary ?? "", /first 999 deterministic findings/);
+  assert.equal(limitation?.evidence[0]?.source, "backups");
+  assert.equal(limitation?.evidence[0]?.summary, "finding limit 1000 reached");
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-backup-"), false);
+  assert.equal(serialized.includes("/private/backups/"), false);
+});
