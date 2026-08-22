@@ -57,6 +57,23 @@ test("service identity coverage output is deterministic and bounded", () => {
   assert.equal(structuralSources.every((source) => /^services\[\d+\]\.name$/.test(source)), true);
 });
 
+test("service identity coverage materializes only bounded findings for high-cardinality identity gaps", () => {
+  const services = Array.from({ length: 5_000 }, (_, index) => ({
+    name: "   ",
+    state: `private-state-${index}`,
+    enabled: `private-enabled-${index}`,
+  }));
+
+  const findings = createServerAuditServiceIdentityCoverageFindings(snapshot(services));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Service record lacks a usable identity").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Service identity coverage findings were truncated").length, 1);
+  const serialized = JSON.stringify(findings);
+  assert.equal(serialized.includes("private-state-"), false);
+  assert.equal(serialized.includes("private-enabled-"), false);
+});
+
 test("service identity coverage emits no finding when service evidence is absent", () => {
   assert.deepEqual(createServerAuditServiceIdentityCoverageFindings({
     schemaVersion: "1",
