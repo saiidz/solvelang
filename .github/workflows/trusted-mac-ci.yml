@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: trusted-mac-${{ github.ref }}
+  group: trusted-mac-hosted-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
