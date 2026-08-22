@@ -21,6 +21,7 @@ test("package identity coverage reports blank normalized names using structural 
   ]));
 
   assert.equal(findings.length, 2);
+  assert.equal(findings[0]?.id, "srv_268b8b7e");
   assert.equal(findings.every((finding) => finding.severity === "info"), true);
   assert.equal(findings.every((finding) => finding.category === "coverage"), true);
   assert.equal(findings.every((finding) => finding.title === "Package record lacks a usable identity"), true);
@@ -55,6 +56,20 @@ test("package identity coverage output is deterministic and bounded", () => {
   const structuralSources = identityFindings.flatMap((finding) => finding.evidence.map((evidence) => evidence.source));
   assert.equal(new Set(structuralSources).size, 99);
   assert.equal(structuralSources.every((source) => /^packages\[\d+\]\.name$/.test(source)), true);
+});
+
+test("package identity coverage materializes only bounded findings for high-cardinality identity gaps", () => {
+  const packages = Array.from({ length: 5_000 }, (_, index) => ({
+    name: "   ",
+    version: `private-version-${index}`,
+  }));
+
+  const findings = createServerAuditPackageIdentityCoverageFindings(snapshot(packages));
+
+  assert.equal(findings.length, 100);
+  assert.equal(findings.filter((finding) => finding.title === "Package record lacks a usable identity").length, 99);
+  assert.equal(findings.filter((finding) => finding.title === "Package identity coverage findings were truncated").length, 1);
+  assert.equal(JSON.stringify(findings).includes("private-version-"), false);
 });
 
 test("package identity coverage emits no finding when package evidence is absent", () => {
