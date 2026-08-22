@@ -25,29 +25,67 @@ function compareFindings(left: ServerAuditFinding, right: ServerAuditFinding): n
     || left.id.localeCompare(right.id);
 }
 
+function siftWorstFindingUp(heap: ServerAuditFinding[], startIndex: number): void {
+  let index = startIndex;
+  while (index > 0) {
+    const parentIndex = Math.floor((index - 1) / 2);
+    if (compareFindings(heap[parentIndex], heap[index]) >= 0) return;
+    [heap[parentIndex], heap[index]] = [heap[index], heap[parentIndex]];
+    index = parentIndex;
+  }
+}
+
+function siftWorstFindingDown(heap: ServerAuditFinding[]): void {
+  let index = 0;
+  while (true) {
+    const leftIndex = index * 2 + 1;
+    if (leftIndex >= heap.length) return;
+    const rightIndex = leftIndex + 1;
+    let worstChildIndex = leftIndex;
+    if (rightIndex < heap.length && compareFindings(heap[rightIndex], heap[leftIndex]) > 0) {
+      worstChildIndex = rightIndex;
+    }
+    if (compareFindings(heap[index], heap[worstChildIndex]) >= 0) return;
+    [heap[index], heap[worstChildIndex]] = [heap[worstChildIndex], heap[index]];
+    index = worstChildIndex;
+  }
+}
+
 export function createServerAuditCertificateCoverageFindings(
   snapshot: ServerAuditSnapshot,
 ): ServerAuditFinding[] {
-  const candidates = (snapshot.web?.certificates ?? [])
-    .map((certificate, index): ServerAuditFinding | undefined => {
-      if (certificate.notAfter !== undefined || certificate.daysRemaining !== undefined) return undefined;
-      const source = `web.certificates[${index}]`;
-      return {
-        id: stableId(["certificate-coverage", "missing-expiry", source]),
-        severity: "info",
-        category: "coverage",
-        title: "TLS certificate record lacks expiry evidence",
-        summary: `Certificate evidence at web.certificates[${index}] includes no explicit notAfter timestamp or daysRemaining value, so expiry posture for that record is unknown.`,
-        recommendation: "Re-collect certificate inventory with the reviewed read-only collector before relying on TLS expiry posture; a separate approved endpoint check is required to verify the actively served certificate.",
-        evidence: [{ source, summary: "certificate record has no supplied expiry evidence" }],
-      };
-    })
-    .filter((finding): finding is ServerAuditFinding => finding !== undefined)
-    .sort(compareFindings);
+  const retainedFindings: ServerAuditFinding[] = [];
+  let findingsObserved = 0;
+  const recordFinding = (finding: ServerAuditFinding): void => {
+    findingsObserved += 1;
+    if (retainedFindings.length < MAX_FINDINGS) {
+      retainedFindings.push(finding);
+      siftWorstFindingUp(retainedFindings, retainedFindings.length - 1);
+      return;
+    }
+    if (compareFindings(finding, retainedFindings[0]) >= 0) return;
+    retainedFindings[0] = finding;
+    siftWorstFindingDown(retainedFindings);
+  };
 
-  if (candidates.length <= MAX_FINDINGS) return candidates;
+  (snapshot.web?.certificates ?? []).forEach((certificate, index) => {
+    if (certificate.notAfter !== undefined || certificate.daysRemaining !== undefined) return;
+    const source = `web.certificates[${index}]`;
+    recordFinding({
+      id: stableId(["certificate-coverage", "missing-expiry", source]),
+      severity: "info",
+      category: "coverage",
+      title: "TLS certificate record lacks expiry evidence",
+      summary: `Certificate evidence at web.certificates[${index}] includes no explicit notAfter timestamp or daysRemaining value, so expiry posture for that record is unknown.`,
+      recommendation: "Re-collect certificate inventory with the reviewed read-only collector before relying on TLS expiry posture; a separate approved endpoint check is required to verify the actively served certificate.",
+      evidence: [{ source, summary: "certificate record has no supplied expiry evidence" }],
+    });
+  });
 
-  const bounded = candidates.slice(0, MAX_FINDINGS - 1);
+  retainedFindings.sort(compareFindings);
+  if (findingsObserved <= MAX_FINDINGS) return retainedFindings;
+
+  const bounded = retainedFindings.slice(0, MAX_FINDINGS - 1);
   bounded.push({
     id: stableId(["certificate-coverage", "findings-truncated", String(MAX_FINDINGS)]),
     severity: "info",
