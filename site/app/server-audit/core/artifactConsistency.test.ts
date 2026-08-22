@@ -105,3 +105,31 @@ test("artifact consistency bounds structural sources while retaining a late conf
     /artifact maxSourcesPerIssue.*2 through 256/,
   );
 });
+
+test("retains only the bounded deterministic artifact issue prefix under high-cardinality conflicts", () => {
+  const input = snapshot();
+  input.logs = [];
+  input.backups = Array.from({ length: 1_000 }, (_, index) => {
+    const group = Math.floor(index / 2);
+    return {
+      name: index % 2 === 0 ? "private-a" : "private-b",
+      path: `/private/backups/group-${group}.dump`,
+      ageHours: index % 2 === 0 ? 1 : 2,
+      sizeBytes: index % 2 === 0 ? 10 : 20,
+    };
+  });
+
+  const analysis = analyzeServerAuditArtifactConsistency(input, { maxIssues: 100 });
+
+  assert.equal(analysis.summary.backupsChecked, 1_000);
+  assert.equal(analysis.issues.length, 100);
+  assert.equal(analysis.execution.maxIssues, 100);
+  assert.equal(analysis.execution.issuesTruncated, true);
+  assert.equal(new Set(analysis.issues.map((issue) => issue.id)).size, 100);
+  assert.ok(analysis.issues.every((issue) => issue.kind === "conflicting-backup-metadata"));
+
+  const serialized = JSON.stringify(analysis);
+  assert.equal(serialized.includes("private-a"), false);
+  assert.equal(serialized.includes("private-b"), false);
+  assert.equal(serialized.includes("/private/backups/"), false);
+});
