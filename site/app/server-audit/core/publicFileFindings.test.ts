@@ -83,7 +83,27 @@ test("public-file marker findings are deterministic and bounded with explicit tr
   assert.deepEqual(first, second);
   assert.equal(first.length, 100);
   assert.equal(first.at(-1)?.title, "Public-file marker findings were truncated");
+  assert.equal(first.at(-1)?.summary, "41 additional marker/reference finding(s) were omitted by the deterministic finding limit.");
+  assert.deepEqual(first.slice(0, 99).map((finding) => finding.evidence[0]?.source),
+    Array.from({ length: 99 }, (_, index) => `web.publicFileChecks[${index}]`));
   assert.ok(first.every((finding) => /^srv_[a-f0-9]{8}$/.test(finding.id)));
+});
+
+test("public-file marker findings retain only the bounded prefix under high-cardinality evidence", () => {
+  const input = snapshot();
+  input.web!.publicFileChecks = Array.from({ length: 5_000 }, (_, index) => ({
+    rootIndex: 0,
+    marker: index % 2 === 0 ? "env-file" as const : "composer-auth" as const,
+    present: true,
+  }));
+
+  const findings = createServerAuditPublicFileFindings(input);
+  assert.equal(findings.length, 100);
+  assert.equal(findings.at(-1)?.title, "Public-file marker findings were truncated");
+  assert.equal(findings.at(-1)?.summary, "4901 additional marker/reference finding(s) were omitted by the deterministic finding limit.");
+  assert.deepEqual(findings.slice(0, 99).map((finding) => finding.evidence[0]?.source),
+    Array.from({ length: 99 }, (_, index) => `web.publicFileChecks[${index}]`));
+  assert.equal(JSON.stringify(findings).includes("/srv/private/customer-app/public"), false);
 });
 
 test("snapshot parser accepts bounded fixed marker evidence and rejects invalid roots or marker names", () => {
