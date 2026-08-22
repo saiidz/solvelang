@@ -8,15 +8,17 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: trusted-mac-hosted-${{ github.ref }}
-  cancel-in-progress: false
-
+# SolveLang has one owner-allocated self-hosted Mac runner slot. Do not use a
+# shared GitHub Actions concurrency group here: a group retains only one
+# pending run and can replace an independent branch's exact-head validation.
+# The single allocated runner provides execution serialization; automation
+# must avoid stacking duplicate pushes while that slot is busy.
 jobs:
   repository-audit-site:
     name: Repository Audit on Mac
     if: github.repository == 'saiidz/solvelang'
-    runs-on: macos-14
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: site
@@ -32,16 +34,16 @@ jobs:
           cache-dependency-path: site/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: caffeinate -dimsu npm ci
 
       - name: Run deterministic Studio and audit tests
-        run: npm run test:studio
+        run: caffeinate -dimsu npm run test:studio
 
       - name: Run lint
-        run: npm run lint
+        run: caffeinate -dimsu npm run lint
 
       - name: Build static site
-        run: npm run build
+        run: caffeinate -dimsu npm run build
 
       - name: Verify exported document languages
-        run: npm run verify:i18n-export
+        run: caffeinate -dimsu npm run verify:i18n-export
