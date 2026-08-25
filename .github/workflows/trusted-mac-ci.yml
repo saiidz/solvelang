@@ -8,8 +8,10 @@ on:
 permissions:
   contents: read
 
+# The runner itself is the repository's one Mac slot. Keep queues independent
+# by trusted branch so another branch cannot replace this branch's pending run.
 concurrency:
-  group: trusted-mac-solvelang-single-slot
+  group: trusted-mac-solvelang-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
