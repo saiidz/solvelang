@@ -56,13 +56,15 @@ namespace.
   the exported name. A braced list is non-empty, has no duplicate exported or
   local names, and has the same collision rules as a namespace binding.
 - `namespace.member` reads an exported value. `namespace.function(args)` calls
-  an exported function. Missing members are static, source-located errors;
-  namespace values cannot be assigned to or mutated.
-- Named imported functions and values are read-only live bindings: assigning
-  them from an importer is invalid, while reads observe the exporting module's
-  current exported value. Imported functions may call declarations within their
-  defining module but do not receive its private declarations through an
-  importer namespace.
+  an exported function. Namespace member reads and calls are read-only live
+  bindings: reads observe the exporting module's current exported value.
+  Missing members are static, source-located errors; namespace values cannot be
+  assigned to or mutated.
+- Named imported functions and values are also read-only live bindings:
+  assigning them from an importer is invalid, while reads observe the exporting
+  module's current exported value. Imported functions may call declarations
+  within their defining module but do not receive its private declarations
+  through an importer namespace.
 
 ### Resolution and evaluation
 
@@ -111,6 +113,7 @@ resolution remain unavailable.
 The implementation must add native and hardened fixtures for exported values
 and functions, namespace and named aliases, contextual-word compatibility,
 private/missing exports, binding collisions (including `input`), live exported
-value updates, deterministic cycles, top-level side-effect and call rejection,
+value updates through both namespace and named imports, deterministic cycles,
+top-level side-effect and call rejection,
 source provenance, root/symlink confinement, preflight of capability-bearing
 function bodies, and unchanged legacy includes with trailing comments.
