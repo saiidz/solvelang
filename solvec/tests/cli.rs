@@ -165,6 +165,26 @@ ask SupportBot("Help")
 }
 
 #[test]
+fn spec_0_1_core_fixture_validates_and_has_deterministic_output() {
+    let fixture = include_str!("fixtures/spec-0.1/core.solve");
+    let file = write_temp_solve_file("spec_0_1_core", fixture);
+
+    assert!(run_solvec(&["validate", &file]).contains("✓ SolveLang validation passed"));
+    assert_eq!(run_solvec(&["run", &file]), "ready:6\n");
+}
+
+#[test]
+fn validation_and_run_accept_escaped_quotes_and_trailing_comments() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_escaped_quote_comment.solve",
+        "print(\"say \\\"hello\\\"\") // \\\" { }\n",
+    );
+
+    assert!(run_solvec(&["validate", &file]).contains("✓ SolveLang validation passed"));
+    assert_eq!(run_solvec(&["run", &file]), "say \"hello\"\n");
+}
+
+#[test]
 fn safe_mode_executes_array_for_loops() {
     let file = write_temp_solve_file(
         "solvelang_cli_for_loop.solve",
@@ -476,6 +496,48 @@ fn imports_report_a_deterministic_root_relative_cycle_chain() {
 }
 
 #[test]
+fn imports_accept_trailing_comments_and_preserve_hardened_confinement() {
+    let root = create_temp_workflow_dir("solvelang_import_trailing_comment");
+    let confined = root.join("confined");
+    fs::create_dir_all(&confined).expect("failed to create confined workflow directory");
+    let shared = confined.join("shared.solve");
+    let entry = confined.join("entry.solve");
+    fs::write(&shared, "print(\"shared\")\n").expect("failed to write shared workflow");
+    fs::write(
+        &entry,
+        "import \"shared.solve\" // shared definitions\nprint(\"entry\")\n",
+    )
+    .expect("failed to write entry workflow");
+    let entry_arg = entry.to_string_lossy().to_string();
+
+    assert_eq!(run_solvec(&["run", entry_arg.as_str()]), "shared\nentry\n");
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--safe", entry_arg.as_str()]);
+    assert!(success, "unexpected stderr: {stderr}");
+    assert_eq!(
+        parse_json_output(&stdout)["outputs"],
+        serde_json::json!(["shared", "entry"])
+    );
+
+    let outside = root.join("outside.solve");
+    fs::write(&outside, "print(\"outside-secret\")\n").expect("failed to write outside workflow");
+    let unsafe_entry = confined.join("unsafe.solve");
+    fs::write(
+        &unsafe_entry,
+        "import \"../outside.solve\" // must remain confined\n",
+    )
+    .expect("failed to write unsafe entry workflow");
+    let unsafe_entry_arg = unsafe_entry.to_string_lossy().to_string();
+    let (success, stdout, stderr) =
+        run_solvec_with_status(&["run", "--json", "--safe", unsafe_entry_arg.as_str()]);
+    assert!(!success, "parent traversal unexpectedly succeeded");
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "import_denied");
+    assert!(!stdout.contains("outside-secret"));
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);
@@ -604,6 +666,22 @@ fn builtin_type_errors_exit_with_runtime_error() {
     assert!(!success, "unexpected stdout: {}", stdout);
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("json_parse expects a text value"));
+}
+
+#[test]
+fn json_builtins_require_exactly_one_argument() {
+    for source in [
+        "print(json_parse())\n",
+        "print(json_parse(\"{}\", \"extra\"))\n",
+        "print(json_stringify())\n",
+        "print(json_stringify(1, 2))\n",
+    ] {
+        let file = write_temp_solve_file("solvelang_cli_json_builtin_arity.solve", source);
+        let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+        assert!(!success, "unexpected stdout: {stdout}");
+        assert!(stderr.contains("expects 1 argument"), "stderr: {stderr}");
+    }
 }
 
 #[test]
@@ -1767,6 +1845,54 @@ fn hardened_preflight_rejects_unknown_mutation_tools_and_agent_tools() {
         let error = parse_json_output(&stdout);
         assert_eq!(error["errors"][0]["code"], "capability_denied");
     }
+}
+
+#[test]
+fn hardened_preflight_rejects_functions_unavailable_at_runtime() {
+    let root = create_temp_workflow_dir("solvelang_hardened_function_availability");
+
+    for (name, source) in [
+        (
+            "forward",
+            "print(\"must-not-be-emitted\")\nlater()\nfn later() { return 1 }\n",
+        ),
+        (
+            "conditional",
+            "if false { fn later() { return 1 } }\nprint(\"must-not-be-emitted\")\nlater()\n",
+        ),
+        (
+            "later-helper-in-body",
+            "fn first() { return later() }\nfn later() { return 1 }\nprint(\"must-not-be-emitted\")\nprint(first())\n",
+        ),
+    ] {
+        let workflow = root.join(format!("{name}.solve"));
+        fs::write(&workflow, source).expect("failed to write workflow");
+        let workflow_arg = workflow.to_string_lossy().to_string();
+        let (success, stdout, stderr) = run_solvec_with_status(&[
+            "run",
+            "--json",
+            "--safe",
+            "--dry-run",
+            workflow_arg.as_str(),
+        ]);
+
+        assert!(!success, "unavailable function was not rejected: {name}");
+        assert!(stderr.is_empty());
+        let error = parse_json_output(&stdout);
+        assert_eq!(error["errors"][0]["code"], "capability_denied");
+        assert!(!stdout.contains("must-not-be-emitted"));
+    }
+}
+
+#[test]
+fn statements_can_be_adjacent_when_the_parser_can_unambiguously_split_them() {
+    let file = write_temp_solve_file(
+        "solvelang_cli_adjacent_statements.solve",
+        "let value = 1 print(value)\n",
+    );
+
+    assert!(run_solvec(&["validate", &file]).contains("✓ SolveLang validation passed"));
+    assert_eq!(run_solvec(&["run", &file]), "1\n");
 }
 
 #[test]
