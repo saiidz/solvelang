@@ -63,10 +63,24 @@ pub fn validate_source(source: &str) -> Result<(), Vec<Diagnostic>> {
 }
 
 fn check_quotes(line: &str, line_number: usize, diagnostics: &mut Vec<Diagnostic>) {
-    let quote_count = line.chars().filter(|character| *character == '"').count();
+    let mut characters = line.chars().enumerate().peekable();
+    let mut opening_quote = None;
 
-    if quote_count % 2 != 0 {
-        let column = line.find('"').map(|index| index + 1).unwrap_or(1);
+    while let Some((index, character)) = characters.next() {
+        if opening_quote.is_some() {
+            if character == '\\' {
+                characters.next();
+            } else if character == '"' {
+                opening_quote = None;
+            }
+        } else if character == '/' && characters.peek().is_some_and(|(_, next)| *next == '/') {
+            break;
+        } else if character == '"' {
+            opening_quote = Some(index + 1);
+        }
+    }
+
+    if let Some(column) = opening_quote {
         diagnostics.push(Diagnostic::new(
             line_number,
             column,
@@ -82,8 +96,25 @@ fn check_braces(
     brace_stack: &mut Vec<(usize, usize)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    for (index, character) in line.chars().enumerate() {
+    let mut characters = line.chars().enumerate().peekable();
+    let mut in_string = false;
+
+    while let Some((index, character)) = characters.next() {
+        if in_string {
+            if character == '\\' {
+                characters.next();
+            } else if character == '"' {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if character == '/' && characters.peek().is_some_and(|(_, next)| *next == '/') {
+            break;
+        }
+
         match character {
+            '"' => in_string = true,
             '{' => brace_stack.push((line_number, index + 1)),
             '}' if brace_stack.pop().is_none() => {
                 diagnostics.push(Diagnostic::new(
@@ -100,7 +131,7 @@ fn check_braces(
 
 #[cfg(test)]
 mod tests {
-    use super::Diagnostic;
+    use super::{Diagnostic, validate_source};
 
     #[test]
     fn formats_diagnostics_with_source_pointer_and_hint() {
@@ -111,5 +142,12 @@ mod tests {
         assert!(formatted.contains("print()"));
         assert!(formatted.lines().any(|line| line.trim() == "^"));
         assert!(formatted.contains("Hint: Add a value here."));
+    }
+
+    #[test]
+    fn validation_ignores_escaped_quotes_and_trailing_comment_contents() {
+        let source = "print(\"say \\\\\"hello\\\\\"\") // \\\" { }\n";
+
+        assert!(validate_source(source).is_ok());
     }
 }

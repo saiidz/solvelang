@@ -997,12 +997,28 @@ fn parse_import_line(line: &str) -> Option<&str> {
         return None;
     }
 
-    let rest = line["import ".len()..].trim();
-    if rest.len() >= 2 && rest.starts_with('"') && rest.ends_with('"') {
-        Some(&rest[1..rest.len() - 1])
-    } else {
-        None
+    let rest = line["import ".len()..].trim_start();
+    if !rest.starts_with('"') {
+        return None;
     }
+
+    let mut escaped = false;
+    for (index, character) in rest.char_indices().skip(1) {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if character == '"' {
+            let trailing = rest[index + character.len_utf8()..].trim_start();
+            return (trailing.is_empty() || trailing.starts_with("//")).then_some(&rest[1..index]);
+        }
+    }
+
+    None
 }
 
 fn preflight_workflow(
@@ -1011,39 +1027,14 @@ fn preflight_workflow(
     hardened: bool,
 ) -> Result<(), CliFailure> {
     let mut function_names = HashSet::new();
-    collect_function_names(statements, &mut function_names);
-
-    preflight_statements(statements, input_injected, hardened, &function_names)
-}
-
-fn collect_function_names<'a>(statements: &'a [Stmt], names: &mut HashSet<&'a str>) {
-    for statement in statements {
-        match statement {
-            Stmt::Function { name, body, .. } => {
-                names.insert(name.as_str());
-                collect_function_names(body, names);
-            }
-            Stmt::If {
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                collect_function_names(then_branch, names);
-                collect_function_names(else_branch, names);
-            }
-            Stmt::While { body, .. } | Stmt::For { body, .. } => {
-                collect_function_names(body, names)
-            }
-            _ => {}
-        }
-    }
+    preflight_statements(statements, input_injected, hardened, &mut function_names)
 }
 
 fn preflight_statements(
     statements: &[Stmt],
     input_injected: bool,
     hardened: bool,
-    function_names: &HashSet<&str>,
+    function_names: &mut HashSet<String>,
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
@@ -1069,7 +1060,10 @@ fn preflight_statements(
                         "unsafe function declarations are disabled by hardened execution policy",
                     ));
                 }
-                preflight_statements(body, input_injected, hardened, function_names)?;
+                let mut body_function_names = function_names.clone();
+                body_function_names.insert(name.clone());
+                preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
+                function_names.insert(name.clone());
             }
             Stmt::If {
                 condition,
@@ -1078,18 +1072,32 @@ fn preflight_statements(
                 ..
             } => {
                 preflight_expr(condition, hardened, function_names)?;
-                preflight_statements(then_branch, input_injected, hardened, function_names)?;
-                preflight_statements(else_branch, input_injected, hardened, function_names)?;
+                let mut then_function_names = function_names.clone();
+                preflight_statements(
+                    then_branch,
+                    input_injected,
+                    hardened,
+                    &mut then_function_names,
+                )?;
+                let mut else_function_names = function_names.clone();
+                preflight_statements(
+                    else_branch,
+                    input_injected,
+                    hardened,
+                    &mut else_function_names,
+                )?;
             }
             Stmt::While {
                 condition, body, ..
             } => {
                 preflight_expr(condition, hardened, function_names)?;
-                preflight_statements(body, input_injected, hardened, function_names)?;
+                let mut body_function_names = function_names.clone();
+                preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
             }
             Stmt::For { iterable, body, .. } => {
                 preflight_expr(iterable, hardened, function_names)?;
-                preflight_statements(body, input_injected, hardened, function_names)?;
+                let mut body_function_names = function_names.clone();
+                preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
             }
             Stmt::Break { .. } | Stmt::Continue { .. } => {}
             Stmt::Agent { .. } if hardened => {
@@ -1114,7 +1122,7 @@ fn preflight_statements(
 fn preflight_expr(
     expr: &Expr,
     hardened: bool,
-    function_names: &HashSet<&str>,
+    function_names: &HashSet<String>,
 ) -> Result<(), CliFailure> {
     match &expr.kind {
         ExprKind::Array(values) => {
@@ -1157,7 +1165,7 @@ fn preflight_expr(
                         | "entries"
                         | "json_parse"
                         | "json_stringify"
-                ) || (function_names.contains(name.as_str())
+                ) || (function_names.contains(name)
                     && !is_explicitly_unsafe_name(name));
                 if !allowed {
                     return Err(capability_failure(

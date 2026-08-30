@@ -280,20 +280,20 @@ let status = qualify("high", 7500)
 print(status)
 ```
 
-Function calls use `name(arg1, arg2)` and must provide exactly the declared number of arguments. Too few or too many arguments are source-located runtime errors that name the function and show the expected and received counts.
+Function calls use `name(arg1, arg2)` and must provide exactly the declared number of arguments. A single trailing comma is accepted in function parameter and call lists. Too few or too many arguments are source-located runtime errors that name the function and show the expected and received counts.
 
 ## Imports
 
 Import another `.solve` file with a relative path:
 
 ```solve
-import "lib/user.solve"
+import "lib/user.solve" // shared definitions
 
 print(user_name)
 print(user_plan)
 ```
 
-Imports are resolved relative to the importing file. Circular imports are rejected with a deterministic root-relative import chain. In hardened mode, imports must be relative regular `.solve` files whose canonical targets remain below the entry workflow's canonical parent. Absolute paths, parent traversal, non-`.solve` paths, and symlink escapes fail before imported content is read. The loader flattens imported source before parsing while retaining line-level provenance, so parser and runtime diagnostics from imported content identify the relative imported-file path and its local line number. Imports remain compatibility includes, not module namespaces or package resolution.
+Imports are source-level compatibility directives recognized before lexing, so a trailing `//` comment is accepted. They are resolved relative to the importing file. Circular imports are rejected with a deterministic root-relative import chain. In hardened mode, imports must be relative regular `.solve` files whose canonical targets remain below the entry workflow's canonical parent. Absolute paths, parent traversal, non-`.solve` paths, and symlink escapes fail before imported content is read. The loader flattens imported source before parsing while retaining line-level provenance, so parser and runtime diagnostics from imported content identify the relative imported-file path and its local line number. Imports remain compatibility includes, not module namespaces or package resolution.
 
 ## Runtime Errors
 

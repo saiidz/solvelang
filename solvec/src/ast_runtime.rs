@@ -358,14 +358,7 @@ impl AstRuntime {
                 let mut safety_counter = 0;
 
                 while self.eval(condition)?.is_truthy() {
-                    match self.execute_block(body)? {
-                        ControlFlow::None | ControlFlow::Continue => {}
-                        ControlFlow::Break => return Ok(ControlFlow::None),
-                        flow @ ControlFlow::Return(_) => return Ok(flow),
-                    }
-
-                    safety_counter += 1;
-                    if safety_counter > 10_000 {
+                    if safety_counter >= 10_000 {
                         return Err(self.error_at(
                             *location,
                             "loop stopped after 10000 iterations",
@@ -374,6 +367,12 @@ impl AstRuntime {
                                     .to_string(),
                             ),
                         ));
+                    }
+                    safety_counter += 1;
+                    match self.execute_block(body)? {
+                        ControlFlow::None | ControlFlow::Continue => {}
+                        ControlFlow::Break => return Ok(ControlFlow::None),
+                        flow @ ControlFlow::Return(_) => return Ok(flow),
                     }
                 }
 
@@ -719,10 +718,9 @@ impl AstRuntime {
             "values" => Some(self.values(args, location)),
             "entries" => Some(self.entries(args, location)),
             "json_parse" => {
-                let input = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let input = self
+                    .evaluate_builtin_arguments("json_parse", args, 1, 1, location)
+                    .map(|values| values.into_iter().next().expect("one checked argument"));
 
                 match input {
                     Ok(Value::Text(text)) => match serde_json::from_str::<JsonValue>(&text) {
@@ -744,10 +742,9 @@ impl AstRuntime {
                 }
             }
             "json_stringify" => {
-                let value = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let value = self
+                    .evaluate_builtin_arguments("json_stringify", args, 1, 1, location)
+                    .map(|values| values.into_iter().next().expect("one checked argument"));
 
                 Some(value.map(|value| {
                     let json = value.to_json();
@@ -755,10 +752,9 @@ impl AstRuntime {
                 }))
             }
             "http_get" => {
-                let input = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let input = self
+                    .evaluate_builtin_arguments("http_get", args, 1, 1, location)
+                    .map(|values| values.into_iter().next().expect("one checked argument"));
 
                 match input {
                     Ok(Value::Text(url)) => Some(self.http_get(&url, location)),
@@ -771,15 +767,11 @@ impl AstRuntime {
                 }
             }
             "http_post" => {
-                let url = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
-
-                let body = args
-                    .get(1)
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let values = self.evaluate_builtin_arguments("http_post", args, 2, 2, location);
+                let (url, body) = match values {
+                    Ok(mut values) => (Ok(values.remove(0)), Ok(values.remove(0))),
+                    Err(error) => (Err(error), Ok(Value::Null)),
+                };
 
                 match (url, body) {
                     (Ok(Value::Text(url)), Ok(Value::Text(body))) => {
@@ -799,10 +791,9 @@ impl AstRuntime {
                 }
             }
             "read_file" => {
-                let input = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let input = self
+                    .evaluate_builtin_arguments("read_file", args, 1, 1, location)
+                    .map(|values| values.into_iter().next().expect("one checked argument"));
 
                 match input {
                     Ok(Value::Text(path)) => Some(self.read_file(&path, location)),
@@ -815,15 +806,11 @@ impl AstRuntime {
                 }
             }
             "write_file" => {
-                let path = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
-
-                let body = args
-                    .get(1)
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let values = self.evaluate_builtin_arguments("write_file", args, 2, 2, location);
+                let (path, body) = match values {
+                    Ok(mut values) => (Ok(values.remove(0)), Ok(values.remove(0))),
+                    Err(error) => (Err(error), Ok(Value::Null)),
+                };
 
                 match (path, body) {
                     (Ok(Value::Text(path)), Ok(Value::Text(body))) => {
@@ -843,10 +830,9 @@ impl AstRuntime {
                 }
             }
             "env" => {
-                let input = args
-                    .first()
-                    .map(|arg| self.eval(arg))
-                    .unwrap_or(Ok(Value::Null));
+                let input = self
+                    .evaluate_builtin_arguments("env", args, 1, 1, location)
+                    .map(|values| values.into_iter().next().expect("one checked argument"));
 
                 match input {
                     Ok(Value::Text(name)) => {
@@ -1455,6 +1441,30 @@ if user.active {
         let mut runtime = AstRuntime::default();
 
         runtime.run(&statements).expect("runtime succeeds");
+    }
+
+    #[test]
+    fn stops_while_loops_before_an_eleventh_thousandth_body_execution() {
+        let statements = parse(
+            r#"
+let count = 0
+while true {
+    count = count + 1
+    if count > 10000 { break }
+}
+"#,
+        );
+        let mut runtime = AstRuntime::default();
+
+        let error = runtime
+            .run(&statements)
+            .expect_err("loop limit is enforced");
+
+        assert!(
+            error
+                .to_string()
+                .contains("loop stopped after 10000 iterations")
+        );
     }
 
     #[test]

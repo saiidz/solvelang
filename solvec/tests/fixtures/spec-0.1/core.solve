@@ -1,0 +1,28 @@
+// SPEC.md 0.1 core grammar and deterministic evaluation fixture.
+let values = [1, 2, 3]
+let total = 0
+let double_negated = not not false
+
+for value in values {
+    total = total + value
+}
+
+fn label(number,) {
+    if number >= 6 and not false {
+        return "ready"
+    }
+    else {
+        return "review"
+    }
+}
+
+agent SupportBot {
+    instruction "Answer clearly."
+    tool lookup
+}
+
+let report = {
+    status: label(total,),
+    total: total,
+}
+print(report.status .. ":" .. report.total)
