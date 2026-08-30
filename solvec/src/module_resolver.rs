@@ -5,7 +5,7 @@
 
 use crate::{
     ast::{ExportedDeclaration, SourceLocation, Stmt},
-    lexer, parser,
+    diagnostics, lexer, parser,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -106,6 +106,19 @@ impl Resolver {
                 format!("failed to read module: {error}"),
             )
         })?;
+        if let Err(diagnostics) = diagnostics::validate_source(&content)
+            && !is_entry
+        {
+            let diagnostic = diagnostics
+                .into_iter()
+                .next()
+                .expect("validation reports an error");
+            return Err(error_at(
+                &identity,
+                SourceLocation::new(diagnostic.line, diagnostic.column),
+                diagnostic.message,
+            ));
+        }
         let statements = match parser::Parser::new(lexer::lex(&content)).parse() {
             Ok(statements) => statements,
             Err(_) if is_entry => Vec::new(),
@@ -356,5 +369,17 @@ mod tests {
         let graph = resolve_explicit_modules(&fixture.entry()).expect("explicit graph");
         assert_eq!(graph.modules.len(), 2);
         assert!(graph.modules.contains_key("module.solve"));
+    }
+
+    #[test]
+    fn validates_imported_source_before_parser_acceptance() {
+        let fixture = Fixture::new();
+        fixture.write("entry.solve", "import \"module.solve\" as module\n");
+        fixture.write("module.solve", "export let value = \"unterminated\n");
+        let error =
+            resolve_explicit_modules(&fixture.entry()).expect_err("malformed dependency fails");
+        assert_eq!(error.source, "module.solve");
+        assert_eq!(error.location.line, 1);
+        assert!(error.message.contains("Unclosed string literal"));
     }
 }

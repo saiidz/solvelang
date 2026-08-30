@@ -835,12 +835,6 @@ fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
 }
 
 fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSource, CliFailure> {
-    module_resolver::resolve_explicit_modules(Path::new(filename)).map_err(|error| {
-        CliFailure::invalid_workflow(format!(
-            "{}:{}:{}: {}",
-            error.source, error.location.line, error.location.column, error.message
-        ))
-    })?;
     let entry = fs::canonicalize(filename).map_err(|error| {
         CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
     })?;
@@ -863,14 +857,21 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
     let mut import_stack = Vec::new();
-    load_file_recursive(
+    let source = load_file_recursive(
         &entry,
         &source_root,
         &entry_path,
         hardened,
         &mut import_stack,
         true,
-    )
+    )?;
+    module_resolver::resolve_explicit_modules(&entry).map_err(|error| {
+        CliFailure::invalid_workflow(format!(
+            "{}:{}:{}: {}",
+            error.source, error.location.line, error.location.column, error.message
+        ))
+    })?;
+    Ok(source)
 }
 
 fn load_file_recursive(
