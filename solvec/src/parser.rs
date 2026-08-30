@@ -280,7 +280,7 @@ impl Parser {
             }
             if !local_names.insert(local.clone()) {
                 self.error_at(
-                    binding_location,
+                    local_location,
                     &format!("duplicate local import binding '{}'", local),
                     "Use a distinct local name for each imported binding.",
                 );
@@ -1584,6 +1584,8 @@ import "shared.solve"
             error
                 .message
                 .contains("duplicate local import binding 'value'")
+                && error.line == 2
+                && error.column == 36
         }));
         assert!(errors.iter().any(|error| {
             error

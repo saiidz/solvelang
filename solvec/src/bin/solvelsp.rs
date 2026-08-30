@@ -35,33 +35,45 @@ fn symbols(text: &str) -> Vec<Value> {
     statements
         .into_iter()
         .flat_map(|statement| match statement {
-            Stmt::Let { name, location, .. } => vec![document_symbol(name, location, 13)],
-            Stmt::Function { name, location, .. } => vec![document_symbol(name, location, 12)],
+            Stmt::Let { name, location, .. } => vec![document_symbol(text, name, location, 13)],
+            Stmt::Function { name, location, .. } => {
+                vec![document_symbol(text, name, location, 12)]
+            }
             Stmt::Export {
                 declaration: ExportedDeclaration::Let { name, location, .. },
                 ..
-            } => vec![document_symbol(name, location, 13)],
+            } => vec![document_symbol(text, name, location, 13)],
             Stmt::Export {
                 declaration: ExportedDeclaration::Function { name, location, .. },
                 ..
-            } => vec![document_symbol(name, location, 12)],
+            } => vec![document_symbol(text, name, location, 12)],
             Stmt::ModuleImport {
                 namespace,
                 namespace_location,
                 ..
-            } => vec![document_symbol(namespace, namespace_location, 3)],
+            } => vec![document_symbol(text, namespace, namespace_location, 3)],
             Stmt::NamedModuleImport { bindings, .. } => bindings
                 .into_iter()
-                .map(|binding| document_symbol(binding.local, binding.local_location, 13))
+                .map(|binding| document_symbol(text, binding.local, binding.local_location, 13))
                 .collect(),
-            Stmt::Agent { name, location, .. } => vec![document_symbol(name, location, 5)],
+            Stmt::Agent { name, location, .. } => {
+                vec![document_symbol(text, name, location, 5)]
+            }
             _ => Vec::new(),
         })
         .collect()
 }
 
-fn document_symbol(name: String, location: SourceLocation, kind: u8) -> Value {
-    json!({"name":name,"kind":kind,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})
+fn source_range(text: &str, location: SourceLocation, name: &str) -> Value {
+    let start = utf16_character_at(text, location.line, location.column)
+        .unwrap_or_else(|| location.column.saturating_sub(1));
+    let end = start + name.encode_utf16().count();
+    json!({"start":{"line":location.line.saturating_sub(1),"character":start},"end":{"line":location.line.saturating_sub(1),"character":end}})
+}
+
+fn document_symbol(text: &str, name: String, location: SourceLocation, kind: u8) -> Value {
+    let range = source_range(text, location, &name);
+    json!({"name":name,"kind":kind,"range":range,"selectionRange":range})
 }
 
 fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
@@ -139,7 +151,7 @@ fn definition(text: &str, line: usize, character: usize) -> Value {
     let Some((location, _)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
-    json!({"uri":"","range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})
+    json!({"uri":"","range":source_range(text, location, &name)})
 }
 
 fn hover(text: &str, line: usize, character: usize) -> Value {
@@ -609,6 +621,31 @@ mod tests {
             document_symbols[1]["selectionRange"]["start"]["character"],
             19
         );
+    }
+
+    #[test]
+    fn import_ranges_use_utf16_offsets() {
+        let source = "import \"😀.solve\" as math\nimport { a𐐀 as local } from \"math.solve\"\nprint(math)\n";
+        let document_symbols = symbols(source);
+        assert_eq!(
+            document_symbols[0]["selectionRange"]["start"]["character"],
+            21
+        );
+        assert_eq!(
+            document_symbols[1]["selectionRange"]["start"]["character"],
+            16
+        );
+
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":source}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":14,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(output[0]["result"]["range"]["start"]["character"], 21);
     }
 
     #[test]
