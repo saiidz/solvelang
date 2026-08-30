@@ -260,6 +260,16 @@ impl AstRuntime {
     }
 
     pub fn run(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+        if let Some(location) = first_explicit_module_location(statements) {
+            return Err(self.error_at(
+                location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            ));
+        }
         self.execute_block(statements).map(|_| ())
     }
 
@@ -1403,6 +1413,33 @@ impl AstRuntime {
         ai::ask_agent(name, &agent.instruction, &agent.tools, &message.to_string())
             .map_err(|error| self.error_at(location, error.to_string(), None))
     }
+}
+
+fn first_explicit_module_location(statements: &[Stmt]) -> Option<SourceLocation> {
+    statements.iter().find_map(|statement| match statement {
+        Stmt::ModuleImport { location, .. }
+        | Stmt::NamedModuleImport { location, .. }
+        | Stmt::Export { location, .. } => Some(*location),
+        Stmt::Function { body, .. } | Stmt::While { body, .. } | Stmt::For { body, .. } => {
+            first_explicit_module_location(body)
+        }
+        Stmt::If {
+            then_branch,
+            else_branch,
+            ..
+        } => first_explicit_module_location(then_branch)
+            .or_else(|| first_explicit_module_location(else_branch)),
+        Stmt::LegacyInclude { .. }
+        | Stmt::Let { .. }
+        | Stmt::Assign { .. }
+        | Stmt::Print { .. }
+        | Stmt::Return { .. }
+        | Stmt::Break { .. }
+        | Stmt::Continue { .. }
+        | Stmt::Agent { .. }
+        | Stmt::Ask { .. }
+        | Stmt::Expr(_) => None,
+    })
 }
 
 #[cfg(test)]

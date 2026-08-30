@@ -54,7 +54,7 @@ impl Parser {
     }
 
     fn statement(&mut self, top_level: bool) -> Option<Stmt> {
-        if self.starts_export() {
+        if self.starts_export_prefix() {
             if top_level {
                 return self.export_statement();
             }
@@ -127,8 +127,9 @@ impl Parser {
                 _ => unreachable!(),
             },
             _ => {
-                self.error_here(
-                    "Invalid export declaration: expected 'let' or 'fn'.",
+                self.error_at(
+                    location,
+                    "export may only prefix a top-level let or fn declaration.",
                     "Export a top-level variable with 'export let' or a function with 'export fn'.",
                 );
                 return None;
@@ -913,9 +914,35 @@ impl Parser {
             Some(Token::Identifier(name)) if name == expected
         )
     }
-    fn starts_export(&self) -> bool {
-        self.check_identifier_at(0, "export")
-            && (self.check_at(1, &Token::Let) || self.check_at(1, &Token::Fn))
+    fn starts_export_prefix(&self) -> bool {
+        if !self.check_identifier_at(0, "export") {
+            return false;
+        }
+
+        !matches!(
+            self.tokens.get(self.current + 1).map(|token| &token.token),
+            Some(
+                Token::Equal
+                    | Token::LeftParen
+                    | Token::Dot
+                    | Token::LeftBracket
+                    | Token::Plus
+                    | Token::Minus
+                    | Token::Star
+                    | Token::Slash
+                    | Token::Join
+                    | Token::EqualEqual
+                    | Token::BangEqual
+                    | Token::Greater
+                    | Token::GreaterEqual
+                    | Token::Less
+                    | Token::LessEqual
+                    | Token::And
+                    | Token::Or
+                    | Token::Newline
+                    | Token::Eof
+            )
+        )
     }
     fn starts_legacy_include(&self) -> bool {
         self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
@@ -1162,14 +1189,45 @@ import "shared.solve"
     #[test]
     fn keeps_module_words_contextual_outside_complete_module_forms() {
         let ast = parse(
-            "let export = 1\nlet import = 2\nlet as = 3\nfn from() { return export + import + as }\n",
+            "let export = 1\nlet import = 2\nlet as = 3\nfn export() { return import }\nfn from() { return export + import + as }\n",
         )
         .expect("contextual module words remain identifiers");
 
         assert!(matches!(&ast[0], Stmt::Let { name, .. } if name == "export"));
         assert!(matches!(&ast[1], Stmt::Let { name, .. } if name == "import"));
         assert!(matches!(&ast[2], Stmt::Let { name, .. } if name == "as"));
-        assert!(matches!(&ast[3], Stmt::Function { name, .. } if name == "from"));
+        assert!(matches!(&ast[3], Stmt::Function { name, .. } if name == "export"));
+        assert!(matches!(&ast[4], Stmt::Function { name, .. } if name == "from"));
+    }
+
+    #[test]
+    fn rejects_invalid_export_prefixes_without_reserving_export_as_an_identifier() {
+        for source in [
+            "export print(\"x\")\n",
+            "export if true { print(\"x\") }\n",
+            "export while true { break }\n",
+            "export agent helper { instruction \"x\" }\n",
+            "export export\n",
+            "if true { export print(\"x\") }\n",
+        ] {
+            let errors = parse(source).expect_err("invalid export prefix must fail");
+            assert!(
+                errors.iter().any(|error| {
+                    error.column == 1 || (source.starts_with("if") && error.column == 11)
+                }),
+                "diagnostics must point at export prefix for {source:?}: {errors:?}"
+            );
+            assert!(
+                errors.iter().any(|error| {
+                    error.message.contains("export")
+                        && (error
+                            .message
+                            .contains("may only prefix a top-level let or fn")
+                            || error.message.contains("only allowed at top level"))
+                }),
+                "unexpected diagnostics for {source:?}: {errors:?}"
+            );
+        }
     }
 
     #[test]
