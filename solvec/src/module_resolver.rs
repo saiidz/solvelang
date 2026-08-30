@@ -251,6 +251,18 @@ impl Resolver {
                 "explicit module target is not a regular file",
             ));
         }
+        if let Some(start) = self.stack.iter().position(|item| item == &canonical) {
+            let mut cycle = self.stack[start..]
+                .iter()
+                .map(|item| self.identity(item))
+                .collect::<Vec<_>>();
+            cycle.push(self.identity(&canonical));
+            return Err(error_at(
+                source,
+                location,
+                format!("explicit module cycle detected: {}", cycle.join(" -> ")),
+            ));
+        }
         self.visit(&canonical, false)
     }
     fn identity(&self, path: &Path) -> String {
@@ -353,9 +365,28 @@ mod tests {
         );
         fixture.write("entry.solve", "import \"a.solve\" as a\n");
         fixture.write("a.solve", "import \"b.solve\" as b\n");
-        fixture.write("b.solve", "import \"a.solve\" as a\n");
+        fixture.write("b.solve", "\n\n  import \"a.solve\" as a\n");
         let error = resolve_explicit_modules(&fixture.entry()).expect_err("cycle fails");
+        assert_eq!(error.source, "b.solve");
+        assert_eq!(error.location.line, 3);
+        assert_eq!(error.location.column, 3);
         assert!(error.message.contains("a.solve -> b.solve -> a.solve"));
+        let repeated =
+            resolve_explicit_modules(&fixture.entry()).expect_err("cycle remains deterministic");
+        assert_eq!(error, repeated);
+
+        fixture.write("entry.solve", "import \"a.solve\" as a\n");
+        fixture.write("a.solve", "import \"b.solve\" as b\n");
+        fixture.write("b.solve", "import \"c.solve\" as c\n");
+        fixture.write("c.solve", "\nimport \"a.solve\" as a\n");
+        let error = resolve_explicit_modules(&fixture.entry()).expect_err("three-file cycle fails");
+        assert_eq!(error.source, "c.solve");
+        assert_eq!(error.location.line, 2);
+        assert!(
+            error
+                .message
+                .contains("a.solve -> b.solve -> c.solve -> a.solve")
+        );
     }
 
     #[test]
