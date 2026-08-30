@@ -35,8 +35,8 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 
 - [ ] Replace the placeholder `SPEC.md` with an implementation-backed, versioned language specification covering lexical grammar, values, precedence, control flow, functions, imports, builtins, diagnostics, hardened execution, JSON behavior, and compatibility rules.
 - [ ] Add fixture-based conformance coverage for every specified behavior. Do not specify unsupported strong typing, concurrency, remote packages, or hosted execution.
-- [ ] Publish a module/package ADR before implementation: identity, local paths, exports/imports/namespaces, manifests, deterministic resolution, cycles, duplicate/shadowing rules, legacy-include migration, provenance, diagnostics, hardened-mode and symlink confinement, and no-network future-registry boundary.
-- [ ] Implement the smallest complete local module system and conservative static module/import validation. Remote fetching remains out of scope.
+- [x] ADR 0001 defines module identity, local paths, explicit export/import namespaces, manifests, deterministic resolution, cycles, duplicate/shadowing rules, legacy-include migration, provenance, diagnostics, hardened-mode/symlink confinement, and the no-network registry boundary.
+- [ ] Implement the smallest complete local module system and conservative static module/import validation against [ADR 0001](adr/0001-local-modules-and-packages.md). Remote fetching remains out of scope.
 
 ### C. Shared Rust core and browser parity
 
