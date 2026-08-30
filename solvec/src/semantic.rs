@@ -52,6 +52,7 @@ struct Checker {
     functions: HashMap<String, FunctionSymbol>,
     agents: HashMap<String, ()>,
     imported_bindings: HashSet<String>,
+    named_import_bindings: HashSet<String>,
     namespace_imports: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
@@ -126,6 +127,7 @@ impl Checker {
             functions,
             agents,
             imported_bindings: HashSet::new(),
+            named_import_bindings: HashSet::new(),
             namespace_imports: HashSet::new(),
             diagnostics,
         }
@@ -280,6 +282,7 @@ impl Checker {
                     for binding in bindings {
                         values.insert(binding.local.clone(), Type::Unknown);
                         self.imported_bindings.insert(binding.local.clone());
+                        self.named_import_bindings.insert(binding.local.clone());
                     }
                 }
                 Stmt::Export {
@@ -469,7 +472,7 @@ impl Checker {
                             "Pass exactly the parameters declared by the function.",
                         );
                     }
-                } else if !is_builtin(name) && !self.imported_bindings.contains(name) {
+                } else if !is_builtin(name) && !self.named_import_bindings.contains(name) {
                     self.error(
                         expr,
                         format!("call to unknown function '{}'", name),
@@ -633,6 +636,14 @@ mod tests {
     #[test]
     fn accepts_named_import_calls_and_requires_namespace_imports() {
         assert!(check(&parse("import { add } from \"math.solve\"\nadd(1, 2)\n")).is_ok());
+
+        let diagnostics = check(&parse("import \"math.solve\" as math\nmath()\n"))
+            .expect_err("namespace aliases are not direct call targets");
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("call to unknown function 'math'")
+        );
 
         let diagnostics =
             check(&parse("missing.add(1, 2)\n")).expect_err("missing namespace fails");
