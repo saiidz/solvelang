@@ -940,6 +940,7 @@ impl Parser {
                     | Token::And
                     | Token::Or
                     | Token::Newline
+                    | Token::RightBrace
                     | Token::Eof
             )
         )
@@ -1189,7 +1190,7 @@ import "shared.solve"
     #[test]
     fn keeps_module_words_contextual_outside_complete_module_forms() {
         let ast = parse(
-            "let export = 1\nlet import = 2\nlet as = 3\nfn export() { return import }\nfn from() { return export + import + as }\n",
+            "let export = 1\nlet import = 2\nlet as = 3\nfn export() { return import }\nfn from() { return export + import + as }\nif true { export }\n",
         )
         .expect("contextual module words remain identifiers");
 
@@ -1198,6 +1199,7 @@ import "shared.solve"
         assert!(matches!(&ast[2], Stmt::Let { name, .. } if name == "as"));
         assert!(matches!(&ast[3], Stmt::Function { name, .. } if name == "export"));
         assert!(matches!(&ast[4], Stmt::Function { name, .. } if name == "from"));
+        assert!(matches!(&ast[5], Stmt::If { .. }));
     }
 
     #[test]
