@@ -3,7 +3,7 @@
 //! Lint intentionally reports only structural facts. It never evaluates values,
 //! resolves capabilities, or changes the execution policy.
 
-use crate::ast::{Expr, ExprKind, SourceLocation, Stmt};
+use crate::ast::{ExportedDeclaration, Expr, ExprKind, SourceLocation, Stmt};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Warning {
@@ -81,7 +81,15 @@ impl Linter {
                 self.lint_expr(iterable);
                 self.lint_block(body);
             }
-            Stmt::Function { body, .. } => self.lint_block(body),
+            Stmt::Function { body, .. }
+            | Stmt::Export {
+                declaration: ExportedDeclaration::Function { body, .. },
+                ..
+            } => self.lint_block(body),
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { value, .. },
+                ..
+            } => self.lint_expr(value),
             Stmt::Ask {
                 message, location, ..
             } => {
@@ -92,7 +100,12 @@ impl Linter {
                 ));
                 self.lint_expr(message);
             }
-            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Agent { .. } => {}
+            Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::Agent { .. }
+            | Stmt::LegacyInclude { .. }
+            | Stmt::ModuleImport { .. }
+            | Stmt::NamedModuleImport { .. } => {}
         }
     }
 
@@ -127,6 +140,11 @@ impl Linter {
                     self.lint_expr(arg);
                 }
             }
+            ExprKind::ModuleCall { args, .. } => {
+                for arg in args {
+                    self.lint_expr(arg);
+                }
+            }
             ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {
             }
         }
@@ -151,7 +169,11 @@ fn statement_terminates(statement: &Stmt) -> bool {
 
 fn statement_location(statement: &Stmt) -> SourceLocation {
     match statement {
-        Stmt::Let { location, .. }
+        Stmt::LegacyInclude { location, .. }
+        | Stmt::ModuleImport { location, .. }
+        | Stmt::NamedModuleImport { location, .. }
+        | Stmt::Export { location, .. }
+        | Stmt::Let { location, .. }
         | Stmt::Assign { location, .. }
         | Stmt::Print { location, .. }
         | Stmt::Return { location, .. }
@@ -228,5 +250,18 @@ mod tests {
         let warnings = lint(&parse("if input.done { return 1 }\nprint(\"reachable\")\n"));
 
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn lints_capability_calls_inside_exported_declarations() {
+        let warnings = lint(&parse(
+            "export let response = http_get(\"https://example.invalid\")\nexport fn save() { return write_file(\"result.txt\", \"value\") }\n",
+        ));
+
+        assert_eq!(warnings.len(), 2);
+        assert_eq!(warnings[0].line, 1);
+        assert!(warnings[0].message.contains("network-capable"));
+        assert_eq!(warnings[1].line, 2);
+        assert!(warnings[1].message.contains("filesystem-capable"));
     }
 }

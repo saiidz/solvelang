@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
-use crate::ast::{BinaryOp, Expr, ExprKind, SourceLocation, Stmt, UnaryOp};
+use crate::ast::{
+    BinaryOp, ExportedDeclaration, Expr, ExprKind, ImportBinding, SourceLocation, Stmt, UnaryOp,
+};
 use crate::diagnostics::Diagnostic;
 use crate::lexer::{LocatedToken, Token};
 
@@ -9,6 +11,11 @@ pub struct Parser {
     current: usize,
     errors: Vec<Diagnostic>,
     loop_depth: usize,
+    exported_names: HashSet<String>,
+    local_bindings: BTreeMap<String, SourceLocation>,
+    top_level_bindings: BTreeMap<String, SourceLocation>,
+    module_bindings: BTreeMap<String, SourceLocation>,
+    parameter_bindings: BTreeMap<String, SourceLocation>,
 }
 
 impl Parser {
@@ -18,6 +25,11 @@ impl Parser {
             current: 0,
             errors: Vec::new(),
             loop_depth: 0,
+            exported_names: HashSet::new(),
+            local_bindings: BTreeMap::new(),
+            top_level_bindings: BTreeMap::new(),
+            module_bindings: BTreeMap::new(),
+            parameter_bindings: BTreeMap::new(),
         }
     }
 
@@ -31,7 +43,7 @@ impl Parser {
             }
 
             let errors_before = self.errors.len();
-            if let Some(statement) = self.statement() {
+            if let Some(statement) = self.statement(true) {
                 if self.errors.len() == errors_before {
                     statements.push(statement);
                 } else {
@@ -49,22 +61,282 @@ impl Parser {
         }
     }
 
-    fn statement(&mut self) -> Option<Stmt> {
+    fn statement(&mut self, top_level: bool) -> Option<Stmt> {
+        if self.starts_export_prefix() {
+            if top_level {
+                return self.export_statement();
+            }
+            self.error_here(
+                "Explicit exports are only allowed at top level.",
+                "Move the export declaration outside the enclosing block.",
+            );
+            return None;
+        }
+
+        if self.starts_explicit_import() {
+            if top_level {
+                return self.module_import_statement();
+            }
+            self.error_here(
+                "Explicit module imports are only allowed at top level.",
+                "Move the import declaration outside the enclosing block.",
+            );
+            return None;
+        }
+
+        if top_level && self.starts_legacy_include() {
+            return self.legacy_include_statement();
+        }
+
         match self.peek() {
-            Token::Let => self.let_statement(),
+            Token::Let => {
+                let statement = self.let_statement()?;
+                if let Stmt::Let { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                    if top_level {
+                        self.register_top_level_binding(name, *location);
+                    }
+                }
+                Some(statement)
+            }
             Token::Print => self.print_statement(),
             Token::Return => self.return_statement(),
-            Token::Fn => self.function_statement(),
+            Token::Fn => {
+                let statement = self.function_statement()?;
+                if let Stmt::Function { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                    if top_level {
+                        self.register_top_level_binding(name, *location);
+                    }
+                }
+                if let Stmt::Function {
+                    params, location, ..
+                } = &statement
+                {
+                    self.register_function_parameters(params, *location);
+                }
+                Some(statement)
+            }
             Token::If => self.if_statement(),
             Token::While => self.while_statement(),
             Token::For => self.for_statement(),
             Token::Break => self.loop_control_statement(true),
             Token::Continue => self.loop_control_statement(false),
-            Token::Agent => self.agent_statement(),
+            Token::Agent => {
+                let statement = self.agent_statement()?;
+                if let Stmt::Agent { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                    if top_level {
+                        self.register_top_level_binding(name, *location);
+                    }
+                }
+                Some(statement)
+            }
             Token::Ask => self.ask_statement(),
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
             _ => Some(Stmt::Expr(self.expression())),
         }
+    }
+
+    fn export_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let declaration = match self.peek() {
+            Token::Let => match self.let_statement()? {
+                Stmt::Let {
+                    name,
+                    value,
+                    location,
+                } => ExportedDeclaration::Let {
+                    name,
+                    value,
+                    location,
+                },
+                _ => unreachable!(),
+            },
+            Token::Fn => match self.function_statement()? {
+                Stmt::Function {
+                    name,
+                    params,
+                    body,
+                    location,
+                } => ExportedDeclaration::Function {
+                    name,
+                    params,
+                    body,
+                    location,
+                },
+                _ => unreachable!(),
+            },
+            _ => {
+                self.error_at(
+                    location,
+                    "export may only prefix a top-level let or fn declaration.",
+                    "Export a top-level variable with 'export let' or a function with 'export fn'.",
+                );
+                return None;
+            }
+        };
+
+        let name = match &declaration {
+            ExportedDeclaration::Let { name, .. } | ExportedDeclaration::Function { name, .. } => {
+                name
+            }
+        };
+        if !self.exported_names.insert(name.clone()) {
+            self.error_at(
+                location,
+                &format!("duplicate exported declaration '{}'", name),
+                "Export each module name only once.",
+            );
+            return None;
+        }
+        if !self.register_export_binding(name, location) {
+            return None;
+        }
+        if let ExportedDeclaration::Function { params, .. } = &declaration {
+            self.register_function_parameters(params, location);
+        }
+
+        Some(Stmt::Export {
+            declaration,
+            location,
+        })
+    }
+
+    fn legacy_include_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => unreachable!(),
+        };
+        if !self.consume_import_terminator() {
+            return None;
+        }
+        Some(Stmt::LegacyInclude { path, location })
+    }
+
+    fn module_import_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        if self.matches(&Token::LeftBrace) {
+            return self.named_module_import(location);
+        }
+
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => unreachable!(),
+        };
+        if !self.consume_contextual(
+            "as",
+            "Invalid namespace import: expected 'as'.",
+            "Use syntax like: import \"math.solve\" as math",
+        ) {
+            return None;
+        }
+        let (namespace, namespace_location) =
+            self.consume_identifier_with_location("Expected namespace name after 'as'.")?;
+        if !self.consume_import_terminator() {
+            return None;
+        }
+        if !self.register_module_binding(&namespace, namespace_location) {
+            return None;
+        }
+        Some(Stmt::ModuleImport {
+            path,
+            namespace,
+            namespace_location,
+            location,
+        })
+    }
+
+    fn named_module_import(&mut self, location: SourceLocation) -> Option<Stmt> {
+        let mut bindings = Vec::new();
+        let mut exported_names = HashSet::new();
+        let mut local_names = HashSet::new();
+
+        if self.check(&Token::RightBrace) {
+            self.error_here(
+                "Invalid named import: expected at least one binding.",
+                "Import one or more names, such as: import { add } from \"math.solve\"",
+            );
+            return None;
+        }
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            let (exported, binding_location) =
+                self.consume_identifier_with_location("Expected exported name in named import.")?;
+            let (local, local_location) = if self.matches_contextual("as") {
+                self.consume_identifier_with_location("Expected local alias after 'as'.")?
+            } else {
+                (exported.clone(), binding_location)
+            };
+
+            if !exported_names.insert(exported.clone()) {
+                self.error_at(
+                    binding_location,
+                    &format!("duplicate imported export '{}'", exported),
+                    "Import each exported name only once per import declaration.",
+                );
+                return None;
+            }
+            if !local_names.insert(local.clone()) {
+                self.error_at(
+                    local_location,
+                    &format!("duplicate local import binding '{}'", local),
+                    "Use a distinct local name for each imported binding.",
+                );
+                return None;
+            }
+            bindings.push(ImportBinding {
+                exported,
+                exported_location: binding_location,
+                local,
+                local_location,
+            });
+
+            if !self.matches(&Token::Comma) {
+                break;
+            }
+        }
+
+        if !self.consume(
+            &Token::RightBrace,
+            "Invalid named import: expected '}'.",
+            "Close the imported binding list with '}'.",
+        ) {
+            return None;
+        }
+        if !self.consume_contextual(
+            "from",
+            "Invalid named import: expected 'from'.",
+            "Provide the source path after the binding list.",
+        ) {
+            return None;
+        }
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => {
+                self.error_previous(
+                    "Invalid named import: expected quoted source path after 'from'.",
+                    "Use a quoted local .solve path, such as: from \"math.solve\"",
+                );
+                return None;
+            }
+        };
+        if !self.consume_import_terminator() {
+            return None;
+        }
+
+        for binding in &bindings {
+            if !self.register_module_binding(&binding.local, binding.local_location) {
+                return None;
+            }
+        }
+
+        Some(Stmt::NamedModuleImport {
+            path,
+            bindings,
+            location,
+        })
     }
 
     fn let_statement(&mut self) -> Option<Stmt> {
@@ -183,6 +455,7 @@ impl Parser {
     fn for_statement(&mut self) -> Option<Stmt> {
         let location = self.advance_location();
         let name = self.consume_identifier("Expected loop variable name after 'for'.")?;
+        self.register_local_binding(&name, location);
         if !self.consume(
             &Token::In,
             "Invalid for loop: expected 'in' after loop variable.",
@@ -318,7 +591,7 @@ impl Parser {
                 break;
             }
             let errors_before = self.errors.len();
-            if let Some(statement) = self.statement() {
+            if let Some(statement) = self.statement(false) {
                 if self.errors.len() == errors_before {
                     statements.push(statement);
                 } else {
@@ -499,6 +772,43 @@ impl Parser {
                 if let Some(name) = name {
                     expr = Expr::new(ExprKind::Property(Box::new(expr), name), location);
                 }
+            } else if self.matches(&Token::LeftParen) {
+                let location = expr.location;
+                let (namespace, member) = match expr.kind {
+                    ExprKind::Property(target, member) => match target.kind {
+                        ExprKind::Variable(namespace) => (namespace, member),
+                        _ => {
+                            self.error_at(
+                                location,
+                                "Only namespace member calls are supported.",
+                                "Call a declared function directly or use namespace.member(...).",
+                            );
+                            (String::new(), String::new())
+                        }
+                    },
+                    _ => {
+                        self.error_at(
+                            location,
+                            "Only namespace member calls are supported.",
+                            "Call a declared function directly or use namespace.member(...).",
+                        );
+                        (String::new(), String::new())
+                    }
+                };
+                let args = self.argument_list();
+                self.consume(
+                    &Token::RightParen,
+                    "Invalid namespace member call: expected ')'.",
+                    "Close the namespace member call with ')'.",
+                );
+                expr = Expr::new(
+                    ExprKind::ModuleCall {
+                        namespace,
+                        member,
+                        args,
+                    },
+                    location,
+                );
             } else {
                 break;
             }
@@ -665,8 +975,17 @@ impl Parser {
         }
     }
     fn consume_identifier(&mut self, message: &str) -> Option<String> {
-        match self.advance() {
-            Token::Identifier(name) => Some(name),
+        self.consume_identifier_with_location(message)
+            .map(|(name, _)| name)
+    }
+    fn consume_identifier_with_location(
+        &mut self,
+        message: &str,
+    ) -> Option<(String, SourceLocation)> {
+        let token = self.advance_located();
+        let location = SourceLocation::new(token.line, token.column);
+        match token.token {
+            Token::Identifier(name) => Some((name, location)),
             _ => {
                 self.error_previous(message, "Use a valid identifier name here.");
                 None
@@ -685,6 +1004,198 @@ impl Parser {
         self.current + 1 < self.tokens.len()
             && std::mem::discriminant(&self.tokens[self.current + 1].token)
                 == std::mem::discriminant(expected)
+    }
+    fn check_identifier_at(&self, offset: usize, expected: &str) -> bool {
+        matches!(
+            self.tokens.get(self.current + offset).map(|token| &token.token),
+            Some(Token::Identifier(name)) if name == expected
+        )
+    }
+    fn starts_export_prefix(&self) -> bool {
+        if !self.check_identifier_at(0, "export") {
+            return false;
+        }
+
+        !matches!(
+            self.tokens.get(self.current + 1).map(|token| &token.token),
+            Some(
+                Token::Equal
+                    | Token::LeftParen
+                    | Token::Dot
+                    | Token::LeftBracket
+                    | Token::Plus
+                    | Token::Minus
+                    | Token::Star
+                    | Token::Slash
+                    | Token::Join
+                    | Token::EqualEqual
+                    | Token::BangEqual
+                    | Token::Greater
+                    | Token::GreaterEqual
+                    | Token::Less
+                    | Token::LessEqual
+                    | Token::And
+                    | Token::Or
+                    | Token::Newline
+                    | Token::RightBrace
+                    | Token::Eof
+            )
+        )
+    }
+    fn register_local_binding(&mut self, name: &str, location: SourceLocation) {
+        if self.module_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a local declaration",
+                    name
+                ),
+                "Use a distinct local declaration name.",
+            );
+            return;
+        }
+        self.local_bindings
+            .entry(name.to_string())
+            .or_insert(location);
+    }
+    fn register_top_level_binding(&mut self, name: &str, location: SourceLocation) {
+        if self.exported_names.contains(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "local declaration '{}' conflicts with an exported binding",
+                    name
+                ),
+                "Use a distinct top-level declaration name.",
+            );
+            return;
+        }
+        self.top_level_bindings
+            .entry(name.to_string())
+            .or_insert(location);
+    }
+    fn register_export_binding(&mut self, name: &str, location: SourceLocation) -> bool {
+        if self.module_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!("exported binding '{}' conflicts with a module import", name),
+                "Use a distinct exported declaration name.",
+            );
+            return false;
+        }
+        if self.top_level_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "exported binding '{}' conflicts with a local declaration",
+                    name
+                ),
+                "Use a distinct exported declaration name.",
+            );
+            return false;
+        }
+        self.top_level_bindings.insert(name.to_string(), location);
+        true
+    }
+    fn register_module_binding(&mut self, name: &str, location: SourceLocation) -> bool {
+        if name == "input" || is_builtin_name(name) {
+            self.error_at(
+                location,
+                &format!("module binding '{}' is reserved", name),
+                "Use a different import or export binding name.",
+            );
+            return false;
+        }
+        if self.module_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!("duplicate module binding '{}'", name),
+                "Use a distinct local binding for each import or export.",
+            );
+            return false;
+        }
+        if self.top_level_bindings.contains_key(name) || self.local_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a local declaration",
+                    name
+                ),
+                "Use a distinct module binding name.",
+            );
+            return false;
+        }
+        if self.parameter_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a function parameter",
+                    name
+                ),
+                "Use a distinct module binding name.",
+            );
+            return false;
+        }
+        self.module_bindings.insert(name.to_string(), location);
+        true
+    }
+    fn register_function_parameters(&mut self, params: &[String], location: SourceLocation) {
+        for param in params {
+            if self.module_bindings.contains_key(param) {
+                self.error_at(
+                    location,
+                    &format!(
+                        "function parameter '{}' conflicts with a module binding",
+                        param
+                    ),
+                    "Use a distinct parameter name.",
+                );
+            }
+            self.parameter_bindings
+                .entry(param.clone())
+                .or_insert(location);
+        }
+    }
+    fn starts_legacy_include(&self) -> bool {
+        self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
+    }
+    fn starts_explicit_import(&self) -> bool {
+        self.check_identifier_at(0, "import")
+            && (self.check_at(1, &Token::LeftBrace)
+                || (self.check_at(1, &Token::Text(String::new()))
+                    && self.check_identifier_at(2, "as")))
+    }
+    fn check_at(&self, offset: usize, expected: &Token) -> bool {
+        self.tokens.get(self.current + offset).is_some_and(|token| {
+            std::mem::discriminant(&token.token) == std::mem::discriminant(expected)
+        })
+    }
+    fn matches_contextual(&mut self, expected: &str) -> bool {
+        if self.check_identifier_at(0, expected) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+    fn consume_contextual(&mut self, expected: &str, message: &str, hint: &str) -> bool {
+        if self.matches_contextual(expected) {
+            true
+        } else {
+            self.error_here(message, hint);
+            false
+        }
+    }
+    fn consume_import_terminator(&mut self) -> bool {
+        if self.check(&Token::Newline) || self.check(&Token::Eof) {
+            true
+        } else {
+            self.error_here(
+                "Invalid import directive: unexpected token after source path.",
+                "Finish the import at the end of the line.",
+            );
+            false
+        }
     }
     fn advance(&mut self) -> Token {
         self.advance_located().token
@@ -727,10 +1238,30 @@ impl Parser {
     }
 }
 
+fn is_builtin_name(name: &str) -> bool {
+    matches!(
+        name,
+        "length"
+            | "is_empty"
+            | "contains"
+            | "get"
+            | "keys"
+            | "values"
+            | "entries"
+            | "json_parse"
+            | "json_stringify"
+            | "http_get"
+            | "http_post"
+            | "read_file"
+            | "write_file"
+            | "env"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::Parser;
-    use crate::ast::Stmt;
+    use crate::ast::{ExportedDeclaration, Expr, ExprKind, Stmt};
     use crate::lexer::lex;
 
     fn parse(source: &str) -> Result<Vec<Stmt>, Vec<crate::diagnostics::Diagnostic>> {
@@ -830,6 +1361,236 @@ print(user.name)
         }));
         assert!(errors.iter().any(|error| {
             error.line == 2 && error.column == 10 && error.message.contains("unknown character '@'")
+        }));
+    }
+
+    #[test]
+    fn parses_explicit_module_exports_and_imports_into_distinct_ast_variants() {
+        let ast = parse(
+            r#"export let api_version = 1
+export fn add(left, right) { return left + right }
+import "math.solve" as math
+import { api_version as version, add as remote_add } from "math.solve"
+import "shared.solve"
+"#,
+        )
+        .expect("explicit module syntax parses");
+
+        assert!(matches!(
+            &ast[0],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, .. },
+                location,
+            } if name == "api_version" && location.line == 1
+        ));
+        assert!(matches!(
+            &ast[1],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, params, .. },
+                ..
+            } if name == "add" && params == &["left", "right"]
+        ));
+        assert!(matches!(
+            &ast[2],
+            Stmt::ModuleImport { path, namespace, namespace_location, location }
+                if path == "math.solve" && namespace == "math" && location.line == 3 && namespace_location.column == 24
+        ));
+        assert!(matches!(
+            &ast[4],
+            Stmt::LegacyInclude { path, location }
+                if path == "shared.solve" && location.line == 5
+        ));
+
+        let Stmt::NamedModuleImport {
+            path,
+            bindings,
+            location,
+        } = &ast[3]
+        else {
+            panic!("expected named module import");
+        };
+        assert_eq!(path, "math.solve");
+        assert_eq!(location.line, 4);
+        assert_eq!(bindings.len(), 2);
+        assert_eq!(bindings[0].exported, "api_version");
+        assert_eq!(bindings[0].local, "version");
+        assert_eq!(bindings[1].exported, "add");
+        assert_eq!(bindings[1].local, "remote_add");
+    }
+
+    #[test]
+    fn parses_callable_namespace_members_without_module_evaluation() {
+        let ast = parse("import \"math.solve\" as math\nprint(math.add(1, 2))\n")
+            .expect("namespace member call parses");
+
+        assert!(matches!(
+            &ast[1],
+            Stmt::Print {
+                value: Expr { kind: ExprKind::ModuleCall { namespace, member, args }, .. },
+                ..
+            } if namespace == "math" && member == "add" && args.len() == 2
+        ));
+    }
+
+    #[test]
+    fn keeps_module_words_contextual_outside_complete_module_forms() {
+        let ast = parse(
+            "let export = 1\nlet import = 2\nlet as = 3\nfn export() { return import }\nfn from() { return export + import + as }\nif true { export }\n",
+        )
+        .expect("contextual module words remain identifiers");
+
+        assert!(matches!(&ast[0], Stmt::Let { name, .. } if name == "export"));
+        assert!(matches!(&ast[1], Stmt::Let { name, .. } if name == "import"));
+        assert!(matches!(&ast[2], Stmt::Let { name, .. } if name == "as"));
+        assert!(matches!(&ast[3], Stmt::Function { name, .. } if name == "export"));
+        assert!(matches!(&ast[4], Stmt::Function { name, .. } if name == "from"));
+        assert!(matches!(&ast[5], Stmt::If { .. }));
+    }
+
+    #[test]
+    fn rejects_invalid_export_prefixes_without_reserving_export_as_an_identifier() {
+        for source in [
+            "export print(\"x\")\n",
+            "export if true { print(\"x\") }\n",
+            "export while true { break }\n",
+            "export agent helper { instruction \"x\" }\n",
+            "export export\n",
+            "if true { export print(\"x\") }\n",
+        ] {
+            let errors = parse(source).expect_err("invalid export prefix must fail");
+            assert!(
+                errors.iter().any(|error| {
+                    error.column == 1 || (source.starts_with("if") && error.column == 11)
+                }),
+                "diagnostics must point at export prefix for {source:?}: {errors:?}"
+            );
+            assert!(
+                errors.iter().any(|error| {
+                    error.message.contains("export")
+                        && (error
+                            .message
+                            .contains("may only prefix a top-level let or fn")
+                            || error.message.contains("only allowed at top level"))
+                }),
+                "unexpected diagnostics for {source:?}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_explicit_module_binding_collisions_deterministically() {
+        for source in [
+            "import { first as value } from \"a.solve\"\nimport { second as value } from \"b.solve\"\n",
+            "let value = 1\nimport \"a.solve\" as value\n",
+            "import \"a.solve\" as value\nlet value = 1\n",
+            "import \"a.solve\" as input\n",
+            "import \"a.solve\" as length\n",
+        ] {
+            let errors = parse(source).expect_err("module binding collision must fail");
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.message.contains("module binding")),
+                "unexpected diagnostics for {source:?}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_module_bindings_that_collide_with_function_parameters() {
+        for source in [
+            "import \"a.solve\" as item\nfn consume(item) { return item }\n",
+            "fn consume(item) { return item }\nimport { value as item } from \"a.solve\"\n",
+        ] {
+            let errors = parse(source).expect_err("parameter collision must fail");
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.message.contains("parameter"))
+            );
+        }
+        assert!(parse("fn consume(item) { return item }\nimport \"a.solve\" as module\n").is_ok());
+    }
+
+    #[test]
+    fn rejects_module_bindings_that_collide_with_scoped_locals_and_loop_variables() {
+        for source in [
+            "import { remote as value } from \"a.solve\"\nfn f() { let value = 1 }\n",
+            "fn f() { let value = 1 }\nimport { remote as value } from \"a.solve\"\n",
+            "import \"a.solve\" as item\nfor item in [1] { print(item) }\n",
+            "for item in [1] { print(item) }\nimport \"a.solve\" as item\n",
+        ] {
+            let errors = parse(source).expect_err("scoped collision must fail");
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.message.contains("local declaration")),
+                "unexpected diagnostics for {source:?}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn exports_retain_ordinary_declaration_parameter_rules() {
+        assert!(parse("export fn identity(identity) { return identity }\n").is_ok());
+    }
+
+    #[test]
+    fn rejects_malformed_or_nested_explicit_module_syntax_with_locations() {
+        let errors = parse("import { } from \"math.solve\"\nimport \"math.solve\" as\n")
+            .expect_err("malformed module syntax must fail");
+
+        assert!(errors.iter().any(|error| {
+            error.line == 1
+                && error.column == 10
+                && error.message.contains("expected at least one binding")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.line == 2 && error.message.contains("Expected namespace name after 'as'")
+        }));
+        let nested_import = parse("if true { import \"math.solve\" as math }\n")
+            .expect_err("nested explicit imports must fail");
+        assert!(
+            nested_import.iter().any(|error| {
+                error.line == 1
+                    && error.column == 11
+                    && error.message.contains("only allowed at top level")
+            }),
+            "unexpected diagnostics: {nested_import:?}"
+        );
+
+        let nested_export =
+            parse("if true { export let value = 1 }\n").expect_err("nested exports must fail");
+        assert!(nested_export.iter().any(|error| {
+            error.line == 1
+                && error.column == 11
+                && error.message.contains("only allowed at top level")
+        }));
+    }
+
+    #[test]
+    fn rejects_duplicate_import_bindings_and_exports() {
+        let errors = parse(
+            "import { add, add as total } from \"math.solve\"\nimport { first as value, second as value } from \"math.solve\"\nexport let result = 1\nexport fn result() { return 2 }\n",
+        )
+        .expect_err("duplicate module names must fail");
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("duplicate imported export 'add'"))
+        );
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("duplicate local import binding 'value'")
+                && error.line == 2
+                && error.column == 36
+        }));
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("duplicate exported declaration 'result'")
         }));
     }
 }

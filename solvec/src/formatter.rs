@@ -38,10 +38,14 @@ pub fn format_source(source: &str) -> String {
             }
             Piece::Symbol(symbol) => match symbol.as_str() {
                 "{" => {
-                    let inline_object = is_inline_object(&line);
+                    let named_import = line.trim() == "import";
+                    let inline_object = is_inline_object(&line) || named_import;
                     brace_stack.push(inline_object);
                     if inline_object {
                         trim_trailing_space(&mut line);
+                        if named_import {
+                            line.push(' ');
+                        }
                         line.push('{');
                     } else {
                         if !line.trim().is_empty() && !line.ends_with(' ') {
@@ -211,6 +215,7 @@ fn is_inline_object(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::format_source;
+    use crate::{lexer, parser::Parser};
 
     #[test]
     fn formats_nested_language_and_is_idempotent() {
@@ -243,5 +248,18 @@ mod tests {
             "agent Helper {\n    instruction \"keep \\\"quotes\\\" and \\\\ slashes\"\n    tool lookup\n}\nlet records = [{owner: \"A\", items: [1, 2]}]\nfor record in records {\n    print(record.owner)\n}\n"
         );
         assert_eq!(format_source(&formatted), formatted);
+    }
+
+    #[test]
+    fn keeps_named_module_imports_on_a_parseable_line() {
+        let formatted =
+            format_source("import { add, api_version as version } from \"math.solve\"\n");
+
+        assert_eq!(
+            formatted,
+            "import {add, api_version as version} from \"math.solve\"\n"
+        );
+        assert_eq!(format_source(&formatted), formatted);
+        assert!(Parser::new(lexer::lex(&formatted)).parse().is_ok());
     }
 }

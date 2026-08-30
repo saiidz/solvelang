@@ -4,9 +4,9 @@
 //! can depend on runtime input, calls, or branches stay `Unknown` instead of
 //! producing speculative diagnostics.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::ast::{BinaryOp, Expr, ExprKind, Stmt};
+use crate::ast::{BinaryOp, ExportedDeclaration, Expr, ExprKind, Stmt};
 use crate::diagnostics::Diagnostic;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +51,9 @@ pub fn check(statements: &[Stmt]) -> Result<(), Vec<Diagnostic>> {
 struct Checker {
     functions: HashMap<String, FunctionSymbol>,
     agents: HashMap<String, ()>,
+    imported_bindings: HashSet<String>,
+    named_import_bindings: HashSet<String>,
+    namespace_imports: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -58,14 +61,52 @@ impl Checker {
     fn new(statements: &[Stmt]) -> Self {
         let mut functions = HashMap::new();
         let mut agents = HashMap::new();
+        let mut imported_bindings = HashSet::new();
+        let mut named_import_bindings = HashSet::new();
+        let mut namespace_imports = HashSet::new();
         let mut diagnostics = Vec::new();
 
         for statement in statements {
             match statement {
+                Stmt::ModuleImport { namespace, .. } => {
+                    imported_bindings.insert(namespace.clone());
+                    namespace_imports.insert(namespace.clone());
+                }
+                Stmt::NamedModuleImport { bindings, .. } => {
+                    for binding in bindings {
+                        imported_bindings.insert(binding.local.clone());
+                        named_import_bindings.insert(binding.local.clone());
+                    }
+                }
                 Stmt::Function {
                     name,
                     params,
                     location,
+                    ..
+                } if functions
+                    .insert(
+                        name.clone(),
+                        FunctionSymbol {
+                            arity: params.len(),
+                        },
+                    )
+                    .is_some() =>
+                {
+                    diagnostics.push(Diagnostic::new(
+                        location.line,
+                        location.column,
+                        format!("duplicate function declaration '{}'", name),
+                        "Use a distinct function name; functions cannot be overloaded.",
+                    ));
+                }
+                Stmt::Export {
+                    declaration:
+                        ExportedDeclaration::Function {
+                            name,
+                            params,
+                            location,
+                            ..
+                        },
                     ..
                 } if functions
                     .insert(
@@ -98,6 +139,9 @@ impl Checker {
         Self {
             functions,
             agents,
+            imported_bindings,
+            named_import_bindings,
+            namespace_imports,
             diagnostics,
         }
     }
@@ -128,6 +172,14 @@ impl Checker {
                     value,
                     location,
                 } => {
+                    if self.imported_bindings.contains(name) {
+                        self.diagnostics.push(Diagnostic::new(
+                            location.line,
+                            location.column,
+                            format!("cannot assign to imported binding '{}'", name),
+                            "Imported values and namespaces are read-only.",
+                        ));
+                    }
                     if !values.contains_key(name) && name != "input" {
                         self.diagnostics.push(Diagnostic::new(
                             location.line,
@@ -137,7 +189,7 @@ impl Checker {
                         ));
                     }
                     let value_type = self.check_expr(value, values, in_function);
-                    if values.contains_key(name) {
+                    if values.contains_key(name) && !self.imported_bindings.contains(name) {
                         values.insert(name.clone(), value_type);
                     }
                 }
@@ -207,8 +259,17 @@ impl Checker {
                         values.entry(name.clone()).or_insert(Type::Unknown);
                     }
                 }
-                Stmt::Function { params, body, .. } => {
+                Stmt::Function { params, body, .. }
+                | Stmt::Export {
+                    declaration: ExportedDeclaration::Function { params, body, .. },
+                    ..
+                } => {
                     let mut function_values = values.clone();
+                    for binding in &self.imported_bindings {
+                        function_values
+                            .entry(binding.clone())
+                            .or_insert(Type::Unknown);
+                    }
                     for param in params {
                         function_values.insert(param.clone(), Type::Unknown);
                     }
@@ -230,6 +291,26 @@ impl Checker {
                         ));
                     }
                 }
+                Stmt::ModuleImport { namespace, .. } => {
+                    values.insert(namespace.clone(), Type::Unknown);
+                    self.imported_bindings.insert(namespace.clone());
+                    self.namespace_imports.insert(namespace.clone());
+                }
+                Stmt::NamedModuleImport { bindings, .. } => {
+                    for binding in bindings {
+                        values.insert(binding.local.clone(), Type::Unknown);
+                        self.imported_bindings.insert(binding.local.clone());
+                        self.named_import_bindings.insert(binding.local.clone());
+                    }
+                }
+                Stmt::Export {
+                    declaration: ExportedDeclaration::Let { name, value, .. },
+                    ..
+                } => {
+                    let value_type = self.check_expr(value, values, in_function);
+                    values.insert(name.clone(), value_type);
+                }
+                Stmt::LegacyInclude { .. } => {}
             }
         }
     }
@@ -409,11 +490,26 @@ impl Checker {
                             "Pass exactly the parameters declared by the function.",
                         );
                     }
-                } else if !is_builtin(name) {
+                } else if !is_builtin(name) && !self.named_import_bindings.contains(name) {
                     self.error(
                         expr,
                         format!("call to unknown function '{}'", name),
                         "Declare the function before calling it, or use a supported builtin.",
+                    );
+                }
+                Type::Unknown
+            }
+            ExprKind::ModuleCall {
+                namespace, args, ..
+            } => {
+                for argument in args {
+                    self.check_expr(argument, values, in_function);
+                }
+                if !self.namespace_imports.contains(namespace) {
+                    self.error(
+                        expr,
+                        format!("unknown module namespace '{}'", namespace),
+                        "Import the namespace before calling one of its members.",
                     );
                 }
                 Type::Unknown
@@ -520,5 +616,76 @@ mod tests {
         assert!(check(&parse("print(keys({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(values({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(entries({ beta: 2, alpha: 1 }))\n")).is_ok());
+    }
+
+    #[test]
+    fn checks_explicit_module_bindings_and_exported_declarations() {
+        assert!(check(&parse(
+            "import { value } from \"a.solve\"\nlet copy = value\nexport let answer = 1\nlet repeated = answer\nexport fn identity(item) { return item }\nprint(identity(copy))\n",
+        ))
+        .is_ok());
+
+        let diagnostics = check(&parse(
+            "export let value = 1 + true\nexport fn invalid() { return \"x\" + 1 }\n",
+        ))
+        .expect_err("exported declarations must receive ordinary semantic checks");
+        assert_eq!(diagnostics.len(), 2);
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.message.contains("requires number operands"))
+        );
+    }
+
+    #[test]
+    fn rejects_assignments_to_read_only_imported_bindings() {
+        let diagnostics = check(&parse(
+            "import \"a.solve\" as module\nmodule = 1\nimport { value } from \"a.solve\"\nvalue = 2\n",
+        ))
+        .expect_err("imports are read-only bindings");
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics.iter().all(|diagnostic| {
+            diagnostic
+                .message
+                .contains("cannot assign to imported binding")
+        }));
+    }
+
+    #[test]
+    fn accepts_named_import_calls_and_requires_namespace_imports() {
+        assert!(check(&parse("import { add } from \"math.solve\"\nadd(1, 2)\n")).is_ok());
+
+        let diagnostics = check(&parse("import \"math.solve\" as math\nmath()\n"))
+            .expect_err("namespace aliases are not direct call targets");
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("call to unknown function 'math'")
+        );
+
+        let diagnostics =
+            check(&parse("missing.add(1, 2)\n")).expect_err("missing namespace fails");
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("unknown module namespace 'missing'")
+        );
+        assert!(check(&parse("unknown(1)\n")).is_err());
+    }
+
+    #[test]
+    fn functions_can_reference_later_imported_bindings() {
+        assert!(
+            check(&parse(
+                "fn wrapper() { return add(1, 2) }\nimport { add } from \"math.solve\"\n",
+            ))
+            .is_ok()
+        );
+        assert!(
+            check(&parse(
+                "fn wrapper() { return math.add(1, 2) }\nimport \"math.solve\" as math\n",
+            ))
+            .is_ok()
+        );
     }
 }

@@ -260,6 +260,16 @@ impl AstRuntime {
     }
 
     pub fn run(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+        if let Some(location) = first_explicit_module_location(statements) {
+            return Err(self.error_at(
+                location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            ));
+        }
         self.execute_block(statements).map(|_| ())
     }
 
@@ -276,6 +286,21 @@ impl AstRuntime {
 
     fn execute(&mut self, statement: &Stmt) -> Result<ControlFlow, RuntimeError> {
         match statement {
+            Stmt::LegacyInclude { location, .. } => Err(self.error_at(
+                *location,
+                "legacy imports must be expanded before evaluation",
+                Some("Run source through the compatibility import loader.".to_string()),
+            )),
+            Stmt::ModuleImport { location, .. }
+            | Stmt::NamedModuleImport { location, .. }
+            | Stmt::Export { location, .. } => Err(self.error_at(
+                *location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            )),
             Stmt::Let {
                 name,
                 value,
@@ -539,6 +564,14 @@ impl AstRuntime {
                 self.eval_binary(left, operator, right, expr.location)
             }
             ExprKind::Call { name, args } => self.call_function(name, args, expr.location),
+            ExprKind::ModuleCall { .. } => Err(self.error_at(
+                expr.location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            )),
         }
     }
 
@@ -1390,6 +1423,62 @@ impl AstRuntime {
     }
 }
 
+fn first_explicit_module_location(statements: &[Stmt]) -> Option<SourceLocation> {
+    statements.iter().find_map(|statement| match statement {
+        Stmt::ModuleImport { location, .. }
+        | Stmt::NamedModuleImport { location, .. }
+        | Stmt::Export { location, .. } => Some(*location),
+        Stmt::Function { body, .. } => first_explicit_module_location(body),
+        Stmt::While {
+            condition, body, ..
+        } => first_explicit_module_expression_location(condition)
+            .or_else(|| first_explicit_module_location(body)),
+        Stmt::For { iterable, body, .. } => first_explicit_module_expression_location(iterable)
+            .or_else(|| first_explicit_module_location(body)),
+        Stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+            ..
+        } => first_explicit_module_expression_location(condition)
+            .or_else(|| first_explicit_module_location(then_branch))
+            .or_else(|| first_explicit_module_location(else_branch)),
+        Stmt::Let { value, .. }
+        | Stmt::Assign { value, .. }
+        | Stmt::Print { value, .. }
+        | Stmt::Return { value, .. }
+        | Stmt::Expr(value) => first_explicit_module_expression_location(value),
+        Stmt::Ask { message, .. } => first_explicit_module_expression_location(message),
+        Stmt::LegacyInclude { .. }
+        | Stmt::Break { .. }
+        | Stmt::Continue { .. }
+        | Stmt::Agent { .. } => None,
+    })
+}
+
+fn first_explicit_module_expression_location(expr: &Expr) -> Option<SourceLocation> {
+    match &expr.kind {
+        ExprKind::ModuleCall { .. } => Some(expr.location),
+        ExprKind::Array(values) => values
+            .iter()
+            .find_map(first_explicit_module_expression_location),
+        ExprKind::Object(entries) => entries
+            .values()
+            .find_map(first_explicit_module_expression_location),
+        ExprKind::Property(target, _) | ExprKind::Unary { expr: target, .. } => {
+            first_explicit_module_expression_location(target)
+        }
+        ExprKind::Index(target, index) => first_explicit_module_expression_location(target)
+            .or_else(|| first_explicit_module_expression_location(index)),
+        ExprKind::Binary { left, right, .. } => first_explicit_module_expression_location(left)
+            .or_else(|| first_explicit_module_expression_location(right)),
+        ExprKind::Call { args, .. } => args
+            .iter()
+            .find_map(first_explicit_module_expression_location),
+        ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -1730,6 +1819,28 @@ print(first_after_skip([1, 4, 9]))
             .run(&parse("print(10 / 0)\n"))
             .expect_err("divide by zero should fail");
         assert!(divide.to_string().contains("divide by zero"));
+    }
+
+    #[test]
+    fn module_calls_fail_before_any_prior_output() {
+        let source = "print(\"must-not-print\")\nmissing.call()\n";
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::unrestricted(),
+            source,
+            "module-call.solve",
+            None,
+            true,
+        );
+        let error = runtime
+            .run(&parse(source))
+            .expect_err("module calls are unresolved");
+
+        assert!(
+            error
+                .to_string()
+                .contains("explicit local modules are not executable")
+        );
+        assert!(runtime.outputs().is_empty());
     }
 
     #[test]

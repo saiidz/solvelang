@@ -5,7 +5,7 @@
 
 use serde_json::{Value, json};
 use solvec::{
-    ast::{SourceLocation, Stmt},
+    ast::{ExportedDeclaration, SourceLocation, Stmt},
     formatter, lexer, parser,
 };
 use std::collections::HashMap;
@@ -32,12 +32,72 @@ fn symbols(text: &str) -> Vec<Value> {
     let Ok(statements) = parser.parse() else {
         return Vec::new();
     };
-    statements.into_iter().filter_map(|statement| match statement {
-        Stmt::Let { name, location, .. } => Some(json!({"name":name,"kind":13,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Function { name, location, .. } => Some(json!({"name":name,"kind":12,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Agent { name, location, .. } => Some(json!({"name":name,"kind":5,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        _ => None,
-    }).collect()
+    statements
+        .into_iter()
+        .flat_map(|statement| match statement {
+            Stmt::Let { name, location, .. } => {
+                vec![document_symbol(text, name, location, 13, false)]
+            }
+            Stmt::Function { name, location, .. } => {
+                vec![document_symbol(text, name, location, 12, false)]
+            }
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, location, .. },
+                ..
+            } => vec![document_symbol(text, name, location, 13, false)],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, location, .. },
+                ..
+            } => vec![document_symbol(text, name, location, 12, false)],
+            Stmt::ModuleImport {
+                namespace,
+                namespace_location,
+                ..
+            } => vec![document_symbol(
+                text,
+                namespace,
+                namespace_location,
+                3,
+                true,
+            )],
+            Stmt::NamedModuleImport { bindings, .. } => bindings
+                .into_iter()
+                .map(|binding| {
+                    document_symbol(text, binding.local, binding.local_location, 13, true)
+                })
+                .collect(),
+            Stmt::Agent { name, location, .. } => {
+                vec![document_symbol(text, name, location, 5, false)]
+            }
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+fn source_range(text: &str, location: SourceLocation, name: &str) -> Value {
+    let start = utf16_character_at(text, location.line, location.column)
+        .unwrap_or_else(|| location.column.saturating_sub(1));
+    let end = start + name.encode_utf16().count();
+    json!({"start":{"line":location.line.saturating_sub(1),"character":start},"end":{"line":location.line.saturating_sub(1),"character":end}})
+}
+
+fn declaration_range(location: SourceLocation) -> Value {
+    json!({"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}})
+}
+
+fn document_symbol(
+    text: &str,
+    name: String,
+    location: SourceLocation,
+    kind: u8,
+    is_identifier_location: bool,
+) -> Value {
+    let range = if is_identifier_location {
+        source_range(text, location, &name)
+    } else {
+        declaration_range(location)
+    };
+    json!({"name":name,"kind":kind,"range":range,"selectionRange":range})
 }
 
 fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
@@ -73,6 +133,32 @@ fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static 
                 location,
                 ..
             } if declared == name => Some((location, "function")),
+            Stmt::Export {
+                declaration:
+                    ExportedDeclaration::Let {
+                        name: declared,
+                        location,
+                        ..
+                    },
+                ..
+            } if declared == name => Some((location, "variable")),
+            Stmt::Export {
+                declaration:
+                    ExportedDeclaration::Function {
+                        name: declared,
+                        location,
+                        ..
+                    },
+                ..
+            } if declared == name => Some((location, "function")),
+            Stmt::ModuleImport {
+                namespace,
+                namespace_location,
+                ..
+            } if namespace == name => Some((namespace_location, "module namespace")),
+            Stmt::NamedModuleImport { bindings, .. } => bindings.into_iter().find_map(|binding| {
+                (binding.local == name).then_some((binding.local_location, "imported binding"))
+            }),
             Stmt::Agent {
                 name: declared,
                 location,
@@ -86,10 +172,15 @@ fn definition(text: &str, line: usize, character: usize) -> Value {
     let Some(name) = identifier_at_position(text, line, character) else {
         return Value::Null;
     };
-    let Some((location, _)) = top_level_symbol(text, &name) else {
+    let Some((location, kind)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
-    json!({"uri":"","range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})
+    let range = if matches!(kind, "module namespace" | "imported binding") {
+        source_range(text, location, &name)
+    } else {
+        declaration_range(location)
+    };
+    json!({"uri":"","range":range})
 }
 
 fn hover(text: &str, line: usize, character: usize) -> Value {
@@ -114,8 +205,8 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
         .filter_map(|located| match located.token {
             lexer::Token::Identifier(candidate) if candidate == name => Some(json!({
                 "range": {
-                    "start": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1)},
-                    "end": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1) + candidate.encode_utf16().count()}
+                    "start": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1))},
+                    "end": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1)) + candidate.encode_utf16().count()}
                 },
                 "kind": 1
             })),
@@ -131,23 +222,54 @@ fn completions(text: &str) -> Vec<Value> {
     };
     statements
         .into_iter()
-        .filter_map(|statement| match statement {
-            Stmt::Let { name, .. } => Some(json!({
+        .flat_map(|statement| match statement {
+            Stmt::Let { name, .. } => vec![json!({
                 "label": name,
                 "kind": 6,
                 "detail": "Top-level SolveLang variable"
-            })),
-            Stmt::Function { name, params, .. } => Some(json!({
+            })],
+            Stmt::Function { name, params, .. } => vec![json!({
                 "label": name,
                 "kind": 3,
                 "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
-            })),
-            Stmt::Agent { name, .. } => Some(json!({
+            })],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, .. },
+                ..
+            } => vec![json!({
+                "label": name,
+                "kind": 6,
+                "detail": "Top-level SolveLang variable"
+            })],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, params, .. },
+                ..
+            } => vec![json!({
+                "label": name,
+                "kind": 3,
+                "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
+            })],
+            Stmt::ModuleImport { namespace, .. } => vec![json!({
+                "label": namespace,
+                "kind": 9,
+                "detail": "Top-level SolveLang module namespace"
+            })],
+            Stmt::NamedModuleImport { bindings, .. } => bindings
+                .into_iter()
+                .map(|binding| {
+                    json!({
+                        "label": binding.local,
+                        "kind": 6,
+                        "detail": "Top-level SolveLang imported binding"
+                    })
+                })
+                .collect(),
+            Stmt::Agent { name, .. } => vec![json!({
                 "label": name,
                 "kind": 7,
                 "detail": "Top-level SolveLang agent"
-            })),
-            _ => None,
+            })],
+            _ => Vec::new(),
         })
         .collect()
 }
@@ -433,7 +555,7 @@ fn main() -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::process_message;
+    use super::{completions, process_message, symbols, top_level_symbol};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -483,6 +605,85 @@ mod tests {
             &mut documents,
         );
         assert_eq!(output[0]["result"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn exported_declarations_remain_visible_to_lsp_symbols_and_completion() {
+        let source = "export let version = 1\nexport fn add(left, right) { return left + right }\n";
+        assert_eq!(symbols(source).len(), 2);
+        assert_eq!(top_level_symbol(source, "version").unwrap().1, "variable");
+        assert_eq!(top_level_symbol(source, "add").unwrap().1, "function");
+        assert_eq!(completions(source).len(), 2);
+    }
+
+    #[test]
+    fn imports_remain_visible_to_lsp_symbols_and_completion() {
+        let source = "import \"math.solve\" as math\nimport { version as api_version, add } from \"math.solve\"\n";
+        assert_eq!(symbols(source).len(), 3);
+        assert_eq!(
+            top_level_symbol(source, "math").unwrap().1,
+            "module namespace"
+        );
+        assert_eq!(
+            top_level_symbol(source, "api_version").unwrap().1,
+            "imported binding"
+        );
+        assert_eq!(
+            top_level_symbol(source, "add").unwrap().1,
+            "imported binding"
+        );
+        assert_eq!(completions(source).len(), 3);
+    }
+
+    #[test]
+    fn import_symbols_point_at_local_binding_tokens() {
+        let source =
+            "import \"math.solve\" as math\nimport { remote as local } from \"math.solve\"\n";
+        assert_eq!(top_level_symbol(source, "math").unwrap().0.column, 24);
+        assert_eq!(top_level_symbol(source, "local").unwrap().0.column, 20);
+        let document_symbols = symbols(source);
+        assert_eq!(
+            document_symbols[0]["selectionRange"]["start"]["character"],
+            23
+        );
+        assert_eq!(
+            document_symbols[1]["selectionRange"]["start"]["character"],
+            19
+        );
+    }
+
+    #[test]
+    fn import_ranges_use_utf16_offsets() {
+        let source = "import \"😀.solve\" as math\nimport { a𐐀 as local } from \"math.solve\"\nprint(math)\n";
+        let document_symbols = symbols(source);
+        assert_eq!(
+            document_symbols[0]["selectionRange"]["start"]["character"],
+            21
+        );
+        assert_eq!(
+            document_symbols[1]["selectionRange"]["start"]["character"],
+            16
+        );
+
+        let mut documents = HashMap::new();
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":source}}}),
+            &mut documents,
+        );
+        let output = process_message(
+            json!({"id":14,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(output[0]["result"]["range"]["start"]["character"], 21);
+
+        let highlights = process_message(
+            json!({"id":15,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(
+            highlights[0]["result"][0]["range"]["start"]["character"],
+            21
+        );
     }
 
     #[test]

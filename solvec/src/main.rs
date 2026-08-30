@@ -1038,6 +1038,10 @@ fn preflight_statements(
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
+            Stmt::LegacyInclude { .. }
+            | Stmt::ModuleImport { .. }
+            | Stmt::NamedModuleImport { .. }
+            | Stmt::Export { .. } => {}
             Stmt::Let { name, value, .. } | Stmt::Assign { name, value, .. } => {
                 if input_injected && name == "input" {
                     return Err(read_only_input_failure());
@@ -1172,6 +1176,11 @@ fn preflight_expr(
                         "unknown or unsafe function calls are disabled by hardened execution policy",
                     ));
                 }
+            }
+        }
+        ExprKind::ModuleCall { args, .. } => {
+            for arg in args {
+                preflight_expr(arg, hardened, function_names)?;
             }
         }
         ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {}

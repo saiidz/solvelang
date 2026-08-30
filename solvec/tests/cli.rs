@@ -538,6 +538,41 @@ fn imports_accept_trailing_comments_and_preserve_hardened_confinement() {
 }
 
 #[test]
+fn explicit_module_programs_fail_before_any_output_or_source_resolution() {
+    let file = write_temp_solve_file(
+        "solvelang_explicit_module_parser_only.solve",
+        "print(\"must-not-print\")\nimport \"missing.solve\" as math\n",
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "explicit module program unexpectedly succeeded");
+    assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
+    assert!(
+        stderr.contains("explicit local modules are not executable"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(!stderr.contains("failed to resolve import"));
+}
+
+#[test]
+fn explicit_exports_fail_before_any_earlier_output() {
+    let file = write_temp_solve_file(
+        "solvelang_explicit_export_parser_only.solve",
+        "print(\"must-not-print\")\nexport let version = 1\n",
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success, "explicit export program unexpectedly succeeded");
+    assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
+    assert!(
+        stderr.contains("explicit local modules are not executable"),
+        "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);

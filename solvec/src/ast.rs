@@ -52,6 +52,11 @@ pub enum ExprKind {
         name: String,
         args: Vec<Expr>,
     },
+    ModuleCall {
+        namespace: String,
+        member: String,
+        args: Vec<Expr>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -77,7 +82,49 @@ pub enum BinaryOp {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ImportBinding {
+    pub exported: String,
+    pub exported_location: SourceLocation,
+    pub local: String,
+    pub local_location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExportedDeclaration {
+    Let {
+        name: String,
+        value: Expr,
+        location: SourceLocation,
+    },
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+        location: SourceLocation,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
+    LegacyInclude {
+        path: String,
+        location: SourceLocation,
+    },
+    ModuleImport {
+        path: String,
+        namespace: String,
+        namespace_location: SourceLocation,
+        location: SourceLocation,
+    },
+    NamedModuleImport {
+        path: String,
+        bindings: Vec<ImportBinding>,
+        location: SourceLocation,
+    },
+    Export {
+        declaration: ExportedDeclaration,
+        location: SourceLocation,
+    },
     Let {
         name: String,
         value: Expr,
