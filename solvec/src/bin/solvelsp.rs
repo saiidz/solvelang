@@ -35,29 +35,39 @@ fn symbols(text: &str) -> Vec<Value> {
     statements
         .into_iter()
         .flat_map(|statement| match statement {
-            Stmt::Let { name, location, .. } => vec![document_symbol(text, name, location, 13)],
+            Stmt::Let { name, location, .. } => {
+                vec![document_symbol(text, name, location, 13, false)]
+            }
             Stmt::Function { name, location, .. } => {
-                vec![document_symbol(text, name, location, 12)]
+                vec![document_symbol(text, name, location, 12, false)]
             }
             Stmt::Export {
                 declaration: ExportedDeclaration::Let { name, location, .. },
                 ..
-            } => vec![document_symbol(text, name, location, 13)],
+            } => vec![document_symbol(text, name, location, 13, false)],
             Stmt::Export {
                 declaration: ExportedDeclaration::Function { name, location, .. },
                 ..
-            } => vec![document_symbol(text, name, location, 12)],
+            } => vec![document_symbol(text, name, location, 12, false)],
             Stmt::ModuleImport {
                 namespace,
                 namespace_location,
                 ..
-            } => vec![document_symbol(text, namespace, namespace_location, 3)],
+            } => vec![document_symbol(
+                text,
+                namespace,
+                namespace_location,
+                3,
+                true,
+            )],
             Stmt::NamedModuleImport { bindings, .. } => bindings
                 .into_iter()
-                .map(|binding| document_symbol(text, binding.local, binding.local_location, 13))
+                .map(|binding| {
+                    document_symbol(text, binding.local, binding.local_location, 13, true)
+                })
                 .collect(),
             Stmt::Agent { name, location, .. } => {
-                vec![document_symbol(text, name, location, 5)]
+                vec![document_symbol(text, name, location, 5, false)]
             }
             _ => Vec::new(),
         })
@@ -71,8 +81,22 @@ fn source_range(text: &str, location: SourceLocation, name: &str) -> Value {
     json!({"start":{"line":location.line.saturating_sub(1),"character":start},"end":{"line":location.line.saturating_sub(1),"character":end}})
 }
 
-fn document_symbol(text: &str, name: String, location: SourceLocation, kind: u8) -> Value {
-    let range = source_range(text, location, &name);
+fn declaration_range(location: SourceLocation) -> Value {
+    json!({"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}})
+}
+
+fn document_symbol(
+    text: &str,
+    name: String,
+    location: SourceLocation,
+    kind: u8,
+    is_identifier_location: bool,
+) -> Value {
+    let range = if is_identifier_location {
+        source_range(text, location, &name)
+    } else {
+        declaration_range(location)
+    };
     json!({"name":name,"kind":kind,"range":range,"selectionRange":range})
 }
 
@@ -148,10 +172,15 @@ fn definition(text: &str, line: usize, character: usize) -> Value {
     let Some(name) = identifier_at_position(text, line, character) else {
         return Value::Null;
     };
-    let Some((location, _)) = top_level_symbol(text, &name) else {
+    let Some((location, kind)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
-    json!({"uri":"","range":source_range(text, location, &name)})
+    let range = if matches!(kind, "module namespace" | "imported binding") {
+        source_range(text, location, &name)
+    } else {
+        declaration_range(location)
+    };
+    json!({"uri":"","range":range})
 }
 
 fn hover(text: &str, line: usize, character: usize) -> Value {
@@ -176,8 +205,8 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
         .filter_map(|located| match located.token {
             lexer::Token::Identifier(candidate) if candidate == name => Some(json!({
                 "range": {
-                    "start": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1)},
-                    "end": {"line": located.line.saturating_sub(1), "character": located.column.saturating_sub(1) + candidate.encode_utf16().count()}
+                    "start": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1))},
+                    "end": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1)) + candidate.encode_utf16().count()}
                 },
                 "kind": 1
             })),
@@ -646,6 +675,15 @@ mod tests {
             &mut documents,
         );
         assert_eq!(output[0]["result"]["range"]["start"]["character"], 21);
+
+        let highlights = process_message(
+            json!({"id":15,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
+            &mut documents,
+        );
+        assert_eq!(
+            highlights[0]["result"][0]["range"]["start"]["character"],
+            21
+        );
     }
 
     #[test]
