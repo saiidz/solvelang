@@ -52,6 +52,7 @@ struct Checker {
     functions: HashMap<String, FunctionSymbol>,
     agents: HashMap<String, ()>,
     imported_bindings: HashSet<String>,
+    namespace_imports: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -125,6 +126,7 @@ impl Checker {
             functions,
             agents,
             imported_bindings: HashSet::new(),
+            namespace_imports: HashSet::new(),
             diagnostics,
         }
     }
@@ -272,6 +274,7 @@ impl Checker {
                 Stmt::ModuleImport { namespace, .. } => {
                     values.insert(namespace.clone(), Type::Unknown);
                     self.imported_bindings.insert(namespace.clone());
+                    self.namespace_imports.insert(namespace.clone());
                 }
                 Stmt::NamedModuleImport { bindings, .. } => {
                     for binding in bindings {
@@ -466,7 +469,7 @@ impl Checker {
                             "Pass exactly the parameters declared by the function.",
                         );
                     }
-                } else if !is_builtin(name) {
+                } else if !is_builtin(name) && !self.imported_bindings.contains(name) {
                     self.error(
                         expr,
                         format!("call to unknown function '{}'", name),
@@ -475,9 +478,18 @@ impl Checker {
                 }
                 Type::Unknown
             }
-            ExprKind::ModuleCall { args, .. } => {
+            ExprKind::ModuleCall {
+                namespace, args, ..
+            } => {
                 for argument in args {
                     self.check_expr(argument, values, in_function);
+                }
+                if !self.namespace_imports.contains(namespace) {
+                    self.error(
+                        expr,
+                        format!("unknown module namespace '{}'", namespace),
+                        "Import the namespace before calling one of its members.",
+                    );
                 }
                 Type::Unknown
             }
@@ -616,5 +628,19 @@ mod tests {
                 .message
                 .contains("cannot assign to imported binding")
         }));
+    }
+
+    #[test]
+    fn accepts_named_import_calls_and_requires_namespace_imports() {
+        assert!(check(&parse("import { add } from \"math.solve\"\nadd(1, 2)\n")).is_ok());
+
+        let diagnostics =
+            check(&parse("missing.add(1, 2)\n")).expect_err("missing namespace fails");
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("unknown module namespace 'missing'")
+        );
+        assert!(check(&parse("unknown(1)\n")).is_err());
     }
 }

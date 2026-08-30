@@ -14,6 +14,7 @@ pub struct Parser {
     exported_names: HashSet<String>,
     local_bindings: BTreeMap<String, SourceLocation>,
     module_bindings: BTreeMap<String, SourceLocation>,
+    parameter_bindings: BTreeMap<String, SourceLocation>,
 }
 
 impl Parser {
@@ -26,6 +27,7 @@ impl Parser {
             exported_names: HashSet::new(),
             local_bindings: BTreeMap::new(),
             module_bindings: BTreeMap::new(),
+            parameter_bindings: BTreeMap::new(),
         }
     }
 
@@ -98,6 +100,13 @@ impl Parser {
                 let statement = self.function_statement()?;
                 if top_level && let Stmt::Function { name, location, .. } = &statement {
                     self.register_local_binding(name, *location);
+                }
+                if top_level
+                    && let Stmt::Function {
+                        params, location, ..
+                    } = &statement
+                {
+                    self.register_function_parameters(params, *location);
                 }
                 Some(statement)
             }
@@ -173,6 +182,9 @@ impl Parser {
         }
         if !self.register_module_binding(name, location) {
             return None;
+        }
+        if let ExportedDeclaration::Function { params, .. } = &declaration {
+            self.register_function_parameters(params, location);
         }
 
         Some(Stmt::Export {
@@ -1060,8 +1072,36 @@ impl Parser {
             );
             return false;
         }
+        if self.parameter_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a function parameter",
+                    name
+                ),
+                "Use a distinct module binding name.",
+            );
+            return false;
+        }
         self.module_bindings.insert(name.to_string(), location);
         true
+    }
+    fn register_function_parameters(&mut self, params: &[String], location: SourceLocation) {
+        for param in params {
+            if self.module_bindings.contains_key(param) {
+                self.error_at(
+                    location,
+                    &format!(
+                        "function parameter '{}' conflicts with a module binding",
+                        param
+                    ),
+                    "Use a distinct parameter name.",
+                );
+            }
+            self.parameter_bindings
+                .entry(param.clone())
+                .or_insert(location);
+        }
     }
     fn starts_legacy_include(&self) -> bool {
         self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
@@ -1401,6 +1441,22 @@ import "shared.solve"
                 "unexpected diagnostics for {source:?}: {errors:?}"
             );
         }
+    }
+
+    #[test]
+    fn rejects_module_bindings_that_collide_with_function_parameters() {
+        for source in [
+            "import \"a.solve\" as item\nfn consume(item) { return item }\n",
+            "fn consume(item) { return item }\nimport { value as item } from \"a.solve\"\n",
+        ] {
+            let errors = parse(source).expect_err("parameter collision must fail");
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.message.contains("parameter"))
+            );
+        }
+        assert!(parse("fn consume(item) { return item }\nimport \"a.solve\" as module\n").is_ok());
     }
 
     #[test]
