@@ -92,7 +92,13 @@ impl Linter {
                 ));
                 self.lint_expr(message);
             }
-            Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Agent { .. } => {}
+            Stmt::Break { .. }
+            | Stmt::Continue { .. }
+            | Stmt::Agent { .. }
+            | Stmt::LegacyInclude { .. }
+            | Stmt::ModuleImport { .. }
+            | Stmt::NamedModuleImport { .. }
+            | Stmt::Export { .. } => {}
         }
     }
 
@@ -151,7 +157,11 @@ fn statement_terminates(statement: &Stmt) -> bool {
 
 fn statement_location(statement: &Stmt) -> SourceLocation {
     match statement {
-        Stmt::Let { location, .. }
+        Stmt::LegacyInclude { location, .. }
+        | Stmt::ModuleImport { location, .. }
+        | Stmt::NamedModuleImport { location, .. }
+        | Stmt::Export { location, .. }
+        | Stmt::Let { location, .. }
         | Stmt::Assign { location, .. }
         | Stmt::Print { location, .. }
         | Stmt::Return { location, .. }

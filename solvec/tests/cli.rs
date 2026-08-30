@@ -538,6 +538,22 @@ fn imports_accept_trailing_comments_and_preserve_hardened_confinement() {
 }
 
 #[test]
+fn explicit_module_imports_fail_before_source_resolution_or_execution() {
+    let file = write_temp_solve_file(
+        "solvelang_explicit_module_parser_only.solve",
+        "import \"missing.solve\" as math\nprint(\"unreachable\")\n",
+    );
+
+    let stderr = run_solvec_error(&["run", &file]);
+
+    assert!(
+        stderr.contains("explicit local modules are not executable"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(!stderr.contains("failed to resolve import"));
+}
+
+#[test]
 fn validate_exits_nonzero_on_missing_file() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["validate", "../examples/does-not-exist.solve"]);

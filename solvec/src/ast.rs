@@ -77,7 +77,47 @@ pub enum BinaryOp {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ImportBinding {
+    pub exported: String,
+    pub local: String,
+    pub location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExportedDeclaration {
+    Let {
+        name: String,
+        value: Expr,
+        location: SourceLocation,
+    },
+    Function {
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+        location: SourceLocation,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
+    LegacyInclude {
+        path: String,
+        location: SourceLocation,
+    },
+    ModuleImport {
+        path: String,
+        namespace: String,
+        location: SourceLocation,
+    },
+    NamedModuleImport {
+        path: String,
+        bindings: Vec<ImportBinding>,
+        location: SourceLocation,
+    },
+    Export {
+        declaration: ExportedDeclaration,
+        location: SourceLocation,
+    },
     Let {
         name: String,
         value: Expr,

@@ -230,6 +230,10 @@ impl Checker {
                         ));
                     }
                 }
+                Stmt::LegacyInclude { .. }
+                | Stmt::ModuleImport { .. }
+                | Stmt::NamedModuleImport { .. }
+                | Stmt::Export { .. } => {}
             }
         }
     }

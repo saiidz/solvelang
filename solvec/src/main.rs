@@ -1038,6 +1038,10 @@ fn preflight_statements(
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
+            Stmt::LegacyInclude { .. }
+            | Stmt::ModuleImport { .. }
+            | Stmt::NamedModuleImport { .. }
+            | Stmt::Export { .. } => {}
             Stmt::Let { name, value, .. } | Stmt::Assign { name, value, .. } => {
                 if input_injected && name == "input" {
                     return Err(read_only_input_failure());

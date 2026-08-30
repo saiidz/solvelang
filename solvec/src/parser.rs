@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
-use crate::ast::{BinaryOp, Expr, ExprKind, SourceLocation, Stmt, UnaryOp};
+use crate::ast::{
+    BinaryOp, ExportedDeclaration, Expr, ExprKind, ImportBinding, SourceLocation, Stmt, UnaryOp,
+};
 use crate::diagnostics::Diagnostic;
 use crate::lexer::{LocatedToken, Token};
 
@@ -9,6 +11,7 @@ pub struct Parser {
     current: usize,
     errors: Vec<Diagnostic>,
     loop_depth: usize,
+    exported_names: HashSet<String>,
 }
 
 impl Parser {
@@ -18,6 +21,7 @@ impl Parser {
             current: 0,
             errors: Vec::new(),
             loop_depth: 0,
+            exported_names: HashSet::new(),
         }
     }
 
@@ -31,7 +35,7 @@ impl Parser {
             }
 
             let errors_before = self.errors.len();
-            if let Some(statement) = self.statement() {
+            if let Some(statement) = self.statement(true) {
                 if self.errors.len() == errors_before {
                     statements.push(statement);
                 } else {
@@ -49,7 +53,33 @@ impl Parser {
         }
     }
 
-    fn statement(&mut self) -> Option<Stmt> {
+    fn statement(&mut self, top_level: bool) -> Option<Stmt> {
+        if self.starts_export() {
+            if top_level {
+                return self.export_statement();
+            }
+            self.error_here(
+                "Explicit exports are only allowed at top level.",
+                "Move the export declaration outside the enclosing block.",
+            );
+            return None;
+        }
+
+        if self.starts_explicit_import() {
+            if top_level {
+                return self.module_import_statement();
+            }
+            self.error_here(
+                "Explicit module imports are only allowed at top level.",
+                "Move the import declaration outside the enclosing block.",
+            );
+            return None;
+        }
+
+        if top_level && self.starts_legacy_include() {
+            return self.legacy_include_statement();
+        }
+
         match self.peek() {
             Token::Let => self.let_statement(),
             Token::Print => self.print_statement(),
@@ -65,6 +95,188 @@ impl Parser {
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
             _ => Some(Stmt::Expr(self.expression())),
         }
+    }
+
+    fn export_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let declaration = match self.peek() {
+            Token::Let => match self.let_statement()? {
+                Stmt::Let {
+                    name,
+                    value,
+                    location,
+                } => ExportedDeclaration::Let {
+                    name,
+                    value,
+                    location,
+                },
+                _ => unreachable!(),
+            },
+            Token::Fn => match self.function_statement()? {
+                Stmt::Function {
+                    name,
+                    params,
+                    body,
+                    location,
+                } => ExportedDeclaration::Function {
+                    name,
+                    params,
+                    body,
+                    location,
+                },
+                _ => unreachable!(),
+            },
+            _ => {
+                self.error_here(
+                    "Invalid export declaration: expected 'let' or 'fn'.",
+                    "Export a top-level variable with 'export let' or a function with 'export fn'.",
+                );
+                return None;
+            }
+        };
+
+        let name = match &declaration {
+            ExportedDeclaration::Let { name, .. } | ExportedDeclaration::Function { name, .. } => {
+                name
+            }
+        };
+        if !self.exported_names.insert(name.clone()) {
+            self.error_at(
+                location,
+                &format!("duplicate exported declaration '{}'", name),
+                "Export each module name only once.",
+            );
+            return None;
+        }
+
+        Some(Stmt::Export {
+            declaration,
+            location,
+        })
+    }
+
+    fn legacy_include_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => unreachable!(),
+        };
+        if !self.consume_import_terminator() {
+            return None;
+        }
+        Some(Stmt::LegacyInclude { path, location })
+    }
+
+    fn module_import_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        if self.matches(&Token::LeftBrace) {
+            return self.named_module_import(location);
+        }
+
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => unreachable!(),
+        };
+        if !self.consume_contextual(
+            "as",
+            "Invalid namespace import: expected 'as'.",
+            "Use syntax like: import \"math.solve\" as math",
+        ) {
+            return None;
+        }
+        let namespace = self.consume_identifier("Expected namespace name after 'as'.")?;
+        if !self.consume_import_terminator() {
+            return None;
+        }
+        Some(Stmt::ModuleImport {
+            path,
+            namespace,
+            location,
+        })
+    }
+
+    fn named_module_import(&mut self, location: SourceLocation) -> Option<Stmt> {
+        let mut bindings = Vec::new();
+        let mut exported_names = HashSet::new();
+        let mut local_names = HashSet::new();
+
+        if self.check(&Token::RightBrace) {
+            self.error_here(
+                "Invalid named import: expected at least one binding.",
+                "Import one or more names, such as: import { add } from \"math.solve\"",
+            );
+            return None;
+        }
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            let (exported, binding_location) =
+                self.consume_identifier_with_location("Expected exported name in named import.")?;
+            let local = if self.matches_contextual("as") {
+                self.consume_identifier("Expected local alias after 'as'.")?
+            } else {
+                exported.clone()
+            };
+
+            if !exported_names.insert(exported.clone()) {
+                self.error_at(
+                    binding_location,
+                    &format!("duplicate imported export '{}'", exported),
+                    "Import each exported name only once per import declaration.",
+                );
+                return None;
+            }
+            if !local_names.insert(local.clone()) {
+                self.error_at(
+                    binding_location,
+                    &format!("duplicate local import binding '{}'", local),
+                    "Use a distinct local name for each imported binding.",
+                );
+                return None;
+            }
+            bindings.push(ImportBinding {
+                exported,
+                local,
+                location: binding_location,
+            });
+
+            if !self.matches(&Token::Comma) {
+                break;
+            }
+        }
+
+        if !self.consume(
+            &Token::RightBrace,
+            "Invalid named import: expected '}'.",
+            "Close the imported binding list with '}'.",
+        ) {
+            return None;
+        }
+        if !self.consume_contextual(
+            "from",
+            "Invalid named import: expected 'from'.",
+            "Provide the source path after the binding list.",
+        ) {
+            return None;
+        }
+        let path = match self.advance() {
+            Token::Text(path) => path,
+            _ => {
+                self.error_previous(
+                    "Invalid named import: expected quoted source path after 'from'.",
+                    "Use a quoted local .solve path, such as: from \"math.solve\"",
+                );
+                return None;
+            }
+        };
+        if !self.consume_import_terminator() {
+            return None;
+        }
+
+        Some(Stmt::NamedModuleImport {
+            path,
+            bindings,
+            location,
+        })
     }
 
     fn let_statement(&mut self) -> Option<Stmt> {
@@ -318,7 +530,7 @@ impl Parser {
                 break;
             }
             let errors_before = self.errors.len();
-            if let Some(statement) = self.statement() {
+            if let Some(statement) = self.statement(false) {
                 if self.errors.len() == errors_before {
                     statements.push(statement);
                 } else {
@@ -665,8 +877,17 @@ impl Parser {
         }
     }
     fn consume_identifier(&mut self, message: &str) -> Option<String> {
-        match self.advance() {
-            Token::Identifier(name) => Some(name),
+        self.consume_identifier_with_location(message)
+            .map(|(name, _)| name)
+    }
+    fn consume_identifier_with_location(
+        &mut self,
+        message: &str,
+    ) -> Option<(String, SourceLocation)> {
+        let token = self.advance_located();
+        let location = SourceLocation::new(token.line, token.column);
+        match token.token {
+            Token::Identifier(name) => Some((name, location)),
             _ => {
                 self.error_previous(message, "Use a valid identifier name here.");
                 None
@@ -685,6 +906,57 @@ impl Parser {
         self.current + 1 < self.tokens.len()
             && std::mem::discriminant(&self.tokens[self.current + 1].token)
                 == std::mem::discriminant(expected)
+    }
+    fn check_identifier_at(&self, offset: usize, expected: &str) -> bool {
+        matches!(
+            self.tokens.get(self.current + offset).map(|token| &token.token),
+            Some(Token::Identifier(name)) if name == expected
+        )
+    }
+    fn starts_export(&self) -> bool {
+        self.check_identifier_at(0, "export")
+            && (self.check_at(1, &Token::Let) || self.check_at(1, &Token::Fn))
+    }
+    fn starts_legacy_include(&self) -> bool {
+        self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
+    }
+    fn starts_explicit_import(&self) -> bool {
+        self.check_identifier_at(0, "import")
+            && (self.check_at(1, &Token::LeftBrace)
+                || (self.check_at(1, &Token::Text(String::new()))
+                    && self.check_identifier_at(2, "as")))
+    }
+    fn check_at(&self, offset: usize, expected: &Token) -> bool {
+        self.tokens.get(self.current + offset).is_some_and(|token| {
+            std::mem::discriminant(&token.token) == std::mem::discriminant(expected)
+        })
+    }
+    fn matches_contextual(&mut self, expected: &str) -> bool {
+        if self.check_identifier_at(0, expected) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+    fn consume_contextual(&mut self, expected: &str, message: &str, hint: &str) -> bool {
+        if self.matches_contextual(expected) {
+            true
+        } else {
+            self.error_here(message, hint);
+            false
+        }
+    }
+    fn consume_import_terminator(&mut self) -> bool {
+        if self.check(&Token::Newline) || self.check(&Token::Eof) {
+            true
+        } else {
+            self.error_here(
+                "Invalid import directive: unexpected token after source path.",
+                "Finish the import at the end of the line.",
+            );
+            false
+        }
     }
     fn advance(&mut self) -> Token {
         self.advance_located().token
@@ -730,7 +1002,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use super::Parser;
-    use crate::ast::Stmt;
+    use crate::ast::{ExportedDeclaration, Stmt};
     use crate::lexer::lex;
 
     fn parse(source: &str) -> Result<Vec<Stmt>, Vec<crate::diagnostics::Diagnostic>> {
@@ -830,6 +1102,130 @@ print(user.name)
         }));
         assert!(errors.iter().any(|error| {
             error.line == 2 && error.column == 10 && error.message.contains("unknown character '@'")
+        }));
+    }
+
+    #[test]
+    fn parses_explicit_module_exports_and_imports_into_distinct_ast_variants() {
+        let ast = parse(
+            r#"export let api_version = 1
+export fn add(left, right) { return left + right }
+import "math.solve" as math
+import { api_version as version, add } from "math.solve"
+import "shared.solve"
+"#,
+        )
+        .expect("explicit module syntax parses");
+
+        assert!(matches!(
+            &ast[0],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, .. },
+                location,
+            } if name == "api_version" && location.line == 1
+        ));
+        assert!(matches!(
+            &ast[1],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, params, .. },
+                ..
+            } if name == "add" && params == &["left", "right"]
+        ));
+        assert!(matches!(
+            &ast[2],
+            Stmt::ModuleImport { path, namespace, location }
+                if path == "math.solve" && namespace == "math" && location.line == 3
+        ));
+        assert!(matches!(
+            &ast[4],
+            Stmt::LegacyInclude { path, location }
+                if path == "shared.solve" && location.line == 5
+        ));
+
+        let Stmt::NamedModuleImport {
+            path,
+            bindings,
+            location,
+        } = &ast[3]
+        else {
+            panic!("expected named module import");
+        };
+        assert_eq!(path, "math.solve");
+        assert_eq!(location.line, 4);
+        assert_eq!(bindings.len(), 2);
+        assert_eq!(bindings[0].exported, "api_version");
+        assert_eq!(bindings[0].local, "version");
+        assert_eq!(bindings[1].exported, "add");
+        assert_eq!(bindings[1].local, "add");
+    }
+
+    #[test]
+    fn keeps_module_words_contextual_outside_complete_module_forms() {
+        let ast = parse(
+            "let export = 1\nlet import = 2\nlet as = 3\nfn from() { return export + import + as }\n",
+        )
+        .expect("contextual module words remain identifiers");
+
+        assert!(matches!(&ast[0], Stmt::Let { name, .. } if name == "export"));
+        assert!(matches!(&ast[1], Stmt::Let { name, .. } if name == "import"));
+        assert!(matches!(&ast[2], Stmt::Let { name, .. } if name == "as"));
+        assert!(matches!(&ast[3], Stmt::Function { name, .. } if name == "from"));
+    }
+
+    #[test]
+    fn rejects_malformed_or_nested_explicit_module_syntax_with_locations() {
+        let errors = parse("import { } from \"math.solve\"\nimport \"math.solve\" as\n")
+            .expect_err("malformed module syntax must fail");
+
+        assert!(errors.iter().any(|error| {
+            error.line == 1
+                && error.column == 10
+                && error.message.contains("expected at least one binding")
+        }));
+        assert!(errors.iter().any(|error| {
+            error.line == 2 && error.message.contains("Expected namespace name after 'as'")
+        }));
+        let nested_import = parse("if true { import \"math.solve\" as math }\n")
+            .expect_err("nested explicit imports must fail");
+        assert!(
+            nested_import.iter().any(|error| {
+                error.line == 1
+                    && error.column == 11
+                    && error.message.contains("only allowed at top level")
+            }),
+            "unexpected diagnostics: {nested_import:?}"
+        );
+
+        let nested_export =
+            parse("if true { export let value = 1 }\n").expect_err("nested exports must fail");
+        assert!(nested_export.iter().any(|error| {
+            error.line == 1
+                && error.column == 11
+                && error.message.contains("only allowed at top level")
+        }));
+    }
+
+    #[test]
+    fn rejects_duplicate_import_bindings_and_exports() {
+        let errors = parse(
+            "import { add, add as total } from \"math.solve\"\nimport { first as value, second as value } from \"math.solve\"\nexport let result = 1\nexport fn result() { return 2 }\n",
+        )
+        .expect_err("duplicate module names must fail");
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("duplicate imported export 'add'"))
+        );
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("duplicate local import binding 'value'")
+        }));
+        assert!(errors.iter().any(|error| {
+            error
+                .message
+                .contains("duplicate exported declaration 'result'")
         }));
     }
 }

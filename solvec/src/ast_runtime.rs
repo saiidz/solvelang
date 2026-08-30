@@ -276,6 +276,21 @@ impl AstRuntime {
 
     fn execute(&mut self, statement: &Stmt) -> Result<ControlFlow, RuntimeError> {
         match statement {
+            Stmt::LegacyInclude { location, .. } => Err(self.error_at(
+                *location,
+                "legacy imports must be expanded before evaluation",
+                Some("Run source through the compatibility import loader.".to_string()),
+            )),
+            Stmt::ModuleImport { location, .. }
+            | Stmt::NamedModuleImport { location, .. }
+            | Stmt::Export { location, .. } => Err(self.error_at(
+                *location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            )),
             Stmt::Let {
                 name,
                 value,
