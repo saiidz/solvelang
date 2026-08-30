@@ -1,6 +1,8 @@
 use solvec::ast::{Expr, ExprKind, Stmt};
 use solvec::ast_runtime::ExecutionPolicy;
-use solvec::{ast_runtime, diagnostics, formatter, lexer, lint, parser, semantic, value};
+use solvec::{
+    ast_runtime, diagnostics, formatter, lexer, lint, module_resolver, parser, semantic, value,
+};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -833,6 +835,12 @@ fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
 }
 
 fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSource, CliFailure> {
+    module_resolver::resolve_explicit_modules(Path::new(filename)).map_err(|error| {
+        CliFailure::invalid_workflow(format!(
+            "{}:{}:{}: {}",
+            error.source, error.location.line, error.location.column, error.message
+        ))
+    })?;
     let entry = fs::canonicalize(filename).map_err(|error| {
         CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
     })?;

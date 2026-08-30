@@ -538,7 +538,7 @@ fn imports_accept_trailing_comments_and_preserve_hardened_confinement() {
 }
 
 #[test]
-fn explicit_module_programs_fail_before_any_output_or_source_resolution() {
+fn explicit_module_graph_validation_fails_before_any_output_or_evaluation() {
     let file = write_temp_solve_file(
         "solvelang_explicit_module_parser_only.solve",
         "print(\"must-not-print\")\nimport \"missing.solve\" as math\n",
@@ -549,10 +549,10 @@ fn explicit_module_programs_fail_before_any_output_or_source_resolution() {
     assert!(!success, "explicit module program unexpectedly succeeded");
     assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
     assert!(
-        stderr.contains("explicit local modules are not executable"),
+        stderr.contains("failed to resolve explicit module 'missing.solve'"),
         "unexpected stderr: {stderr}"
     );
-    assert!(!stderr.contains("failed to resolve import"));
+    assert!(!stderr.contains("must-not-print"));
 }
 
 #[test]
