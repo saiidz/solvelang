@@ -32,14 +32,36 @@ fn symbols(text: &str) -> Vec<Value> {
     let Ok(statements) = parser.parse() else {
         return Vec::new();
     };
-    statements.into_iter().filter_map(|statement| match statement {
-        Stmt::Let { name, location, .. } => Some(json!({"name":name,"kind":13,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Function { name, location, .. } => Some(json!({"name":name,"kind":12,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Export { declaration: ExportedDeclaration::Let { name, location, .. }, .. } => Some(json!({"name":name,"kind":13,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Export { declaration: ExportedDeclaration::Function { name, location, .. }, .. } => Some(json!({"name":name,"kind":12,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        Stmt::Agent { name, location, .. } => Some(json!({"name":name,"kind":5,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
-        _ => None,
-    }).collect()
+    statements
+        .into_iter()
+        .flat_map(|statement| match statement {
+            Stmt::Let { name, location, .. } => vec![document_symbol(name, location, 13)],
+            Stmt::Function { name, location, .. } => vec![document_symbol(name, location, 12)],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, location, .. },
+                ..
+            } => vec![document_symbol(name, location, 13)],
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, location, .. },
+                ..
+            } => vec![document_symbol(name, location, 12)],
+            Stmt::ModuleImport {
+                namespace,
+                location,
+                ..
+            } => vec![document_symbol(namespace, location, 3)],
+            Stmt::NamedModuleImport { bindings, .. } => bindings
+                .into_iter()
+                .map(|binding| document_symbol(binding.local, binding.location, 13))
+                .collect(),
+            Stmt::Agent { name, location, .. } => vec![document_symbol(name, location, 5)],
+            _ => Vec::new(),
+        })
+        .collect()
+}
+
+fn document_symbol(name: String, location: SourceLocation, kind: u8) -> Value {
+    json!({"name":name,"kind":kind,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})
 }
 
 fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
@@ -93,6 +115,14 @@ fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static 
                     },
                 ..
             } if declared == name => Some((location, "function")),
+            Stmt::ModuleImport {
+                namespace,
+                location,
+                ..
+            } if namespace == name => Some((location, "module namespace")),
+            Stmt::NamedModuleImport { bindings, .. } => bindings.into_iter().find_map(|binding| {
+                (binding.local == name).then_some((binding.location, "imported binding"))
+            }),
             Stmt::Agent {
                 name: declared,
                 location,
@@ -151,39 +181,54 @@ fn completions(text: &str) -> Vec<Value> {
     };
     statements
         .into_iter()
-        .filter_map(|statement| match statement {
-            Stmt::Let { name, .. } => Some(json!({
+        .flat_map(|statement| match statement {
+            Stmt::Let { name, .. } => vec![json!({
                 "label": name,
                 "kind": 6,
                 "detail": "Top-level SolveLang variable"
-            })),
-            Stmt::Function { name, params, .. } => Some(json!({
+            })],
+            Stmt::Function { name, params, .. } => vec![json!({
                 "label": name,
                 "kind": 3,
                 "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
-            })),
+            })],
             Stmt::Export {
                 declaration: ExportedDeclaration::Let { name, .. },
                 ..
-            } => Some(json!({
+            } => vec![json!({
                 "label": name,
                 "kind": 6,
                 "detail": "Top-level SolveLang variable"
-            })),
+            })],
             Stmt::Export {
                 declaration: ExportedDeclaration::Function { name, params, .. },
                 ..
-            } => Some(json!({
+            } => vec![json!({
                 "label": name,
                 "kind": 3,
                 "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
-            })),
-            Stmt::Agent { name, .. } => Some(json!({
+            })],
+            Stmt::ModuleImport { namespace, .. } => vec![json!({
+                "label": namespace,
+                "kind": 9,
+                "detail": "Top-level SolveLang module namespace"
+            })],
+            Stmt::NamedModuleImport { bindings, .. } => bindings
+                .into_iter()
+                .map(|binding| {
+                    json!({
+                        "label": binding.local,
+                        "kind": 6,
+                        "detail": "Top-level SolveLang imported binding"
+                    })
+                })
+                .collect(),
+            Stmt::Agent { name, .. } => vec![json!({
                 "label": name,
                 "kind": 7,
                 "detail": "Top-level SolveLang agent"
-            })),
-            _ => None,
+            })],
+            _ => Vec::new(),
         })
         .collect()
 }
@@ -528,6 +573,25 @@ mod tests {
         assert_eq!(top_level_symbol(source, "version").unwrap().1, "variable");
         assert_eq!(top_level_symbol(source, "add").unwrap().1, "function");
         assert_eq!(completions(source).len(), 2);
+    }
+
+    #[test]
+    fn imports_remain_visible_to_lsp_symbols_and_completion() {
+        let source = "import \"math.solve\" as math\nimport { version as api_version, add } from \"math.solve\"\n";
+        assert_eq!(symbols(source).len(), 3);
+        assert_eq!(
+            top_level_symbol(source, "math").unwrap().1,
+            "module namespace"
+        );
+        assert_eq!(
+            top_level_symbol(source, "api_version").unwrap().1,
+            "imported binding"
+        );
+        assert_eq!(
+            top_level_symbol(source, "add").unwrap().1,
+            "imported binding"
+        );
+        assert_eq!(completions(source).len(), 3);
     }
 
     #[test]

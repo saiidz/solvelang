@@ -61,10 +61,23 @@ impl Checker {
     fn new(statements: &[Stmt]) -> Self {
         let mut functions = HashMap::new();
         let mut agents = HashMap::new();
+        let mut imported_bindings = HashSet::new();
+        let mut named_import_bindings = HashSet::new();
+        let mut namespace_imports = HashSet::new();
         let mut diagnostics = Vec::new();
 
         for statement in statements {
             match statement {
+                Stmt::ModuleImport { namespace, .. } => {
+                    imported_bindings.insert(namespace.clone());
+                    namespace_imports.insert(namespace.clone());
+                }
+                Stmt::NamedModuleImport { bindings, .. } => {
+                    for binding in bindings {
+                        imported_bindings.insert(binding.local.clone());
+                        named_import_bindings.insert(binding.local.clone());
+                    }
+                }
                 Stmt::Function {
                     name,
                     params,
@@ -126,9 +139,9 @@ impl Checker {
         Self {
             functions,
             agents,
-            imported_bindings: HashSet::new(),
-            named_import_bindings: HashSet::new(),
-            namespace_imports: HashSet::new(),
+            imported_bindings,
+            named_import_bindings,
+            namespace_imports,
             diagnostics,
         }
     }
@@ -252,6 +265,11 @@ impl Checker {
                     ..
                 } => {
                     let mut function_values = values.clone();
+                    for binding in &self.imported_bindings {
+                        function_values
+                            .entry(binding.clone())
+                            .or_insert(Type::Unknown);
+                    }
                     for param in params {
                         function_values.insert(param.clone(), Type::Unknown);
                     }
@@ -653,5 +671,21 @@ mod tests {
                 .contains("unknown module namespace 'missing'")
         );
         assert!(check(&parse("unknown(1)\n")).is_err());
+    }
+
+    #[test]
+    fn functions_can_reference_later_imported_bindings() {
+        assert!(
+            check(&parse(
+                "fn wrapper() { return add(1, 2) }\nimport { add } from \"math.solve\"\n",
+            ))
+            .is_ok()
+        );
+        assert!(
+            check(&parse(
+                "fn wrapper() { return math.add(1, 2) }\nimport \"math.solve\" as math\n",
+            ))
+            .is_ok()
+        );
     }
 }
