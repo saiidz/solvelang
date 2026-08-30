@@ -12,6 +12,8 @@ pub struct Parser {
     errors: Vec<Diagnostic>,
     loop_depth: usize,
     exported_names: HashSet<String>,
+    local_bindings: BTreeMap<String, SourceLocation>,
+    module_bindings: BTreeMap<String, SourceLocation>,
 }
 
 impl Parser {
@@ -22,6 +24,8 @@ impl Parser {
             errors: Vec::new(),
             loop_depth: 0,
             exported_names: HashSet::new(),
+            local_bindings: BTreeMap::new(),
+            module_bindings: BTreeMap::new(),
         }
     }
 
@@ -81,16 +85,34 @@ impl Parser {
         }
 
         match self.peek() {
-            Token::Let => self.let_statement(),
+            Token::Let => {
+                let statement = self.let_statement()?;
+                if top_level && let Stmt::Let { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                }
+                Some(statement)
+            }
             Token::Print => self.print_statement(),
             Token::Return => self.return_statement(),
-            Token::Fn => self.function_statement(),
+            Token::Fn => {
+                let statement = self.function_statement()?;
+                if top_level && let Stmt::Function { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                }
+                Some(statement)
+            }
             Token::If => self.if_statement(),
             Token::While => self.while_statement(),
             Token::For => self.for_statement(),
             Token::Break => self.loop_control_statement(true),
             Token::Continue => self.loop_control_statement(false),
-            Token::Agent => self.agent_statement(),
+            Token::Agent => {
+                let statement = self.agent_statement()?;
+                if top_level && let Stmt::Agent { name, location, .. } = &statement {
+                    self.register_local_binding(name, *location);
+                }
+                Some(statement)
+            }
             Token::Ask => self.ask_statement(),
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
             _ => Some(Stmt::Expr(self.expression())),
@@ -149,6 +171,9 @@ impl Parser {
             );
             return None;
         }
+        if !self.register_module_binding(name, location) {
+            return None;
+        }
 
         Some(Stmt::Export {
             declaration,
@@ -187,6 +212,9 @@ impl Parser {
         }
         let namespace = self.consume_identifier("Expected namespace name after 'as'.")?;
         if !self.consume_import_terminator() {
+            return None;
+        }
+        if !self.register_module_binding(&namespace, location) {
             return None;
         }
         Some(Stmt::ModuleImport {
@@ -271,6 +299,12 @@ impl Parser {
         };
         if !self.consume_import_terminator() {
             return None;
+        }
+
+        for binding in &bindings {
+            if !self.register_module_binding(&binding.local, binding.location) {
+                return None;
+            }
         }
 
         Some(Stmt::NamedModuleImport {
@@ -945,6 +979,53 @@ impl Parser {
             )
         )
     }
+    fn register_local_binding(&mut self, name: &str, location: SourceLocation) {
+        if self.module_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a local declaration",
+                    name
+                ),
+                "Use a distinct local declaration name.",
+            );
+            return;
+        }
+        self.local_bindings
+            .entry(name.to_string())
+            .or_insert(location);
+    }
+    fn register_module_binding(&mut self, name: &str, location: SourceLocation) -> bool {
+        if name == "input" {
+            self.error_at(
+                location,
+                "module binding 'input' is reserved",
+                "Use a different import or export binding name.",
+            );
+            return false;
+        }
+        if self.module_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!("duplicate module binding '{}'", name),
+                "Use a distinct local binding for each import or export.",
+            );
+            return false;
+        }
+        if self.local_bindings.contains_key(name) {
+            self.error_at(
+                location,
+                &format!(
+                    "module binding '{}' conflicts with a local declaration",
+                    name
+                ),
+                "Use a distinct module binding name.",
+            );
+            return false;
+        }
+        self.module_bindings.insert(name.to_string(), location);
+        true
+    }
     fn starts_legacy_include(&self) -> bool {
         self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
     }
@@ -1139,7 +1220,7 @@ print(user.name)
             r#"export let api_version = 1
 export fn add(left, right) { return left + right }
 import "math.solve" as math
-import { api_version as version, add } from "math.solve"
+import { api_version as version, add as remote_add } from "math.solve"
 import "shared.solve"
 "#,
         )
@@ -1184,7 +1265,7 @@ import "shared.solve"
         assert_eq!(bindings[0].exported, "api_version");
         assert_eq!(bindings[0].local, "version");
         assert_eq!(bindings[1].exported, "add");
-        assert_eq!(bindings[1].local, "add");
+        assert_eq!(bindings[1].local, "remote_add");
     }
 
     #[test]
@@ -1227,6 +1308,24 @@ import "shared.solve"
                             .contains("may only prefix a top-level let or fn")
                             || error.message.contains("only allowed at top level"))
                 }),
+                "unexpected diagnostics for {source:?}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_explicit_module_binding_collisions_deterministically() {
+        for source in [
+            "import { first as value } from \"a.solve\"\nimport { second as value } from \"b.solve\"\n",
+            "let value = 1\nimport \"a.solve\" as value\n",
+            "import \"a.solve\" as value\nlet value = 1\n",
+            "import \"a.solve\" as input\n",
+        ] {
+            let errors = parse(source).expect_err("module binding collision must fail");
+            assert!(
+                errors
+                    .iter()
+                    .any(|error| error.message.contains("module binding")),
                 "unexpected diagnostics for {source:?}: {errors:?}"
             );
         }

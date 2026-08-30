@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::ast::{BinaryOp, Expr, ExprKind, Stmt};
+use crate::ast::{BinaryOp, ExportedDeclaration, Expr, ExprKind, Stmt};
 use crate::diagnostics::Diagnostic;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,6 +66,31 @@ impl Checker {
                     name,
                     params,
                     location,
+                    ..
+                } if functions
+                    .insert(
+                        name.clone(),
+                        FunctionSymbol {
+                            arity: params.len(),
+                        },
+                    )
+                    .is_some() =>
+                {
+                    diagnostics.push(Diagnostic::new(
+                        location.line,
+                        location.column,
+                        format!("duplicate function declaration '{}'", name),
+                        "Use a distinct function name; functions cannot be overloaded.",
+                    ));
+                }
+                Stmt::Export {
+                    declaration:
+                        ExportedDeclaration::Function {
+                            name,
+                            params,
+                            location,
+                            ..
+                        },
                     ..
                 } if functions
                     .insert(
@@ -207,7 +232,11 @@ impl Checker {
                         values.entry(name.clone()).or_insert(Type::Unknown);
                     }
                 }
-                Stmt::Function { params, body, .. } => {
+                Stmt::Function { params, body, .. }
+                | Stmt::Export {
+                    declaration: ExportedDeclaration::Function { params, body, .. },
+                    ..
+                } => {
                     let mut function_values = values.clone();
                     for param in params {
                         function_values.insert(param.clone(), Type::Unknown);
@@ -230,10 +259,22 @@ impl Checker {
                         ));
                     }
                 }
-                Stmt::LegacyInclude { .. }
-                | Stmt::ModuleImport { .. }
-                | Stmt::NamedModuleImport { .. }
-                | Stmt::Export { .. } => {}
+                Stmt::ModuleImport { namespace, .. } => {
+                    values.insert(namespace.clone(), Type::Unknown);
+                }
+                Stmt::NamedModuleImport { bindings, .. } => {
+                    for binding in bindings {
+                        values.insert(binding.local.clone(), Type::Unknown);
+                    }
+                }
+                Stmt::Export {
+                    declaration: ExportedDeclaration::Let { name, value, .. },
+                    ..
+                } => {
+                    let value_type = self.check_expr(value, values, in_function);
+                    values.insert(name.clone(), value_type);
+                }
+                Stmt::LegacyInclude { .. } => {}
             }
         }
     }
@@ -524,5 +565,24 @@ mod tests {
         assert!(check(&parse("print(keys({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(values({ beta: 2, alpha: 1 }))\n")).is_ok());
         assert!(check(&parse("print(entries({ beta: 2, alpha: 1 }))\n")).is_ok());
+    }
+
+    #[test]
+    fn checks_explicit_module_bindings_and_exported_declarations() {
+        assert!(check(&parse(
+            "import { value } from \"a.solve\"\nlet copy = value\nexport let answer = 1\nlet repeated = answer\nexport fn identity(item) { return item }\nprint(identity(copy))\n",
+        ))
+        .is_ok());
+
+        let diagnostics = check(&parse(
+            "export let value = 1 + true\nexport fn invalid() { return \"x\" + 1 }\n",
+        ))
+        .expect_err("exported declarations must receive ordinary semantic checks");
+        assert_eq!(diagnostics.len(), 2);
+        assert!(
+            diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.message.contains("requires number operands"))
+        );
     }
 }
