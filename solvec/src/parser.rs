@@ -232,16 +232,18 @@ impl Parser {
         ) {
             return None;
         }
-        let namespace = self.consume_identifier("Expected namespace name after 'as'.")?;
+        let (namespace, namespace_location) =
+            self.consume_identifier_with_location("Expected namespace name after 'as'.")?;
         if !self.consume_import_terminator() {
             return None;
         }
-        if !self.register_module_binding(&namespace, location) {
+        if !self.register_module_binding(&namespace, namespace_location) {
             return None;
         }
         Some(Stmt::ModuleImport {
             path,
             namespace,
+            namespace_location,
             location,
         })
     }
@@ -262,10 +264,10 @@ impl Parser {
         while !self.check(&Token::RightBrace) && !self.is_at_end() {
             let (exported, binding_location) =
                 self.consume_identifier_with_location("Expected exported name in named import.")?;
-            let local = if self.matches_contextual("as") {
-                self.consume_identifier("Expected local alias after 'as'.")?
+            let (local, local_location) = if self.matches_contextual("as") {
+                self.consume_identifier_with_location("Expected local alias after 'as'.")?
             } else {
-                exported.clone()
+                (exported.clone(), binding_location)
             };
 
             if !exported_names.insert(exported.clone()) {
@@ -286,8 +288,9 @@ impl Parser {
             }
             bindings.push(ImportBinding {
                 exported,
+                exported_location: binding_location,
                 local,
-                location: binding_location,
+                local_location,
             });
 
             if !self.matches(&Token::Comma) {
@@ -324,7 +327,7 @@ impl Parser {
         }
 
         for binding in &bindings {
-            if !self.register_module_binding(&binding.local, binding.location) {
+            if !self.register_module_binding(&binding.local, binding.local_location) {
                 return None;
             }
         }
@@ -1389,8 +1392,8 @@ import "shared.solve"
         ));
         assert!(matches!(
             &ast[2],
-            Stmt::ModuleImport { path, namespace, location }
-                if path == "math.solve" && namespace == "math" && location.line == 3
+            Stmt::ModuleImport { path, namespace, namespace_location, location }
+                if path == "math.solve" && namespace == "math" && location.line == 3 && namespace_location.column == 24
         ));
         assert!(matches!(
             &ast[4],

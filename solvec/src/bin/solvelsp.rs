@@ -47,12 +47,12 @@ fn symbols(text: &str) -> Vec<Value> {
             } => vec![document_symbol(name, location, 12)],
             Stmt::ModuleImport {
                 namespace,
-                location,
+                namespace_location,
                 ..
-            } => vec![document_symbol(namespace, location, 3)],
+            } => vec![document_symbol(namespace, namespace_location, 3)],
             Stmt::NamedModuleImport { bindings, .. } => bindings
                 .into_iter()
-                .map(|binding| document_symbol(binding.local, binding.location, 13))
+                .map(|binding| document_symbol(binding.local, binding.local_location, 13))
                 .collect(),
             Stmt::Agent { name, location, .. } => vec![document_symbol(name, location, 5)],
             _ => Vec::new(),
@@ -117,11 +117,11 @@ fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static 
             } if declared == name => Some((location, "function")),
             Stmt::ModuleImport {
                 namespace,
-                location,
+                namespace_location,
                 ..
-            } if namespace == name => Some((location, "module namespace")),
+            } if namespace == name => Some((namespace_location, "module namespace")),
             Stmt::NamedModuleImport { bindings, .. } => bindings.into_iter().find_map(|binding| {
-                (binding.local == name).then_some((binding.location, "imported binding"))
+                (binding.local == name).then_some((binding.local_location, "imported binding"))
             }),
             Stmt::Agent {
                 name: declared,
@@ -592,6 +592,23 @@ mod tests {
             "imported binding"
         );
         assert_eq!(completions(source).len(), 3);
+    }
+
+    #[test]
+    fn import_symbols_point_at_local_binding_tokens() {
+        let source =
+            "import \"math.solve\" as math\nimport { remote as local } from \"math.solve\"\n";
+        assert_eq!(top_level_symbol(source, "math").unwrap().0.column, 24);
+        assert_eq!(top_level_symbol(source, "local").unwrap().0.column, 20);
+        let document_symbols = symbols(source);
+        assert_eq!(
+            document_symbols[0]["selectionRange"]["start"]["character"],
+            23
+        );
+        assert_eq!(
+            document_symbols[1]["selectionRange"]["start"]["character"],
+            19
+        );
     }
 
     #[test]

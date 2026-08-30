@@ -84,8 +84,9 @@ pub enum BinaryOp {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ImportBinding {
     pub exported: String,
+    pub exported_location: SourceLocation,
     pub local: String,
-    pub location: SourceLocation,
+    pub local_location: SourceLocation,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -112,6 +113,7 @@ pub enum Stmt {
     ModuleImport {
         path: String,
         namespace: String,
+        namespace_location: SourceLocation,
         location: SourceLocation,
     },
     NamedModuleImport {
