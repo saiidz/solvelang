@@ -52,6 +52,11 @@ pub enum ExprKind {
         name: String,
         args: Vec<Expr>,
     },
+    ModuleCall {
+        namespace: String,
+        member: String,
+        args: Vec<Expr>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]

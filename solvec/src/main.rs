@@ -1178,6 +1178,11 @@ fn preflight_expr(
                 }
             }
         }
+        ExprKind::ModuleCall { args, .. } => {
+            for arg in args {
+                preflight_expr(arg, hardened, function_names)?;
+            }
+        }
         ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {}
     }
     Ok(())

@@ -4,7 +4,7 @@
 //! can depend on runtime input, calls, or branches stay `Unknown` instead of
 //! producing speculative diagnostics.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::ast::{BinaryOp, ExportedDeclaration, Expr, ExprKind, Stmt};
 use crate::diagnostics::Diagnostic;
@@ -51,6 +51,7 @@ pub fn check(statements: &[Stmt]) -> Result<(), Vec<Diagnostic>> {
 struct Checker {
     functions: HashMap<String, FunctionSymbol>,
     agents: HashMap<String, ()>,
+    imported_bindings: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -123,6 +124,7 @@ impl Checker {
         Self {
             functions,
             agents,
+            imported_bindings: HashSet::new(),
             diagnostics,
         }
     }
@@ -153,6 +155,14 @@ impl Checker {
                     value,
                     location,
                 } => {
+                    if self.imported_bindings.contains(name) {
+                        self.diagnostics.push(Diagnostic::new(
+                            location.line,
+                            location.column,
+                            format!("cannot assign to imported binding '{}'", name),
+                            "Imported values and namespaces are read-only.",
+                        ));
+                    }
                     if !values.contains_key(name) && name != "input" {
                         self.diagnostics.push(Diagnostic::new(
                             location.line,
@@ -162,7 +172,7 @@ impl Checker {
                         ));
                     }
                     let value_type = self.check_expr(value, values, in_function);
-                    if values.contains_key(name) {
+                    if values.contains_key(name) && !self.imported_bindings.contains(name) {
                         values.insert(name.clone(), value_type);
                     }
                 }
@@ -261,10 +271,12 @@ impl Checker {
                 }
                 Stmt::ModuleImport { namespace, .. } => {
                     values.insert(namespace.clone(), Type::Unknown);
+                    self.imported_bindings.insert(namespace.clone());
                 }
                 Stmt::NamedModuleImport { bindings, .. } => {
                     for binding in bindings {
                         values.insert(binding.local.clone(), Type::Unknown);
+                        self.imported_bindings.insert(binding.local.clone());
                     }
                 }
                 Stmt::Export {
@@ -463,6 +475,12 @@ impl Checker {
                 }
                 Type::Unknown
             }
+            ExprKind::ModuleCall { args, .. } => {
+                for argument in args {
+                    self.check_expr(argument, values, in_function);
+                }
+                Type::Unknown
+            }
         }
     }
 }
@@ -584,5 +602,19 @@ mod tests {
                 .iter()
                 .all(|diagnostic| diagnostic.message.contains("requires number operands"))
         );
+    }
+
+    #[test]
+    fn rejects_assignments_to_read_only_imported_bindings() {
+        let diagnostics = check(&parse(
+            "import \"a.solve\" as module\nmodule = 1\nimport { value } from \"a.solve\"\nvalue = 2\n",
+        ))
+        .expect_err("imports are read-only bindings");
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics.iter().all(|diagnostic| {
+            diagnostic
+                .message
+                .contains("cannot assign to imported binding")
+        }));
     }
 }

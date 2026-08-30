@@ -564,6 +564,14 @@ impl AstRuntime {
                 self.eval_binary(left, operator, right, expr.location)
             }
             ExprKind::Call { name, args } => self.call_function(name, args, expr.location),
+            ExprKind::ModuleCall { .. } => Err(self.error_at(
+                expr.location,
+                "explicit local modules are not executable until module resolution is available",
+                Some(
+                    "Use the legacy import form until the resolver implementation is released."
+                        .to_string(),
+                ),
+            )),
         }
     }
 

@@ -746,6 +746,43 @@ impl Parser {
                 if let Some(name) = name {
                     expr = Expr::new(ExprKind::Property(Box::new(expr), name), location);
                 }
+            } else if self.matches(&Token::LeftParen) {
+                let location = expr.location;
+                let (namespace, member) = match expr.kind {
+                    ExprKind::Property(target, member) => match target.kind {
+                        ExprKind::Variable(namespace) => (namespace, member),
+                        _ => {
+                            self.error_at(
+                                location,
+                                "Only namespace member calls are supported.",
+                                "Call a declared function directly or use namespace.member(...).",
+                            );
+                            (String::new(), String::new())
+                        }
+                    },
+                    _ => {
+                        self.error_at(
+                            location,
+                            "Only namespace member calls are supported.",
+                            "Call a declared function directly or use namespace.member(...).",
+                        );
+                        (String::new(), String::new())
+                    }
+                };
+                let args = self.argument_list();
+                self.consume(
+                    &Token::RightParen,
+                    "Invalid namespace member call: expected ')'.",
+                    "Close the namespace member call with ')'.",
+                );
+                expr = Expr::new(
+                    ExprKind::ModuleCall {
+                        namespace,
+                        member,
+                        args,
+                    },
+                    location,
+                );
             } else {
                 break;
             }
@@ -996,10 +1033,10 @@ impl Parser {
             .or_insert(location);
     }
     fn register_module_binding(&mut self, name: &str, location: SourceLocation) -> bool {
-        if name == "input" {
+        if name == "input" || is_builtin_name(name) {
             self.error_at(
                 location,
-                "module binding 'input' is reserved",
+                &format!("module binding '{}' is reserved", name),
                 "Use a different import or export binding name.",
             );
             return false;
@@ -1108,10 +1145,30 @@ impl Parser {
     }
 }
 
+fn is_builtin_name(name: &str) -> bool {
+    matches!(
+        name,
+        "length"
+            | "is_empty"
+            | "contains"
+            | "get"
+            | "keys"
+            | "values"
+            | "entries"
+            | "json_parse"
+            | "json_stringify"
+            | "http_get"
+            | "http_post"
+            | "read_file"
+            | "write_file"
+            | "env"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::Parser;
-    use crate::ast::{ExportedDeclaration, Stmt};
+    use crate::ast::{ExportedDeclaration, Expr, ExprKind, Stmt};
     use crate::lexer::lex;
 
     fn parse(source: &str) -> Result<Vec<Stmt>, Vec<crate::diagnostics::Diagnostic>> {
@@ -1269,6 +1326,20 @@ import "shared.solve"
     }
 
     #[test]
+    fn parses_callable_namespace_members_without_module_evaluation() {
+        let ast = parse("import \"math.solve\" as math\nprint(math.add(1, 2))\n")
+            .expect("namespace member call parses");
+
+        assert!(matches!(
+            &ast[1],
+            Stmt::Print {
+                value: Expr { kind: ExprKind::ModuleCall { namespace, member, args }, .. },
+                ..
+            } if namespace == "math" && member == "add" && args.len() == 2
+        ));
+    }
+
+    #[test]
     fn keeps_module_words_contextual_outside_complete_module_forms() {
         let ast = parse(
             "let export = 1\nlet import = 2\nlet as = 3\nfn export() { return import }\nfn from() { return export + import + as }\nif true { export }\n",
@@ -1320,6 +1391,7 @@ import "shared.solve"
             "let value = 1\nimport \"a.solve\" as value\n",
             "import \"a.solve\" as value\nlet value = 1\n",
             "import \"a.solve\" as input\n",
+            "import \"a.solve\" as length\n",
         ] {
             let errors = parse(source).expect_err("module binding collision must fail");
             assert!(

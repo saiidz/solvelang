@@ -5,7 +5,7 @@
 
 use serde_json::{Value, json};
 use solvec::{
-    ast::{SourceLocation, Stmt},
+    ast::{ExportedDeclaration, SourceLocation, Stmt},
     formatter, lexer, parser,
 };
 use std::collections::HashMap;
@@ -35,6 +35,8 @@ fn symbols(text: &str) -> Vec<Value> {
     statements.into_iter().filter_map(|statement| match statement {
         Stmt::Let { name, location, .. } => Some(json!({"name":name,"kind":13,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
         Stmt::Function { name, location, .. } => Some(json!({"name":name,"kind":12,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
+        Stmt::Export { declaration: ExportedDeclaration::Let { name, location, .. }, .. } => Some(json!({"name":name,"kind":13,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
+        Stmt::Export { declaration: ExportedDeclaration::Function { name, location, .. }, .. } => Some(json!({"name":name,"kind":12,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
         Stmt::Agent { name, location, .. } => Some(json!({"name":name,"kind":5,"range":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}},"selectionRange":{"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}}})),
         _ => None,
     }).collect()
@@ -71,6 +73,24 @@ fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static 
             Stmt::Function {
                 name: declared,
                 location,
+                ..
+            } if declared == name => Some((location, "function")),
+            Stmt::Export {
+                declaration:
+                    ExportedDeclaration::Let {
+                        name: declared,
+                        location,
+                        ..
+                    },
+                ..
+            } if declared == name => Some((location, "variable")),
+            Stmt::Export {
+                declaration:
+                    ExportedDeclaration::Function {
+                        name: declared,
+                        location,
+                        ..
+                    },
                 ..
             } if declared == name => Some((location, "function")),
             Stmt::Agent {
@@ -138,6 +158,22 @@ fn completions(text: &str) -> Vec<Value> {
                 "detail": "Top-level SolveLang variable"
             })),
             Stmt::Function { name, params, .. } => Some(json!({
+                "label": name,
+                "kind": 3,
+                "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
+            })),
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, .. },
+                ..
+            } => Some(json!({
+                "label": name,
+                "kind": 6,
+                "detail": "Top-level SolveLang variable"
+            })),
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { name, params, .. },
+                ..
+            } => Some(json!({
                 "label": name,
                 "kind": 3,
                 "detail": format!("Top-level SolveLang function with {} parameter(s)", params.len())
@@ -433,7 +469,7 @@ fn main() -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::process_message;
+    use super::{completions, process_message, symbols, top_level_symbol};
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -483,6 +519,15 @@ mod tests {
             &mut documents,
         );
         assert_eq!(output[0]["result"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn exported_declarations_remain_visible_to_lsp_symbols_and_completion() {
+        let source = "export let version = 1\nexport fn add(left, right) { return left + right }\n";
+        assert_eq!(symbols(source).len(), 2);
+        assert_eq!(top_level_symbol(source, "version").unwrap().1, "variable");
+        assert_eq!(top_level_symbol(source, "add").unwrap().1, "function");
+        assert_eq!(completions(source).len(), 2);
     }
 
     #[test]

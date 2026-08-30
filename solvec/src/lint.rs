@@ -140,6 +140,11 @@ impl Linter {
                     self.lint_expr(arg);
                 }
             }
+            ExprKind::ModuleCall { args, .. } => {
+                for arg in args {
+                    self.lint_expr(arg);
+                }
+            }
             ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {
             }
         }
