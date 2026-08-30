@@ -4,6 +4,8 @@
 
 **Captured:** 2026-08-21
 
+> Historical checkpoint: this document contains detailed merged-train evidence captured on 2026-08-21. Use [project completion plan](project-completion-plan.md) for the current repository-completion checklist, and verify all GitHub/production facts live before acting.
+
 Before every build/integration run, reconcile current `main`, all open PRs, recent closed/merged/superseded PRs, exact branch heads/bases, mergeability, review threads, Hosted CI/Rust/RustSec, self-hosted validation when applicable, active branches, open issues, `.github/workflows`, `ROADMAP.md`, this handoff, and `docs/current-production-status-2026-08-20.md`. Live GitHub state and newer verified production evidence always win over hashes recorded here.
 
 ## Current repository checkpoint
