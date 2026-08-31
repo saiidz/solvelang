@@ -127,6 +127,12 @@ struct ModuleScope {
     filename: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ModuleInitializationStatus {
+    Initializing,
+    Initialized,
+}
+
 #[derive(Clone, Debug)]
 struct Agent {
     instruction: String,
@@ -202,6 +208,7 @@ pub struct AstRuntime {
     namespaces: HashMap<String, String>,
     read_only_bindings: HashSet<String>,
     module_scopes: HashMap<String, ModuleScope>,
+    module_initialization: HashMap<String, ModuleInitializationStatus>,
     local_bindings: Vec<HashMap<String, Value>>,
     active_module_calls: Vec<String>,
     active_module: Option<String>,
@@ -224,6 +231,7 @@ impl Default for AstRuntime {
             namespaces: HashMap::new(),
             read_only_bindings: HashSet::new(),
             module_scopes: HashMap::new(),
+            module_initialization: HashMap::new(),
             local_bindings: Vec::new(),
             active_module_calls: Vec::new(),
             active_module: None,
@@ -321,11 +329,17 @@ impl AstRuntime {
             .ok_or_else(|| RuntimeError::new("explicit module graph is empty"))?
             .clone();
 
+        let saved_module_scopes = self.module_scopes.clone();
+        let saved_initialization = self.module_initialization.clone();
         for identity in &graph.order {
             if identity == &entry_identity {
                 continue;
             }
-            self.initialize_module(graph, identity)?;
+            if let Err(error) = self.initialize_module(graph, identity) {
+                self.module_scopes = saved_module_scopes;
+                self.module_initialization = saved_initialization;
+                return Err(error);
+            }
         }
 
         let entry = graph
@@ -342,10 +356,24 @@ impl AstRuntime {
         graph: &ModuleGraph,
         identity: &str,
     ) -> Result<(), RuntimeError> {
+        match self.module_initialization.get(identity) {
+            Some(ModuleInitializationStatus::Initialized) => return Ok(()),
+            Some(ModuleInitializationStatus::Initializing) => {
+                return Err(RuntimeError::new(format!(
+                    "recursive initialization of module '{}' was rejected",
+                    identity
+                )));
+            }
+            None => {}
+        }
         let node = graph
             .modules
             .get(identity)
             .ok_or_else(|| RuntimeError::new("resolved module is missing from the graph"))?;
+        self.module_initialization.insert(
+            identity.to_string(),
+            ModuleInitializationStatus::Initializing,
+        );
         let source = node.source.clone();
         let statements = node.statements.clone();
         let mut module =
@@ -353,8 +381,13 @@ impl AstRuntime {
         module.module_scopes = self.module_scopes.clone();
         module.active_module = Some(identity.to_string());
         module.module_execution_enabled = true;
-        module.install_imports(&statements, node.dependencies.as_slice())?;
-        module.execute_module_declarations(&statements)?;
+        if let Err(error) = module
+            .install_imports(&statements, node.dependencies.as_slice())
+            .and_then(|_| module.execute_module_declarations(&statements))
+        {
+            self.module_initialization.remove(identity);
+            return Err(error);
+        }
         self.module_scopes.insert(
             identity.to_string(),
             ModuleScope {
@@ -367,6 +400,10 @@ impl AstRuntime {
                 source_lines: module.source_lines,
                 filename: identity.to_string(),
             },
+        );
+        self.module_initialization.insert(
+            identity.to_string(),
+            ModuleInitializationStatus::Initialized,
         );
         Ok(())
     }
@@ -525,8 +562,8 @@ impl AstRuntime {
         Ok(())
     }
 
-    fn executing_module_function(&self) -> bool {
-        !self.active_module_calls.is_empty()
+    fn executing_function(&self) -> bool {
+        !self.local_bindings.is_empty()
     }
 
     fn local_value(&self, name: &str) -> Option<Value> {
@@ -546,7 +583,7 @@ impl AstRuntime {
         &mut self,
         statements: &[Stmt],
     ) -> Result<ControlFlow, RuntimeError> {
-        if !self.executing_module_function() {
+        if !self.executing_function() {
             return self.execute_block(statements);
         }
 
@@ -630,7 +667,7 @@ impl AstRuntime {
                 value,
                 location,
             } => {
-                if self.read_only_bindings.contains(name) {
+                if self.read_only_bindings.contains(name) && !self.executing_function() {
                     return Err(self.error_at(
                         *location,
                         format!("imported binding '{}' is read-only", name),
@@ -645,7 +682,7 @@ impl AstRuntime {
                     ));
                 }
                 let value = self.eval(value)?;
-                if self.executing_module_function() {
+                if self.executing_function() {
                     self.local_bindings
                         .last_mut()
                         .expect("module function has a local binding scope")
@@ -660,7 +697,9 @@ impl AstRuntime {
                 value,
                 location,
             } => {
-                if self.read_only_bindings.contains(name) {
+                if self.read_only_bindings.contains(name)
+                    && self.local_binding_scope(name).is_none()
+                {
                     return Err(self.error_at(
                         *location,
                         format!("imported binding '{}' is read-only", name),
@@ -782,7 +821,7 @@ impl AstRuntime {
                     ));
                 }
                 for value in values {
-                    if self.executing_module_function() {
+                    if self.executing_function() {
                         let mut loop_scope = HashMap::new();
                         loop_scope.insert(name.clone(), value);
                         self.local_bindings.push(loop_scope);
@@ -790,7 +829,7 @@ impl AstRuntime {
                         self.vars.insert(name.clone(), value);
                     }
                     let flow = self.execute_module_scoped_block(body);
-                    if self.executing_module_function() {
+                    if self.executing_function() {
                         self.local_bindings.pop();
                     }
                     match flow? {
@@ -1177,17 +1216,26 @@ impl AstRuntime {
                 .collect();
             self.local_bindings.push(params);
         } else {
-            for (index, param) in function.params.iter().enumerate() {
-                self.vars.insert(param.clone(), values[index].clone());
-            }
+            let params = function
+                .params
+                .iter()
+                .zip(values.iter())
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
+            self.local_bindings.push(params);
         }
 
         let flow = self.execute_block(&function.body);
         if module_identity.is_some() {
             self.local_bindings.pop();
             self.active_module_calls.pop();
+        } else {
+            self.local_bindings.pop();
         }
 
+        // A module call is the transaction boundary. A successful cross-module call
+        // commits its defining module before the caller resumes; a later caller
+        // failure rolls back only the caller, not the already committed callee.
         if let (Some(identity), Ok(_)) = (&module_identity, &flow)
             && !same_module_call
         {
@@ -2115,7 +2163,7 @@ mod tests {
     #[cfg(unix)]
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{AstRuntime, ExecutionPolicy};
+    use super::{AstRuntime, ExecutionPolicy, ModuleInitializationStatus};
     use crate::lexer::lex;
     use crate::parser::Parser;
     use crate::value::Value;
@@ -2245,6 +2293,117 @@ print(named_count)
 
     #[cfg(unix)]
     #[test]
+    fn canonical_modules_initialize_once_and_all_import_forms_share_state() {
+        let root = module_fixture("exactly_once_diamond");
+        let entry = root.join("entry.solve");
+        let entry_source = r#"
+import "a.solve" as a
+import "b.solve" as b
+import "state.solve" as state
+import { value, bump } from "./state.solve"
+print(a.bump_shared())
+print(b.bump_shared())
+print(value)
+print(state.value)
+print(bump())
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            root.join("a.solve"),
+            "import { bump } from \"state.solve\"\nexport fn bump_shared() { return bump() }\n",
+        )
+        .expect("a module");
+        fs::write(
+            root.join("b.solve"),
+            "import \"./state.solve\" as state\nexport fn bump_shared() { return state.bump() }\n",
+        )
+        .expect("b module");
+        fs::write(
+            root.join("state.solve"),
+            "export let value = 0\nexport fn bump() { value = value + 1 return value }\n",
+        )
+        .expect("state module");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let repeated_graph =
+            crate::module_resolver::resolve_explicit_modules(&entry).expect("repeated graph");
+        assert_eq!(
+            graph.order,
+            vec!["state.solve", "a.solve", "b.solve", "entry.solve"]
+        );
+        assert_eq!(graph.order, repeated_graph.order);
+        assert_eq!(
+            graph
+                .order
+                .iter()
+                .filter(|identity| identity.as_str() == "state.solve")
+                .count(),
+            1
+        );
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("module runtime succeeds");
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(1),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(3),
+            ]
+        );
+        assert_eq!(
+            runtime.module_initialization.get("state.solve"),
+            Some(&ModuleInitializationStatus::Initialized)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_module_initialization_rolls_back_the_whole_initialization_phase() {
+        let root = module_fixture("initialization_transaction");
+        let entry = root.join("entry.solve");
+        let entry_source = "import \"dependent.solve\" as dependent\nprint(\"MUST NOT PRINT\")\n";
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            root.join("shared.solve"),
+            "export let partial = 1\nprint(\"MUST NOT PRINT\")\n",
+        )
+        .expect("failing dependency");
+        fs::write(
+            root.join("dependent.solve"),
+            "import { partial } from \"shared.solve\"\nexport let value = partial\n",
+        )
+        .expect("dependent module");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect_err("module initialization fails atomically");
+        assert!(runtime.outputs().is_empty());
+        assert!(runtime.module_scopes.is_empty());
+        assert!(runtime.module_initialization.is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn nested_module_calls_share_live_state_without_committing_local_shadows() {
         let root = module_fixture("nested_live_state");
         let entry = root.join("entry.solve");
@@ -2318,6 +2477,120 @@ export fn parameter_shadow(count) { count = count + 1 return count }
 
     #[cfg(unix)]
     #[test]
+    fn nested_same_module_failure_rolls_back_the_outermost_call_chain() {
+        let root = module_fixture("nested_call_transaction");
+        let entry = root.join("entry.solve");
+        let entry_source = "import \"counter.solve\" as counter\ncounter.fail_outer()\n";
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            root.join("counter.solve"),
+            r#"
+export let count = 1
+fn first() { count = count + 2 }
+fn second() { count = count + 3 }
+export fn fail_outer() { count = count + 1 first() second() return 1 / 0 }
+"#,
+        )
+        .expect("counter module");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect_err("outer failure rolls back nested mutations");
+        assert_eq!(
+            runtime.module_scopes["counter.solve"].vars["count"],
+            Value::Number(1)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn imported_bindings_are_read_only_but_lexical_shadows_remain_local() {
+        let root = module_fixture("import_shadows");
+        let entry = root.join("entry.solve");
+        let entry_source = r#"
+import { value } from "state.solve"
+fn parameter(value) { value = value + 1 return value }
+fn local() { let value = 8 value = value + 1 return value }
+fn block() { if true { let value = 10 value = value + 1 return value } return 0 }
+fn loop() { for value in [12] { value = value + 1 return value } return 0 }
+print(parameter(4))
+print(local())
+print(block())
+print(loop())
+print(value)
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(root.join("state.solve"), "export let value = 2\n").expect("state module");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("lexical shadows are legal");
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(5),
+                Value::Number(9),
+                Value::Number(11),
+                Value::Number(13),
+                Value::Number(2),
+            ]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn imported_runtime_errors_keep_module_line_and_column_provenance() {
+        let root = module_fixture("error_provenance");
+        let module_source =
+            "fn private() {\n  return 1 / 0\n}\nexport fn fail() { return private() }\n";
+        fs::write(root.join("math.solve"), module_source).expect("math module");
+
+        for entry_source in [
+            "import \"math.solve\" as math\nmath.fail()\n",
+            "import { fail } from \"math.solve\"\nfail()\n",
+        ] {
+            let entry = root.join("entry.solve");
+            fs::write(&entry, entry_source).expect("entry source");
+            let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+            let mut runtime = AstRuntime::with_input(
+                ExecutionPolicy::safe(Vec::new()),
+                entry_source,
+                "entry.solve",
+                None,
+                true,
+            );
+            let error = runtime
+                .run_with_modules(&graph, &parse(entry_source))
+                .expect_err("imported call fails");
+            let rendered = error.to_string();
+            assert!(
+                rendered.contains("on line 2, column 12 in math.solve"),
+                "{rendered}"
+            );
+            assert!(rendered.contains("return 1 / 0"), "{rendered}");
+            assert!(!rendered.contains("entry.solve at 1:1"), "{rendered}");
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn module_function_failures_and_cross_module_calls_keep_state_isolated() {
         let root = module_fixture("cross_module_state");
         let entry = root.join("entry.solve");
@@ -2329,7 +2602,7 @@ import "right.solve" as right
 print(left.bump_twice())
 print(left.count)
 print(right.count)
-left.fail_after_update()
+left.fail_after_right_success()
 "#;
         fs::write(&entry, entry_source).expect("entry source");
         fs::write(
@@ -2339,6 +2612,7 @@ import "right.solve" as right
 export let count = 0
 export fn bump_twice() { count = count + 1 right.bump() count = count + 1 return count }
 export fn fail_after_update() { count = 99 return 1 / 0 }
+export fn fail_after_right_success() { count = 99 right.bump() return 1 / 0 }
 "#,
         )
         .expect("left module");
@@ -2367,6 +2641,10 @@ export fn fail_after_update() { count = 99 return 1 / 0 }
         assert_eq!(
             runtime.module_scopes["left.solve"].vars["count"],
             Value::Number(2)
+        );
+        assert_eq!(
+            runtime.module_scopes["right.solve"].vars["count"],
+            Value::Number(102)
         );
         let _ = fs::remove_dir_all(root);
     }

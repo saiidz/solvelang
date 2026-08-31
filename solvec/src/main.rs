@@ -416,8 +416,8 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
         .map_err(|message| CliFailure::arguments(format!("invalid execution policy: {message}")))?;
     let input = load_explicit_input(options.input_path.as_deref())?;
     let entry = freeze_entry_with_imports(filename, options.hardened())?;
-    preflight_workflow(&entry.statements, input.is_some(), options.hardened())?;
     let module_graph = resolve_frozen_entry_modules(&entry.module_entry, &entry.source)?;
+    preflight_workflow(&entry.statements, input.is_some(), options.hardened())?;
     preflight_resolved_modules(&module_graph, options.hardened())?;
 
     let mut runtime = ast_runtime::AstRuntime::with_input(

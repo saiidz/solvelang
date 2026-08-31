@@ -1998,6 +1998,41 @@ fn hardened_preflight_rejects_functions_unavailable_at_runtime() {
 }
 
 #[test]
+fn hardened_preflight_rejects_capabilities_in_reachable_module_helpers_before_effects() {
+    let root = create_temp_workflow_dir("solvelang_module_hardened_preflight");
+    let workflow = root.join("entry.solve");
+    fs::write(
+        &workflow,
+        "import \"unsafe.solve\" as unsafe_module\nprint(\"MUST NOT PRINT\")\nunsafe_module.run()\n",
+    )
+    .expect("entry source");
+    fs::write(
+        root.join("unsafe.solve"),
+        r#"
+fn deepest() { return env("SOLVELANG_SECRET") }
+fn helper() { return deepest() }
+export fn run() { return helper() }
+"#,
+    )
+    .expect("unsafe module");
+    let workflow_arg = workflow.to_string_lossy().to_string();
+
+    let (success, stdout, stderr) = run_solvec_with_status(&[
+        "run",
+        "--json",
+        "--safe",
+        "--dry-run",
+        workflow_arg.as_str(),
+    ]);
+
+    assert!(!success);
+    assert!(stderr.is_empty());
+    let error = parse_json_output(&stdout);
+    assert_eq!(error["errors"][0]["code"], "capability_denied");
+    assert!(!stdout.contains("MUST NOT PRINT"));
+}
+
+#[test]
 fn statements_can_be_adjacent_when_the_parser_can_unambiguously_split_them() {
     let file = write_temp_solve_file(
         "solvelang_cli_adjacent_statements.solve",

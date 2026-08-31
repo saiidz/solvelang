@@ -12,10 +12,8 @@ pub struct Parser {
     errors: Vec<Diagnostic>,
     loop_depth: usize,
     exported_names: HashSet<String>,
-    local_bindings: BTreeMap<String, SourceLocation>,
     top_level_bindings: BTreeMap<String, SourceLocation>,
     module_bindings: BTreeMap<String, SourceLocation>,
-    parameter_bindings: BTreeMap<String, SourceLocation>,
 }
 
 impl Parser {
@@ -26,10 +24,8 @@ impl Parser {
             errors: Vec::new(),
             loop_depth: 0,
             exported_names: HashSet::new(),
-            local_bindings: BTreeMap::new(),
             top_level_bindings: BTreeMap::new(),
             module_bindings: BTreeMap::new(),
-            parameter_bindings: BTreeMap::new(),
         }
     }
 
@@ -91,11 +87,10 @@ impl Parser {
         match self.peek() {
             Token::Let => {
                 let statement = self.let_statement()?;
-                if let Stmt::Let { name, location, .. } = &statement {
-                    self.register_local_binding(name, *location);
-                    if top_level {
-                        self.register_top_level_binding(name, *location);
-                    }
+                if let Stmt::Let { name, location, .. } = &statement
+                    && top_level
+                {
+                    self.register_top_level_binding(name, *location);
                 }
                 Some(statement)
             }
@@ -103,17 +98,10 @@ impl Parser {
             Token::Return => self.return_statement(),
             Token::Fn => {
                 let statement = self.function_statement()?;
-                if let Stmt::Function { name, location, .. } = &statement {
-                    self.register_local_binding(name, *location);
-                    if top_level {
-                        self.register_top_level_binding(name, *location);
-                    }
-                }
-                if let Stmt::Function {
-                    params, location, ..
-                } = &statement
+                if let Stmt::Function { name, location, .. } = &statement
+                    && top_level
                 {
-                    self.register_function_parameters(params, *location);
+                    self.register_top_level_binding(name, *location);
                 }
                 Some(statement)
             }
@@ -124,11 +112,10 @@ impl Parser {
             Token::Continue => self.loop_control_statement(false),
             Token::Agent => {
                 let statement = self.agent_statement()?;
-                if let Stmt::Agent { name, location, .. } = &statement {
-                    self.register_local_binding(name, *location);
-                    if top_level {
-                        self.register_top_level_binding(name, *location);
-                    }
+                if let Stmt::Agent { name, location, .. } = &statement
+                    && top_level
+                {
+                    self.register_top_level_binding(name, *location);
                 }
                 Some(statement)
             }
@@ -193,10 +180,6 @@ impl Parser {
         if !self.register_export_binding(name, location) {
             return None;
         }
-        if let ExportedDeclaration::Function { params, .. } = &declaration {
-            self.register_function_parameters(params, location);
-        }
-
         Some(Stmt::Export {
             declaration,
             location,
@@ -455,7 +438,6 @@ impl Parser {
     fn for_statement(&mut self) -> Option<Stmt> {
         let location = self.advance_location();
         let name = self.consume_identifier("Expected loop variable name after 'for'.")?;
-        self.register_local_binding(&name, location);
         if !self.consume(
             &Token::In,
             "Invalid for loop: expected 'in' after loop variable.",
@@ -1042,23 +1024,18 @@ impl Parser {
             )
         )
     }
-    fn register_local_binding(&mut self, name: &str, location: SourceLocation) {
+    fn register_top_level_binding(&mut self, name: &str, location: SourceLocation) {
         if self.module_bindings.contains_key(name) {
             self.error_at(
                 location,
                 &format!(
-                    "module binding '{}' conflicts with a local declaration",
+                    "module binding '{}' conflicts with a top-level declaration",
                     name
                 ),
-                "Use a distinct local declaration name.",
+                "Use a distinct top-level declaration name.",
             );
             return;
         }
-        self.local_bindings
-            .entry(name.to_string())
-            .or_insert(location);
-    }
-    fn register_top_level_binding(&mut self, name: &str, location: SourceLocation) {
         if self.exported_names.contains(name) {
             self.error_at(
                 location,
@@ -1114,7 +1091,7 @@ impl Parser {
             );
             return false;
         }
-        if self.top_level_bindings.contains_key(name) || self.local_bindings.contains_key(name) {
+        if self.top_level_bindings.contains_key(name) {
             self.error_at(
                 location,
                 &format!(
@@ -1125,36 +1102,8 @@ impl Parser {
             );
             return false;
         }
-        if self.parameter_bindings.contains_key(name) {
-            self.error_at(
-                location,
-                &format!(
-                    "module binding '{}' conflicts with a function parameter",
-                    name
-                ),
-                "Use a distinct module binding name.",
-            );
-            return false;
-        }
         self.module_bindings.insert(name.to_string(), location);
         true
-    }
-    fn register_function_parameters(&mut self, params: &[String], location: SourceLocation) {
-        for param in params {
-            if self.module_bindings.contains_key(param) {
-                self.error_at(
-                    location,
-                    &format!(
-                        "function parameter '{}' conflicts with a module binding",
-                        param
-                    ),
-                    "Use a distinct parameter name.",
-                );
-            }
-            self.parameter_bindings
-                .entry(param.clone())
-                .or_insert(location);
-        }
     }
     fn starts_legacy_include(&self) -> bool {
         self.check_identifier_at(0, "import") && self.check_at(1, &Token::Text(String::new()))
@@ -1497,36 +1446,25 @@ import "shared.solve"
     }
 
     #[test]
-    fn rejects_module_bindings_that_collide_with_function_parameters() {
+    fn allows_function_parameters_to_shadow_module_bindings() {
         for source in [
             "import \"a.solve\" as item\nfn consume(item) { return item }\n",
             "fn consume(item) { return item }\nimport { value as item } from \"a.solve\"\n",
         ] {
-            let errors = parse(source).expect_err("parameter collision must fail");
-            assert!(
-                errors
-                    .iter()
-                    .any(|error| error.message.contains("parameter"))
-            );
+            parse(source).expect("function parameter shadowing is lexical and legal");
         }
         assert!(parse("fn consume(item) { return item }\nimport \"a.solve\" as module\n").is_ok());
     }
 
     #[test]
-    fn rejects_module_bindings_that_collide_with_scoped_locals_and_loop_variables() {
+    fn allows_scoped_locals_and_loop_variables_to_shadow_module_bindings() {
         for source in [
             "import { remote as value } from \"a.solve\"\nfn f() { let value = 1 }\n",
             "fn f() { let value = 1 }\nimport { remote as value } from \"a.solve\"\n",
             "import \"a.solve\" as item\nfor item in [1] { print(item) }\n",
             "for item in [1] { print(item) }\nimport \"a.solve\" as item\n",
         ] {
-            let errors = parse(source).expect_err("scoped collision must fail");
-            assert!(
-                errors
-                    .iter()
-                    .any(|error| error.message.contains("local declaration")),
-                "unexpected diagnostics for {source:?}: {errors:?}"
-            );
+            parse(source).expect("scoped import shadowing is lexical and legal");
         }
     }
 
