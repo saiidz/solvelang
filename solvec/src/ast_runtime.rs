@@ -202,6 +202,8 @@ pub struct AstRuntime {
     namespaces: HashMap<String, String>,
     read_only_bindings: HashSet<String>,
     module_scopes: HashMap<String, ModuleScope>,
+    local_bindings: Vec<HashMap<String, Value>>,
+    active_module_calls: Vec<String>,
     active_module: Option<String>,
     module_execution_enabled: bool,
 }
@@ -222,6 +224,8 @@ impl Default for AstRuntime {
             namespaces: HashMap::new(),
             read_only_bindings: HashSet::new(),
             module_scopes: HashMap::new(),
+            local_bindings: Vec::new(),
+            active_module_calls: Vec::new(),
             active_module: None,
             module_execution_enabled: false,
         }
@@ -521,6 +525,37 @@ impl AstRuntime {
         Ok(())
     }
 
+    fn executing_module_function(&self) -> bool {
+        !self.active_module_calls.is_empty()
+    }
+
+    fn local_value(&self, name: &str) -> Option<Value> {
+        self.local_bindings
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name).cloned())
+    }
+
+    fn local_binding_scope(&self, name: &str) -> Option<usize> {
+        (0..self.local_bindings.len())
+            .rev()
+            .find(|index| self.local_bindings[*index].contains_key(name))
+    }
+
+    fn execute_module_scoped_block(
+        &mut self,
+        statements: &[Stmt],
+    ) -> Result<ControlFlow, RuntimeError> {
+        if !self.executing_module_function() {
+            return self.execute_block(statements);
+        }
+
+        self.local_bindings.push(HashMap::new());
+        let flow = self.execute_block(statements);
+        self.local_bindings.pop();
+        flow
+    }
+
     fn execute_block(&mut self, statements: &[Stmt]) -> Result<ControlFlow, RuntimeError> {
         for statement in statements {
             let flow = self.execute(statement)?;
@@ -610,6 +645,13 @@ impl AstRuntime {
                     ));
                 }
                 let value = self.eval(value)?;
+                if self.executing_module_function() {
+                    self.local_bindings
+                        .last_mut()
+                        .expect("module function has a local binding scope")
+                        .insert(name.clone(), value);
+                    return Ok(ControlFlow::None);
+                }
                 self.vars.insert(name.clone(), value);
                 Ok(ControlFlow::None)
             }
@@ -631,6 +673,11 @@ impl AstRuntime {
                         "the injected input value is read-only",
                         None,
                     ));
+                }
+                if let Some(index) = self.local_binding_scope(name) {
+                    let value = self.eval(value)?;
+                    self.local_bindings[index].insert(name.clone(), value);
+                    return Ok(ControlFlow::None);
                 }
                 if !self.vars.contains_key(name) {
                     return Err(self.error_at(
@@ -675,9 +722,9 @@ impl AstRuntime {
                 ..
             } => {
                 if self.eval(condition)?.is_truthy() {
-                    self.execute_block(then_branch)
+                    self.execute_module_scoped_block(then_branch)
                 } else {
-                    self.execute_block(else_branch)
+                    self.execute_module_scoped_block(else_branch)
                 }
             }
             Stmt::While {
@@ -699,7 +746,7 @@ impl AstRuntime {
                         ));
                     }
                     safety_counter += 1;
-                    match self.execute_block(body)? {
+                    match self.execute_module_scoped_block(body)? {
                         ControlFlow::None | ControlFlow::Continue => {}
                         ControlFlow::Break => return Ok(ControlFlow::None),
                         flow @ ControlFlow::Return(_) => return Ok(flow),
@@ -735,8 +782,18 @@ impl AstRuntime {
                     ));
                 }
                 for value in values {
-                    self.vars.insert(name.clone(), value);
-                    match self.execute_block(body)? {
+                    if self.executing_module_function() {
+                        let mut loop_scope = HashMap::new();
+                        loop_scope.insert(name.clone(), value);
+                        self.local_bindings.push(loop_scope);
+                    } else {
+                        self.vars.insert(name.clone(), value);
+                    }
+                    let flow = self.execute_module_scoped_block(body);
+                    if self.executing_module_function() {
+                        self.local_bindings.pop();
+                    }
+                    match flow? {
                         ControlFlow::None | ControlFlow::Continue => {}
                         ControlFlow::Break => return Ok(ControlFlow::None),
                         flow @ ControlFlow::Return(_) => return Ok(flow),
@@ -784,6 +841,9 @@ impl AstRuntime {
             ExprKind::Text(value) => Ok(Value::Text(value.clone())),
             ExprKind::Bool(value) => Ok(Value::Bool(*value)),
             ExprKind::Variable(name) => {
+                if let Some(value) = self.local_value(name) {
+                    return Ok(value);
+                }
                 if let Some(imported) = self.imported_values.get(name).cloned() {
                     return self.imported_value(&imported, expr.location);
                 }
@@ -1087,23 +1147,65 @@ impl AstRuntime {
         }
 
         let saved = self.capture_scope();
-        if let Some(identity) = &function.module_identity {
-            let scope = self.module_scopes.get(identity).cloned().ok_or_else(|| {
-                self.error_at(
-                    location,
-                    "function's defining module was not initialized",
-                    None,
-                )
-            })?;
-            self.apply_scope(scope);
-        }
+        let module_identity = function.module_identity.clone();
+        let same_module_call = module_identity
+            .as_ref()
+            .is_some_and(|identity| self.active_module_calls.last() == Some(identity));
+        let saved_local_bindings = if module_identity.is_some() {
+            Some(std::mem::take(&mut self.local_bindings))
+        } else {
+            None
+        };
 
-        for (index, param) in function.params.iter().enumerate() {
-            self.vars.insert(param.clone(), values[index].clone());
+        if let Some(identity) = &module_identity {
+            if !same_module_call {
+                let scope = self.module_scopes.get(identity).cloned().ok_or_else(|| {
+                    self.error_at(
+                        location,
+                        "function's defining module was not initialized",
+                        None,
+                    )
+                })?;
+                self.apply_scope(scope);
+            }
+            self.active_module_calls.push(identity.clone());
+            let params = function
+                .params
+                .iter()
+                .zip(values.iter())
+                .map(|(name, value)| (name.clone(), value.clone()))
+                .collect();
+            self.local_bindings.push(params);
+        } else {
+            for (index, param) in function.params.iter().enumerate() {
+                self.vars.insert(param.clone(), values[index].clone());
+            }
         }
 
         let flow = self.execute_block(&function.body);
-        self.restore_scope(saved);
+        if module_identity.is_some() {
+            self.local_bindings.pop();
+            self.active_module_calls.pop();
+        }
+
+        if let (Some(identity), Ok(_)) = (&module_identity, &flow)
+            && !same_module_call
+        {
+            let updated_vars = self.vars.clone();
+            let scope = self
+                .module_scopes
+                .get_mut(identity)
+                .expect("module scope remains initialized during its function call");
+            scope.vars = updated_vars;
+        }
+
+        match (module_identity.is_some(), same_module_call, flow.is_ok()) {
+            (true, true, true) => self.restore_scope_preserving_vars(saved),
+            _ => self.restore_scope(saved),
+        }
+        if let Some(local_bindings) = saved_local_bindings {
+            self.local_bindings = local_bindings;
+        }
         let flow = flow?;
         match flow {
             ControlFlow::None => Ok(Value::Null),
@@ -1209,6 +1311,15 @@ impl AstRuntime {
 
     fn restore_scope(&mut self, scope: ModuleScope) {
         self.apply_scope(scope);
+    }
+
+    fn restore_scope_preserving_vars(&mut self, scope: ModuleScope) {
+        self.functions = scope.functions;
+        self.imported_values = scope.imported_values;
+        self.namespaces = scope.namespaces;
+        self.read_only_bindings = scope.read_only_bindings;
+        self.source_lines = scope.source_lines;
+        self.filename = Some(scope.filename);
     }
 
     fn call_builtin(
@@ -2075,6 +2186,187 @@ print(math.add(3, 4))
                 Value::Number(15),
                 Value::Number(17)
             ]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exported_lets_remain_live_after_exported_function_calls() {
+        let root = module_fixture("live_exports");
+        let entry = root.join("entry.solve");
+        let module = root.join("counter.solve");
+        let entry_source = r#"
+import "counter.solve" as counter
+import { count as named_count, increment } from "counter.solve"
+print(named_count)
+print(increment())
+print(named_count)
+print(counter.count)
+print(counter.increment())
+print(named_count)
+print(counter.increment_from(named_count))
+print(named_count)
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            &module,
+            "export let count = 1\nexport fn increment() { count = count + 1 return count }\nexport fn increment_from(count) { count = count + 1 return count }\n",
+        )
+        .expect("module source");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("module runtime succeeds");
+
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(1),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(3),
+                Value::Number(3),
+                Value::Number(4),
+                Value::Number(3),
+            ]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn nested_module_calls_share_live_state_without_committing_local_shadows() {
+        let root = module_fixture("nested_live_state");
+        let entry = root.join("entry.solve");
+        let module = root.join("counter.solve");
+        let entry_source = r#"
+import "counter.solve" as counter
+import { count as named_count, twice, update_then_read, local_shadow, loop_shadow, block_shadow, parameter_shadow } from "counter.solve"
+print(twice())
+print(named_count)
+print(counter.count)
+print(update_then_read())
+print(named_count)
+print(local_shadow())
+print(named_count)
+print(loop_shadow())
+print(named_count)
+print(block_shadow())
+print(named_count)
+print(parameter_shadow(12))
+print(named_count)
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            &module,
+            r#"
+export let count = 0
+fn increment() { count = count + 1 }
+fn read() { return count }
+export fn twice() { increment() increment() return count }
+export fn update_then_read() { count = 5 return read() }
+export fn local_shadow() { let count = 9 return count }
+export fn loop_shadow() { for count in [7] {} return count }
+export fn block_shadow() { if true { let count = 11 } return count }
+export fn parameter_shadow(count) { count = count + 1 return count }
+"#,
+        )
+        .expect("module source");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("module runtime succeeds");
+
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(2),
+                Value::Number(5),
+                Value::Number(5),
+                Value::Number(9),
+                Value::Number(5),
+                Value::Number(5),
+                Value::Number(5),
+                Value::Number(5),
+                Value::Number(5),
+                Value::Number(13),
+                Value::Number(5),
+            ]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn module_function_failures_and_cross_module_calls_keep_state_isolated() {
+        let root = module_fixture("cross_module_state");
+        let entry = root.join("entry.solve");
+        let left = root.join("left.solve");
+        let right = root.join("right.solve");
+        let entry_source = r#"
+import "left.solve" as left
+import "right.solve" as right
+print(left.bump_twice())
+print(left.count)
+print(right.count)
+left.fail_after_update()
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            &left,
+            r#"
+import "right.solve" as right
+export let count = 0
+export fn bump_twice() { count = count + 1 right.bump() count = count + 1 return count }
+export fn fail_after_update() { count = 99 return 1 / 0 }
+"#,
+        )
+        .expect("left module");
+        fs::write(
+            &right,
+            "export let count = 100\nexport fn bump() { count = count + 1 return count }\n",
+        )
+        .expect("right module");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        let error = runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect_err("failing exported function is rejected");
+        assert!(error.to_string().contains("divide by zero"), "{error}");
+        assert_eq!(
+            runtime.outputs(),
+            &[Value::Number(2), Value::Number(2), Value::Number(101)]
+        );
+        assert_eq!(
+            runtime.module_scopes["left.solve"].vars["count"],
+            Value::Number(2)
         );
         let _ = fs::remove_dir_all(root);
     }
