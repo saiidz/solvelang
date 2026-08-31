@@ -885,18 +885,7 @@ fn freeze_entry_with_imports(
         .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
-    let entry_content = fs::read_to_string(&entry).map_err(|error| {
-        CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
-    })?;
-    let raw_source = LoadedSource::from_raw(&entry_path, &entry_content);
-    validate_diagnostics(&raw_source)?;
-    let raw_statements = parse_source(&raw_source)?;
-    let module_entry = module_resolver::FrozenEntry::from_parts(
-        entry.clone(),
-        source_root.clone(),
-        entry_content.clone(),
-        raw_statements,
-    );
+    let entry_content = read_frozen_entry_content(&entry, &metadata)?;
     let mut import_stack = Vec::new();
     let source = load_file_recursive(
         &entry,
@@ -909,11 +898,55 @@ fn freeze_entry_with_imports(
     )?;
     validate_diagnostics(&source)?;
     let statements = parse_source(&source)?;
+    let module_entry = module_resolver::FrozenEntry::from_parts(
+        entry,
+        source_root,
+        source.content.clone(),
+        statements.clone(),
+    );
     Ok(FrozenWorkflowEntry {
         module_entry,
         source,
         statements,
     })
+}
+
+fn read_frozen_entry_content(entry: &Path, expected: &fs::Metadata) -> Result<String, CliFailure> {
+    let mut file = fs::File::open(entry).map_err(|error| {
+        CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
+    })?;
+    let opened = file.metadata().map_err(|error| {
+        CliFailure::source(format!(
+            "failed to inspect '{}': {}",
+            entry.display(),
+            error
+        ))
+    })?;
+    if !same_frozen_entry_identity(expected, &opened) {
+        return Err(CliFailure::source(
+            "entry source changed while loading; refusing to freeze a different file",
+        ));
+    }
+    let mut content = String::new();
+    file.read_to_string(&mut content).map_err(|error| {
+        CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
+    })?;
+    Ok(content)
+}
+
+#[cfg(unix)]
+fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    expected.dev() == opened.dev() && expected.ino() == opened.ino()
+}
+
+#[cfg(not(unix))]
+fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    expected.is_file()
+        && opened.is_file()
+        && expected.len() == opened.len()
+        && expected.modified().ok() == opened.modified().ok()
 }
 
 fn resolve_frozen_entry_modules(
@@ -1386,7 +1419,9 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
-    use super::{freeze_entry_with_imports, resolve_frozen_entry_modules};
+    use super::{
+        freeze_entry_with_imports, read_frozen_entry_content, resolve_frozen_entry_modules,
+    };
     use solvec::{
         ast_runtime::{AstRuntime, ExecutionPolicy},
         value::Value,
@@ -1485,6 +1520,30 @@ mod tests {
         );
         assert!(graph.modules.contains_key("safe.solve"));
         assert!(!graph.modules.contains_key("outside.solve"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn frozen_entry_read_rejects_a_replacement_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = fixture_root();
+        let entry = root.join("entry.solve");
+        let outside = root.join("outside.solve");
+        fs::write(&entry, "print(1)\n").expect("entry source");
+        fs::write(&outside, "print(2)\n").expect("outside source");
+        let metadata = fs::metadata(&entry).expect("entry metadata");
+        fs::remove_file(&entry).expect("remove entry");
+        symlink(&outside, &entry).expect("replacement symlink");
+
+        let error = read_frozen_entry_content(&entry, &metadata)
+            .expect_err("replacement symlink is rejected");
+        assert!(
+            error
+                .human_message
+                .contains("entry source changed while loading")
+        );
         let _ = fs::remove_dir_all(root);
     }
 }

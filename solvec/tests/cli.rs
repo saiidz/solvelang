@@ -561,6 +561,23 @@ fn imports_accept_trailing_comments_and_preserve_hardened_confinement() {
 }
 
 #[test]
+fn legacy_compatibility_includes_expand_before_entry_parsing() {
+    let root = create_temp_workflow_dir("solvelang_legacy_nested_include");
+    let entry = root.join("entry.solve");
+    fs::write(
+        &entry,
+        "fn value() {\n    import \"body.solve\"\n}\nprint(value())\n",
+    )
+    .expect("failed to write entry workflow");
+    fs::write(root.join("body.solve"), "return 7\n")
+        .expect("failed to write included function body");
+
+    let entry_arg = entry.to_string_lossy().to_string();
+    assert_eq!(run_solvec(&["run", entry_arg.as_str()]), "7\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn explicit_module_graph_validation_fails_before_any_output_or_evaluation() {
     let file = write_temp_solve_file(
         "solvelang_explicit_module_parser_only.solve",
