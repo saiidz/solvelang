@@ -330,15 +330,35 @@ impl AstRuntime {
             .last()
             .ok_or_else(|| RuntimeError::new("explicit module graph is empty"))?
             .clone();
+        let entry = graph
+            .modules
+            .get(&entry_identity)
+            .ok_or_else(|| RuntimeError::new("explicit module entry is missing from the graph"))?;
 
-        for binding in &self.read_only_bindings {
-            self.functions.remove(binding);
+        let input = if self.input_injected {
+            self.vars.get("input").cloned()
+        } else {
+            None
+        };
+        self.vars.clear();
+        if let Some(input) = input {
+            self.vars.insert("input".to_string(), input);
         }
+        self.functions.clear();
+        self.agents.clear();
+        self.outputs.clear();
         self.imported_values.clear();
         self.namespaces.clear();
         self.read_only_bindings.clear();
         self.module_scopes.clear();
         self.module_initialization.clear();
+        self.local_bindings.clear();
+        self.function_scope_starts.clear();
+        self.active_module_calls.clear();
+        self.active_module = None;
+        self.module_execution_enabled = false;
+        self.source_lines = entry.source.lines().map(str::to_owned).collect();
+        self.filename = Some(entry_identity.clone());
         let saved_module_scopes = self.module_scopes.clone();
         let saved_initialization = self.module_initialization.clone();
         for identity in &graph.order {
@@ -352,10 +372,6 @@ impl AstRuntime {
             }
         }
 
-        let entry = graph
-            .modules
-            .get(&entry_identity)
-            .ok_or_else(|| RuntimeError::new("explicit module entry is missing from the graph"))?;
         self.module_execution_enabled = true;
         self.install_imports(statements, entry.dependencies.as_slice())?;
         self.execute_block(statements).map(|_| ())
@@ -2693,11 +2709,48 @@ print(value)
         runtime
             .run_with_modules(&second_graph, &parse(entry_source))
             .expect("second graph runs independently");
-        assert_eq!(runtime.outputs(), &[Value::Number(1), Value::Number(2)]);
+        assert_eq!(runtime.outputs(), &[Value::Number(2)]);
         assert_eq!(
             runtime.module_scopes["state.solve"].vars["value"],
             Value::Number(2)
         );
+        let _ = fs::remove_dir_all(first_root);
+        let _ = fs::remove_dir_all(second_root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reused_runtime_clears_prior_entry_state_but_preserves_host_input() {
+        let first_root = module_fixture("first_entry_epoch");
+        let second_root = module_fixture("second_entry_epoch");
+        let first_source = "let secret = 41\nfn old() { return secret }\n";
+        let second_source = "print(old())\n";
+        fs::write(first_root.join("entry.solve"), first_source).expect("first entry");
+        fs::write(second_root.join("entry.solve"), second_source).expect("second entry");
+        let first_graph =
+            crate::module_resolver::resolve_explicit_modules(&first_root.join("entry.solve"))
+                .expect("first graph");
+        let second_graph =
+            crate::module_resolver::resolve_explicit_modules(&second_root.join("entry.solve"))
+                .expect("second graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            first_source,
+            "entry.solve",
+            Some(Value::Number(7)),
+            true,
+        );
+        runtime
+            .run_with_modules(&first_graph, &parse(first_source))
+            .expect("first entry runs");
+        let error = runtime
+            .run_with_modules(&second_graph, &parse(second_source))
+            .expect_err("prior entry function is unavailable");
+        assert!(error.to_string().contains("unknown function 'old'"));
+        assert!(!runtime.vars.contains_key("secret"));
+        assert!(!runtime.functions.contains_key("old"));
+        assert_eq!(runtime.vars.get("input"), Some(&Value::Number(7)));
+        assert!(runtime.outputs().is_empty());
         let _ = fs::remove_dir_all(first_root);
         let _ = fs::remove_dir_all(second_root);
     }
