@@ -40,7 +40,7 @@ struct FunctionSymbol {
 /// Checks parsed syntax without evaluating it or selecting an execution policy.
 pub fn check(statements: &[Stmt]) -> Result<(), Vec<Diagnostic>> {
     let mut checker = Checker::new(statements);
-    checker.check_block(statements, &mut HashMap::new(), false);
+    checker.check_scoped_block(statements, &mut HashMap::new(), false, []);
     if checker.diagnostics.is_empty() {
         Ok(())
     } else {
@@ -54,6 +54,7 @@ struct Checker {
     imported_bindings: HashSet<String>,
     named_import_bindings: HashSet<String>,
     namespace_imports: HashSet<String>,
+    import_shadow_scopes: Vec<HashSet<String>>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -142,6 +143,7 @@ impl Checker {
             imported_bindings,
             named_import_bindings,
             namespace_imports,
+            import_shadow_scopes: Vec::new(),
             diagnostics,
         }
     }
@@ -155,6 +157,26 @@ impl Checker {
         ));
     }
 
+    fn check_scoped_block(
+        &mut self,
+        statements: &[Stmt],
+        values: &mut HashMap<String, Type>,
+        in_function: bool,
+        shadows: impl IntoIterator<Item = String>,
+    ) {
+        self.import_shadow_scopes
+            .push(shadows.into_iter().collect());
+        self.check_block(statements, values, in_function);
+        self.import_shadow_scopes.pop();
+    }
+
+    fn import_is_shadowed(&self, name: &str) -> bool {
+        self.import_shadow_scopes
+            .iter()
+            .rev()
+            .any(|scope| scope.contains(name))
+    }
+
     fn check_block(
         &mut self,
         statements: &[Stmt],
@@ -166,13 +188,19 @@ impl Checker {
                 Stmt::Let { name, value, .. } => {
                     let value_type = self.check_expr(value, values, in_function);
                     values.insert(name.clone(), value_type);
+                    if in_function && self.imported_bindings.contains(name) {
+                        self.import_shadow_scopes
+                            .last_mut()
+                            .expect("semantic block has a shadow scope")
+                            .insert(name.clone());
+                    }
                 }
                 Stmt::Assign {
                     name,
                     value,
                     location,
                 } => {
-                    if self.imported_bindings.contains(name) {
+                    if self.imported_bindings.contains(name) && !self.import_is_shadowed(name) {
                         self.diagnostics.push(Diagnostic::new(
                             location.line,
                             location.column,
@@ -189,7 +217,9 @@ impl Checker {
                         ));
                     }
                     let value_type = self.check_expr(value, values, in_function);
-                    if values.contains_key(name) && !self.imported_bindings.contains(name) {
+                    if values.contains_key(name)
+                        && (!self.imported_bindings.contains(name) || self.import_is_shadowed(name))
+                    {
                         values.insert(name.clone(), value_type);
                     }
                 }
@@ -210,8 +240,8 @@ impl Checker {
                     // across both paths; all other values become dynamic/unknown.
                     let mut then_values = values.clone();
                     let mut else_values = values.clone();
-                    self.check_block(then_branch, &mut then_values, in_function);
-                    self.check_block(else_branch, &mut else_values, in_function);
+                    self.check_scoped_block(then_branch, &mut then_values, in_function, []);
+                    self.check_scoped_block(else_branch, &mut else_values, in_function, []);
                     for name in then_values.keys().chain(else_values.keys()) {
                         let merged = match (then_values.get(name), else_values.get(name)) {
                             (Some(left), Some(right)) if left == right => left.clone(),
@@ -225,7 +255,7 @@ impl Checker {
                 } => {
                     self.check_expr(condition, values, in_function);
                     let mut body_values = values.clone();
-                    self.check_block(body, &mut body_values, in_function);
+                    self.check_scoped_block(body, &mut body_values, in_function, []);
                     for name in body_values.keys() {
                         values.entry(name.clone()).or_insert(Type::Unknown);
                     }
@@ -254,7 +284,7 @@ impl Checker {
                     };
                     let mut body_values = values.clone();
                     body_values.insert(name.clone(), item_type);
-                    self.check_block(body, &mut body_values, in_function);
+                    self.check_scoped_block(body, &mut body_values, in_function, [name.clone()]);
                     for name in body_values.keys() {
                         values.entry(name.clone()).or_insert(Type::Unknown);
                     }
@@ -273,7 +303,12 @@ impl Checker {
                     for param in params {
                         function_values.insert(param.clone(), Type::Unknown);
                     }
-                    self.check_block(body, &mut function_values, true);
+                    self.check_scoped_block(
+                        body,
+                        &mut function_values,
+                        true,
+                        params.iter().cloned(),
+                    );
                 }
                 Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Agent { .. } => {}
                 Stmt::Ask {
@@ -477,7 +512,13 @@ impl Checker {
                 for argument in args {
                     self.check_expr(argument, values, in_function);
                 }
-                if let Some(function) = self.functions.get(name) {
+                if self.named_import_bindings.contains(name) && self.import_is_shadowed(name) {
+                    self.error(
+                        expr,
+                        format!("lexical binding '{}' is not callable", name),
+                        "Rename the lexical binding or call the imported function outside its shadowing scope.",
+                    );
+                } else if let Some(function) = self.functions.get(name) {
                     if args.len() != function.arity {
                         self.error(
                             expr,
@@ -505,7 +546,8 @@ impl Checker {
                 for argument in args {
                     self.check_expr(argument, values, in_function);
                 }
-                if !self.namespace_imports.contains(namespace) {
+                if self.import_is_shadowed(namespace) || !self.namespace_imports.contains(namespace)
+                {
                     self.error(
                         expr,
                         format!("unknown module namespace '{}'", namespace),
@@ -649,6 +691,24 @@ mod tests {
                 .message
                 .contains("cannot assign to imported binding")
         }));
+    }
+
+    #[test]
+    fn imported_bindings_remain_read_only_in_nested_blocks_but_allow_lexical_shadows() {
+        let diagnostics = check(&parse(
+            "import { value } from \"a.solve\"\nfn invalid() { if true { value = 2 } }\n",
+        ))
+        .expect_err("nested assignment to an import must fail");
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic
+                .message
+                .contains("cannot assign to imported binding 'value'")
+        }));
+
+        check(&parse(
+            "import { value } from \"a.solve\"\nfn parameter(value) { value = 2 }\nfn local() { let value = 1 value = 2 }\nfn loop() { for value in [1] { value = 2 } }\n",
+        ))
+        .expect("parameter, local, and loop shadows are writable lexical bindings");
     }
 
     #[test]
