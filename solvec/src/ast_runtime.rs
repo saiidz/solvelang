@@ -210,6 +210,7 @@ pub struct AstRuntime {
     module_scopes: HashMap<String, ModuleScope>,
     module_initialization: HashMap<String, ModuleInitializationStatus>,
     local_bindings: Vec<HashMap<String, Value>>,
+    function_scope_starts: Vec<usize>,
     active_module_calls: Vec<String>,
     active_module: Option<String>,
     module_execution_enabled: bool,
@@ -233,6 +234,7 @@ impl Default for AstRuntime {
             module_scopes: HashMap::new(),
             module_initialization: HashMap::new(),
             local_bindings: Vec::new(),
+            function_scope_starts: Vec::new(),
             active_module_calls: Vec::new(),
             active_module: None,
             module_execution_enabled: false,
@@ -567,14 +569,18 @@ impl AstRuntime {
     }
 
     fn local_value(&self, name: &str) -> Option<Value> {
+        let start = self.function_scope_starts.last().copied().unwrap_or(0);
         self.local_bindings
+            .get(start..)
+            .unwrap_or_default()
             .iter()
             .rev()
             .find_map(|scope| scope.get(name).cloned())
     }
 
     fn local_binding_scope(&self, name: &str) -> Option<usize> {
-        (0..self.local_bindings.len())
+        let start = self.function_scope_starts.last().copied().unwrap_or(0);
+        (start..self.local_bindings.len())
             .rev()
             .find(|index| self.local_bindings[*index].contains_key(name))
     }
@@ -1210,6 +1216,7 @@ impl AstRuntime {
                 self.apply_scope(scope);
             }
             self.active_module_calls.push(identity.clone());
+            self.function_scope_starts.push(self.local_bindings.len());
             let params = function
                 .params
                 .iter()
@@ -1218,6 +1225,7 @@ impl AstRuntime {
                 .collect();
             self.local_bindings.push(params);
         } else {
+            self.function_scope_starts.push(self.local_bindings.len());
             let params = function
                 .params
                 .iter()
@@ -1230,9 +1238,11 @@ impl AstRuntime {
         let flow = self.execute_block(&function.body);
         if module_identity.is_some() {
             self.local_bindings.pop();
+            self.function_scope_starts.pop();
             self.active_module_calls.pop();
         } else {
             self.local_bindings.pop();
+            self.function_scope_starts.pop();
         }
 
         // A module call is the transaction boundary. A successful cross-module call
@@ -2564,7 +2574,10 @@ print(value)
 import "state.solve" as state
 import { value } from "state.solve"
 fn read(state) { return state.value }
+fn inner() { return state.value }
+fn outer(state) { return inner() }
 print(read({ value: 7 }))
+print(outer({ value: 9 }))
 for value in [8] { print(value) }
 print(state.value)
 print(value)
@@ -2586,6 +2599,7 @@ print(value)
             runtime.outputs(),
             &[
                 Value::Number(7),
+                Value::Number(2),
                 Value::Number(8),
                 Value::Number(2),
                 Value::Number(2),
