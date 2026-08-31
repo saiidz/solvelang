@@ -540,7 +540,8 @@ impl Checker {
                 for argument in args {
                     self.check_expr(argument, values, in_function);
                 }
-                if !self.namespace_imports.contains(namespace) {
+                if self.import_is_shadowed(namespace) || !self.namespace_imports.contains(namespace)
+                {
                     self.error(
                         expr,
                         format!("unknown module namespace '{}'", namespace),

@@ -821,17 +821,11 @@ impl AstRuntime {
                     ));
                 }
                 for value in values {
-                    if self.executing_function() {
-                        let mut loop_scope = HashMap::new();
-                        loop_scope.insert(name.clone(), value);
-                        self.local_bindings.push(loop_scope);
-                    } else {
-                        self.vars.insert(name.clone(), value);
-                    }
+                    let mut loop_scope = HashMap::new();
+                    loop_scope.insert(name.clone(), value);
+                    self.local_bindings.push(loop_scope);
                     let flow = self.execute_module_scoped_block(body);
-                    if self.executing_function() {
-                        self.local_bindings.pop();
-                    }
+                    self.local_bindings.pop();
                     match flow? {
                         ControlFlow::None | ControlFlow::Continue => {}
                         ControlFlow::Break => return Ok(ControlFlow::None),
@@ -909,6 +903,7 @@ impl AstRuntime {
             }
             ExprKind::Property(target, property) => {
                 if let ExprKind::Variable(namespace) = &target.kind
+                    && self.local_value(namespace).is_none()
                     && let Some(identity) = self.namespaces.get(namespace).cloned()
                 {
                     return self.namespace_export_value(&identity, property, expr.location);
@@ -1131,6 +1126,13 @@ impl AstRuntime {
         args: &[Expr],
         location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
+        if self.local_value(namespace).is_some() {
+            return Err(self.error_at(
+                location,
+                format!("lexical binding '{}' is not a module namespace", namespace),
+                None,
+            ));
+        }
         let identity = self.namespaces.get(namespace).cloned().ok_or_else(|| {
             self.error_at(
                 location,
@@ -2550,6 +2552,46 @@ print(value)
                 Value::Number(2),
             ]
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn namespace_and_top_level_loop_shadows_resolve_lexically() {
+        let root = module_fixture("namespace_and_loop_shadows");
+        let entry = root.join("entry.solve");
+        let entry_source = r#"
+import "state.solve" as state
+import { value } from "state.solve"
+fn read(state) { return state.value }
+print(read({ value: 7 }))
+for value in [8] { print(value) }
+print(state.value)
+print(value)
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(root.join("state.solve"), "export let value = 2\n").expect("state module");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("lexical namespace and loop shadows win");
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(7),
+                Value::Number(8),
+                Value::Number(2),
+                Value::Number(2),
+            ]
+        );
+        assert!(!runtime.vars.contains_key("value"));
         let _ = fs::remove_dir_all(root);
     }
 
