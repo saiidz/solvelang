@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
@@ -8,6 +8,7 @@ use serde_json::Value as JsonValue;
 
 use crate::ai;
 use crate::ast::{BinaryOp, Expr, ExprKind, SourceLocation, Stmt, UnaryOp};
+use crate::module_resolver::{ExportKind, ModuleGraph};
 use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -102,8 +103,28 @@ impl std::fmt::Display for RuntimeError {
 
 #[derive(Clone, Debug)]
 struct Function {
+    name: String,
     params: Vec<String>,
     body: Vec<Stmt>,
+    module_identity: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct ImportedValue {
+    module_identity: String,
+    exported_name: String,
+}
+
+#[derive(Clone, Debug)]
+struct ModuleScope {
+    vars: HashMap<String, Value>,
+    functions: HashMap<String, Function>,
+    imported_values: HashMap<String, ImportedValue>,
+    namespaces: HashMap<String, String>,
+    read_only_bindings: HashSet<String>,
+    exports: BTreeMap<String, ExportKind>,
+    source_lines: Vec<String>,
+    filename: String,
 }
 
 #[derive(Clone, Debug)]
@@ -177,6 +198,12 @@ pub struct AstRuntime {
     capture_output: bool,
     outputs: Vec<Value>,
     input_injected: bool,
+    imported_values: HashMap<String, ImportedValue>,
+    namespaces: HashMap<String, String>,
+    read_only_bindings: HashSet<String>,
+    module_scopes: HashMap<String, ModuleScope>,
+    active_module: Option<String>,
+    module_execution_enabled: bool,
 }
 
 impl Default for AstRuntime {
@@ -191,6 +218,12 @@ impl Default for AstRuntime {
             capture_output: false,
             outputs: Vec::new(),
             input_injected: false,
+            imported_values: HashMap::new(),
+            namespaces: HashMap::new(),
+            read_only_bindings: HashSet::new(),
+            module_scopes: HashMap::new(),
+            active_module: None,
+            module_execution_enabled: false,
         }
     }
 }
@@ -273,6 +306,221 @@ impl AstRuntime {
         self.execute_block(statements).map(|_| ())
     }
 
+    pub fn run_with_modules(
+        &mut self,
+        graph: &ModuleGraph,
+        statements: &[Stmt],
+    ) -> Result<(), RuntimeError> {
+        let entry_identity = graph
+            .order
+            .last()
+            .ok_or_else(|| RuntimeError::new("explicit module graph is empty"))?
+            .clone();
+
+        for identity in &graph.order {
+            if identity == &entry_identity {
+                continue;
+            }
+            self.initialize_module(graph, identity)?;
+        }
+
+        let entry = graph
+            .modules
+            .get(&entry_identity)
+            .ok_or_else(|| RuntimeError::new("explicit module entry is missing from the graph"))?;
+        self.module_execution_enabled = true;
+        self.install_imports(statements, entry.dependencies.as_slice())?;
+        self.execute_block(statements).map(|_| ())
+    }
+
+    fn initialize_module(
+        &mut self,
+        graph: &ModuleGraph,
+        identity: &str,
+    ) -> Result<(), RuntimeError> {
+        let node = graph
+            .modules
+            .get(identity)
+            .ok_or_else(|| RuntimeError::new("resolved module is missing from the graph"))?;
+        let source = node.source.clone();
+        let statements = node.statements.clone();
+        let mut module =
+            AstRuntime::with_input(self.policy.clone(), &source, identity, None, false);
+        module.module_scopes = self.module_scopes.clone();
+        module.active_module = Some(identity.to_string());
+        module.module_execution_enabled = true;
+        module.install_imports(&statements, node.dependencies.as_slice())?;
+        module.execute_module_declarations(&statements)?;
+        self.module_scopes.insert(
+            identity.to_string(),
+            ModuleScope {
+                vars: module.vars,
+                functions: module.functions,
+                imported_values: module.imported_values,
+                namespaces: module.namespaces,
+                read_only_bindings: module.read_only_bindings,
+                exports: node.exports.clone(),
+                source_lines: module.source_lines,
+                filename: identity.to_string(),
+            },
+        );
+        Ok(())
+    }
+
+    fn install_imports(
+        &mut self,
+        statements: &[Stmt],
+        dependencies: &[String],
+    ) -> Result<(), RuntimeError> {
+        let mut dependencies = dependencies.iter();
+        for statement in statements {
+            let (bindings, location) = match statement {
+                Stmt::ModuleImport {
+                    namespace,
+                    location,
+                    ..
+                } => (
+                    vec![(None, namespace.clone(), namespace.clone())],
+                    *location,
+                ),
+                Stmt::NamedModuleImport {
+                    bindings, location, ..
+                } => (
+                    bindings
+                        .iter()
+                        .map(|binding| {
+                            (
+                                Some(binding.exported.clone()),
+                                binding.local.clone(),
+                                binding.local.clone(),
+                            )
+                        })
+                        .collect(),
+                    *location,
+                ),
+                _ => continue,
+            };
+            let dependency = dependencies.next().ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "explicit module import is absent from the validated dependency graph",
+                    None,
+                )
+            })?;
+            let scope = self.module_scopes.get(dependency).ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "explicit module dependency was not initialized",
+                    None,
+                )
+            })?;
+            for (exported, local, namespace) in bindings {
+                self.read_only_bindings.insert(local.clone());
+                match exported {
+                    None => {
+                        self.namespaces.insert(namespace, dependency.clone());
+                    }
+                    Some(exported) => match scope.exports.get(&exported) {
+                        Some(ExportKind::Let) => {
+                            self.imported_values.insert(
+                                local,
+                                ImportedValue {
+                                    module_identity: dependency.clone(),
+                                    exported_name: exported,
+                                },
+                            );
+                        }
+                        Some(ExportKind::Function) => {
+                            let function =
+                                scope.functions.get(&exported).cloned().ok_or_else(|| {
+                                    self.error_at(
+                                        location,
+                                        "validated exported function was not initialized",
+                                        None,
+                                    )
+                                })?;
+                            self.functions.insert(local, function);
+                        }
+                        None => {
+                            return Err(self.error_at(
+                                location,
+                                "validated module import is missing its export",
+                                None,
+                            ));
+                        }
+                    },
+                }
+            }
+        }
+        if dependencies.next().is_some() {
+            return Err(RuntimeError::new(
+                "validated module graph contains an unbound explicit import",
+            ));
+        }
+        Ok(())
+    }
+
+    fn execute_module_declarations(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
+        for statement in statements {
+            match statement {
+                Stmt::ModuleImport { .. } | Stmt::NamedModuleImport { .. } => {}
+                Stmt::Let { value, .. } => {
+                    self.require_pure_module_initializer(value)?;
+                    self.execute(statement)?;
+                }
+                Stmt::Function { .. } => {
+                    self.execute(statement)?;
+                }
+                Stmt::Export { declaration, .. } => match declaration {
+                    crate::ast::ExportedDeclaration::Let {
+                        name,
+                        value,
+                        location,
+                    } => {
+                        self.require_pure_module_initializer(value)?;
+                        self.execute(&Stmt::Let {
+                            name: name.clone(),
+                            value: value.clone(),
+                            location: *location,
+                        })?;
+                    }
+                    crate::ast::ExportedDeclaration::Function {
+                        name,
+                        params,
+                        body,
+                        location,
+                    } => {
+                        self.execute(&Stmt::Function {
+                            name: name.clone(),
+                            params: params.clone(),
+                            body: body.clone(),
+                            location: *location,
+                        })?;
+                    }
+                },
+                _ => {
+                    return Err(self.error_at(
+                        statement_location(statement),
+                        "module top level may contain only imports, let declarations, and fn declarations",
+                        Some("Keep module setup declarative; executable statements belong in exported functions.".to_string()),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn require_pure_module_initializer(&self, expression: &Expr) -> Result<(), RuntimeError> {
+        if let Some(location) = first_call_location(expression) {
+            return Err(self.error_at(
+                location,
+                "module top-level initializers may not call functions",
+                Some("Use literals, data construction, and operators at module top level; call functions explicitly after initialization.".to_string()),
+            ));
+        }
+        Ok(())
+    }
+
     fn execute_block(&mut self, statements: &[Stmt]) -> Result<ControlFlow, RuntimeError> {
         for statement in statements {
             let flow = self.execute(statement)?;
@@ -291,21 +539,69 @@ impl AstRuntime {
                 "legacy imports must be expanded before evaluation",
                 Some("Run source through the compatibility import loader.".to_string()),
             )),
-            Stmt::ModuleImport { location, .. }
-            | Stmt::NamedModuleImport { location, .. }
-            | Stmt::Export { location, .. } => Err(self.error_at(
-                *location,
-                "explicit local modules are not executable until module resolution is available",
-                Some(
-                    "Use the legacy import form until the resolver implementation is released."
-                        .to_string(),
-                ),
-            )),
+            Stmt::ModuleImport { location, .. } | Stmt::NamedModuleImport { location, .. } => {
+                if self.module_execution_enabled {
+                    Ok(ControlFlow::None)
+                } else {
+                    Err(self.error_at(
+                        *location,
+                        "explicit local modules are not executable until module resolution is available",
+                        Some(
+                            "Use the legacy import form until the resolver implementation is released."
+                                .to_string(),
+                        ),
+                    ))
+                }
+            }
+            Stmt::Export {
+                declaration,
+                location,
+            } => {
+                if !self.module_execution_enabled {
+                    return Err(self.error_at(
+                        *location,
+                        "explicit local modules are not executable until module resolution is available",
+                        Some(
+                            "Use the legacy import form until the resolver implementation is released."
+                                .to_string(),
+                        ),
+                    ));
+                }
+                match declaration {
+                    crate::ast::ExportedDeclaration::Let {
+                        name,
+                        value,
+                        location,
+                    } => self.execute(&Stmt::Let {
+                        name: name.clone(),
+                        value: value.clone(),
+                        location: *location,
+                    }),
+                    crate::ast::ExportedDeclaration::Function {
+                        name,
+                        params,
+                        body,
+                        location,
+                    } => self.execute(&Stmt::Function {
+                        name: name.clone(),
+                        params: params.clone(),
+                        body: body.clone(),
+                        location: *location,
+                    }),
+                }
+            }
             Stmt::Let {
                 name,
                 value,
                 location,
             } => {
+                if self.read_only_bindings.contains(name) {
+                    return Err(self.error_at(
+                        *location,
+                        format!("imported binding '{}' is read-only", name),
+                        None,
+                    ));
+                }
                 if self.input_injected && name == "input" {
                     return Err(self.error_at(
                         *location,
@@ -322,6 +618,13 @@ impl AstRuntime {
                 value,
                 location,
             } => {
+                if self.read_only_bindings.contains(name) {
+                    return Err(self.error_at(
+                        *location,
+                        format!("imported binding '{}' is read-only", name),
+                        None,
+                    ));
+                }
                 if self.input_injected && name == "input" {
                     return Err(self.error_at(
                         *location,
@@ -357,8 +660,10 @@ impl AstRuntime {
                 self.functions.insert(
                     name.clone(),
                     Function {
+                        name: name.clone(),
                         params: params.clone(),
                         body: body.clone(),
+                        module_identity: self.active_module.clone(),
                     },
                 );
                 Ok(ControlFlow::None)
@@ -478,9 +783,17 @@ impl AstRuntime {
             ExprKind::Number(value) => Ok(Value::Number(*value)),
             ExprKind::Text(value) => Ok(Value::Text(value.clone())),
             ExprKind::Bool(value) => Ok(Value::Bool(*value)),
-            ExprKind::Variable(name) => self.vars.get(name).cloned().ok_or_else(|| {
-                self.error_at(expr.location, format!("unknown variable '{}'", name), None)
-            }),
+            ExprKind::Variable(name) => {
+                if let Some(imported) = self.imported_values.get(name).cloned() {
+                    return self.imported_value(&imported, expr.location);
+                }
+                if let Some(identity) = self.namespaces.get(name).cloned() {
+                    return self.namespace_value(&identity, expr.location);
+                }
+                self.vars.get(name).cloned().ok_or_else(|| {
+                    self.error_at(expr.location, format!("unknown variable '{}'", name), None)
+                })
+            }
             ExprKind::Array(values) => {
                 let mut result = Vec::new();
                 for value in values {
@@ -496,6 +809,11 @@ impl AstRuntime {
                 Ok(Value::Object(result))
             }
             ExprKind::Property(target, property) => {
+                if let ExprKind::Variable(namespace) = &target.kind
+                    && let Some(identity) = self.namespaces.get(namespace).cloned()
+                {
+                    return self.namespace_export_value(&identity, property, expr.location);
+                }
                 let target = self.eval(target)?;
                 match target {
                     Value::Object(entries) => {
@@ -564,14 +882,11 @@ impl AstRuntime {
                 self.eval_binary(left, operator, right, expr.location)
             }
             ExprKind::Call { name, args } => self.call_function(name, args, expr.location),
-            ExprKind::ModuleCall { .. } => Err(self.error_at(
-                expr.location,
-                "explicit local modules are not executable until module resolution is available",
-                Some(
-                    "Use the legacy import form until the resolver implementation is released."
-                        .to_string(),
-                ),
-            )),
+            ExprKind::ModuleCall {
+                namespace,
+                member,
+                args,
+            } => self.call_module_function(namespace, member, args, expr.location),
         }
     }
 
@@ -703,28 +1018,93 @@ impl AstRuntime {
             }
         };
 
-        if args.len() != function.params.len() {
+        let values = args
+            .iter()
+            .map(|argument| self.eval(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.invoke_function(function, values, location)
+    }
+
+    fn call_module_function(
+        &mut self,
+        namespace: &str,
+        member: &str,
+        args: &[Expr],
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        let identity = self.namespaces.get(namespace).cloned().ok_or_else(|| {
+            self.error_at(
+                location,
+                format!("unknown module namespace '{}'", namespace),
+                None,
+            )
+        })?;
+        let scope = self
+            .module_scopes
+            .get(&identity)
+            .ok_or_else(|| self.error_at(location, "module namespace was not initialized", None))?;
+        if scope.exports.get(member) != Some(&ExportKind::Function) {
+            return Err(self.error_at(
+                location,
+                format!(
+                    "module '{}' does not export function '{}'",
+                    identity, member
+                ),
+                None,
+            ));
+        }
+        let function = scope.functions.get(member).cloned().ok_or_else(|| {
+            self.error_at(
+                location,
+                "validated exported function was not initialized",
+                None,
+            )
+        })?;
+        let values = args
+            .iter()
+            .map(|argument| self.eval(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.invoke_function(function, values, location)
+    }
+
+    fn invoke_function(
+        &mut self,
+        function: Function,
+        values: Vec<Value>,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        if values.len() != function.params.len() {
             return Err(self.error_at(
                 location,
                 format!(
                     "Function '{}' expects {} arguments but received {}.",
-                    name,
+                    function.name,
                     function.params.len(),
-                    args.len()
+                    values.len()
                 ),
                 Some("Pass exactly the parameters declared by the function.".to_string()),
             ));
         }
 
-        let saved_vars = self.vars.clone();
-
-        for (index, param) in function.params.iter().enumerate() {
-            let value = self.eval(&args[index])?;
-            self.vars.insert(param.clone(), value);
+        let saved = self.capture_scope();
+        if let Some(identity) = &function.module_identity {
+            let scope = self.module_scopes.get(identity).cloned().ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "function's defining module was not initialized",
+                    None,
+                )
+            })?;
+            self.apply_scope(scope);
         }
 
-        let flow = self.execute_block(&function.body)?;
-        self.vars = saved_vars;
+        for (index, param) in function.params.iter().enumerate() {
+            self.vars.insert(param.clone(), values[index].clone());
+        }
+
+        let flow = self.execute_block(&function.body);
+        self.restore_scope(saved);
+        let flow = flow?;
         match flow {
             ControlFlow::None => Ok(Value::Null),
             ControlFlow::Return(value) => Ok(value),
@@ -734,6 +1114,101 @@ impl AstRuntime {
                 Some("Use break and continue only directly inside a loop.".to_string()),
             )),
         }
+    }
+
+    fn imported_value(
+        &self,
+        imported: &ImportedValue,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        self.module_scopes
+            .get(&imported.module_identity)
+            .and_then(|scope| scope.vars.get(&imported.exported_name))
+            .cloned()
+            .ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "validated imported value was not initialized",
+                    None,
+                )
+            })
+    }
+
+    fn namespace_value(
+        &self,
+        identity: &str,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        let scope = self
+            .module_scopes
+            .get(identity)
+            .ok_or_else(|| self.error_at(location, "module namespace was not initialized", None))?;
+        let mut values = BTreeMap::new();
+        for (name, kind) in &scope.exports {
+            if *kind == ExportKind::Let
+                && let Some(value) = scope.vars.get(name)
+            {
+                values.insert(name.clone(), value.clone());
+            }
+        }
+        Ok(Value::Object(values))
+    }
+
+    fn namespace_export_value(
+        &self,
+        identity: &str,
+        name: &str,
+        location: SourceLocation,
+    ) -> Result<Value, RuntimeError> {
+        let scope = self
+            .module_scopes
+            .get(identity)
+            .ok_or_else(|| self.error_at(location, "module namespace was not initialized", None))?;
+        match scope.exports.get(name) {
+            Some(ExportKind::Let) => scope.vars.get(name).cloned().ok_or_else(|| {
+                self.error_at(
+                    location,
+                    "validated exported value was not initialized",
+                    None,
+                )
+            }),
+            Some(ExportKind::Function) => Err(self.error_at(
+                location,
+                format!(
+                    "module '{}' export '{}' is a function and must be called",
+                    identity, name
+                ),
+                None,
+            )),
+            None => Ok(Value::Null),
+        }
+    }
+
+    fn capture_scope(&self) -> ModuleScope {
+        ModuleScope {
+            vars: self.vars.clone(),
+            functions: self.functions.clone(),
+            imported_values: self.imported_values.clone(),
+            namespaces: self.namespaces.clone(),
+            read_only_bindings: self.read_only_bindings.clone(),
+            exports: BTreeMap::new(),
+            source_lines: self.source_lines.clone(),
+            filename: self.filename.clone().unwrap_or_default(),
+        }
+    }
+
+    fn apply_scope(&mut self, scope: ModuleScope) {
+        self.vars = scope.vars;
+        self.functions = scope.functions;
+        self.imported_values = scope.imported_values;
+        self.namespaces = scope.namespaces;
+        self.read_only_bindings = scope.read_only_bindings;
+        self.source_lines = scope.source_lines;
+        self.filename = Some(scope.filename);
+    }
+
+    fn restore_scope(&mut self, scope: ModuleScope) {
+        self.apply_scope(scope);
     }
 
     fn call_builtin(
@@ -1456,6 +1931,46 @@ fn first_explicit_module_location(statements: &[Stmt]) -> Option<SourceLocation>
     })
 }
 
+fn statement_location(statement: &Stmt) -> SourceLocation {
+    match statement {
+        Stmt::LegacyInclude { location, .. }
+        | Stmt::ModuleImport { location, .. }
+        | Stmt::NamedModuleImport { location, .. }
+        | Stmt::Export { location, .. }
+        | Stmt::Let { location, .. }
+        | Stmt::Assign { location, .. }
+        | Stmt::Print { location, .. }
+        | Stmt::Return { location, .. }
+        | Stmt::Function { location, .. }
+        | Stmt::If { location, .. }
+        | Stmt::While { location, .. }
+        | Stmt::For { location, .. }
+        | Stmt::Break { location }
+        | Stmt::Continue { location }
+        | Stmt::Agent { location, .. }
+        | Stmt::Ask { location, .. } => *location,
+        Stmt::Expr(expression) => expression.location,
+    }
+}
+
+fn first_call_location(expression: &Expr) -> Option<SourceLocation> {
+    match &expression.kind {
+        ExprKind::Call { .. } | ExprKind::ModuleCall { .. } => Some(expression.location),
+        ExprKind::Array(values) => values.iter().find_map(first_call_location),
+        ExprKind::Object(entries) => entries.values().find_map(first_call_location),
+        ExprKind::Property(target, _) | ExprKind::Unary { expr: target, .. } => {
+            first_call_location(target)
+        }
+        ExprKind::Index(target, index) => {
+            first_call_location(target).or_else(|| first_call_location(index))
+        }
+        ExprKind::Binary { left, right, .. } => {
+            first_call_location(left).or_else(|| first_call_location(right))
+        }
+        ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => None,
+    }
+}
+
 fn first_explicit_module_expression_location(expr: &Expr) -> Option<SourceLocation> {
     match &expr.kind {
         ExprKind::ModuleCall { .. } => Some(expr.location),
@@ -1497,6 +2012,129 @@ mod tests {
     fn parse(source: &str) -> Vec<crate::ast::Stmt> {
         let mut parser = Parser::new(lex(source));
         parser.parse().expect("parse succeeds")
+    }
+
+    #[cfg(unix)]
+    fn module_fixture(name: &str) -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "solvelang_runtime_module_{name}_{}_{}",
+            std::process::id(),
+            nonce
+        ));
+        fs::create_dir_all(&root).expect("fixture root");
+        root
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolved_modules_bind_exports_without_leaking_private_scope() {
+        let root = module_fixture("bindings");
+        let entry = root.join("entry.solve");
+        let module = root.join("math.solve");
+        let entry_source = r#"
+import "math.solve" as math
+import { base as initial, add } from "math.solve"
+print(initial)
+print(math.base)
+print(add(2, 3))
+print(math.add(3, 4))
+"#;
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            &module,
+            "let private = 10\nexport let base = 4\nexport fn add(left, right) { return left + right + private }\n",
+        )
+        .expect("module source");
+
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        fs::write(
+            &module,
+            "print(\"must-not-be-read\")\nexport let base = 999\n",
+        )
+        .expect("mutate module after graph resolution");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect("module runtime succeeds");
+
+        assert_eq!(
+            runtime.outputs(),
+            &[
+                Value::Number(4),
+                Value::Number(4),
+                Value::Number(15),
+                Value::Number(17)
+            ]
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolved_module_initialization_rejects_execution_and_read_only_import_writes() {
+        let root = module_fixture("boundaries");
+        let entry = root.join("entry.solve");
+        let module = root.join("module.solve");
+        fs::write(
+            &entry,
+            "import { value } from \"module.solve\"\nvalue = 2\n",
+        )
+        .expect("entry source");
+        fs::write(&module, "export let value = 1\n").expect("module source");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            "import { value } from \"module.solve\"\nvalue = 2\n",
+            "entry.solve",
+            None,
+            true,
+        );
+        let error = runtime
+            .run_with_modules(
+                &graph,
+                &parse("import { value } from \"module.solve\"\nvalue = 2\n"),
+            )
+            .expect_err("import binding is read-only");
+        assert!(
+            error
+                .to_string()
+                .contains("imported binding 'value' is read-only")
+        );
+        assert!(runtime.outputs().is_empty());
+
+        fs::write(&module, "print(\"must-not-print\")\nexport let value = 1\n")
+            .expect("module source");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            "import { value } from \"module.solve\"\nprint(value)\n",
+            "entry.solve",
+            None,
+            true,
+        );
+        let error = runtime
+            .run_with_modules(
+                &graph,
+                &parse("import { value } from \"module.solve\"\nprint(value)\n"),
+            )
+            .expect_err("module top-level execution is rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("module top level may contain only imports")
+        );
+        assert!(runtime.outputs().is_empty());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

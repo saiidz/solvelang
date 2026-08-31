@@ -20,11 +20,23 @@ pub struct ModuleError {
     pub message: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModuleNode {
     pub identity: String,
     pub exports: BTreeMap<String, ExportKind>,
     pub dependencies: Vec<String>,
+    pub(crate) source: String,
+    pub(crate) statements: Vec<Stmt>,
+}
+
+impl ModuleNode {
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    pub fn statements(&self) -> &[Stmt] {
+        &self.statements
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,41 +45,84 @@ pub enum ExportKind {
     Function,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModuleGraph {
     pub root: PathBuf,
     pub modules: BTreeMap<String, ModuleNode>,
     pub order: Vec<String>,
 }
 
-pub fn resolve_explicit_modules(entry: &Path) -> Result<ModuleGraph, ModuleError> {
-    let entry = fs::canonicalize(entry).map_err(|error| {
-        error_at(
-            "<entry>",
-            SourceLocation::new(1, 1),
-            format!("failed to resolve entry source: {error}"),
-        )
-    })?;
-    let root = entry
-        .parent()
-        .ok_or_else(|| {
+/// An entry source whose canonical identity, root, source text, and parsed AST
+/// were captured together. Resolution must begin from this value so an entry
+/// path cannot be swapped between source loading and graph construction.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrozenEntry {
+    canonical_path: PathBuf,
+    root: PathBuf,
+    source: String,
+    statements: Vec<Stmt>,
+}
+
+impl FrozenEntry {
+    pub fn read(entry: &Path) -> Result<Self, ModuleError> {
+        let canonical_path = fs::canonicalize(entry).map_err(|error| {
             error_at(
                 "<entry>",
                 SourceLocation::new(1, 1),
-                "could not determine entry source directory",
+                format!("failed to resolve entry source: {error}"),
             )
-        })?
-        .to_path_buf();
+        })?;
+        let root = entry_root(&canonical_path)?;
+        let identity = relative_source_path(&canonical_path, &root);
+        let source = fs::read_to_string(&canonical_path).map_err(|error| {
+            error_at(
+                &identity,
+                SourceLocation::new(1, 1),
+                format!("failed to read module: {error}"),
+            )
+        })?;
+        let statements = parse_module_source(&source, &identity)?;
+        Ok(Self {
+            canonical_path,
+            root,
+            source,
+            statements,
+        })
+    }
+
+    pub fn from_parts(
+        canonical_path: PathBuf,
+        root: PathBuf,
+        source: String,
+        statements: Vec<Stmt>,
+    ) -> Self {
+        Self {
+            canonical_path,
+            root,
+            source,
+            statements,
+        }
+    }
+}
+
+pub fn resolve_explicit_modules(entry: &Path) -> Result<ModuleGraph, ModuleError> {
+    let frozen_entry = FrozenEntry::read(entry)?;
+    resolve_explicit_modules_from_frozen_entry(&frozen_entry)
+}
+
+pub fn resolve_explicit_modules_from_frozen_entry(
+    entry: &FrozenEntry,
+) -> Result<ModuleGraph, ModuleError> {
     let mut resolver = Resolver {
-        root: root.clone(),
+        root: entry.root.clone(),
         modules: BTreeMap::new(),
         canonical: HashMap::new(),
         stack: Vec::new(),
         order: Vec::new(),
     };
-    resolver.visit(&entry)?;
+    resolver.visit_frozen_entry(entry)?;
     Ok(ModuleGraph {
-        root,
+        root: entry.root.clone(),
         modules: resolver.modules,
         order: resolver.order,
     })
@@ -82,6 +137,14 @@ struct Resolver {
 }
 
 impl Resolver {
+    fn visit_frozen_entry(&mut self, entry: &FrozenEntry) -> Result<String, ModuleError> {
+        self.visit_loaded(
+            &entry.canonical_path,
+            entry.source.clone(),
+            entry.statements.clone(),
+        )
+    }
+
     fn visit(&mut self, path: &Path) -> Result<String, ModuleError> {
         if let Some(identity) = self.canonical.get(path) {
             return Ok(identity.clone());
@@ -106,28 +169,20 @@ impl Resolver {
                 format!("failed to read module: {error}"),
             )
         })?;
-        if let Err(diagnostics) = diagnostics::validate_source(&content) {
-            let diagnostic = diagnostics
-                .into_iter()
-                .next()
-                .expect("validation reports an error");
-            return Err(error_at(
-                &identity,
-                SourceLocation::new(diagnostic.line, diagnostic.column),
-                diagnostic.message,
-            ));
+        let statements = parse_module_source(&content, &identity)?;
+        self.visit_loaded(path, content, statements)
+    }
+
+    fn visit_loaded(
+        &mut self,
+        path: &Path,
+        content: String,
+        statements: Vec<Stmt>,
+    ) -> Result<String, ModuleError> {
+        if let Some(identity) = self.canonical.get(path) {
+            return Ok(identity.clone());
         }
-        let statements = match parser::Parser::new(lexer::lex(&content)).parse() {
-            Ok(statements) => statements,
-            Err(errors) => {
-                let error = errors.into_iter().next().expect("parser reports an error");
-                return Err(error_at(
-                    &identity,
-                    SourceLocation::new(error.line, error.column),
-                    error.message,
-                ));
-            }
-        };
+        let identity = self.identity(path);
         self.stack.push(path.to_path_buf());
         let mut exports = BTreeMap::new();
         let mut dependencies = Vec::new();
@@ -183,6 +238,8 @@ impl Resolver {
                 identity: identity.clone(),
                 exports,
                 dependencies,
+                source: content,
+                statements,
             },
         );
         self.order.push(identity.clone());
@@ -270,6 +327,48 @@ impl Resolver {
     }
 }
 
+fn entry_root(entry: &Path) -> Result<PathBuf, ModuleError> {
+    entry.parent().map(Path::to_path_buf).ok_or_else(|| {
+        error_at(
+            "<entry>",
+            SourceLocation::new(1, 1),
+            "could not determine entry source directory",
+        )
+    })
+}
+
+fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
+    canonical
+        .strip_prefix(source_root)
+        .unwrap_or(canonical)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn parse_module_source(source: &str, identity: &str) -> Result<Vec<Stmt>, ModuleError> {
+    if let Err(diagnostics) = diagnostics::validate_source(source) {
+        let diagnostic = diagnostics
+            .into_iter()
+            .next()
+            .expect("validation reports an error");
+        return Err(error_at(
+            identity,
+            SourceLocation::new(diagnostic.line, diagnostic.column),
+            diagnostic.message,
+        ));
+    }
+    parser::Parser::new(lexer::lex(source))
+        .parse()
+        .map_err(|errors| {
+            let error = errors.into_iter().next().expect("parser reports an error");
+            error_at(
+                identity,
+                SourceLocation::new(error.line, error.column),
+                error.message,
+            )
+        })
+}
+
 fn error_at(source: &str, location: SourceLocation, message: impl Into<String>) -> ModuleError {
     ModuleError {
         source: source.to_string(),
@@ -280,7 +379,10 @@ fn error_at(source: &str, location: SourceLocation, message: impl Into<String>) 
 
 #[cfg(test)]
 mod tests {
-    use super::{ExportKind, resolve_explicit_modules};
+    use super::{
+        ExportKind, FrozenEntry, resolve_explicit_modules,
+        resolve_explicit_modules_from_frozen_entry,
+    };
     use std::{
         fs,
         path::PathBuf,
@@ -438,5 +540,52 @@ mod tests {
         assert_eq!(error.source, "entry.solve");
         assert_eq!(error.location.line, 1);
         assert!(error.message.contains("Unclosed string literal"));
+    }
+
+    #[test]
+    fn frozen_entry_graph_uses_the_original_source_after_entry_replacement() {
+        let fixture = Fixture::new();
+        fixture.write("entry.solve", "import \"a.solve\" as module\n");
+        fixture.write("a.solve", "export let value = 1\n");
+        fixture.write("b.solve", "export let value = 2\n");
+
+        let frozen = FrozenEntry::read(&fixture.entry()).expect("entry freezes");
+        fixture.write("entry.solve", "import \"b.solve\" as module\n");
+
+        let graph =
+            resolve_explicit_modules_from_frozen_entry(&frozen).expect("frozen graph resolves");
+        assert!(graph.modules.contains_key("a.solve"));
+        assert!(!graph.modules.contains_key("b.solve"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn frozen_symlink_entry_keeps_its_original_canonical_root_and_source() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = Fixture::new();
+        let root_a = fixture.root.join("root-a");
+        let root_b = fixture.root.join("root-b");
+        fs::create_dir_all(&root_a).expect("root a");
+        fs::create_dir_all(&root_b).expect("root b");
+        fs::write(root_a.join("entry.solve"), "import \"a.solve\" as module\n").expect("entry a");
+        fs::write(root_a.join("a.solve"), "export let value = 1\n").expect("module a");
+        fs::write(root_b.join("entry.solve"), "import \"b.solve\" as module\n").expect("entry b");
+        fs::write(root_b.join("b.solve"), "export let value = 2\n").expect("module b");
+        let entry_link = fixture.root.join("entry.solve");
+        symlink(root_a.join("entry.solve"), &entry_link).expect("entry link a");
+
+        let frozen = FrozenEntry::read(&entry_link).expect("entry freezes");
+        fs::remove_file(&entry_link).expect("remove old entry link");
+        symlink(root_b.join("entry.solve"), &entry_link).expect("entry link b");
+
+        let graph =
+            resolve_explicit_modules_from_frozen_entry(&frozen).expect("frozen graph resolves");
+        assert_eq!(
+            graph.root,
+            fs::canonicalize(&root_a).expect("root a canonicalizes")
+        );
+        assert!(graph.modules.contains_key("a.solve"));
+        assert!(!graph.modules.contains_key("b.solve"));
     }
 }

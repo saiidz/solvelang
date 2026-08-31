@@ -86,6 +86,12 @@ struct LoadedSource {
     entry_path: String,
 }
 
+struct FrozenWorkflowEntry {
+    module_entry: module_resolver::FrozenEntry,
+    source: LoadedSource,
+    statements: Vec<Stmt>,
+}
+
 impl LoadedSource {
     fn empty(entry_path: String) -> Self {
         Self {
@@ -409,20 +415,34 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
     let policy = build_execution_policy(&options)
         .map_err(|message| CliFailure::arguments(format!("invalid execution policy: {message}")))?;
     let input = load_explicit_input(options.input_path.as_deref())?;
-    let source = load_source_with_imports(filename, options.hardened())?;
+    let entry = freeze_entry_with_imports(filename, options.hardened())?;
+    preflight_workflow(&entry.statements, input.is_some(), options.hardened())?;
+    let module_graph = resolve_frozen_entry_modules(&entry.module_entry, &entry.source)?;
+    preflight_resolved_modules(&module_graph, options.hardened())?;
 
-    validate_diagnostics(&source)?;
-    let statements = parse_source(&source)?;
-    preflight_workflow(&statements, input.is_some(), options.hardened())?;
-
-    let mut runtime =
-        ast_runtime::AstRuntime::with_input(policy, &source.content, filename, input, options.json);
+    let mut runtime = ast_runtime::AstRuntime::with_input(
+        policy,
+        &entry.source.content,
+        filename,
+        input,
+        options.json,
+    );
     if options.hardened() && !options.json {
         println!("{}", ADVISORY_LABEL);
     }
-    runtime
-        .run(&statements)
-        .map_err(|error| CliFailure::runtime(source.remap_runtime_message(&error.to_string())))?;
+    let result = if entry.statements.iter().any(|statement| {
+        matches!(
+            statement,
+            Stmt::ModuleImport { .. } | Stmt::NamedModuleImport { .. } | Stmt::Export { .. }
+        )
+    }) {
+        runtime.run_with_modules(&module_graph, &entry.statements)
+    } else {
+        runtime.run(&entry.statements)
+    };
+    result.map_err(|error| {
+        CliFailure::runtime(entry.source.remap_runtime_message(&error.to_string()))
+    })?;
 
     if options.json {
         let outputs = runtime
@@ -835,6 +855,15 @@ fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
 }
 
 fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSource, CliFailure> {
+    let entry = freeze_entry_with_imports(filename, hardened)?;
+    resolve_frozen_entry_modules(&entry.module_entry, &entry.source)?;
+    Ok(entry.source)
+}
+
+fn freeze_entry_with_imports(
+    filename: &str,
+    hardened: bool,
+) -> Result<FrozenWorkflowEntry, CliFailure> {
     let entry = fs::canonicalize(filename).map_err(|error| {
         CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
     })?;
@@ -856,6 +885,7 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
+    let entry_content = read_frozen_entry_content(&entry, &metadata, hardened)?;
     let mut import_stack = Vec::new();
     let source = load_file_recursive(
         &entry,
@@ -864,16 +894,89 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         hardened,
         &mut import_stack,
         true,
+        Some(&entry_content),
     )?;
     validate_diagnostics(&source)?;
-    parse_source(&source)?;
-    module_resolver::resolve_explicit_modules(&entry).map_err(|error| {
-        CliFailure::invalid_workflow(format!(
-            "{}:{}:{}: {}",
-            error.source, error.location.line, error.location.column, error.message
+    let statements = parse_source(&source)?;
+    let module_entry = module_resolver::FrozenEntry::from_parts(
+        entry,
+        source_root,
+        source.content.clone(),
+        statements.clone(),
+    );
+    Ok(FrozenWorkflowEntry {
+        module_entry,
+        source,
+        statements,
+    })
+}
+
+fn read_frozen_entry_content(
+    entry: &Path,
+    expected: &fs::Metadata,
+    _hardened: bool,
+) -> Result<String, CliFailure> {
+    #[cfg(not(unix))]
+    if _hardened {
+        return Err(CliFailure::source(
+            "hardened entry loading requires stable file identity verification on this platform",
+        ));
+    }
+    let mut file = fs::File::open(entry).map_err(|error| {
+        CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
+    })?;
+    let opened = file.metadata().map_err(|error| {
+        CliFailure::source(format!(
+            "failed to inspect '{}': {}",
+            entry.display(),
+            error
         ))
     })?;
-    Ok(source)
+    if !same_frozen_entry_identity(expected, &opened) {
+        return Err(CliFailure::source(
+            "entry source changed while loading; refusing to freeze a different file",
+        ));
+    }
+    let mut content = String::new();
+    file.read_to_string(&mut content).map_err(|error| {
+        CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
+    })?;
+    Ok(content)
+}
+
+#[cfg(unix)]
+fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    expected.dev() == opened.dev() && expected.ino() == opened.ino()
+}
+
+#[cfg(not(unix))]
+fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) -> bool {
+    expected.is_file()
+        && opened.is_file()
+        && expected.len() == opened.len()
+        && expected.modified().ok() == opened.modified().ok()
+}
+
+fn resolve_frozen_entry_modules(
+    entry: &module_resolver::FrozenEntry,
+    source: &LoadedSource,
+) -> Result<module_resolver::ModuleGraph, CliFailure> {
+    module_resolver::resolve_explicit_modules_from_frozen_entry(entry).map_err(|error| {
+        let (path, line) = if error.source == source.entry_path {
+            source
+                .origin(error.location.line)
+                .map(|origin| (origin.path.as_str(), origin.line))
+                .unwrap_or((error.source.as_str(), error.location.line))
+        } else {
+            (error.source.as_str(), error.location.line)
+        };
+        CliFailure::invalid_workflow(format!(
+            "{}:{}:{}: {}",
+            path, line, error.location.column, error.message
+        ))
+    })
 }
 
 fn load_file_recursive(
@@ -883,6 +986,7 @@ fn load_file_recursive(
     hardened: bool,
     import_stack: &mut Vec<PathBuf>,
     is_entry: bool,
+    frozen_content: Option<&str>,
 ) -> Result<LoadedSource, CliFailure> {
     if let Some(cycle_start) = import_stack.iter().position(|path| path == canonical) {
         let mut cycle = import_stack[cycle_start..]
@@ -899,14 +1003,17 @@ fn load_file_recursive(
     }
     import_stack.push(canonical.to_path_buf());
 
-    let content = fs::read_to_string(canonical).map_err(|error| {
-        let message = format!("failed to read '{}': {}", canonical.display(), error);
-        if hardened && !is_entry {
-            CliFailure::import(message)
-        } else {
-            CliFailure::source(message)
-        }
-    })?;
+    let content = match frozen_content {
+        Some(content) => content.to_string(),
+        None => fs::read_to_string(canonical).map_err(|error| {
+            let message = format!("failed to read '{}': {}", canonical.display(), error);
+            if hardened && !is_entry {
+                CliFailure::import(message)
+            } else {
+                CliFailure::source(message)
+            }
+        })?,
+    };
     let parent = canonical
         .parent()
         .ok_or_else(|| CliFailure::source("could not determine source parent directory"))?;
@@ -926,6 +1033,7 @@ fn load_file_recursive(
                 hardened,
                 import_stack,
                 false,
+                None,
             )?;
             if imported_source.content.is_empty() {
                 output.push_line(&imported_path, 1, "");
@@ -1041,6 +1149,19 @@ fn preflight_workflow(
     preflight_statements(statements, input_injected, hardened, &mut function_names)
 }
 
+fn preflight_resolved_modules(
+    graph: &module_resolver::ModuleGraph,
+    hardened: bool,
+) -> Result<(), CliFailure> {
+    for identity in graph.order.iter().take(graph.order.len().saturating_sub(1)) {
+        let module = graph.modules.get(identity).ok_or_else(|| {
+            CliFailure::invalid_workflow("resolved module is missing from the dependency graph")
+        })?;
+        preflight_workflow(module.statements(), false, hardened)?;
+    }
+    Ok(())
+}
+
 fn preflight_statements(
     statements: &[Stmt],
     input_injected: bool,
@@ -1049,16 +1170,44 @@ fn preflight_statements(
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
-            Stmt::LegacyInclude { .. }
-            | Stmt::ModuleImport { .. }
-            | Stmt::NamedModuleImport { .. }
-            | Stmt::Export { .. } => {}
+            Stmt::LegacyInclude { .. } | Stmt::ModuleImport { .. } => {}
+            Stmt::NamedModuleImport { bindings, .. } => {
+                for binding in bindings {
+                    function_names.insert(binding.local.clone());
+                }
+            }
             Stmt::Let { name, value, .. } | Stmt::Assign { name, value, .. } => {
                 if input_injected && name == "input" {
                     return Err(read_only_input_failure());
                 }
                 preflight_expr(value, hardened, function_names)?;
             }
+            Stmt::Export { declaration, .. } => match declaration {
+                solvec::ast::ExportedDeclaration::Let { name, value, .. } => {
+                    if input_injected && name == "input" {
+                        return Err(read_only_input_failure());
+                    }
+                    preflight_expr(value, hardened, function_names)?;
+                }
+                solvec::ast::ExportedDeclaration::Function {
+                    name, params, body, ..
+                } => {
+                    if input_injected
+                        && (name == "input" || params.iter().any(|param| param == "input"))
+                    {
+                        return Err(read_only_input_failure());
+                    }
+                    if hardened && is_explicitly_unsafe_name(name) {
+                        return Err(capability_failure(
+                            "unsafe function declarations are disabled by hardened execution policy",
+                        ));
+                    }
+                    let mut body_function_names = function_names.clone();
+                    body_function_names.insert(name.clone());
+                    preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
+                    function_names.insert(name.clone());
+                }
+            },
             Stmt::Print { value, .. } | Stmt::Return { value, .. } | Stmt::Expr(value) => {
                 preflight_expr(value, hardened, function_names)?;
             }
@@ -1285,4 +1434,135 @@ fn print_usage() {
     println!();
     println!("Legacy runtime:");
     println!("  The public legacy command and --legacy flag have been removed.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        freeze_entry_with_imports, read_frozen_entry_content, resolve_frozen_entry_modules,
+    };
+    use solvec::{
+        ast_runtime::{AstRuntime, ExecutionPolicy},
+        value::Value,
+    };
+    use std::{
+        fs,
+        sync::atomic::{AtomicUsize, Ordering},
+    };
+
+    static NEXT_FIXTURE: AtomicUsize = AtomicUsize::new(0);
+
+    fn fixture_root() -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "solvelang_frozen_entry_{}_{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).expect("fixture root");
+        root
+    }
+
+    #[test]
+    fn frozen_entry_source_and_graph_survive_entry_replacement_before_execution() {
+        let root = fixture_root();
+        let entry = root.join("entry.solve");
+        fs::write(
+            &entry,
+            "import \"a.solve\" as module\nprint(module.value)\n",
+        )
+        .expect("entry source");
+        fs::write(root.join("a.solve"), "export let value = 1\n").expect("module a");
+        fs::write(root.join("b.solve"), "export let value = 2\n").expect("module b");
+
+        let frozen = freeze_entry_with_imports(&entry.to_string_lossy(), true)
+            .expect("entry freezes before replacement");
+        fs::write(
+            &entry,
+            "import \"b.solve\" as module\nprint(module.value)\n",
+        )
+        .expect("replace entry after freeze");
+
+        let graph = resolve_frozen_entry_modules(&frozen.module_entry, &frozen.source)
+            .expect("graph uses frozen entry source");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            &frozen.source.content,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&graph, &frozen.statements)
+            .expect("runtime executes frozen entry source");
+
+        assert_eq!(runtime.outputs(), &[Value::Number(1)]);
+        assert!(graph.modules.contains_key("a.solve"));
+        assert!(!graph.modules.contains_key("b.solve"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn hardened_frozen_symlink_entry_cannot_switch_to_another_root() {
+        use std::os::unix::fs::symlink;
+
+        let root = fixture_root();
+        let root_a = root.join("root-a");
+        let root_b = root.join("root-b");
+        fs::create_dir_all(&root_a).expect("root a");
+        fs::create_dir_all(&root_b).expect("root b");
+        fs::write(
+            root_a.join("entry.solve"),
+            "import \"safe.solve\" as module\nprint(module.value)\n",
+        )
+        .expect("entry a");
+        fs::write(root_a.join("safe.solve"), "export let value = 1\n").expect("safe module");
+        fs::write(
+            root_b.join("entry.solve"),
+            "import \"outside.solve\" as module\nprint(module.value)\n",
+        )
+        .expect("entry b");
+        fs::write(root_b.join("outside.solve"), "export let value = 2\n").expect("outside module");
+        let entry_link = root.join("entry.solve");
+        symlink(root_a.join("entry.solve"), &entry_link).expect("entry link a");
+
+        let frozen = freeze_entry_with_imports(&entry_link.to_string_lossy(), true)
+            .expect("hardened entry freezes");
+        fs::remove_file(&entry_link).expect("remove old entry link");
+        symlink(root_b.join("entry.solve"), &entry_link).expect("entry link b");
+
+        let graph = resolve_frozen_entry_modules(&frozen.module_entry, &frozen.source)
+            .expect("frozen graph remains rooted at root a");
+        assert_eq!(
+            graph.root,
+            fs::canonicalize(&root_a).expect("root a canonicalizes")
+        );
+        assert!(graph.modules.contains_key("safe.solve"));
+        assert!(!graph.modules.contains_key("outside.solve"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn frozen_entry_read_rejects_a_replacement_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = fixture_root();
+        let entry = root.join("entry.solve");
+        let outside = root.join("outside.solve");
+        fs::write(&entry, "print(1)\n").expect("entry source");
+        fs::write(&outside, "print(2)\n").expect("outside source");
+        let metadata = fs::metadata(&entry).expect("entry metadata");
+        fs::remove_file(&entry).expect("remove entry");
+        symlink(&outside, &entry).expect("replacement symlink");
+
+        let error = read_frozen_entry_content(&entry, &metadata, true)
+            .expect_err("replacement symlink is rejected");
+        assert!(
+            error
+                .human_message
+                .contains("entry source changed while loading")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
 }
