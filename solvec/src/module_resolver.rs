@@ -65,7 +65,7 @@ pub fn resolve_explicit_modules(entry: &Path) -> Result<ModuleGraph, ModuleError
         stack: Vec::new(),
         order: Vec::new(),
     };
-    resolver.visit(&entry, true)?;
+    resolver.visit(&entry)?;
     Ok(ModuleGraph {
         root,
         modules: resolver.modules,
@@ -82,7 +82,7 @@ struct Resolver {
 }
 
 impl Resolver {
-    fn visit(&mut self, path: &Path, is_entry: bool) -> Result<String, ModuleError> {
+    fn visit(&mut self, path: &Path) -> Result<String, ModuleError> {
         if let Some(identity) = self.canonical.get(path) {
             return Ok(identity.clone());
         }
@@ -106,9 +106,7 @@ impl Resolver {
                 format!("failed to read module: {error}"),
             )
         })?;
-        if let Err(diagnostics) = diagnostics::validate_source(&content)
-            && !is_entry
-        {
+        if let Err(diagnostics) = diagnostics::validate_source(&content) {
             let diagnostic = diagnostics
                 .into_iter()
                 .next()
@@ -262,7 +260,7 @@ impl Resolver {
                 format!("explicit module cycle detected: {}", cycle.join(" -> ")),
             ));
         }
-        self.visit(&canonical, false)
+        self.visit(&canonical)
     }
     fn identity(&self, path: &Path) -> String {
         path.strip_prefix(&self.root)
@@ -427,5 +425,18 @@ mod tests {
 
         assert_eq!(error.source, "entry.solve");
         assert_eq!(error.location.line, 2);
+    }
+
+    #[test]
+    fn rejects_entry_lexer_diagnostics_before_constructing_a_graph() {
+        let fixture = Fixture::new();
+        fixture.write("entry.solve", "export let value = \"unterminated\n");
+
+        let error = resolve_explicit_modules(&fixture.entry())
+            .expect_err("malformed entry must not produce a graph");
+
+        assert_eq!(error.source, "entry.solve");
+        assert_eq!(error.location.line, 1);
+        assert!(error.message.contains("Unclosed string literal"));
     }
 }
