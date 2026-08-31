@@ -865,6 +865,8 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         &mut import_stack,
         true,
     )?;
+    validate_diagnostics(&source)?;
+    parse_source(&source)?;
     module_resolver::resolve_explicit_modules(&entry).map_err(|error| {
         CliFailure::invalid_workflow(format!(
             "{}:{}:{}: {}",

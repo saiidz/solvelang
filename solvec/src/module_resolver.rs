@@ -121,7 +121,6 @@ impl Resolver {
         }
         let statements = match parser::Parser::new(lexer::lex(&content)).parse() {
             Ok(statements) => statements,
-            Err(_) if is_entry => Vec::new(),
             Err(errors) => {
                 let error = errors.into_iter().next().expect("parser reports an error");
                 return Err(error_at(
@@ -412,5 +411,21 @@ mod tests {
         assert_eq!(error.source, "module.solve");
         assert_eq!(error.location.line, 1);
         assert!(error.message.contains("Unclosed string literal"));
+    }
+
+    #[test]
+    fn rejects_malformed_entries_instead_of_returning_an_incomplete_graph() {
+        let fixture = Fixture::new();
+        fixture.write(
+            "entry.solve",
+            "import \"dependency.solve\" as dependency\n@\n",
+        );
+        fixture.write("dependency.solve", "export let value = 1\n");
+
+        let error = resolve_explicit_modules(&fixture.entry())
+            .expect_err("malformed entry must not produce a graph");
+
+        assert_eq!(error.source, "entry.solve");
+        assert_eq!(error.location.line, 2);
     }
 }
