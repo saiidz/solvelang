@@ -1,6 +1,8 @@
 use solvec::ast::{Expr, ExprKind, Stmt};
 use solvec::ast_runtime::ExecutionPolicy;
-use solvec::{ast_runtime, diagnostics, formatter, lexer, lint, parser, semantic, value};
+use solvec::{
+    ast_runtime, diagnostics, formatter, lexer, lint, module_resolver, parser, semantic, value,
+};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -855,14 +857,23 @@ fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSour
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
     let mut import_stack = Vec::new();
-    load_file_recursive(
+    let source = load_file_recursive(
         &entry,
         &source_root,
         &entry_path,
         hardened,
         &mut import_stack,
         true,
-    )
+    )?;
+    validate_diagnostics(&source)?;
+    parse_source(&source)?;
+    module_resolver::resolve_explicit_modules(&entry).map_err(|error| {
+        CliFailure::invalid_workflow(format!(
+            "{}:{}:{}: {}",
+            error.source, error.location.line, error.location.column, error.message
+        ))
+    })?;
+    Ok(source)
 }
 
 fn load_file_recursive(

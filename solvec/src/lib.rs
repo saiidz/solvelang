@@ -11,6 +11,7 @@ pub mod diagnostics;
 pub mod formatter;
 pub mod lexer;
 pub mod lint;
+pub mod module_resolver;
 pub mod parser;
 pub mod semantic;
 pub mod value;
