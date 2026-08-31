@@ -331,6 +331,14 @@ impl AstRuntime {
             .ok_or_else(|| RuntimeError::new("explicit module graph is empty"))?
             .clone();
 
+        for binding in &self.read_only_bindings {
+            self.functions.remove(binding);
+        }
+        self.imported_values.clear();
+        self.namespaces.clear();
+        self.read_only_bindings.clear();
+        self.module_scopes.clear();
+        self.module_initialization.clear();
         let saved_module_scopes = self.module_scopes.clone();
         let saved_initialization = self.module_initialization.clone();
         for identity in &graph.order {
@@ -1107,6 +1115,13 @@ impl AstRuntime {
         args: &[Expr],
         location: SourceLocation,
     ) -> Result<Value, RuntimeError> {
+        if self.read_only_bindings.contains(name) && self.local_value(name).is_some() {
+            return Err(self.error_at(
+                location,
+                format!("lexical binding '{}' is not callable", name),
+                None,
+            ));
+        }
         if let Some(value) = self.call_builtin(name, args, location) {
             return value.map_err(|error| self.attach_location(error, location));
         }
@@ -2607,6 +2622,84 @@ print(value)
         );
         assert!(!runtime.vars.contains_key("value"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn named_function_shadows_fail_closed_without_module_side_effects() {
+        let root = module_fixture("named_function_shadow");
+        let entry = root.join("entry.solve");
+        let entry_source =
+            "import { run } from \"state.solve\"\nfn wrapper(run) { run() }\nwrapper(1)\n";
+        fs::write(&entry, entry_source).expect("entry source");
+        fs::write(
+            root.join("state.solve"),
+            "export let count = 0\nexport fn run() { count = count + 1 }\n",
+        )
+        .expect("state module");
+        let graph = crate::module_resolver::resolve_explicit_modules(&entry).expect("graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        let error = runtime
+            .run_with_modules(&graph, &parse(entry_source))
+            .expect_err("shadowed imported function is not dispatched");
+        assert!(
+            error
+                .to_string()
+                .contains("lexical binding 'run' is not callable")
+        );
+        assert_eq!(
+            runtime.module_scopes["state.solve"].vars["count"],
+            Value::Number(0)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reused_runtime_starts_a_fresh_module_initialization_epoch() {
+        let first_root = module_fixture("first_runtime_graph");
+        let second_root = module_fixture("second_runtime_graph");
+        let entry_source = "import \"state.solve\" as state\nprint(state.value)\n";
+        for (root, value) in [(&first_root, 1), (&second_root, 2)] {
+            fs::write(root.join("entry.solve"), entry_source).expect("entry source");
+            fs::write(
+                root.join("state.solve"),
+                format!("export let value = {value}\n"),
+            )
+            .expect("state module");
+        }
+        let first_graph =
+            crate::module_resolver::resolve_explicit_modules(&first_root.join("entry.solve"))
+                .expect("first graph");
+        let second_graph =
+            crate::module_resolver::resolve_explicit_modules(&second_root.join("entry.solve"))
+                .expect("second graph");
+        let mut runtime = AstRuntime::with_input(
+            ExecutionPolicy::safe(Vec::new()),
+            entry_source,
+            "entry.solve",
+            None,
+            true,
+        );
+        runtime
+            .run_with_modules(&first_graph, &parse(entry_source))
+            .expect("first graph runs");
+        runtime
+            .run_with_modules(&second_graph, &parse(entry_source))
+            .expect("second graph runs independently");
+        assert_eq!(runtime.outputs(), &[Value::Number(1), Value::Number(2)]);
+        assert_eq!(
+            runtime.module_scopes["state.solve"].vars["value"],
+            Value::Number(2)
+        );
+        let _ = fs::remove_dir_all(first_root);
+        let _ = fs::remove_dir_all(second_root);
     }
 
     #[cfg(unix)]

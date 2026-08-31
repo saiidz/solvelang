@@ -512,7 +512,13 @@ impl Checker {
                 for argument in args {
                     self.check_expr(argument, values, in_function);
                 }
-                if let Some(function) = self.functions.get(name) {
+                if self.named_import_bindings.contains(name) && self.import_is_shadowed(name) {
+                    self.error(
+                        expr,
+                        format!("lexical binding '{}' is not callable", name),
+                        "Rename the lexical binding or call the imported function outside its shadowing scope.",
+                    );
+                } else if let Some(function) = self.functions.get(name) {
                     if args.len() != function.arity {
                         self.error(
                             expr,
