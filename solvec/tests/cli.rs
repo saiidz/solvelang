@@ -72,6 +72,29 @@ fn create_temp_workflow_dir(name: &str) -> std::path::PathBuf {
     path
 }
 
+#[test]
+fn explicit_modules_execute_with_private_scopes_and_read_only_exports() {
+    let root = create_temp_workflow_dir("solvelang_runtime_modules");
+    let entry = root.join("entry.solve");
+    let module = root.join("math.solve");
+    fs::write(
+        &entry,
+        "import \"math.solve\" as math\nimport { base, add } from \"math.solve\"\nprint(base)\nprint(math.add(2, 3))\nprint(add(3, 4))\n",
+    )
+    .expect("failed to write entry workflow");
+    fs::write(
+        &module,
+        "let private = 10\nexport let base = 4\nexport fn add(left, right) { return left + right + private }\n",
+    )
+    .expect("failed to write module workflow");
+
+    let entry_arg = entry.to_string_lossy().to_string();
+    let output = run_solvec(&["run", "--safe", entry_arg.as_str()]);
+
+    assert_eq!(output, "NON-PRODUCTION ADVISORY ONLY\n4\n15\n17\n");
+    let _ = fs::remove_dir_all(root);
+}
+
 fn run_solvec_with_env(
     args: &[&str],
     envs: &[(&str, &str)],
@@ -556,7 +579,7 @@ fn explicit_module_graph_validation_fails_before_any_output_or_evaluation() {
 }
 
 #[test]
-fn explicit_exports_fail_before_any_earlier_output() {
+fn explicit_exports_execute_after_graph_validation() {
     let file = write_temp_solve_file(
         "solvelang_explicit_export_parser_only.solve",
         "print(\"must-not-print\")\nexport let version = 1\n",
@@ -564,12 +587,9 @@ fn explicit_exports_fail_before_any_earlier_output() {
 
     let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
 
-    assert!(!success, "explicit export program unexpectedly succeeded");
-    assert!(stdout.is_empty(), "unexpected stdout: {stdout}");
-    assert!(
-        stderr.contains("explicit local modules are not executable"),
-        "unexpected stderr: {stderr}"
-    );
+    assert!(success, "explicit export program failed: {stderr}");
+    assert_eq!(stdout, "must-not-print\n");
+    assert!(stderr.is_empty());
 }
 
 #[test]

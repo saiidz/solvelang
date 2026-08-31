@@ -20,11 +20,23 @@ pub struct ModuleError {
     pub message: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModuleNode {
     pub identity: String,
     pub exports: BTreeMap<String, ExportKind>,
     pub dependencies: Vec<String>,
+    pub(crate) source: String,
+    pub(crate) statements: Vec<Stmt>,
+}
+
+impl ModuleNode {
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    pub fn statements(&self) -> &[Stmt] {
+        &self.statements
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,7 +45,7 @@ pub enum ExportKind {
     Function,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModuleGraph {
     pub root: PathBuf,
     pub modules: BTreeMap<String, ModuleNode>,
@@ -183,6 +195,8 @@ impl Resolver {
                 identity: identity.clone(),
                 exports,
                 dependencies,
+                source: content,
+                statements,
             },
         );
         self.order.push(identity.clone());

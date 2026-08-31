@@ -414,14 +414,31 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
     validate_diagnostics(&source)?;
     let statements = parse_source(&source)?;
     preflight_workflow(&statements, input.is_some(), options.hardened())?;
+    let module_graph =
+        module_resolver::resolve_explicit_modules(Path::new(filename)).map_err(|error| {
+            CliFailure::invalid_workflow(format!(
+                "{}:{}:{}: {}",
+                error.source, error.location.line, error.location.column, error.message
+            ))
+        })?;
+    preflight_resolved_modules(&module_graph, options.hardened())?;
 
     let mut runtime =
         ast_runtime::AstRuntime::with_input(policy, &source.content, filename, input, options.json);
     if options.hardened() && !options.json {
         println!("{}", ADVISORY_LABEL);
     }
-    runtime
-        .run(&statements)
+    let result = if statements.iter().any(|statement| {
+        matches!(
+            statement,
+            Stmt::ModuleImport { .. } | Stmt::NamedModuleImport { .. } | Stmt::Export { .. }
+        )
+    }) {
+        runtime.run_with_modules(&module_graph, &statements)
+    } else {
+        runtime.run(&statements)
+    };
+    result
         .map_err(|error| CliFailure::runtime(source.remap_runtime_message(&error.to_string())))?;
 
     if options.json {
@@ -1041,6 +1058,19 @@ fn preflight_workflow(
     preflight_statements(statements, input_injected, hardened, &mut function_names)
 }
 
+fn preflight_resolved_modules(
+    graph: &module_resolver::ModuleGraph,
+    hardened: bool,
+) -> Result<(), CliFailure> {
+    for identity in graph.order.iter().take(graph.order.len().saturating_sub(1)) {
+        let module = graph.modules.get(identity).ok_or_else(|| {
+            CliFailure::invalid_workflow("resolved module is missing from the dependency graph")
+        })?;
+        preflight_workflow(module.statements(), false, hardened)?;
+    }
+    Ok(())
+}
+
 fn preflight_statements(
     statements: &[Stmt],
     input_injected: bool,
@@ -1049,16 +1079,44 @@ fn preflight_statements(
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
-            Stmt::LegacyInclude { .. }
-            | Stmt::ModuleImport { .. }
-            | Stmt::NamedModuleImport { .. }
-            | Stmt::Export { .. } => {}
+            Stmt::LegacyInclude { .. } | Stmt::ModuleImport { .. } => {}
+            Stmt::NamedModuleImport { bindings, .. } => {
+                for binding in bindings {
+                    function_names.insert(binding.local.clone());
+                }
+            }
             Stmt::Let { name, value, .. } | Stmt::Assign { name, value, .. } => {
                 if input_injected && name == "input" {
                     return Err(read_only_input_failure());
                 }
                 preflight_expr(value, hardened, function_names)?;
             }
+            Stmt::Export { declaration, .. } => match declaration {
+                solvec::ast::ExportedDeclaration::Let { name, value, .. } => {
+                    if input_injected && name == "input" {
+                        return Err(read_only_input_failure());
+                    }
+                    preflight_expr(value, hardened, function_names)?;
+                }
+                solvec::ast::ExportedDeclaration::Function {
+                    name, params, body, ..
+                } => {
+                    if input_injected
+                        && (name == "input" || params.iter().any(|param| param == "input"))
+                    {
+                        return Err(read_only_input_failure());
+                    }
+                    if hardened && is_explicitly_unsafe_name(name) {
+                        return Err(capability_failure(
+                            "unsafe function declarations are disabled by hardened execution policy",
+                        ));
+                    }
+                    let mut body_function_names = function_names.clone();
+                    body_function_names.insert(name.clone());
+                    preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
+                    function_names.insert(name.clone());
+                }
+            },
             Stmt::Print { value, .. } | Stmt::Return { value, .. } | Stmt::Expr(value) => {
                 preflight_expr(value, hardened, function_names)?;
             }
