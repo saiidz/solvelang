@@ -578,6 +578,47 @@ fn legacy_compatibility_includes_expand_before_entry_parsing() {
 }
 
 #[test]
+fn frozen_module_errors_remap_to_the_legacy_include_origin() {
+    let root = create_temp_workflow_dir("solvelang_frozen_module_origin");
+    let entry = root.join("entry.solve");
+    fs::write(&entry, "import \"prefix.solve\"\n").expect("failed to write entry workflow");
+    fs::write(
+        root.join("prefix.solve"),
+        "import \"missing.solve\" as missing\n",
+    )
+    .expect("failed to write included source");
+
+    let entry_arg = entry.to_string_lossy().to_string();
+    let stderr = run_solvec_error(&["run", entry_arg.as_str()]);
+    assert!(
+        stderr.contains("prefix.solve:1:1: failed to resolve explicit module 'missing.solve'"),
+        "unexpected stderr: {stderr}"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn frozen_module_errors_keep_entry_line_numbers_after_legacy_expansion() {
+    let root = create_temp_workflow_dir("solvelang_frozen_entry_module_origin");
+    let entry = root.join("entry.solve");
+    fs::write(
+        &entry,
+        "import \"prefix.solve\"\nimport \"missing.solve\" as missing\n",
+    )
+    .expect("failed to write entry workflow");
+    fs::write(root.join("prefix.solve"), "let first = 1\nlet second = 2\n")
+        .expect("failed to write included source");
+
+    let entry_arg = entry.to_string_lossy().to_string();
+    let stderr = run_solvec_error(&["run", entry_arg.as_str()]);
+    assert!(
+        stderr.contains("entry.solve:2:1: failed to resolve explicit module 'missing.solve'"),
+        "unexpected stderr: {stderr}"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn explicit_module_graph_validation_fails_before_any_output_or_evaluation() {
     let file = write_temp_solve_file(
         "solvelang_explicit_module_parser_only.solve",

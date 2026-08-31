@@ -417,7 +417,7 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
     let input = load_explicit_input(options.input_path.as_deref())?;
     let entry = freeze_entry_with_imports(filename, options.hardened())?;
     preflight_workflow(&entry.statements, input.is_some(), options.hardened())?;
-    let module_graph = resolve_frozen_entry_modules(&entry.module_entry)?;
+    let module_graph = resolve_frozen_entry_modules(&entry.module_entry, &entry.source)?;
     preflight_resolved_modules(&module_graph, options.hardened())?;
 
     let mut runtime = ast_runtime::AstRuntime::with_input(
@@ -856,7 +856,7 @@ fn relative_source_path(canonical: &Path, source_root: &Path) -> String {
 
 fn load_source_with_imports(filename: &str, hardened: bool) -> Result<LoadedSource, CliFailure> {
     let entry = freeze_entry_with_imports(filename, hardened)?;
-    resolve_frozen_entry_modules(&entry.module_entry)?;
+    resolve_frozen_entry_modules(&entry.module_entry, &entry.source)?;
     Ok(entry.source)
 }
 
@@ -885,7 +885,7 @@ fn freeze_entry_with_imports(
         .ok_or_else(|| CliFailure::source("could not determine entry source directory"))?
         .to_path_buf();
     let entry_path = relative_source_path(&entry, &source_root);
-    let entry_content = read_frozen_entry_content(&entry, &metadata)?;
+    let entry_content = read_frozen_entry_content(&entry, &metadata, hardened)?;
     let mut import_stack = Vec::new();
     let source = load_file_recursive(
         &entry,
@@ -911,7 +911,17 @@ fn freeze_entry_with_imports(
     })
 }
 
-fn read_frozen_entry_content(entry: &Path, expected: &fs::Metadata) -> Result<String, CliFailure> {
+fn read_frozen_entry_content(
+    entry: &Path,
+    expected: &fs::Metadata,
+    _hardened: bool,
+) -> Result<String, CliFailure> {
+    #[cfg(not(unix))]
+    if _hardened {
+        return Err(CliFailure::source(
+            "hardened entry loading requires stable file identity verification on this platform",
+        ));
+    }
     let mut file = fs::File::open(entry).map_err(|error| {
         CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
     })?;
@@ -951,11 +961,20 @@ fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) ->
 
 fn resolve_frozen_entry_modules(
     entry: &module_resolver::FrozenEntry,
+    source: &LoadedSource,
 ) -> Result<module_resolver::ModuleGraph, CliFailure> {
     module_resolver::resolve_explicit_modules_from_frozen_entry(entry).map_err(|error| {
+        let (path, line) = if error.source == source.entry_path {
+            source
+                .origin(error.location.line)
+                .map(|origin| (origin.path.as_str(), origin.line))
+                .unwrap_or((error.source.as_str(), error.location.line))
+        } else {
+            (error.source.as_str(), error.location.line)
+        };
         CliFailure::invalid_workflow(format!(
             "{}:{}:{}: {}",
-            error.source, error.location.line, error.location.column, error.message
+            path, line, error.location.column, error.message
         ))
     })
 }
@@ -1463,7 +1482,7 @@ mod tests {
         )
         .expect("replace entry after freeze");
 
-        let graph = resolve_frozen_entry_modules(&frozen.module_entry)
+        let graph = resolve_frozen_entry_modules(&frozen.module_entry, &frozen.source)
             .expect("graph uses frozen entry source");
         let mut runtime = AstRuntime::with_input(
             ExecutionPolicy::safe(Vec::new()),
@@ -1512,7 +1531,7 @@ mod tests {
         fs::remove_file(&entry_link).expect("remove old entry link");
         symlink(root_b.join("entry.solve"), &entry_link).expect("entry link b");
 
-        let graph = resolve_frozen_entry_modules(&frozen.module_entry)
+        let graph = resolve_frozen_entry_modules(&frozen.module_entry, &frozen.source)
             .expect("frozen graph remains rooted at root a");
         assert_eq!(
             graph.root,
@@ -1537,7 +1556,7 @@ mod tests {
         fs::remove_file(&entry).expect("remove entry");
         symlink(&outside, &entry).expect("replacement symlink");
 
-        let error = read_frozen_entry_content(&entry, &metadata)
+        let error = read_frozen_entry_content(&entry, &metadata, true)
             .expect_err("replacement symlink is rejected");
         assert!(
             error
