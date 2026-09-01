@@ -73,22 +73,23 @@ jobs:
 
       - name: Run clippy
         working-directory: solvec
-        run: cargo clippy --target "$TARGET" -- -D warnings
+        run: cargo clippy --locked --target "$TARGET" -- -D warnings
 
       - name: Run tests
         working-directory: solvec
-        run: cargo test --target "$TARGET"
+        run: cargo test --locked --target "$TARGET"
 
       - name: Build exact candidate
         working-directory: solvec
-        run: cargo build --release --target "$TARGET"
+        run: cargo build --release --locked --target "$TARGET"
 
       - name: Package deterministic candidate twice
         run: |
           set -Eeuo pipefail
           first="$RUNNER_TEMP/release-candidate-first"
           second="$RUNNER_TEMP/release-candidate-second"
-          mkdir -p "$first" "$second"
+          smoke="$RUNNER_TEMP/release-candidate-smoke"
+          mkdir -p "$first" "$second" "$smoke"
           bash scripts/prepare-release-candidate.sh "$SOURCE_SHA" "$TARGET" "$first" | tee "$RUNNER_TEMP/release-candidate-first.env"
           bash scripts/prepare-release-candidate.sh "$SOURCE_SHA" "$TARGET" "$second" | tee "$RUNNER_TEMP/release-candidate-second.env"
           diff -u "$RUNNER_TEMP/release-candidate-first.env" "$RUNNER_TEMP/release-candidate-second.env"
@@ -99,7 +100,10 @@ jobs:
           cmp "$first/$first_checksum" "$second/$first_checksum"
           cmp "$first/$first_provenance" "$second/$first_provenance"
           (cd "$first" && sha256sum --check "$first_checksum")
-          python3 - "$first/$first_provenance" "$SOURCE_SHA" <<'PY'
+          tar -xzf "$first/$first_artifact" -C "$smoke"
+          test -x "$smoke/solvec"
+          "$smoke/solvec" help >/dev/null
+          python3 - "$first/$first_provenance" "$SOURCE_SHA" "$first_artifact" <<'PY'
           import json
           import pathlib
           import sys
@@ -107,8 +111,11 @@ jobs:
           assert payload["release_kind"] == "candidate-dry-run"
           assert payload["publishable"] is False
           assert payload["source_sha"] == sys.argv[2]
+          assert payload["artifact"] == sys.argv[3]
+          assert payload["repository"] == "saiidz/solvelang"
           assert payload["run_id"] != "local"
-          assert payload["artifact_sha256"]
+          assert payload["run_attempt"] != "local"
+          assert len(payload["artifact_sha256"]) == 64
           PY
 
       - name: Upload non-publishable candidate evidence
