@@ -1,0 +1,128 @@
+name: Release Candidate Dry Run
+
+on:
+  pull_request:
+    paths:
+      - "solvec/**"
+      - "scripts/prepare-release-candidate.sh"
+      - ".github/workflows/release-candidate.yml"
+      - "docs/release-contract.md"
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: "Optional Cargo package version expected from the selected ref"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x86_64:
+    name: Linux x86_64 candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      TARGET: x86_64-unknown-linux-gnu
+      EXPECTED_VERSION: ${{ inputs.expected_version }}
+    steps:
+      - name: Checkout exact candidate source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+          targets: ${{ env.TARGET }}
+
+      - name: Verify exact source identity
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code
+
+      - name: Verify optional version expectation
+        if: ${{ env.EXPECTED_VERSION != '' }}
+        run: |
+          set -Eeuo pipefail
+          actual="$(python3 - <<'PY'
+          import pathlib
+          import tomllib
+          with pathlib.Path("solvec/Cargo.toml").open("rb") as handle:
+              print(tomllib.load(handle)["package"]["version"])
+          PY
+          )"
+          test "$actual" = "$EXPECTED_VERSION" || {
+            echo "expected version $EXPECTED_VERSION but Cargo.toml reports $actual" >&2
+            exit 1
+          }
+
+      - name: Check formatting
+        working-directory: solvec
+        run: cargo fmt --check
+
+      - name: Run clippy
+        working-directory: solvec
+        run: cargo clippy --target "$TARGET" -- -D warnings
+
+      - name: Run tests
+        working-directory: solvec
+        run: cargo test --target "$TARGET"
+
+      - name: Build exact candidate
+        working-directory: solvec
+        run: cargo build --release --target "$TARGET"
+
+      - name: Package deterministic candidate twice
+        run: |
+          set -Eeuo pipefail
+          first="$RUNNER_TEMP/release-candidate-first"
+          second="$RUNNER_TEMP/release-candidate-second"
+          mkdir -p "$first" "$second"
+          bash scripts/prepare-release-candidate.sh "$SOURCE_SHA" "$TARGET" "$first" | tee "$RUNNER_TEMP/release-candidate-first.env"
+          bash scripts/prepare-release-candidate.sh "$SOURCE_SHA" "$TARGET" "$second" | tee "$RUNNER_TEMP/release-candidate-second.env"
+          diff -u "$RUNNER_TEMP/release-candidate-first.env" "$RUNNER_TEMP/release-candidate-second.env"
+          first_artifact="$(awk -F= '$1 == "artifact" {print $2}' "$RUNNER_TEMP/release-candidate-first.env")"
+          first_checksum="$(awk -F= '$1 == "checksum" {print $2}' "$RUNNER_TEMP/release-candidate-first.env")"
+          first_provenance="$(awk -F= '$1 == "provenance" {print $2}' "$RUNNER_TEMP/release-candidate-first.env")"
+          cmp "$first/$first_artifact" "$second/$first_artifact"
+          cmp "$first/$first_checksum" "$second/$first_checksum"
+          cmp "$first/$first_provenance" "$second/$first_provenance"
+          sha256sum --check "$first/$first_checksum"
+          python3 - "$first/$first_provenance" "$SOURCE_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+          payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert payload["release_kind"] == "candidate-dry-run"
+          assert payload["publishable"] is False
+          assert payload["source_sha"] == sys.argv[2]
+          assert payload["run_id"] != "local"
+          assert payload["artifact_sha256"]
+          PY
+          echo "artifact=$first_artifact" >> "$GITHUB_ENV"
+          echo "checksum=$first_checksum" >> "$GITHUB_ENV"
+          echo "provenance=$first_provenance" >> "$GITHUB_ENV"
+          echo "candidate_dir=$first" >> "$GITHUB_ENV"
+
+      - name: Upload non-publishable candidate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: solvelang-release-candidate-${{ env.SOURCE_SHA }}
+          path: |
+            ${{ env.candidate_dir }}/${{ env.artifact }}
+            ${{ env.candidate_dir }}/${{ env.checksum }}
+            ${{ env.candidate_dir }}/${{ env.provenance }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
