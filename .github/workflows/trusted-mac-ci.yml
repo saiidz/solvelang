@@ -8,15 +8,21 @@ on:
 permissions:
   contents: read
 
+# SolveLang has one owner-allocated self-hosted Mac runner slot. Serialize
+# validation per trusted branch so a newer push can replace only stale pending
+# work from that same branch without dropping another branch's exact-head run.
+# Automation must still avoid intentionally stacking multiple agent/mac-* jobs
+# while the single SolveLang Mac slot is busy.
 concurrency:
-  group: trusted-mac-hosted-${{ github.ref }}
+  group: trusted-mac-solvelang-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   repository-audit-site:
     name: Repository Audit on Mac
     if: github.repository == 'saiidz/solvelang'
-    runs-on: macos-14
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: site
@@ -32,16 +38,16 @@ jobs:
           cache-dependency-path: site/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: caffeinate -dimsu npm ci
 
       - name: Run deterministic Studio and audit tests
-        run: npm run test:studio
+        run: caffeinate -dimsu npm run test:studio
 
       - name: Run lint
-        run: npm run lint
+        run: caffeinate -dimsu npm run lint
 
       - name: Build static site
-        run: npm run build
+        run: caffeinate -dimsu npm run build
 
       - name: Verify exported document languages
-        run: npm run verify:i18n-export
+        run: caffeinate -dimsu npm run verify:i18n-export
