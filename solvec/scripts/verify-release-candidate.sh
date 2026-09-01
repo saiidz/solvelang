@@ -47,7 +47,10 @@ if provenance.get("os") != "linux" or provenance.get("arch") != "x86_64":
     raise SystemExit("normalized release-candidate platform does not match target")
 
 version = provenance.get("version", "")
-if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version):
+if not re.fullmatch(
+    r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?",
+    version,
+):
     raise SystemExit("provenance version is not semver-like")
 artifact_name = provenance.get("artifact", "")
 expected_name = f"solvelang-{version}-linux-x86_64.tar.gz"
