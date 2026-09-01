@@ -147,7 +147,7 @@ Do not run `sam deploy` as part of routine contributor validation.
 
 | Area changed | Minimum validation |
 |---|---|
-| Rust lexer/parser/runtime | `cargo fmt --check`, `cargo test` |
+| Rust language core/runtime | Run `cargo fmt --check` and `cargo test` in both `solvec-core/` and `solvec/` |
 | Executable example | `cargo run -- validate <file>` and, when safe, `cargo run -- run <file>` |
 | Runtime safety | Rust tests plus targeted hardened-mode checks |
 | Website | `npm run lint`, `npm run build` |
@@ -162,9 +162,9 @@ Do not run `sam deploy` as part of routine contributor validation.
 
 Read:
 
-- `solvec/src/lexer.rs`
-- `solvec/src/parser.rs`
-- `solvec/src/ast.rs`
+- `solvec-core/src/lexer.rs`
+- `solvec-core/src/parser.rs`
+- `solvec-core/src/ast.rs`
 - `docs/language-reference.md`
 
 ### Change runtime behavior
@@ -172,7 +172,7 @@ Read:
 Read:
 
 - `solvec/src/ast_runtime.rs`
-- `solvec/src/value.rs`
+- `solvec-core/src/value.rs`
 - `solvec/src/main.rs`
 - `docs/runtime-safety.md`
 

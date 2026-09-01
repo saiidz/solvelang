@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "solvec/**"
+      - "solvec-core/**"
       - ".github/workflows/release-candidate-ci.yml"
       - "docs/release-contract.md"
       - "docs/release-candidate-dry-run.md"

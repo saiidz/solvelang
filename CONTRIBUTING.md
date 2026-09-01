@@ -75,9 +75,9 @@ sam build --template template.yaml
 
 | Change | Primary location |
 |---|---|
-| Lexer/token behavior | `solvec/src/lexer.rs` |
-| Parser/AST behavior | `solvec/src/parser.rs`, `solvec/src/ast.rs` |
-| Runtime semantics | `solvec/src/ast_runtime.rs`, `solvec/src/value.rs` |
+| Lexer/token behavior | `solvec-core/src/lexer.rs` |
+| Parser/AST behavior | `solvec-core/src/parser.rs`, `solvec-core/src/ast.rs` |
+| Runtime semantics | `solvec/src/ast_runtime.rs`, `solvec-core/src/value.rs` |
 | CLI/options/policy setup | `solvec/src/main.rs` |
 | AI provider prototype | `solvec/src/ai.rs` |
 | Language docs | `docs/language-reference.md` |
