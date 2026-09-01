@@ -1,0 +1,5 @@
+let private = 10
+export let base = 4
+export fn add(left, right) {
+    return left + right + private
+}
