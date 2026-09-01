@@ -21,6 +21,12 @@ alphanumeric characters or `_`. Reserved words are `let`, `fn`, `return`, `if`, 
 `while`, `for`, `in`, `break`, `continue`, `print`, `true`, `false`, `and`,
 `or`, `not`, `agent`, `tool`, `instruction`, and `ask`.
 
+`import`, `export`, `as`, and `from` are contextual words. They keep their
+ordinary identifier meaning unless they occur in one of the complete top-level
+explicit-module forms defined below. The exact legacy include form
+`import "relative/path.solve"` remains a separate source-level compatibility
+directive.
+
 Text literals use double quotes. Implemented escapes are `\"`, `\\`, `\n`,
 `\t`, and `\r`; an unrecognized escaped character is represented without its
 backslash. Source numbers are decimal digits in `0..=2147483647`; negative
@@ -29,14 +35,24 @@ characters and out-of-range source literals produce source-located diagnostics.
 
 ## Grammar
 
-The EBNF below is the implemented syntactic surface *after import expansion*.
-`import "relative/path.solve"` is a source-level directive recognized before
-lexing: it may be followed by whitespace and a `//` comment, and the imported
-source replaces the directive before this grammar is applied. `{ x }` is
-repetition and `[ x ]` is optional.
+The EBNF below describes parsed SolveLang statements after any legacy
+compatibility includes have been expanded. Explicit module imports are **not**
+flattened: they remain top-level language statements and are resolved as a
+module graph before execution.
+
+`{ x }` is repetition and `[ x ]` is optional.
 
 ```text
-program        = { newline } { statement { newline } } EOF ;
+program           = { newline } { topLevelStatement { newline } } EOF ;
+topLevelStatement = exportStmt | namespaceImportStmt | namedImportStmt | statement ;
+
+exportStmt        = "export" ( letStmt | functionStmt ) ;
+namespaceImportStmt
+                  = "import" text "as" identifier ;
+namedImportStmt   = "import" "{" importBinding { "," importBinding } [ "," ] "}"
+                    "from" text ;
+importBinding     = identifier [ "as" identifier ] ;
+
 statement      = letStmt | assignStmt | printStmt | returnStmt | functionStmt
                | ifStmt | whileStmt | forStmt | breakStmt | continueStmt
                | agentStmt | askStmt | expression ;
@@ -63,7 +79,9 @@ comparison     = term { ( ">" | ">=" | "<" | "<=" ) term } ;
 term           = factor { ( "+" | "-" | ".." ) factor } ;
 factor         = unary { ( "*" | "/" ) unary } ;
 unary          = { "not" } postfix ;
-postfix        = primary { "[" expression "]" | "." identifier } ;
+postfix        = primary { "[" expression "]" | "." identifier | moduleCallSuffix } ;
+moduleCallSuffix
+               = "(" [ expression { "," expression } [ "," ] ] ")" ;
 primary        = number | text | "true" | "false" | identifier
                | identifier "(" [ expression { "," expression } [ "," ] ] ")"
                | "(" expression ")" | array | object ;
@@ -73,6 +91,13 @@ object         = "{" { newline } [ objectKey ":" expression { newline }
                [ "," { newline } ] ] "}" ;
 objectKey      = identifier | text ;
 ```
+
+`exportStmt`, `namespaceImportStmt`, and `namedImportStmt` are top-level only.
+`export` may prefix only `let` or `fn`. A named import list must be non-empty.
+The `moduleCallSuffix` is accepted only when its current receiver is a direct
+`identifier.member` property expression, so the implemented postfix call form
+is `namespace.member(...)`; arbitrary first-class expression calls are not part
+of 0.1.
 
 Operators at each grammar level associate left-to-right. Levels are listed from
 lowest to highest precedence. Postfix property/index access binds more tightly
@@ -111,10 +136,7 @@ available under hardened execution; argument/result details are in the
 The runtime also implements host-capability builtins for file, environment,
 HTTP, and experimental agent/provider behavior. `run --safe`, `--dry-run`,
 `--no-network`, and `--json` select hardened policy: capability-bearing and
-unknown/mutation-style calls are denied before execution. Hardened imports must
-be confined relative regular `.solve` files below the entry workflow's canonical
-parent; absolute paths, parent traversal, non-`.solve` targets, and symlink
-escapes fail closed.
+unknown/mutation-style calls are denied before execution.
 
 Hardened preflight is deliberately conservative about user-defined functions:
 it checks a function body when its declaration is encountered, and permits a
@@ -127,25 +149,99 @@ executing source to resolve dynamic function rebinding.
 `agent`, `tool`, `instruction`, and `ask` are experimental; they are not a
 stable provider contract or an unattended production-workflow guarantee.
 
-## Imports, diagnostics, and deterministic behavior
+## Imports and explicit local modules
 
-`import "relative/path.solve"` is a compatibility include, not a module or
-package system. It is deliberately a pre-lexing source directive rather than a
-`statement` in the EBNF above; a trailing `//` comment is accepted on the same
-line. Imports resolve relative to the importing file, flatten before parsing,
-preserve line-level provenance, and reject cycles with a deterministic
-root-relative chain. 0.1 has no exports, namespaces, manifests, or remote
-resolution.
+SolveLang 0.1 has two intentionally distinct local-source mechanisms.
+
+### Legacy compatibility include
+
+The exact source form `import "relative/path.solve"`, followed only by
+whitespace and an optional `//` comment/end of line, is a compatibility include.
+It resolves relative to the importing file, flattens the imported source before
+ordinary program parsing/execution, preserves line-level provenance, and rejects
+cycles with a deterministic root-relative chain. It creates no namespace or
+export boundary.
+
+Under hardened execution, legacy includes must be relative regular `.solve`
+files confined below the workflow root. Absolute paths, parent traversal,
+non-`.solve` targets, and symlink escapes fail before imported content is used.
+
+### Explicit local modules
+
+The explicit forms are:
+
+```solve
+// module source
+export let api_version = 1
+export fn add(left, right) { return left + right }
+
+// importer
+import "math.solve" as math
+import { api_version as version, add } from "math.solve"
+
+print(math.add(version, 2))
+print(add(3, 4))
+```
+
+An explicit module exposes only declarations marked with `export`. Private
+module declarations remain available to functions defined in that module but
+are never exposed through an importer namespace or named import.
+
+Namespace and named-import bindings are module-scope, read-only **live**
+bindings. Reads observe the exporting module's current exported value, including
+changes made by functions executing inside that module. Importers cannot assign
+to or call through a binding in a way that mutates the import binding itself.
+Missing/private exports fail during graph validation rather than being invented
+at runtime.
+
+Module-scope import names cannot collide with module-scope variables, functions,
+builtins, the injected `input` global, or another import binding. Function
+parameters, function-local `let`s, nested-block `let`s, and loop variables may
+lexically shadow imports. Lexical bindings win over imports within their scope.
+A `let` shadow becomes active only **after** its initializer is evaluated, so in
+`let state = state.value` the initializer can still read an otherwise-visible
+imported namespace named `state`, while subsequent local uses refer to the new
+binding.
+
+Explicit imports resolve only relative local `.solve` files. Resolution uses a
+canonical local identity, rejects unsafe traversal/absolute/backslash/non-file
+or escaping targets, builds and validates the complete explicit-module graph,
+checks export surfaces and cycles, and completes before any module or entry
+source is evaluated. There is no package fallback, index lookup, environment
+search path, user-directory lookup, registry, dependency installation, or
+network resolution.
+
+Each canonical explicit module initializes exactly once per workflow run in
+deterministic dependency order. A module top level may contain explicit module
+imports plus exported or private `let`/`fn` declarations. It may not perform
+ordinary executable side effects such as `print`, control flow, agents, asks,
+assignments, expression statements, or calls. Module `let` initializers are
+restricted to a pure no-call expression subset. Module initialization is
+transactional: a failing initialization phase does not leave partially committed
+module state, and a reused runtime starts a fresh workflow/module epoch while
+preserving only explicit host input/configuration.
+
+Imported runtime errors retain the defining module's source provenance. Hardened
+preflight validates the complete resolved module graph before entry execution,
+so capability-bearing module helpers cannot be hidden behind import order.
+
+The accepted detailed syntax/runtime contract is
+[ADR 0003](docs/adr/0003-explicit-local-module-syntax.md); the local identity and
+security boundary is [ADR 0001](docs/adr/0001-local-modules-and-packages.md).
+
+## Diagnostics and deterministic behavior
 
 Parser, conservative semantic-check, lint, and runtime diagnostics identify a
 line and column and, where source is available, show source text, a caret, and a
-hint. Imported-source diagnostics identify the relevant imported path/local line.
-Parser recovery is statement-oriented and may report independently malformed
-statements.
+hint. Legacy included-source and explicit-module diagnostics retain the relevant
+local source provenance. Parser recovery is statement-oriented and may report
+independently malformed statements.
 
 Given identical source, input, execution policy, and supported host responses,
-pure evaluation and output ordering are deterministic. Host capabilities and
-experimental AI/provider output are outside that guarantee.
+pure evaluation and output ordering are deterministic. Explicit local-module
+graph ordering and initialization are deterministic for the same local source
+tree. Host capabilities and experimental AI/provider output are outside that
+guarantee.
 
 ## JSON CLI contract
 
@@ -160,10 +256,14 @@ contract, not a general remote API.
 
 The documented CLI surface is `run`, `validate`, `check`, `lint`, `fmt`,
 `tokens`, `ast`, and `help`, plus documented compatibility flags. The executable
-contract is covered by parser/runtime unit tests and `solvec/tests/cli.rs`,
-including arithmetic/overflow, diagnostics, loop control, imports/provenance,
-hardened policy, JSON atomicity, and deterministic output.
+contract is covered by parser/runtime unit tests and `solvec/tests/`, including
+arithmetic/overflow, diagnostics, loop control, legacy imports/provenance,
+explicit local modules, hardened policy, JSON atomicity, and deterministic
+output. `solvec/tests/fixtures/spec-0.1/` contains implementation-backed
+conformance fixtures for the 0.1 contract.
 
-Any specification change must add executable conformance coverage. A module
-system, static type system, and WASM-safe core require separate versioned designs
-and conformance suites; they are not silently introduced in 0.1.
+Any specification change must add executable conformance coverage. The 0.1
+explicit-module subset does **not** imply package manifests, bare specifiers,
+remote packages/registries, dependency installation, semver solving, a static
+type system, concurrency, or WASM/browser parity. Those remain separate
+versioned architecture decisions and require their own conformance evidence.
