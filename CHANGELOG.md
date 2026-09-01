@@ -25,7 +25,7 @@ This changelog does not imply that separately gated production services are enab
 
 - Added parser-backed local LSP diagnostics, symbols, definition, hover, highlights, completion, semantic tokens, and formatting for opened documents.
 - Added explicit-module syntax awareness to the local editor model.
-- Cross-file opened-document module navigation is being completed in PR #753 and must not be treated as released until that PR is merged and included in a tagged release.
+- Added bounded cross-file definition, hover, and namespace completion for explicit modules that are already open in the LSP document cache, including private-export, URI/path, UTF-16, and lexical-shadow fail-closed behavior through PR #753.
 
 ### Repository and audit products
 
