@@ -1,0 +1,14 @@
+import "math.solve" as math
+import { value as current, bump } from "state.solve"
+
+print(math.add(2, 3))
+print(current)
+print(bump())
+print(current)
+
+fn capture() {
+    let math = math.base
+    return math
+}
+
+print(capture())
