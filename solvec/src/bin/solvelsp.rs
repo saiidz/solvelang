@@ -167,30 +167,27 @@ fn identifier_index_at_position(text: &str, line: usize, character: usize) -> Op
 
 fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
     let tokens = lexer::lex(text);
-    let index = tokens.iter().enumerate().find_map(|(index, located)| {
-        match &located.token {
+    let index = tokens
+        .iter()
+        .enumerate()
+        .find_map(|(index, located)| match &located.token {
             lexer::Token::Identifier(name) if located.line == line + 1 => {
                 let start = token_start_utf16(text, located);
                 (character >= start && character < start + name.encode_utf16().count())
                     .then_some(index)
             }
             _ => None,
-        }
-    })?;
+        })?;
     match &tokens[index].token {
         lexer::Token::Identifier(name) => Some(name.clone()),
         _ => None,
     }
 }
 
-fn member_at_position(
-    text: &str,
-    line: usize,
-    character: usize,
-) -> Option<(String, String)> {
+fn member_at_position(text: &str, line: usize, character: usize) -> Option<(String, String)> {
     let tokens = lexer::lex(text);
     let index = identifier_index_at_position(text, line, character)?;
-    if index < 2 || !matches!(tokens[index - 1].token, lexer::Token::Dot) {
+    if index < 2 || !matches!(&tokens[index - 1].token, lexer::Token::Dot) {
         return None;
     }
     let lexer::Token::Identifier(namespace) = &tokens[index - 2].token else {
@@ -426,20 +423,20 @@ fn resolve_import_uri(importer: &str, import_path: &str) -> Option<String> {
 fn function_scope_bindings(tokens: &[lexer::LocatedToken]) -> HashMap<usize, Vec<String>> {
     let mut bindings = HashMap::<usize, Vec<String>>::new();
     for (index, token) in tokens.iter().enumerate() {
-        match token.token {
+        match &token.token {
             lexer::Token::Fn => {
                 let Some(left_paren) = (index + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftParen))
+                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftParen))
                 else {
                     continue;
                 };
-                let Some(right_paren) = (left_paren + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::RightParen))
-                else {
+                let Some(right_paren) = (left_paren + 1..tokens.len()).find(|candidate| {
+                    matches!(&tokens[*candidate].token, lexer::Token::RightParen)
+                }) else {
                     continue;
                 };
                 let Some(left_brace) = (right_paren + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftBrace))
+                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftBrace))
                 else {
                     continue;
                 };
@@ -453,18 +450,19 @@ fn function_scope_bindings(tokens: &[lexer::LocatedToken]) -> HashMap<usize, Vec
                 bindings.entry(left_brace).or_default().extend(params);
             }
             lexer::Token::For => {
-                let variable = tokens[index + 1..]
-                    .iter()
-                    .find_map(|candidate| match &candidate.token {
-                        lexer::Token::Newline => None,
-                        lexer::Token::Identifier(name) => Some(name.clone()),
-                        _ => None,
-                    });
+                let variable =
+                    tokens[index + 1..]
+                        .iter()
+                        .find_map(|candidate| match &candidate.token {
+                            lexer::Token::Newline => None,
+                            lexer::Token::Identifier(name) => Some(name.clone()),
+                            _ => None,
+                        });
                 let Some(variable) = variable else {
                     continue;
                 };
                 let Some(left_brace) = (index + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftBrace))
+                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftBrace))
                 else {
                     continue;
                 };
@@ -479,29 +477,29 @@ fn function_scope_bindings(tokens: &[lexer::LocatedToken]) -> HashMap<usize, Vec
 fn binding_declaration_indexes(tokens: &[lexer::LocatedToken]) -> HashSet<usize> {
     let mut indexes = HashSet::new();
     for (index, token) in tokens.iter().enumerate() {
-        match token.token {
+        match &token.token {
             lexer::Token::Let => {
                 if let Some((offset, _)) = tokens[index + 1..]
                     .iter()
                     .enumerate()
-                    .find(|(_, candidate)| matches!(candidate.token, lexer::Token::Identifier(_)))
+                    .find(|(_, candidate)| matches!(&candidate.token, lexer::Token::Identifier(_)))
                 {
                     indexes.insert(index + 1 + offset);
                 }
             }
             lexer::Token::Fn => {
                 let Some(left_paren) = (index + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftParen))
+                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftParen))
                 else {
                     continue;
                 };
-                let Some(right_paren) = (left_paren + 1..tokens.len())
-                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::RightParen))
-                else {
+                let Some(right_paren) = (left_paren + 1..tokens.len()).find(|candidate| {
+                    matches!(&tokens[*candidate].token, lexer::Token::RightParen)
+                }) else {
                     continue;
                 };
                 for candidate in left_paren + 1..right_paren {
-                    if matches!(tokens[candidate].token, lexer::Token::Identifier(_)) {
+                    if matches!(&tokens[candidate].token, lexer::Token::Identifier(_)) {
                         indexes.insert(candidate);
                     }
                 }
@@ -510,7 +508,7 @@ fn binding_declaration_indexes(tokens: &[lexer::LocatedToken]) -> HashSet<usize>
                 if let Some((offset, _)) = tokens[index + 1..]
                     .iter()
                     .enumerate()
-                    .find(|(_, candidate)| matches!(candidate.token, lexer::Token::Identifier(_)))
+                    .find(|(_, candidate)| matches!(&candidate.token, lexer::Token::Identifier(_)))
                 {
                     indexes.insert(index + 1 + offset);
                 }
@@ -521,12 +519,7 @@ fn binding_declaration_indexes(tokens: &[lexer::LocatedToken]) -> HashSet<usize>
     indexes
 }
 
-fn active_lexical_shadow(
-    text: &str,
-    name: &str,
-    line: usize,
-    character: usize,
-) -> bool {
+fn active_lexical_shadow(text: &str, name: &str, line: usize, character: usize) -> bool {
     let tokens = lexer::lex(text);
     let target_index = identifier_index_at_position(text, line, character);
     let declaration_indexes = binding_declaration_indexes(&tokens);
@@ -559,13 +552,14 @@ fn active_lexical_shadow(
                 }
             }
             lexer::Token::Let => {
-                if let Some(declared) = tokens[index + 1..]
-                    .iter()
-                    .find_map(|candidate| match &candidate.token {
-                        lexer::Token::Identifier(value) => Some(value.clone()),
-                        lexer::Token::Newline => None,
-                        _ => None,
-                    })
+                if let Some(declared) =
+                    tokens[index + 1..]
+                        .iter()
+                        .find_map(|candidate| match &candidate.token {
+                            lexer::Token::Identifier(value) => Some(value.clone()),
+                            lexer::Token::Newline => None,
+                            _ => None,
+                        })
                     && let Some(scope) = scopes.last_mut()
                 {
                     scope.insert(declared);
@@ -1137,7 +1131,12 @@ mod tests {
         );
         assert_eq!(output[0]["method"], "textDocument/publishDiagnostics");
         assert_eq!(output[0]["params"]["uri"], "file:///test.solve");
-        assert!(!output[0]["params"]["diagnostics"].as_array().unwrap().is_empty());
+        assert!(
+            !output[0]["params"]["diagnostics"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1153,16 +1152,29 @@ mod tests {
     fn imports_remain_visible_to_lsp_symbols_and_completion() {
         let source = "import \"math.solve\" as math\nimport { version as api_version, add } from \"math.solve\"\n";
         assert_eq!(symbols(source).len(), 3);
-        assert_eq!(top_level_symbol(source, "math").unwrap().1, "module namespace");
-        assert_eq!(top_level_symbol(source, "api_version").unwrap().1, "imported binding");
-        assert_eq!(top_level_symbol(source, "add").unwrap().1, "imported binding");
+        assert_eq!(
+            top_level_symbol(source, "math").unwrap().1,
+            "module namespace"
+        );
+        assert_eq!(
+            top_level_symbol(source, "api_version").unwrap().1,
+            "imported binding"
+        );
+        assert_eq!(
+            top_level_symbol(source, "add").unwrap().1,
+            "imported binding"
+        );
         assert_eq!(completions(source).len(), 3);
     }
 
     #[test]
     fn definition_resolves_same_document_top_level_symbols() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///test.solve", "let item = 1\nprint(item)");
+        open(
+            &mut documents,
+            "file:///test.solve",
+            "let item = 1\nprint(item)",
+        );
         let output = process_message(
             json!({"id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
             &mut documents,
@@ -1173,8 +1185,16 @@ mod tests {
     #[test]
     fn namespace_member_definition_crosses_open_documents() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\n");
-        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.version)\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"math.solve\" as math\nprint(math.version)\n",
+        );
         let output = process_message(
             json!({"id":20,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":12}}}),
             &mut documents,
@@ -1187,8 +1207,16 @@ mod tests {
     #[test]
     fn namespace_function_definition_crosses_open_documents() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export fn add(left, right) { return left + right }\n");
-        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.add(1, 2))\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export fn add(left, right) { return left + right }\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"math.solve\" as math\nprint(math.add(1, 2))\n",
+        );
         let output = process_message(
             json!({"id":21,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":11}}}),
             &mut documents,
@@ -1199,7 +1227,11 @@ mod tests {
     #[test]
     fn namespace_alias_definition_stays_local() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math)\n");
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"math.solve\" as math\nprint(math)\n",
+        );
         let output = process_message(
             json!({"id":22,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":6}}}),
             &mut documents,
@@ -1210,8 +1242,16 @@ mod tests {
     #[test]
     fn named_and_aliased_imports_resolve_to_defining_export() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\n");
-        open(&mut documents, "file:///project/main.solve", "import { version as api_version, add } from \"math.solve\"\nprint(api_version)\nprint(add(1, 2))\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let version = 1\nexport fn add(left, right) { return left + right }\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { version as api_version, add } from \"math.solve\"\nprint(api_version)\nprint(add(1, 2))\n",
+        );
         let alias = process_message(
             json!({"id":23,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
@@ -1229,8 +1269,16 @@ mod tests {
     #[test]
     fn namespace_completion_exposes_exports_only() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\nfn hidden() {}\n");
-        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nmath.");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\nfn hidden() {}\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"math.solve\" as math\nmath.",
+        );
         let output = process_message(
             json!({"id":25,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":5}}}),
             &mut documents,
@@ -1244,7 +1292,11 @@ mod tests {
     #[test]
     fn unopened_module_targets_fail_closed() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/main.solve", "import { version } from \"math.solve\"\nprint(version)\n");
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { version } from \"math.solve\"\nprint(version)\n",
+        );
         let output = process_message(
             json!({"id":26,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
@@ -1255,8 +1307,16 @@ mod tests {
     #[test]
     fn private_module_names_do_not_navigate() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "let private = 9\nexport let public = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.private)\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "let private = 9\nexport let public = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"math.solve\" as math\nprint(math.private)\n",
+        );
         let output = process_message(
             json!({"id":27,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":12}}}),
             &mut documents,
@@ -1267,8 +1327,16 @@ mod tests {
     #[test]
     fn lexical_parameter_shadow_wins_over_named_import() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let value = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import { value } from \"math.solve\"\nfn read(value) { return value }\nprint(read(9))\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let value = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { value } from \"math.solve\"\nfn read(value) { return value }\nprint(read(9))\n",
+        );
         let output = process_message(
             json!({"id":28,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":24}}}),
             &mut documents,
@@ -1279,8 +1347,16 @@ mod tests {
     #[test]
     fn lexical_namespace_shadow_blocks_module_member_navigation() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/state.solve", "export let value = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import \"state.solve\" as state\nfn read(state) { return state.value }\nprint(read({ value: 9 }))\n");
+        open(
+            &mut documents,
+            "file:///project/state.solve",
+            "export let value = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import \"state.solve\" as state\nfn read(state) { return state.value }\nprint(read({ value: 9 }))\n",
+        );
         let output = process_message(
             json!({"id":29,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":30}}}),
             &mut documents,
@@ -1291,14 +1367,26 @@ mod tests {
     #[test]
     fn cross_file_ranges_use_utf16_units() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let a𐐀 = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import { a𐐀 } from \"math.solve\"\nprint(a𐐀)\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let a𐐀 = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { a𐐀 } from \"math.solve\"\nprint(a𐐀)\n",
+        );
         let output = process_message(
             json!({"id":30,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
         );
-        let start = output[0]["result"]["range"]["start"]["character"].as_u64().unwrap();
-        let end = output[0]["result"]["range"]["end"]["character"].as_u64().unwrap();
+        let start = output[0]["result"]["range"]["start"]["character"]
+            .as_u64()
+            .unwrap();
+        let end = output[0]["result"]["range"]["end"]["character"]
+            .as_u64()
+            .unwrap();
         assert_eq!(start, 11);
         assert_eq!(end - start, 3);
     }
@@ -1306,8 +1394,16 @@ mod tests {
     #[test]
     fn cross_file_hover_identifies_origin() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let version = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import { version as api_version } from \"math.solve\"\nprint(api_version)\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let version = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { version as api_version } from \"math.solve\"\nprint(api_version)\n",
+        );
         let output = process_message(
             json!({"id":31,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
@@ -1320,20 +1416,39 @@ mod tests {
     #[test]
     fn relative_parent_import_uri_is_normalized() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/shared/math.solve", "export let version = 1\n");
-        open(&mut documents, "file:///project/app/main.solve", "import { version } from \"../shared/math.solve\"\nprint(version)\n");
+        open(
+            &mut documents,
+            "file:///project/shared/math.solve",
+            "export let version = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/app/main.solve",
+            "import { version } from \"../shared/math.solve\"\nprint(version)\n",
+        );
         let output = process_message(
             json!({"id":32,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/app/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
         );
-        assert_eq!(output[0]["result"]["uri"], "file:///project/shared/math.solve");
+        assert_eq!(
+            output[0]["result"]["uri"],
+            "file:///project/shared/math.solve"
+        );
     }
 
     #[test]
     fn repeated_cross_file_responses_are_deterministic() {
         let mut documents = HashMap::new();
-        open(&mut documents, "file:///project/math.solve", "export let version = 1\n");
-        open(&mut documents, "file:///project/main.solve", "import { version } from \"math.solve\"\nprint(version)\n");
+        open(
+            &mut documents,
+            "file:///project/math.solve",
+            "export let version = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { version } from \"math.solve\"\nprint(version)\n",
+        );
         let request = json!({"id":33,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}});
         let first = process_message(request.clone(), &mut documents);
         let second = process_message(request, &mut documents);
