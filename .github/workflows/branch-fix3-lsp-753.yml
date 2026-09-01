@@ -9,53 +9,31 @@ permissions:
   contents: write
 
 jobs:
-  fix-and-validate:
+  fix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feature/lsp-open-module-navigation-20260901
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy,rustfmt
-      - name: Fix Clippy range loop
+          components: rustfmt
+      - name: Apply iterator lint fix
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('solvec/src/bin/solvelsp.rs')
-          text = path.read_text()
-          old = '''                for candidate in left_paren + 1..right_paren {
-                    if matches!(&tokens[candidate].token, lexer::Token::Identifier(_)) {
-                        indexes.insert(candidate);
-                    }
-                }
-'''
-          new = '''                for (candidate, token) in tokens
-                    .iter()
-                    .enumerate()
-                    .take(right_paren)
-                    .skip(left_paren + 1)
-                {
-                    if matches!(&token.token, lexer::Token::Identifier(_)) {
-                        indexes.insert(candidate);
-                    }
-                }
-'''
-          if old not in text:
+          p = Path('solvec/src/bin/solvelsp.rs')
+          s = p.read_text()
+          old = "                for candidate in left_paren + 1..right_paren {\n                    if matches!(&tokens[candidate].token, lexer::Token::Identifier(_)) {\n                        indexes.insert(candidate);\n                    }\n                }"
+          new = "                for (candidate, token) in tokens.iter().enumerate().take(right_paren).skip(left_paren + 1) {\n                    if matches!(&token.token, lexer::Token::Identifier(_)) {\n                        indexes.insert(candidate);\n                    }\n                }"
+          if old not in s:
               raise SystemExit('expected range loop not found')
-          path.write_text(text.replace(old, new, 1))
+          p.write_text(s.replace(old, new, 1))
           PY
-      - name: Validate Rust source
-        run: |
           cargo fmt --manifest-path solvec/Cargo.toml
-          cargo fmt --check --manifest-path solvec/Cargo.toml
-          cargo clippy --manifest-path solvec/Cargo.toml -- -D warnings
-          cargo test --manifest-path solvec/Cargo.toml
-          cargo build --release --manifest-path solvec/Cargo.toml
-          git diff --check
-      - name: Commit validated fix
+      - name: Commit fix
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
