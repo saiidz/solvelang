@@ -118,7 +118,10 @@ When changing executable syntax or semantics:
 Minimum validation:
 
 ```bash
-cd solvec
+cd solvec-core
+cargo fmt --check
+cargo test
+cd ../solvec
 cargo fmt --check
 cargo test
 cargo run -- validate ../examples/support_triage.solve

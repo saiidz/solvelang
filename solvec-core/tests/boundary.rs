@@ -44,6 +44,50 @@ fn manifest_table_entries<'a>(manifest: &'a str, table: &str) -> Vec<&'a str> {
     entries
 }
 
+fn core_package_contract_is_approved(manifest: &str) -> bool {
+    manifest_table_entries(manifest, "package")
+        == [
+            "name = \"solvec-core\"",
+            "version = \"0.1.0\"",
+            "edition = \"2024\"",
+            "publish = false",
+        ]
+}
+
+fn public_module_names(source: &str) -> Vec<&str> {
+    let tokens = source.split_whitespace().collect::<Vec<_>>();
+    tokens
+        .windows(3)
+        .filter(|tokens| tokens[0] == "pub" && tokens[1] == "mod")
+        .map(|tokens| {
+            tokens[2].trim_end_matches(|character: char| {
+                !character.is_ascii_alphanumeric() && character != '_'
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn inline_public_modules_are_included_in_the_export_inventory() {
+    assert_eq!(public_module_names("pub mod ai {}"), ["ai"]);
+}
+
+#[test]
+fn custom_build_scripts_are_not_an_approved_package_contract() {
+    let manifest = r#"[package]
+name = "solvec-core"
+version = "0.1.0"
+edition = "2024"
+publish = false
+build = "scripts/custom.rs"
+
+[dependencies]
+serde_json = "1"
+"#;
+
+    assert!(!core_package_contract_is_approved(manifest));
+}
+
 #[test]
 fn pure_core_source_set_has_no_host_capability_adapters() {
     let forbidden = [
@@ -56,6 +100,11 @@ fn pure_core_source_set_has_no_host_capability_adapters() {
         "std::os",
         "std::thread",
         "std::time",
+        "print!(",
+        "println!(",
+        "eprint!(",
+        "eprintln!(",
+        "dbg!(",
         "usestd::{",
         "usestdas",
         "externcratestd",
@@ -105,8 +154,8 @@ fn core_manifest_has_only_the_expected_runtime_dependency() {
         "solvec-core must keep an exact direct runtime dependency allowlist"
     );
     assert!(
-        manifest_table_entries(&manifest, "package").contains(&"publish = false"),
-        "solvec-core must remain non-publishable"
+        core_package_contract_is_approved(&manifest),
+        "solvec-core package metadata must remain exact, non-publishable, and build-script-free"
     );
     assert!(
         !Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -124,11 +173,7 @@ fn native_host_sources_are_not_owned_by_core() {
             .join("lib.rs"),
     )
     .expect("read solvec-core library root");
-    let exported_modules = lib
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("pub mod "))
-        .filter_map(|module| module.strip_suffix(';'))
-        .collect::<Vec<_>>();
+    let exported_modules = public_module_names(&lib);
 
     assert_eq!(
         exported_modules,
