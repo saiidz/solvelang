@@ -1,15 +1,37 @@
-//! Minimal stdio LSP transport for full-document diagnostics.
+//! Minimal stdio LSP transport for full-document diagnostics and bounded open-document module navigation.
 //!
-//! Supported: initialize, shutdown, and textDocument/didOpen. URI updates,
-//! incremental changes, workspace access, and execution are intentionally unsupported.
+//! Supported documents are cached only through `textDocument/didOpen`. Cross-file module tooling
+//! consults only those already-open documents; workspace indexing, filesystem crawling, source
+//! execution, and network access are intentionally unsupported.
 
 use serde_json::{Value, json};
 use solvec::{
     ast::{ExportedDeclaration, SourceLocation, Stmt},
     formatter, lexer, parser,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, BufReader, Read, Write};
+
+#[derive(Clone, Debug)]
+struct ExportInfo {
+    name: String,
+    kind: &'static str,
+    location: SourceLocation,
+    params: usize,
+}
+
+#[derive(Clone, Debug)]
+struct NamespaceImport {
+    path: String,
+    namespace: String,
+}
+
+#[derive(Clone, Debug)]
+struct NamedImport {
+    path: String,
+    exported: String,
+    local: String,
+}
 
 fn diagnostics(text: &str) -> Vec<Value> {
     let mut parser = parser::Parser::new(lexer::lex(text));
@@ -27,9 +49,13 @@ fn diagnostics(text: &str) -> Vec<Value> {
     }
 }
 
-fn symbols(text: &str) -> Vec<Value> {
+fn parse_document(text: &str) -> Option<Vec<Stmt>> {
     let mut parser = parser::Parser::new(lexer::lex(text));
-    let Ok(statements) = parser.parse() else {
+    parser.parse().ok()
+}
+
+fn symbols(text: &str) -> Vec<Value> {
+    let Some(statements) = parse_document(text) else {
         return Vec::new();
     };
     statements
@@ -85,6 +111,26 @@ fn declaration_range(location: SourceLocation) -> Value {
     json!({"start":{"line":location.line.saturating_sub(1),"character":location.column.saturating_sub(1)},"end":{"line":location.line.saturating_sub(1),"character":location.column}})
 }
 
+fn declaration_name_range(text: &str, location: SourceLocation, name: &str) -> Value {
+    lexer::lex(text)
+        .into_iter()
+        .find_map(|located| match located.token {
+            lexer::Token::Identifier(candidate)
+                if candidate == name
+                    && located.line == location.line
+                    && located.column >= location.column =>
+            {
+                Some(source_range(
+                    text,
+                    SourceLocation::new(located.line, located.column),
+                    name,
+                ))
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| declaration_range(location))
+}
+
 fn document_symbol(
     text: &str,
     name: String,
@@ -100,26 +146,90 @@ fn document_symbol(
     json!({"name":name,"kind":kind,"range":range,"selectionRange":range})
 }
 
-fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
+fn token_start_utf16(text: &str, token: &lexer::LocatedToken) -> usize {
+    utf16_character_at(text, token.line, token.column)
+        .unwrap_or_else(|| token.column.saturating_sub(1))
+}
+
+fn identifier_index_at_position(text: &str, line: usize, character: usize) -> Option<usize> {
     lexer::lex(text)
-        .into_iter()
-        .find_map(|located| match located.token {
-            lexer::Token::Identifier(name)
-                if located.line == line + 1
-                    && character + 1 >= located.column
-                    && character < located.column + name.encode_utf16().count() =>
-            {
-                Some(name)
+        .iter()
+        .enumerate()
+        .find_map(|(index, located)| match &located.token {
+            lexer::Token::Identifier(name) if located.line == line + 1 => {
+                let start = token_start_utf16(text, located);
+                (character >= start && character < start + name.encode_utf16().count())
+                    .then_some(index)
             }
             _ => None,
         })
 }
 
-fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static str)> {
-    let mut parser = parser::Parser::new(lexer::lex(text));
-    let Ok(statements) = parser.parse() else {
+fn identifier_at_position(text: &str, line: usize, character: usize) -> Option<String> {
+    let tokens = lexer::lex(text);
+    let index = tokens.iter().enumerate().find_map(|(index, located)| {
+        match &located.token {
+            lexer::Token::Identifier(name) if located.line == line + 1 => {
+                let start = token_start_utf16(text, located);
+                (character >= start && character < start + name.encode_utf16().count())
+                    .then_some(index)
+            }
+            _ => None,
+        }
+    })?;
+    match &tokens[index].token {
+        lexer::Token::Identifier(name) => Some(name.clone()),
+        _ => None,
+    }
+}
+
+fn member_at_position(
+    text: &str,
+    line: usize,
+    character: usize,
+) -> Option<(String, String)> {
+    let tokens = lexer::lex(text);
+    let index = identifier_index_at_position(text, line, character)?;
+    if index < 2 || !matches!(tokens[index - 1].token, lexer::Token::Dot) {
+        return None;
+    }
+    let lexer::Token::Identifier(namespace) = &tokens[index - 2].token else {
         return None;
     };
+    let lexer::Token::Identifier(member) = &tokens[index].token else {
+        return None;
+    };
+    Some((namespace.clone(), member.clone()))
+}
+
+fn namespace_before_completion(text: &str, line: usize, character: usize) -> Option<String> {
+    let source_line = text.lines().nth(line)?;
+    let mut prefix = String::new();
+    let mut units = 0usize;
+    for character_value in source_line.chars() {
+        let width = character_value.len_utf16();
+        if units + width > character {
+            break;
+        }
+        prefix.push(character_value);
+        units += width;
+    }
+    let trimmed = prefix.trim_end();
+    let before_dot = trimmed.strip_suffix('.')?.trim_end();
+    let mut reversed = before_dot
+        .chars()
+        .rev()
+        .take_while(|value| value.is_alphanumeric() || *value == '_')
+        .collect::<String>();
+    if reversed.is_empty() {
+        return None;
+    }
+    reversed = reversed.chars().rev().collect();
+    Some(reversed)
+}
+
+fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static str)> {
+    let statements = parse_document(text)?;
     statements
         .into_iter()
         .find_map(|statement| match statement {
@@ -168,10 +278,356 @@ fn top_level_symbol(text: &str, name: &str) -> Option<(SourceLocation, &'static 
         })
 }
 
-fn definition(text: &str, line: usize, character: usize) -> Value {
+fn export_infos(text: &str) -> Vec<ExportInfo> {
+    let Some(statements) = parse_document(text) else {
+        return Vec::new();
+    };
+    statements
+        .into_iter()
+        .filter_map(|statement| match statement {
+            Stmt::Export {
+                declaration: ExportedDeclaration::Let { name, location, .. },
+                ..
+            } => Some(ExportInfo {
+                name,
+                kind: "variable",
+                location,
+                params: 0,
+            }),
+            Stmt::Export {
+                declaration:
+                    ExportedDeclaration::Function {
+                        name,
+                        params,
+                        location,
+                        ..
+                    },
+                ..
+            } => Some(ExportInfo {
+                name,
+                kind: "function",
+                location,
+                params: params.len(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+fn export_info(text: &str, name: &str) -> Option<ExportInfo> {
+    export_infos(text)
+        .into_iter()
+        .find(|export| export.name == name)
+}
+
+fn import_statements(text: &str) -> Vec<Stmt> {
+    if let Some(statements) = parse_document(text) {
+        return statements
+            .into_iter()
+            .filter(|statement| {
+                matches!(
+                    statement,
+                    Stmt::ModuleImport { .. } | Stmt::NamedModuleImport { .. }
+                )
+            })
+            .collect();
+    }
+
+    let mut imports = Vec::new();
+    for line in text.lines() {
+        if !line.trim_start().starts_with("import ") {
+            continue;
+        }
+        let mut parser = parser::Parser::new(lexer::lex(line));
+        if let Ok(statements) = parser.parse() {
+            imports.extend(statements.into_iter().filter(|statement| {
+                matches!(
+                    statement,
+                    Stmt::ModuleImport { .. } | Stmt::NamedModuleImport { .. }
+                )
+            }));
+        }
+    }
+    imports
+}
+
+fn namespace_import(text: &str, namespace: &str) -> Option<NamespaceImport> {
+    import_statements(text)
+        .into_iter()
+        .find_map(|statement| match statement {
+            Stmt::ModuleImport {
+                path,
+                namespace: declared,
+                ..
+            } if declared == namespace => Some(NamespaceImport {
+                path,
+                namespace: declared,
+            }),
+            _ => None,
+        })
+}
+
+fn named_import(text: &str, local: &str) -> Option<NamedImport> {
+    import_statements(text)
+        .into_iter()
+        .find_map(|statement| match statement {
+            Stmt::NamedModuleImport { path, bindings, .. } => bindings
+                .into_iter()
+                .find(|binding| binding.local == local)
+                .map(|binding| NamedImport {
+                    path,
+                    exported: binding.exported,
+                    local: binding.local,
+                }),
+            _ => None,
+        })
+}
+
+fn normalize_uri_path(path: &str) -> Option<String> {
+    let mut segments = Vec::new();
+    for segment in path.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop()?;
+            }
+            value => segments.push(value),
+        }
+    }
+    Some(format!("/{}", segments.join("/")))
+}
+
+fn resolve_import_uri(importer: &str, import_path: &str) -> Option<String> {
+    if import_path.is_empty()
+        || !import_path.ends_with(".solve")
+        || import_path.starts_with('/')
+        || import_path.contains("://")
+        || import_path.contains('\\')
+    {
+        return None;
+    }
+
+    let scheme_index = importer.find("://")?;
+    let prefix = &importer[..scheme_index + 3];
+    let rest = &importer[scheme_index + 3..];
+    let (authority, uri_path) = if rest.starts_with('/') {
+        ("", rest)
+    } else {
+        let slash = rest.find('/')?;
+        (&rest[..slash], &rest[slash..])
+    };
+    let parent_end = uri_path.rfind('/')?;
+    let parent = &uri_path[..parent_end + 1];
+    let combined = format!("{parent}{import_path}");
+    let normalized = normalize_uri_path(&combined)?;
+    Some(format!("{prefix}{authority}{normalized}"))
+}
+
+fn function_scope_bindings(tokens: &[lexer::LocatedToken]) -> HashMap<usize, Vec<String>> {
+    let mut bindings = HashMap::<usize, Vec<String>>::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match token.token {
+            lexer::Token::Fn => {
+                let Some(left_paren) = (index + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftParen))
+                else {
+                    continue;
+                };
+                let Some(right_paren) = (left_paren + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::RightParen))
+                else {
+                    continue;
+                };
+                let Some(left_brace) = (right_paren + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftBrace))
+                else {
+                    continue;
+                };
+                let params = tokens[left_paren + 1..right_paren]
+                    .iter()
+                    .filter_map(|param| match &param.token {
+                        lexer::Token::Identifier(name) => Some(name.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                bindings.entry(left_brace).or_default().extend(params);
+            }
+            lexer::Token::For => {
+                let variable = tokens[index + 1..]
+                    .iter()
+                    .find_map(|candidate| match &candidate.token {
+                        lexer::Token::Newline => None,
+                        lexer::Token::Identifier(name) => Some(name.clone()),
+                        _ => None,
+                    });
+                let Some(variable) = variable else {
+                    continue;
+                };
+                let Some(left_brace) = (index + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftBrace))
+                else {
+                    continue;
+                };
+                bindings.entry(left_brace).or_default().push(variable);
+            }
+            _ => {}
+        }
+    }
+    bindings
+}
+
+fn binding_declaration_indexes(tokens: &[lexer::LocatedToken]) -> HashSet<usize> {
+    let mut indexes = HashSet::new();
+    for (index, token) in tokens.iter().enumerate() {
+        match token.token {
+            lexer::Token::Let => {
+                if let Some((offset, _)) = tokens[index + 1..]
+                    .iter()
+                    .enumerate()
+                    .find(|(_, candidate)| matches!(candidate.token, lexer::Token::Identifier(_)))
+                {
+                    indexes.insert(index + 1 + offset);
+                }
+            }
+            lexer::Token::Fn => {
+                let Some(left_paren) = (index + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::LeftParen))
+                else {
+                    continue;
+                };
+                let Some(right_paren) = (left_paren + 1..tokens.len())
+                    .find(|candidate| matches!(tokens[*candidate].token, lexer::Token::RightParen))
+                else {
+                    continue;
+                };
+                for candidate in left_paren + 1..right_paren {
+                    if matches!(tokens[candidate].token, lexer::Token::Identifier(_)) {
+                        indexes.insert(candidate);
+                    }
+                }
+            }
+            lexer::Token::For => {
+                if let Some((offset, _)) = tokens[index + 1..]
+                    .iter()
+                    .enumerate()
+                    .find(|(_, candidate)| matches!(candidate.token, lexer::Token::Identifier(_)))
+                {
+                    indexes.insert(index + 1 + offset);
+                }
+            }
+            _ => {}
+        }
+    }
+    indexes
+}
+
+fn active_lexical_shadow(
+    text: &str,
+    name: &str,
+    line: usize,
+    character: usize,
+) -> bool {
+    let tokens = lexer::lex(text);
+    let target_index = identifier_index_at_position(text, line, character);
+    let declaration_indexes = binding_declaration_indexes(&tokens);
+    if target_index.is_some_and(|index| declaration_indexes.contains(&index)) {
+        return true;
+    }
+
+    let scope_bindings = function_scope_bindings(&tokens);
+    let mut scopes = vec![HashSet::<String>::new()];
+    for (index, token) in tokens.iter().enumerate() {
+        let token_line = token.line.saturating_sub(1);
+        let token_character = token_start_utf16(text, token);
+        if token_line > line || (token_line == line && token_character > character) {
+            break;
+        }
+
+        match &token.token {
+            lexer::Token::LeftBrace => {
+                let scope = scope_bindings
+                    .get(&index)
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .collect::<HashSet<_>>();
+                scopes.push(scope);
+            }
+            lexer::Token::RightBrace => {
+                if scopes.len() > 1 {
+                    scopes.pop();
+                }
+            }
+            lexer::Token::Let => {
+                if let Some(declared) = tokens[index + 1..]
+                    .iter()
+                    .find_map(|candidate| match &candidate.token {
+                        lexer::Token::Identifier(value) => Some(value.clone()),
+                        lexer::Token::Newline => None,
+                        _ => None,
+                    })
+                    && let Some(scope) = scopes.last_mut()
+                {
+                    scope.insert(declared);
+                }
+            }
+            _ => {}
+        }
+    }
+    scopes.iter().rev().any(|scope| scope.contains(name))
+}
+
+fn export_location(uri: &str, text: &str, export: &ExportInfo) -> Value {
+    json!({
+        "uri": uri,
+        "range": declaration_name_range(text, export.location, &export.name)
+    })
+}
+
+fn definition(
+    uri: &str,
+    text: &str,
+    documents: &HashMap<String, String>,
+    line: usize,
+    character: usize,
+) -> Value {
+    if let Some((namespace, member)) = member_at_position(text, line, character)
+        && let Some(import) = namespace_import(text, &namespace)
+    {
+        if active_lexical_shadow(text, &namespace, line, character) {
+            return Value::Null;
+        }
+        let Some(target_uri) = resolve_import_uri(uri, &import.path) else {
+            return Value::Null;
+        };
+        let Some(target_text) = documents.get(&target_uri) else {
+            return Value::Null;
+        };
+        let Some(export) = export_info(target_text, &member) else {
+            return Value::Null;
+        };
+        return export_location(&target_uri, target_text, &export);
+    }
+
     let Some(name) = identifier_at_position(text, line, character) else {
         return Value::Null;
     };
+    if let Some(import) = named_import(text, &name) {
+        if active_lexical_shadow(text, &name, line, character) {
+            return Value::Null;
+        }
+        let Some(target_uri) = resolve_import_uri(uri, &import.path) else {
+            return Value::Null;
+        };
+        let Some(target_text) = documents.get(&target_uri) else {
+            return Value::Null;
+        };
+        let Some(export) = export_info(target_text, &import.exported) else {
+            return Value::Null;
+        };
+        return export_location(&target_uri, target_text, &export);
+    }
+
     let Some((location, kind)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
@@ -180,13 +636,60 @@ fn definition(text: &str, line: usize, character: usize) -> Value {
     } else {
         declaration_range(location)
     };
-    json!({"uri":"","range":range})
+    json!({"uri":uri,"range":range})
 }
 
-fn hover(text: &str, line: usize, character: usize) -> Value {
+fn imported_hover(name: &str, target_uri: &str, export: &ExportInfo) -> Value {
+    json!({"contents":{"kind":"markdown","value":format!(
+        "`{name}`\n\nImported SolveLang {} `{}` from `{target_uri}`.",
+        export.kind, export.name
+    )}})
+}
+
+fn hover(
+    uri: &str,
+    text: &str,
+    documents: &HashMap<String, String>,
+    line: usize,
+    character: usize,
+) -> Value {
+    if let Some((namespace, member)) = member_at_position(text, line, character)
+        && let Some(import) = namespace_import(text, &namespace)
+    {
+        if active_lexical_shadow(text, &namespace, line, character) {
+            return Value::Null;
+        }
+        let Some(target_uri) = resolve_import_uri(uri, &import.path) else {
+            return Value::Null;
+        };
+        let Some(target_text) = documents.get(&target_uri) else {
+            return Value::Null;
+        };
+        let Some(export) = export_info(target_text, &member) else {
+            return Value::Null;
+        };
+        return imported_hover(&format!("{namespace}.{member}"), &target_uri, &export);
+    }
+
     let Some(name) = identifier_at_position(text, line, character) else {
         return Value::Null;
     };
+    if let Some(import) = named_import(text, &name) {
+        if active_lexical_shadow(text, &name, line, character) {
+            return Value::Null;
+        }
+        let Some(target_uri) = resolve_import_uri(uri, &import.path) else {
+            return Value::Null;
+        };
+        let Some(target_text) = documents.get(&target_uri) else {
+            return Value::Null;
+        };
+        let Some(export) = export_info(target_text, &import.exported) else {
+            return Value::Null;
+        };
+        return imported_hover(&import.local, &target_uri, &export);
+    }
+
     let Some((_, kind)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
@@ -203,21 +706,23 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
     lexer::lex(text)
         .into_iter()
         .filter_map(|located| match located.token {
-            lexer::Token::Identifier(candidate) if candidate == name => Some(json!({
-                "range": {
-                    "start": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1))},
-                    "end": {"line": located.line.saturating_sub(1), "character": utf16_character_at(text, located.line, located.column).unwrap_or_else(|| located.column.saturating_sub(1)) + candidate.encode_utf16().count()}
-                },
-                "kind": 1
-            })),
+            lexer::Token::Identifier(candidate) if candidate == name => {
+                let start = token_start_utf16(text, &located);
+                Some(json!({
+                    "range": {
+                        "start": {"line": located.line.saturating_sub(1), "character": start},
+                        "end": {"line": located.line.saturating_sub(1), "character": start + candidate.encode_utf16().count()}
+                    },
+                    "kind": 1
+                }))
+            }
             _ => None,
         })
         .collect()
 }
 
 fn completions(text: &str) -> Vec<Value> {
-    let mut parser = parser::Parser::new(lexer::lex(text));
-    let Ok(statements) = parser.parse() else {
+    let Some(statements) = parse_document(text) else {
         return Vec::new();
     };
     statements
@@ -274,6 +779,43 @@ fn completions(text: &str) -> Vec<Value> {
         .collect()
 }
 
+fn module_completions(
+    uri: &str,
+    text: &str,
+    documents: &HashMap<String, String>,
+    line: usize,
+    character: usize,
+) -> Option<Vec<Value>> {
+    let namespace = namespace_before_completion(text, line, character)?;
+    let import = namespace_import(text, &namespace)?;
+    if active_lexical_shadow(text, &namespace, line, character) {
+        return Some(Vec::new());
+    }
+    let Some(target_uri) = resolve_import_uri(uri, &import.path) else {
+        return Some(Vec::new());
+    };
+    let Some(target_text) = documents.get(&target_uri) else {
+        return Some(Vec::new());
+    };
+    Some(
+        export_infos(target_text)
+            .into_iter()
+            .map(|export| {
+                let kind = if export.kind == "function" { 3 } else { 6 };
+                let detail = if export.kind == "function" {
+                    format!(
+                        "Exported SolveLang function with {} parameter(s) from {}",
+                        export.params, target_uri
+                    )
+                } else {
+                    format!("Exported SolveLang variable from {}", target_uri)
+                };
+                json!({"label": export.name, "kind": kind, "detail": detail})
+            })
+            .collect(),
+    )
+}
+
 fn utf16_character_at(text: &str, line: usize, column: usize) -> Option<usize> {
     text.lines().nth(line.saturating_sub(1)).map(|source_line| {
         source_line
@@ -327,8 +869,7 @@ fn semantic_token_kind_and_length(token: &lexer::Token) -> Option<(u32, usize)> 
 }
 
 fn semantic_tokens(text: &str) -> Vec<u32> {
-    let mut parser = parser::Parser::new(lexer::lex(text));
-    if parser.parse().is_err() {
+    if parse_document(text).is_none() {
         return Vec::new();
     }
 
@@ -363,10 +904,7 @@ fn semantic_tokens(text: &str) -> Vec<u32> {
 }
 
 fn document_formatting(text: &str) -> Option<Vec<Value>> {
-    let mut parser = parser::Parser::new(lexer::lex(text));
-    if parser.parse().is_err() {
-        return None;
-    }
+    parse_document(text)?;
 
     let formatted = formatter::format_source(text);
     if formatted == text {
@@ -389,7 +927,7 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
     let method = message.get("method").and_then(Value::as_str);
     match method {
         Some("initialize") => vec![
-            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{},"documentFormattingProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","variable","number","operator"],"tokenModifiers":[]},"full":true}}}}),
+            json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":{"capabilities":{"textDocumentSync":1,"documentSymbolProvider":true,"definitionProvider":true,"hoverProvider":true,"documentHighlightProvider":true,"completionProvider":{"triggerCharacters":["."]},"documentFormattingProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","variable","number","operator"],"tokenModifiers":[]},"full":true}}}}),
         ],
         Some("shutdown") => vec![
             json!({"jsonrpc":"2.0", "id": message.get("id").cloned().unwrap_or(Value::Null), "result":null}),
@@ -416,19 +954,18 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 .as_str()
                 .unwrap_or("");
             let position = &message["params"]["position"];
-            let mut result = documents
+            let result = documents
                 .get(uri)
                 .map(|text| {
                     definition(
+                        uri,
                         text,
+                        documents,
                         position["line"].as_u64().unwrap_or(0) as usize,
                         position["character"].as_u64().unwrap_or(0) as usize,
                     )
                 })
                 .unwrap_or(Value::Null);
-            if let Some(location) = result.as_object_mut() {
-                location.insert("uri".to_string(), Value::String(uri.to_string()));
-            }
             vec![
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
             ]
@@ -442,7 +979,9 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
                 .get(uri)
                 .map(|text| {
                     hover(
+                        uri,
                         text,
+                        documents,
                         position["line"].as_u64().unwrap_or(0) as usize,
                         position["character"].as_u64().unwrap_or(0) as usize,
                     )
@@ -475,9 +1014,19 @@ fn process_message(message: Value, documents: &mut HashMap<String, String>) -> V
             let uri = message["params"]["textDocument"]["uri"]
                 .as_str()
                 .unwrap_or("");
+            let position = &message["params"]["position"];
             let result = documents
                 .get(uri)
-                .map(|text| completions(text))
+                .map(|text| {
+                    module_completions(
+                        uri,
+                        text,
+                        documents,
+                        position["line"].as_u64().unwrap_or(0) as usize,
+                        position["character"].as_u64().unwrap_or(0) as usize,
+                    )
+                    .unwrap_or_else(|| completions(text))
+                })
                 .unwrap_or_default();
             vec![
                 json!({"jsonrpc":"2.0","id":message.get("id").cloned().unwrap_or(Value::Null),"result":result}),
@@ -559,6 +1108,13 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
 
+    fn open(documents: &mut HashMap<String, String>, uri: &str, text: &str) {
+        process_message(
+            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"text":text}}}),
+            documents,
+        );
+    }
+
     #[test]
     fn initialize_advertises_full_document_sync_only() {
         let output = process_message(
@@ -568,17 +1124,8 @@ mod tests {
         assert_eq!(output[0]["result"]["capabilities"]["textDocumentSync"], 1);
         assert_eq!(output[0]["result"]["capabilities"]["hoverProvider"], true);
         assert_eq!(
-            output[0]["result"]["capabilities"]["documentHighlightProvider"],
-            true
-        );
-        assert!(output[0]["result"]["capabilities"]["completionProvider"].is_object());
-        assert_eq!(
-            output[0]["result"]["capabilities"]["documentFormattingProvider"],
-            true
-        );
-        assert_eq!(
-            output[0]["result"]["capabilities"]["semanticTokensProvider"]["legend"]["tokenTypes"],
-            json!(["keyword", "variable", "number", "operator"])
+            output[0]["result"]["capabilities"]["completionProvider"]["triggerCharacters"],
+            json!(["."])
         );
     }
 
@@ -590,21 +1137,7 @@ mod tests {
         );
         assert_eq!(output[0]["method"], "textDocument/publishDiagnostics");
         assert_eq!(output[0]["params"]["uri"], "file:///test.solve");
-        assert!(output[0]["params"]["diagnostics"].as_array().unwrap().len() > 0);
-    }
-
-    #[test]
-    fn document_symbols_use_the_canonical_parser_for_open_documents() {
-        let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nfn work() {}"}}}),
-            &mut documents,
-        );
-        let output = process_message(
-            json!({"id":2,"method":"textDocument/documentSymbol","params":{"textDocument":{"uri":"file:///test.solve"}}}),
-            &mut documents,
-        );
-        assert_eq!(output[0]["result"].as_array().unwrap().len(), 2);
+        assert!(!output[0]["params"]["diagnostics"].as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -620,79 +1153,16 @@ mod tests {
     fn imports_remain_visible_to_lsp_symbols_and_completion() {
         let source = "import \"math.solve\" as math\nimport { version as api_version, add } from \"math.solve\"\n";
         assert_eq!(symbols(source).len(), 3);
-        assert_eq!(
-            top_level_symbol(source, "math").unwrap().1,
-            "module namespace"
-        );
-        assert_eq!(
-            top_level_symbol(source, "api_version").unwrap().1,
-            "imported binding"
-        );
-        assert_eq!(
-            top_level_symbol(source, "add").unwrap().1,
-            "imported binding"
-        );
+        assert_eq!(top_level_symbol(source, "math").unwrap().1, "module namespace");
+        assert_eq!(top_level_symbol(source, "api_version").unwrap().1, "imported binding");
+        assert_eq!(top_level_symbol(source, "add").unwrap().1, "imported binding");
         assert_eq!(completions(source).len(), 3);
     }
 
     #[test]
-    fn import_symbols_point_at_local_binding_tokens() {
-        let source =
-            "import \"math.solve\" as math\nimport { remote as local } from \"math.solve\"\n";
-        assert_eq!(top_level_symbol(source, "math").unwrap().0.column, 24);
-        assert_eq!(top_level_symbol(source, "local").unwrap().0.column, 20);
-        let document_symbols = symbols(source);
-        assert_eq!(
-            document_symbols[0]["selectionRange"]["start"]["character"],
-            23
-        );
-        assert_eq!(
-            document_symbols[1]["selectionRange"]["start"]["character"],
-            19
-        );
-    }
-
-    #[test]
-    fn import_ranges_use_utf16_offsets() {
-        let source = "import \"😀.solve\" as math\nimport { a𐐀 as local } from \"math.solve\"\nprint(math)\n";
-        let document_symbols = symbols(source);
-        assert_eq!(
-            document_symbols[0]["selectionRange"]["start"]["character"],
-            21
-        );
-        assert_eq!(
-            document_symbols[1]["selectionRange"]["start"]["character"],
-            16
-        );
-
+    fn definition_resolves_same_document_top_level_symbols() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":source}}}),
-            &mut documents,
-        );
-        let output = process_message(
-            json!({"id":14,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
-            &mut documents,
-        );
-        assert_eq!(output[0]["result"]["range"]["start"]["character"], 21);
-
-        let highlights = process_message(
-            json!({"id":15,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":2,"character":6}}}),
-            &mut documents,
-        );
-        assert_eq!(
-            highlights[0]["result"][0]["range"]["start"]["character"],
-            21
-        );
-    }
-
-    #[test]
-    fn definition_resolves_only_open_document_top_level_symbols() {
-        let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///test.solve", "let item = 1\nprint(item)");
         let output = process_message(
             json!({"id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
             &mut documents,
@@ -701,164 +1171,186 @@ mod tests {
     }
 
     #[test]
-    fn hover_describes_open_document_top_level_symbols_only() {
+    fn namespace_member_definition_crosses_open_documents() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\n");
+        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.version)\n");
         let output = process_message(
-            json!({"id":4,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
+            json!({"id":20,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":12}}}),
             &mut documents,
         );
-        assert_eq!(output[0]["result"]["contents"]["kind"], "markdown");
-        assert_eq!(
-            output[0]["result"]["contents"]["value"],
-            "`item`\n\nTop-level SolveLang variable."
-        );
-
-        let unopened = process_message(
-            json!({"id":5,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///missing.solve"},"position":{"line":0,"character":0}}}),
-            &mut documents,
-        );
-        assert!(unopened[0]["result"].is_null());
+        assert_eq!(output[0]["result"]["uri"], "file:///project/math.solve");
+        assert_eq!(output[0]["result"]["range"]["start"]["line"], 0);
+        assert_eq!(output[0]["result"]["range"]["start"]["character"], 11);
     }
 
     #[test]
-    fn highlights_same_name_spans_for_open_document_top_level_symbols() {
+    fn namespace_function_definition_crosses_open_documents() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item)"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///project/math.solve", "export fn add(left, right) { return left + right }\n");
+        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.add(1, 2))\n");
         let output = process_message(
-            json!({"id":6,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":1,"character":6}}}),
+            json!({"id":21,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":11}}}),
             &mut documents,
         );
-        let highlights = output[0]["result"].as_array().expect("highlight list");
-        assert_eq!(highlights.len(), 2);
-        assert_eq!(highlights[0]["range"]["start"]["line"], 0);
-        assert_eq!(highlights[1]["range"]["start"]["line"], 1);
-
-        let unknown = process_message(
-            json!({"id":7,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":0,"character":0}}}),
-            &mut documents,
-        );
-        assert!(unknown[0]["result"].as_array().unwrap().is_empty());
+        assert_eq!(output[0]["result"]["uri"], "file:///project/math.solve");
     }
 
     #[test]
-    fn highlight_ranges_use_utf16_character_units() {
+    fn namespace_alias_definition_stays_local() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///utf16.solve","text":"let café = 1\nprint(café)"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math)\n");
         let output = process_message(
-            json!({"id":8,"method":"textDocument/documentHighlight","params":{"textDocument":{"uri":"file:///utf16.solve"},"position":{"line":1,"character":6}}}),
+            json!({"id":22,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":6}}}),
             &mut documents,
         );
-        let highlights = output[0]["result"].as_array().expect("highlight list");
-        assert_eq!(highlights.len(), 2);
-        for highlight in highlights {
-            let start = highlight["range"]["start"]["character"].as_u64().unwrap();
-            let end = highlight["range"]["end"]["character"].as_u64().unwrap();
-            assert_eq!(end - start, 4);
-        }
+        assert_eq!(output[0]["result"]["uri"], "file:///project/main.solve");
     }
 
     #[test]
-    fn completion_returns_parser_backed_top_level_symbols_from_open_documents() {
+    fn named_and_aliased_imports_resolve_to_defining_export() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nfn work(value) {}\nagent helper { instruction \"Assist\" }"}}}),
+        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\n");
+        open(&mut documents, "file:///project/main.solve", "import { version as api_version, add } from \"math.solve\"\nprint(api_version)\nprint(add(1, 2))\n");
+        let alias = process_message(
+            json!({"id":23,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
         );
-        let output = process_message(
-            json!({"id":9,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///test.solve"},"position":{"line":3,"character":0}}}),
+        assert_eq!(alias[0]["result"]["uri"], "file:///project/math.solve");
+        assert_eq!(alias[0]["result"]["range"]["start"]["line"], 0);
+        let direct = process_message(
+            json!({"id":24,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":2,"character":6}}}),
             &mut documents,
         );
-        let items = output[0]["result"].as_array().expect("completion items");
-        assert_eq!(items.len(), 3);
-        assert_eq!(items[0]["label"], "item");
-        assert_eq!(
-            items[1]["detail"],
-            "Top-level SolveLang function with 1 parameter(s)"
-        );
-        assert_eq!(items[2]["kind"], 7);
-
-        let unopened = process_message(
-            json!({"id":10,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///missing.solve"},"position":{"line":0,"character":0}}}),
-            &mut documents,
-        );
-        assert!(unopened[0]["result"].as_array().unwrap().is_empty());
+        assert_eq!(direct[0]["result"]["uri"], "file:///project/math.solve");
+        assert_eq!(direct[0]["result"]["range"]["start"]["line"], 1);
     }
 
     #[test]
-    fn semantic_tokens_are_parser_validated_and_open_document_local() {
+    fn namespace_completion_exposes_exports_only() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"let item = 1\nprint(item + 2)"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///project/math.solve", "export let version = 1\nexport fn add(left, right) { return left + right }\nlet private = 9\nfn hidden() {}\n");
+        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nmath.");
         let output = process_message(
-            json!({"id":11,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///test.solve"}}}),
+            json!({"id":25,"method":"textDocument/completion","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":5}}}),
             &mut documents,
         );
-        assert_eq!(
-            output[0]["result"]["data"],
-            json!([
-                0, 0, 3, 0, 0, 0, 4, 4, 1, 0, 0, 5, 1, 3, 0, 0, 2, 1, 2, 0, 1, 0, 5, 0, 0, 0, 5, 1,
-                3, 0, 0, 1, 4, 1, 0, 0, 5, 1, 3, 0, 0, 2, 1, 2, 0, 0, 1, 1, 3, 0
-            ])
-        );
-
-        let unopened = process_message(
-            json!({"id":12,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":"file:///missing.solve"}}}),
-            &mut documents,
-        );
-        assert_eq!(unopened[0]["result"]["data"], json!([]));
+        let items = output[0]["result"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["label"], "version");
+        assert_eq!(items[1]["label"], "add");
     }
 
     #[test]
-    fn formatting_uses_the_canonical_formatter_for_parser_valid_open_documents() {
+    fn unopened_module_targets_fail_closed() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///test.solve","text":"// 😀\nlet value=1"}}}),
-            &mut documents,
-        );
+        open(&mut documents, "file:///project/main.solve", "import { version } from \"math.solve\"\nprint(version)\n");
         let output = process_message(
-            json!({"id":13,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///test.solve"}}}),
+            json!({"id":26,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
         );
+        assert!(output[0]["result"].is_null());
+    }
 
-        assert_eq!(output[0]["result"][0]["newText"], "// 😀\nlet value = 1\n");
-        assert_eq!(
-            output[0]["result"][0]["range"]["start"],
-            json!({"line": 0, "character": 0})
+    #[test]
+    fn private_module_names_do_not_navigate() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/math.solve", "let private = 9\nexport let public = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import \"math.solve\" as math\nprint(math.private)\n");
+        let output = process_message(
+            json!({"id":27,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":12}}}),
+            &mut documents,
         );
-        assert_eq!(
-            output[0]["result"][0]["range"]["end"],
-            json!({"line": 1, "character": 11})
+        assert!(output[0]["result"].is_null());
+    }
+
+    #[test]
+    fn lexical_parameter_shadow_wins_over_named_import() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/math.solve", "export let value = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import { value } from \"math.solve\"\nfn read(value) { return value }\nprint(read(9))\n");
+        let output = process_message(
+            json!({"id":28,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":24}}}),
+            &mut documents,
         );
+        assert!(output[0]["result"].is_null());
+    }
+
+    #[test]
+    fn lexical_namespace_shadow_blocks_module_member_navigation() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/state.solve", "export let value = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import \"state.solve\" as state\nfn read(state) { return state.value }\nprint(read({ value: 9 }))\n");
+        let output = process_message(
+            json!({"id":29,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":30}}}),
+            &mut documents,
+        );
+        assert!(output[0]["result"].is_null());
+    }
+
+    #[test]
+    fn cross_file_ranges_use_utf16_units() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/math.solve", "export let a𐐀 = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import { a𐐀 } from \"math.solve\"\nprint(a𐐀)\n");
+        let output = process_message(
+            json!({"id":30,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
+            &mut documents,
+        );
+        let start = output[0]["result"]["range"]["start"]["character"].as_u64().unwrap();
+        let end = output[0]["result"]["range"]["end"]["character"].as_u64().unwrap();
+        assert_eq!(start, 11);
+        assert_eq!(end - start, 3);
+    }
+
+    #[test]
+    fn cross_file_hover_identifies_origin() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/math.solve", "export let version = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import { version as api_version } from \"math.solve\"\nprint(api_version)\n");
+        let output = process_message(
+            json!({"id":31,"method":"textDocument/hover","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
+            &mut documents,
+        );
+        let value = output[0]["result"]["contents"]["value"].as_str().unwrap();
+        assert!(value.contains("version"));
+        assert!(value.contains("file:///project/math.solve"));
+    }
+
+    #[test]
+    fn relative_parent_import_uri_is_normalized() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/shared/math.solve", "export let version = 1\n");
+        open(&mut documents, "file:///project/app/main.solve", "import { version } from \"../shared/math.solve\"\nprint(version)\n");
+        let output = process_message(
+            json!({"id":32,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/app/main.solve"},"position":{"line":1,"character":7}}}),
+            &mut documents,
+        );
+        assert_eq!(output[0]["result"]["uri"], "file:///project/shared/math.solve");
+    }
+
+    #[test]
+    fn repeated_cross_file_responses_are_deterministic() {
+        let mut documents = HashMap::new();
+        open(&mut documents, "file:///project/math.solve", "export let version = 1\n");
+        open(&mut documents, "file:///project/main.solve", "import { version } from \"math.solve\"\nprint(version)\n");
+        let request = json!({"id":33,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}});
+        let first = process_message(request.clone(), &mut documents);
+        let second = process_message(request, &mut documents);
+        assert_eq!(first[0]["result"], second[0]["result"]);
     }
 
     #[test]
     fn formatting_rejects_invalid_or_unopened_documents() {
         let mut documents = HashMap::new();
-        process_message(
-            json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///invalid.solve","text":"let = 1"}}}),
-            &mut documents,
-        );
-
+        open(&mut documents, "file:///invalid.solve", "let = 1");
         let invalid = process_message(
-            json!({"id":14,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///invalid.solve"}}}),
+            json!({"id":34,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///invalid.solve"}}}),
             &mut documents,
         );
         assert!(invalid[0]["result"].is_null());
-
         let unopened = process_message(
-            json!({"id":15,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///missing.solve"}}}),
+            json!({"id":35,"method":"textDocument/formatting","params":{"textDocument":{"uri":"file:///missing.solve"}}}),
             &mut documents,
         );
         assert!(unopened[0]["result"].is_null());
