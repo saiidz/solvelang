@@ -30,7 +30,7 @@ Cloud/API access (experimental/test-mode)
 
 ## Canonical runtime
 
-The Rust CLI in `solvec/` is the source of truth for executable language behavior. It contains the lexer, parser, AST/runtime implementation, values, diagnostics, AI provider code, CLI parsing, input handling, import loading, and execution policy.
+The Rust CLI in `solvec/` is the source of truth for executable language behavior. It depends on and re-exports the host-incapable lexer, parser, AST, values, and diagnostics owned by `solvec-core/`, while native runtime evaluation, AI provider code, CLI parsing, input handling, import loading, and execution policy remain in `solvec/`.
 
 ## Safety model
 

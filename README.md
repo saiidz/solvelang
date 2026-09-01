@@ -228,15 +228,20 @@ SolveLang is organized around several related layers.
 
 ### 1. Canonical language runtime
 
-`solvec/` contains the Rust implementation:
+`solvec-core/` owns the host-incapable Rust language modules:
 
 - lexer
 - parser
 - AST
+- diagnostics, formatting, lint, and conservative semantics
+- canonical in-memory values
+
+`solvec/` provides the native façade and host-capable runtime:
+
 - interpreter
 - explicit local-module resolver/runtime
 - CLI
-- runtime policy and diagnostics
+- runtime policy
 - AI-provider boundary
 
 The Rust CLI is the canonical validator and runtime.
@@ -280,7 +285,8 @@ Separately verified production evidence records API access, customer password ac
 
 ```text
 solvelang/
-├── solvec/              Rust lexer, parser, AST, interpreter, and CLI
+├── solvec-core/         Host-incapable Rust language core
+├── solvec/              Native interpreter, host adapters, and CLI
 ├── site/                Website, Studio, demos, and browser previews
 ├── services/            API/account and supporting services
 ├── examples/            SolveLang workflows and demo assets
