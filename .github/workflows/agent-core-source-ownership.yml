@@ -1,0 +1,211 @@
+name: Agent Core Source Ownership
+
+on:
+  push:
+    branches:
+      - workbench/core-source-ownership-20260901
+    paths:
+      - .github/workflows/agent-core-source-ownership.yml
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: workbench/core-source-ownership-20260901
+          fetch-depth: 1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Move pure source ownership into solvec-core
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for module in ast diagnostics formatter lexer lint parser semantic value; do
+            cp "solvec/src/${module}.rs" "solvec-core/src/${module}.rs"
+            rm "solvec/src/${module}.rs"
+          done
+
+          cat > solvec-core/src/lib.rs <<'RS'
+          #![forbid(unsafe_code)]
+          //! Dependency-minimal, host-incapable SolveLang language core.
+          //!
+          //! Host-capable runtime, filesystem/module loading, HTTP, environment,
+          //! provider, process, and CLI code remain in the native `solvec` crate.
+
+          pub mod ast;
+          pub mod diagnostics;
+          pub mod formatter;
+          pub mod lexer;
+          pub mod lint;
+          pub mod parser;
+          pub mod semantic;
+          pub mod value;
+
+          #[cfg(test)]
+          mod tests {
+              use crate::{diagnostics, formatter, lexer, parser, value::Value};
+
+              #[test]
+              fn core_exposes_parse_format_diagnostic_and_value_contract() {
+                  let source = "let value=1\nprint(value)\n";
+                  let formatted = formatter::format_source(source);
+                  assert_eq!(formatted, "let value = 1\nprint(value)\n");
+                  assert!(diagnostics::validate_source(&formatted).is_ok());
+                  let mut parser = parser::Parser::new(lexer::lex(&formatted));
+                  assert_eq!(parser.parse().expect("formatted source parses").len(), 2);
+                  assert!(Value::Number(1).is_truthy());
+              }
+          }
+          RS
+
+          cat > solvec/src/lib.rs <<'RS'
+          //! Native SolveLang host/runtime façade.
+          //!
+          //! Pure language APIs are owned by `solvec-core` and re-exported here so
+          //! existing `solvec::ast`, `solvec::parser`, `solvec::formatter`, and
+          //! related callers keep the same public paths. Host-capable adapters stay
+          //! in this native crate.
+
+          pub mod ai;
+          pub mod ast_runtime;
+          pub mod module_resolver;
+
+          pub use solvec_core::{ast, diagnostics, formatter, lexer, lint, parser, semantic, value};
+
+          #[cfg(test)]
+          mod tests {
+              use crate::{diagnostics, formatter, lexer, parser};
+
+              #[test]
+              fn native_facade_reexports_core_language_apis() {
+                  let source = "let value=1\nprint(value)\n";
+                  let formatted = formatter::format_source(source);
+                  assert_eq!(formatted, "let value = 1\nprint(value)\n");
+                  assert!(diagnostics::validate_source(&formatted).is_ok());
+                  let mut parser = parser::Parser::new(lexer::lex(&formatted));
+                  assert_eq!(parser.parse().expect("formatted source parses").len(), 2);
+              }
+          }
+          RS
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cargo = Path('solvec/Cargo.toml')
+          text = cargo.read_text()
+          anchor = 'serde_json = "1"\n'
+          dep = 'solvec-core = { path = "../solvec-core" }\n'
+          if dep not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('solvec Cargo.toml dependency anchor mismatch')
+              text = text.replace(anchor, anchor + dep, 1)
+          cargo.write_text(text)
+          PY
+
+          cat > solvec-core/tests/boundary.rs <<'RS'
+          use std::fs;
+
+          const PURE_SOURCES: &[(&str, &str)] = &[
+              ("ast", include_str!("../src/ast.rs")),
+              ("diagnostics", include_str!("../src/diagnostics.rs")),
+              ("formatter", include_str!("../src/formatter.rs")),
+              ("lexer", include_str!("../src/lexer.rs")),
+              ("lint", include_str!("../src/lint.rs")),
+              ("parser", include_str!("../src/parser.rs")),
+              ("semantic", include_str!("../src/semantic.rs")),
+              ("value", include_str!("../src/value.rs")),
+          ];
+
+          #[test]
+          fn pure_core_source_set_has_no_host_capability_adapters() {
+              let forbidden = [
+                  "reqwest",
+                  "std::fs",
+                  "std::env",
+                  "std::net",
+                  "std::process",
+                  "crate::ai",
+                  "crate::ast_runtime",
+                  "crate::module_resolver",
+              ];
+
+              for (name, source) in PURE_SOURCES {
+                  for token in forbidden {
+                      assert!(
+                          !source.contains(token),
+                          "pure core module {name} unexpectedly contains host-capability token {token:?}"
+                      );
+                  }
+              }
+          }
+
+          #[test]
+          fn core_manifest_has_only_the_expected_runtime_dependency() {
+              let manifest = fs::read_to_string(format!("{}/Cargo.toml", env!("CARGO_MANIFEST_DIR")))
+                  .expect("read solvec-core Cargo.toml");
+              assert!(manifest.contains("serde_json = \"1\""));
+              for forbidden in ["reqwest", "tokio", "wasmtime", "wasi", "openai"] {
+                  assert!(
+                      !manifest.contains(forbidden),
+                      "solvec-core manifest contains forbidden dependency marker {forbidden:?}"
+                  );
+              }
+          }
+
+          #[test]
+          fn native_host_sources_are_not_owned_by_core() {
+              for forbidden in ["ai.rs", "ast_runtime.rs", "module_resolver.rs"] {
+                  assert!(
+                      !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                          .join("src")
+                          .join(forbidden)
+                          .exists(),
+                      "solvec-core unexpectedly owns native host source {forbidden}"
+                  );
+              }
+          }
+          RS
+
+          cat > docs/solvec-core-boundary.md <<'MD'
+          # `solvec-core` pure boundary
+
+          `solvec-core` is the host-incapable Rust language core required by ADR 0002. It now owns the AST, lexer, parser, diagnostics, formatter, lint, conservative semantics, and canonical in-memory value modules. Native `solvec` depends on the core and re-exports those modules so existing public Rust paths remain compatible.
+
+          Explicitly excluded from `solvec-core` are provider/AI code, the host-mixed evaluator in `ast_runtime`, filesystem-backed module resolution/loading, environment access, HTTP, process/CLI behavior, package registries, browser globals, WASI, and source mutation.
+
+          The core currently has one runtime dependency, `serde_json`, because the canonical `Value` conversion contract uses it. Boundary tests reject obvious host-capability references and host-oriented dependencies in the core source set.
+
+          This source-ownership move still does **not** make the browser preview canonical. The remaining accepted sequence is to split pure evaluation from host adapters, add a deny-all WASM wrapper, run shared native/WASM conformance with deterministic limits, and statically audit the WASM import/resource surface before browser replacement.
+
+          No production, managed execution, package registry, filesystem import, network, provider, or source-mutation authority is created by this crate.
+          MD
+
+          cargo fmt --manifest-path solvec-core/Cargo.toml
+          cargo fmt --manifest-path solvec/Cargo.toml
+          cargo generate-lockfile --manifest-path solvec/Cargo.toml
+          cargo clippy --manifest-path solvec-core/Cargo.toml -- -D warnings
+          cargo test --manifest-path solvec-core/Cargo.toml
+          cargo clippy --manifest-path solvec/Cargo.toml -- -D warnings
+          cargo test --manifest-path solvec/Cargo.toml
+          cargo build --manifest-path solvec/Cargo.toml --release --locked
+          git diff --check
+
+      - name: Commit staged ownership move
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'solve-build-loop'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'refactor(core): move pure source ownership into solvec-core'
+          git push origin HEAD:workbench/core-source-ownership-20260901
