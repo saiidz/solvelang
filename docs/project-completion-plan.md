@@ -1,14 +1,14 @@
 # SolveLang project completion plan
 
-_Canonical repository-completion checklist. Reconciled 2026-09-01 against `main` at `1aeeb500caaac88285075fce8ef352177764a736`; live GitHub state always wins if this checkpoint becomes stale._
+_Canonical repository-completion checklist. Reconciled 2026-09-01 against `main` at `7938c1a2d39c5cda3a9afdef64ea65f95bb3ed43`; live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work only. It does not authorize a deployment, an AWS/IAM/KMS/DNS/Cloudflare mutation, a customer/Admin mutation, email, live Stripe activity, a charge/refund, provider execution, or any audit remediation.
 
 ## Source of truth and current queue
 
 - Live GitHub state wins over this document, historical handoffs, and old PR bodies.
-- #751 is merged and established the current explicit-local-module runtime hardening baseline on `main`.
-- #753 is the active bounded LSP opened-document cross-file module-navigation slice. It must satisfy fresh exact-head CI/RustSec/review gates before merge.
+- #751 is merged and established the explicit-local-module runtime hardening baseline on `main`.
+- #753 is merged and adds bounded opened-document cross-file explicit-module definition, hover, and namespace completion with fail-closed private-export/path/shadowing behavior.
 - #723 remains stale/review-blocked Trusted Mac restoration and must not merge. Do not retrigger it or create a Mac successor until the one allocated SolveLang self-hosted Mac slot is demonstrably free.
 - Production/account/Admin/TOTP facts are tracked separately from repository completion; a merge never acts as production authorization.
 
@@ -16,7 +16,7 @@ This plan records repository-safe work only. It does not authorize a deployment,
 
 - Repository Audit / Solve Graph: bounded, static, parse-only analysis; graph search, paths, alternatives, impact, affected validations, MCP surfaces, browser presentation, and local static adapters. Repository mutation/remediation remains disabled.
 - Server Audit: bounded, redacted, read-only evidence/reporting and relationship/posture work. Linux collector assumptions are not cross-platform support; remediation remains disabled.
-- Language/DX: Rust lexer/parser/AST/interpreter/CLI; conservative `check`/`lint`; formatter; loop control; pure collection helpers; source diagnostics; narrow non-executing LSP and opt-in VS Code support.
+- Language/DX: Rust lexer/parser/AST/interpreter/CLI; conservative `check`/`lint`; formatter; loop control; pure collection helpers; source diagnostics; narrow non-executing LSP and opt-in VS Code support, including bounded cross-file navigation among already-open explicit-module documents through #753.
 - Explicit local modules: accepted syntax contract, parser/AST support, deterministic graph resolution, export-surface validation, frozen entry/module source identity, namespace/named imports, live exported values, transactional runtime behavior, exactly-once deterministic initialization, lexical-shadow isolation, cross-workflow state isolation, provenance, and hardened preflight are merged through #746–#751. Legacy include imports remain a separate compatibility mechanism. Remote packages/registries and manifest-based dependency resolution are not implemented.
 - Production foundation: API/accounts/password authentication/Admin/TOTP infrastructure have separate live-state evidence. Billing, paid priority, provider execution, queue processing, and general managed workflow execution remain off unless separately authorized and proven live.
 
@@ -54,7 +54,7 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 ### D. CLI and editor contract
 
 - [ ] Pin public CLI help, exit-code categories, stdout/stderr behavior, JSON envelope/schema, canonical `version` behavior, and command/flag compatibility with fixture-based regression tests.
-- [ ] Complete #753 or its exact-head successor for bounded opened-document cross-file module definition/hover/completion with private-export and lexical-shadow correctness.
+- [x] Bounded opened-document cross-file module definition/hover/completion with private-export, URI/path, UTF-16, and lexical-shadow correctness is merged through #753.
 - [ ] Add later non-executing LSP slices only where evidence justifies them: incremental full-text sync/stale-document protection, bounded workspace/module indexing, cross-file diagnostics/references, safe rename, cancellation/debouncing, and deterministic request identity.
 - [ ] Keep editor-triggered execution, network, tools, agents, and source mutation opt-in and disabled by default.
 
