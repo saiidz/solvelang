@@ -10,6 +10,11 @@ EXPECTED_SHA="$1"
 TARGET="$2"
 OUTPUT_DIR="$3"
 
+if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "expected source SHA must be a full 40-character lowercase Git SHA" >&2
+  exit 64
+fi
+
 case "$TARGET" in
   x86_64-unknown-linux-gnu)
     OS_NAME="linux"
@@ -23,10 +28,21 @@ case "$TARGET" in
 esac
 
 ROOT="$(git rev-parse --show-toplevel)"
+if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=no)" ]]; then
+  echo "release-candidate packaging requires a clean tracked worktree" >&2
+  exit 65
+fi
+
 ACTUAL_SHA="$(git -C "$ROOT" rev-parse HEAD)"
 if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
   echo "source SHA mismatch: expected $EXPECTED_SHA, got $ACTUAL_SHA" >&2
   exit 65
+fi
+
+BINARY_PATH="$ROOT/solvec/target/$TARGET/release/$BINARY_NAME"
+if [[ ! -f "$BINARY_PATH" || ! -x "$BINARY_PATH" ]]; then
+  echo "release binary is missing or not executable: $BINARY_PATH" >&2
+  exit 66
 fi
 
 VERSION="$(python3 - "$ROOT/solvec/Cargo.toml" <<'PY'
@@ -54,7 +70,7 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 STAGING_DIR="$(mktemp -d)"
 trap 'rm -rf "$STAGING_DIR"' EXIT
 
-cp "$ROOT/solvec/target/$TARGET/release/$BINARY_NAME" "$STAGING_DIR/$BINARY_NAME"
+cp "$BINARY_PATH" "$STAGING_DIR/$BINARY_NAME"
 chmod 0755 "$STAGING_DIR/$BINARY_NAME"
 
 # Produce deterministic bytes for the same source commit + toolchain + target.
@@ -89,6 +105,7 @@ python3 - \
   "$SOURCE_DATE_EPOCH" \
   "$ARTIFACT_BASENAME" \
   "$ARTIFACT_SHA256" \
+  "${GITHUB_REPOSITORY:-local}" \
   "${GITHUB_WORKFLOW:-local}" \
   "${GITHUB_RUN_ID:-local}" \
   "${GITHUB_RUN_ATTEMPT:-local}" \
@@ -108,6 +125,7 @@ import sys
     source_date_epoch,
     artifact,
     artifact_sha256,
+    repository,
     workflow,
     run_id,
     run_attempt,
@@ -127,6 +145,7 @@ payload = {
     "source_date_epoch": int(source_date_epoch),
     "artifact": artifact,
     "artifact_sha256": artifact_sha256,
+    "repository": repository,
     "workflow": workflow,
     "run_id": run_id,
     "run_attempt": run_attempt,
