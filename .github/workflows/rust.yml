@@ -58,3 +58,10 @@ jobs:
 
       - name: Build release
         run: cargo build --release
+
+      - name: Validate host-incapable solvec-core boundary
+        working-directory: solvec-core
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+          cargo test
