@@ -50,11 +50,11 @@ Current policy:
 | Platform | Release claim |
 | --- | --- |
 | Linux x86_64 | Primary hosted-CI validation target when the release workflow proves it |
-| macOS ARM64 | Supported only when the release commit receives the repository-required Trusted Mac validation; queued/cancelled/missing is not success |
+| macOS ARM64 | `solvec`/Rust CLI support requires a terminal successful Rust build/test on ARM64 for the exact release commit; a Trusted Mac site/Studio-only result is not sufficient |
 | Windows x64 | Supported only when the release commit receives the repository-required Windows validation for the affected contract |
 | Browser/WASM | Not a release runtime until the accepted pure-core/WASM ADR is implemented and browser-targeted conformance/security gates pass |
 
-A release page must list only platforms actually validated for that exact release commit. One platform never substitutes for a required result on another.
+A release page must list only platforms actually validated for that exact release commit. One platform never substitutes for a required result on another. Surface-specific checks also do not substitute for the runtime they claim: a site/Studio validation may support a web-surface claim, but it cannot by itself qualify a Rust CLI target.
 
 ## Release-candidate gate
 
