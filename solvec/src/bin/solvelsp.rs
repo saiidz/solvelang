@@ -6,7 +6,7 @@
 
 use serde_json::{Value, json};
 use solvec::{
-    ast::{ExportedDeclaration, SourceLocation, Stmt},
+    ast::{ExportedDeclaration, Expr, ExprKind, SourceLocation, Stmt},
     formatter, lexer, parser,
 };
 use std::collections::{HashMap, HashSet};
@@ -376,95 +376,178 @@ fn named_import(text: &str, local: &str) -> Option<NamedImport> {
         })
 }
 
-fn normalize_uri_path(path: &str) -> Option<String> {
-    let mut segments = Vec::new();
-    for segment in path.split('/') {
-        match segment {
-            "" | "." => {}
-            ".." => {
-                segments.pop()?;
-            }
-            value => segments.push(value),
-        }
-    }
-    Some(format!("/{}", segments.join("/")))
-}
-
 fn resolve_import_uri(importer: &str, import_path: &str) -> Option<String> {
+    let path = std::path::Path::new(import_path);
     if import_path.is_empty()
-        || !import_path.ends_with(".solve")
-        || import_path.starts_with('/')
-        || import_path.contains("://")
+        || import_path.contains('\0')
         || import_path.contains('\\')
+        || path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+        || path.extension().and_then(|part| part.to_str()) != Some("solve")
     {
         return None;
     }
 
-    let scheme_index = importer.find("://")?;
-    let prefix = &importer[..scheme_index + 3];
-    let rest = &importer[scheme_index + 3..];
-    let (authority, uri_path) = if rest.starts_with('/') {
-        ("", rest)
-    } else {
-        let slash = rest.find('/')?;
-        (&rest[..slash], &rest[slash..])
-    };
-    let parent_end = uri_path.rfind('/')?;
-    let parent = &uri_path[..parent_end + 1];
-    let combined = format!("{parent}{import_path}");
-    let normalized = normalize_uri_path(&combined)?;
-    Some(format!("{prefix}{authority}{normalized}"))
+    let mut target = reqwest::Url::parse(importer).ok()?;
+    if target.cannot_be_a_base() {
+        return None;
+    }
+    target.set_query(None);
+    target.set_fragment(None);
+    {
+        let mut segments = target.path_segments_mut().ok()?;
+        segments.pop_if_empty();
+        segments.pop();
+        for segment in import_path.split('/') {
+            if segment.is_empty() || segment == "." {
+                continue;
+            }
+            segments.push(segment);
+        }
+    }
+    Some(target.to_string())
 }
 
-fn function_scope_bindings(tokens: &[lexer::LocatedToken]) -> HashMap<usize, Vec<String>> {
-    let mut bindings = HashMap::<usize, Vec<String>>::new();
-    for (index, token) in tokens.iter().enumerate() {
-        match &token.token {
-            lexer::Token::Fn => {
-                let Some(left_paren) = (index + 1..tokens.len())
-                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftParen))
-                else {
-                    continue;
-                };
-                let Some(right_paren) = (left_paren + 1..tokens.len()).find(|candidate| {
-                    matches!(&tokens[*candidate].token, lexer::Token::RightParen)
-                }) else {
-                    continue;
-                };
-                let Some(left_brace) = (right_paren + 1..tokens.len())
-                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftBrace))
-                else {
-                    continue;
-                };
-                let params = tokens[left_paren + 1..right_paren]
-                    .iter()
-                    .filter_map(|param| match &param.token {
-                        lexer::Token::Identifier(name) => Some(name.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-                bindings.entry(left_brace).or_default().extend(params);
+fn later_location(left: SourceLocation, right: SourceLocation) -> SourceLocation {
+    if (right.line, right.column) > (left.line, left.column) {
+        right
+    } else {
+        left
+    }
+}
+
+fn expr_latest_location(expr: &Expr) -> SourceLocation {
+    let mut latest = expr.location;
+    match &expr.kind {
+        ExprKind::Array(items) => {
+            for item in items {
+                latest = later_location(latest, expr_latest_location(item));
             }
-            lexer::Token::For => {
-                let variable =
-                    tokens[index + 1..]
-                        .iter()
-                        .find_map(|candidate| match &candidate.token {
-                            lexer::Token::Newline => None,
-                            lexer::Token::Identifier(name) => Some(name.clone()),
-                            _ => None,
-                        });
-                let Some(variable) = variable else {
-                    continue;
-                };
-                let Some(left_brace) = (index + 1..tokens.len())
-                    .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftBrace))
-                else {
-                    continue;
-                };
-                bindings.entry(left_brace).or_default().push(variable);
+        }
+        ExprKind::Object(entries) => {
+            for value in entries.values() {
+                latest = later_location(latest, expr_latest_location(value));
+            }
+        }
+        ExprKind::Property(target, _) => {
+            latest = later_location(latest, expr_latest_location(target));
+        }
+        ExprKind::Index(target, index) => {
+            latest = later_location(latest, expr_latest_location(target));
+            latest = later_location(latest, expr_latest_location(index));
+        }
+        ExprKind::Unary { expr, .. } => {
+            latest = later_location(latest, expr_latest_location(expr));
+        }
+        ExprKind::Binary { left, right, .. } => {
+            latest = later_location(latest, expr_latest_location(left));
+            latest = later_location(latest, expr_latest_location(right));
+        }
+        ExprKind::Call { args, .. } | ExprKind::ModuleCall { args, .. } => {
+            for arg in args {
+                latest = later_location(latest, expr_latest_location(arg));
+            }
+        }
+        ExprKind::Number(_) | ExprKind::Text(_) | ExprKind::Bool(_) | ExprKind::Variable(_) => {}
+    }
+    latest
+}
+
+fn collect_for_scopes(statements: &[Stmt], scopes: &mut Vec<(String, SourceLocation)>) {
+    for statement in statements {
+        match statement {
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                ..
+            } => {
+                scopes.push((name.clone(), expr_latest_location(iterable)));
+                collect_for_scopes(body, scopes);
+            }
+            Stmt::Function { body, .. } | Stmt::While { body, .. } => {
+                collect_for_scopes(body, scopes);
+            }
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { body, .. },
+                ..
+            } => collect_for_scopes(body, scopes),
+            Stmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_for_scopes(then_branch, scopes);
+                collect_for_scopes(else_branch, scopes);
             }
             _ => {}
+        }
+    }
+}
+
+fn scope_statements(text: &str) -> Option<Vec<Stmt>> {
+    parse_document(text).or_else(|| {
+        let mut repaired = text.to_string();
+        repaired.push_str("__solvelsp_completion");
+        parse_document(&repaired)
+    })
+}
+
+fn token_is_after_location(token: &lexer::LocatedToken, location: SourceLocation) -> bool {
+    (token.line, token.column) > (location.line, location.column)
+}
+
+fn function_scope_bindings(
+    text: &str,
+    tokens: &[lexer::LocatedToken],
+) -> HashMap<usize, Vec<String>> {
+    let mut bindings = HashMap::<usize, Vec<String>>::new();
+    for (index, token) in tokens.iter().enumerate() {
+        if !matches!(&token.token, lexer::Token::Fn) {
+            continue;
+        }
+        let Some(left_paren) = (index + 1..tokens.len())
+            .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftParen))
+        else {
+            continue;
+        };
+        let Some(right_paren) = (left_paren + 1..tokens.len())
+            .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::RightParen))
+        else {
+            continue;
+        };
+        let Some(left_brace) = (right_paren + 1..tokens.len())
+            .find(|candidate| matches!(&tokens[*candidate].token, lexer::Token::LeftBrace))
+        else {
+            continue;
+        };
+        let params = tokens[left_paren + 1..right_paren]
+            .iter()
+            .filter_map(|param| match &param.token {
+                lexer::Token::Identifier(name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        bindings.entry(left_brace).or_default().extend(params);
+    }
+
+    if let Some(statements) = scope_statements(text) {
+        let mut for_scopes = Vec::new();
+        collect_for_scopes(&statements, &mut for_scopes);
+        for (name, iterable_end) in for_scopes {
+            if let Some((left_brace, _)) = tokens.iter().enumerate().find(|(_, token)| {
+                matches!(&token.token, lexer::Token::LeftBrace)
+                    && token_is_after_location(token, iterable_end)
+            }) {
+                bindings.entry(left_brace).or_default().push(name);
+            }
         }
     }
     bindings
@@ -528,7 +611,7 @@ fn active_lexical_shadow(text: &str, name: &str, line: usize, character: usize) 
         return true;
     }
 
-    let scope_bindings = function_scope_bindings(&tokens);
+    let scope_bindings = function_scope_bindings(text, &tokens);
     let mut scopes = vec![HashSet::<String>::new()];
     for (index, token) in tokens.iter().enumerate() {
         let token_line = token.line.saturating_sub(1);
@@ -1415,7 +1498,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_parent_import_uri_is_normalized() {
+    fn parent_traversal_import_uri_fails_closed() {
         let mut documents = HashMap::new();
         open(
             &mut documents,
@@ -1431,10 +1514,50 @@ mod tests {
             json!({"id":32,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/app/main.solve"},"position":{"line":1,"character":7}}}),
             &mut documents,
         );
+        assert!(output[0]["result"].is_null());
+    }
+
+    #[test]
+    fn encoded_module_uri_matches_decoded_import_path() {
+        let mut documents = HashMap::new();
+        open(
+            &mut documents,
+            "file:///project/my%20module.solve",
+            "export let version = 1\n",
+        );
+        open(
+            &mut documents,
+            "file:///project/main.solve",
+            "import { version } from \"my module.solve\"\nprint(version)\n",
+        );
+        let output = process_message(
+            json!({"id":36,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":7}}}),
+            &mut documents,
+        );
         assert_eq!(
             output[0]["result"]["uri"],
-            "file:///project/shared/math.solve"
+            "file:///project/my%20module.solve"
         );
+    }
+
+    #[test]
+    fn object_literal_iterable_keeps_loop_shadow_active_in_body() {
+        let mut documents = HashMap::new();
+        open(
+            &mut documents,
+            "file:///project/item.solve",
+            "export let value = 99\n",
+        );
+        let source =
+            "import \"item.solve\" as item\nfor item in [{ value: 1 }] { print(item.value) }\n";
+        open(&mut documents, "file:///project/main.solve", source);
+        let line = source.lines().nth(1).unwrap();
+        let character = line.find("item.value").unwrap() + "item.".len();
+        let output = process_message(
+            json!({"id":37,"method":"textDocument/definition","params":{"textDocument":{"uri":"file:///project/main.solve"},"position":{"line":1,"character":character}}}),
+            &mut documents,
+        );
+        assert!(output[0]["result"].is_null());
     }
 
     #[test]
