@@ -72,7 +72,7 @@ A commit may be called a SolveLang release candidate only when all applicable it
 
 ## Artifacts, checksums, and provenance
 
-Release artifacts must be generated from a clean checkout of the tagged commit by a pinned/reviewed workflow or an equivalently documented reproducible process.
+Final release artifacts must be generated from a clean checkout of the tagged commit by a pinned/reviewed workflow or an equivalently documented reproducible process. Pre-tag candidate artifacts may be generated only as a dry-run verification aid; they are not publishable release artifacts and must be regenerated from the final tag.
 
 For every distributed binary/archive:
 
@@ -104,12 +104,13 @@ Migration notes are mandatory when source that worked under the prior documented
 2. Reconcile truth/spec/docs and select the pre-1.0 version.
 3. Run the exact-candidate validation/security matrix.
 4. Fix validated findings on a new commit and restart the exact-head gate; never bless stale checks.
-5. Generate release artifacts/checksums/provenance from the clean candidate.
-6. Verify artifact contents and the supported-platform matrix.
-7. Create the annotated version tag on the exact candidate commit.
-8. Publish release notes/changelog and upgrade notes together with artifacts.
-9. Smoke-test the distributed artifacts without using production credentials or customer data.
-10. Keep any production rollout as a separate protected action requiring its own evidence and approval.
+5. Optionally generate non-publishable candidate artifacts as a dry run and inspect them; any defect returns to step 4.
+6. Create the annotated version tag on the exact validated candidate commit.
+7. Generate the **final** release artifacts, SHA-256 checksums, and provenance from a clean checkout of that tag.
+8. Verify final artifact contents, provenance, checksums, and the supported-platform matrix against the tag.
+9. Publish release notes/changelog and upgrade notes together with the verified tagged artifacts.
+10. Smoke-test the distributed artifacts without using production credentials or customer data.
+11. Keep any production rollout as a separate protected action requiring its own evidence and approval.
 
 ## Rollback and yanking
 
