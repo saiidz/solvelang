@@ -24,6 +24,7 @@ enum Command {
     Format { check: bool },
     Tokens,
     Ast,
+    Version,
     Help,
 }
 
@@ -349,6 +350,10 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
         print_usage();
         return Ok(());
     }
+    if matches!(command, Command::Version) {
+        println!("solvec {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
 
     let filename = filename.ok_or_else(|| CliFailure::arguments("missing SolveLang file"))?;
 
@@ -403,7 +408,7 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
             println!("{:#?}", parse_source(&source)?);
             Ok(())
         }
-        Command::Help => Ok(()),
+        Command::Version | Command::Help => Ok(()),
     }
 }
 
@@ -493,6 +498,13 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
                 Ok((Command::Help, None))
             } else {
                 Err("help does not accept extra arguments".to_string())
+            }
+        }
+        "version" | "--version" | "-V" => {
+            if args.len() == 1 {
+                Ok((Command::Version, None))
+            } else {
+                Err("version does not accept extra arguments".to_string())
             }
         }
         "run" => parse_run_args(&args[1..]),
@@ -1410,6 +1422,7 @@ fn print_usage() {
     println!("  solvec fmt [--check] <file.solve>  Format source without changing meaning");
     println!("  solvec tokens <file.solve>         Print lexer tokens");
     println!("  solvec ast <file.solve>            Print parsed AST");
+    println!("  solvec version                     Print canonical package version");
     println!();
     println!("Local structured-run options:");
     println!("  --input <file>                     Inject strict JSON as read-only 'input'");

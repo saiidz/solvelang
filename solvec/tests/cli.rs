@@ -2237,3 +2237,43 @@ fn upcomingsounds_cli_contract_example_runs_with_every_hardened_flag() {
     assert_eq!(output["outputs"][0]["owner"], "human-owner");
     assert_eq!(output["outputs"][0]["action_taken"], false);
 }
+
+#[test]
+fn cli_version_command_matches_package_metadata() {
+    let expected = format!("solvec {}\n", env!("CARGO_PKG_VERSION"));
+    for argument in ["version", "--version", "-V"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+            .arg(argument)
+            .output()
+            .expect("failed to execute solvec version command");
+        assert!(output.status.success(), "{argument} failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
+        assert!(output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn cli_version_rejects_extra_arguments_with_existing_usage_contract() {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .args(["version", "extra"])
+        .output()
+        .expect("failed to execute solvec version command");
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("SolveLang Compiler"));
+    assert!(stdout.contains("Usage:"));
+    assert!(stderr.contains("version does not accept extra arguments"));
+}
+
+#[test]
+fn cli_help_lists_version_command() {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .arg("--help")
+        .output()
+        .expect("failed to execute solvec help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("solvec version"));
+    assert!(stdout.contains("Print canonical package version"));
+}
