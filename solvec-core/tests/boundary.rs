@@ -2,7 +2,10 @@ use std::fs;
 
 const PURE_SOURCES: &[(&str, &str)] = &[
     ("ast", include_str!("../../solvec/src/ast.rs")),
-    ("diagnostics", include_str!("../../solvec/src/diagnostics.rs")),
+    (
+        "diagnostics",
+        include_str!("../../solvec/src/diagnostics.rs"),
+    ),
     ("formatter", include_str!("../../solvec/src/formatter.rs")),
     ("lexer", include_str!("../../solvec/src/lexer.rs")),
     ("lint", include_str!("../../solvec/src/lint.rs")),
@@ -50,7 +53,11 @@ fn core_manifest_has_only_the_expected_runtime_dependency() {
 #[test]
 fn core_crate_does_not_export_host_capable_native_modules() {
     let lib = include_str!("../src/lib.rs");
-    for forbidden in ["pub mod ai", "pub mod ast_runtime", "pub mod module_resolver"] {
+    for forbidden in [
+        "pub mod ai",
+        "pub mod ast_runtime",
+        "pub mod module_resolver",
+    ] {
         assert!(
             !lib.contains(forbidden),
             "solvec-core unexpectedly exports {forbidden:?}"
