@@ -1,0 +1,44 @@
+name: Agent Core Minimal Lock
+
+on:
+  push:
+    branches:
+      - workbench/core-source-ownership-20260901
+    paths:
+      - .github/workflows/agent-core-minimal-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: workbench/core-source-ownership-20260901
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore baseline lock and add only local path package
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout ee0a00277f890a3a887a16d5a5c3430c1c481349 -- solvec/Cargo.lock
+          cargo check --manifest-path solvec/Cargo.toml
+          cargo build --manifest-path solvec/Cargo.toml --release --locked
+          git diff --check
+          git diff --stat -- solvec/Cargo.lock
+
+      - name: Commit minimal lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'solve-build-loop'
+          git config user.email 'actions@users.noreply.github.com'
+          git add solvec/Cargo.lock
+          git diff --cached --check
+          git commit -m 'build(core): minimize path dependency lock update'
+          git push origin HEAD:workbench/core-source-ownership-20260901
