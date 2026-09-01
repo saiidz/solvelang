@@ -1,0 +1,12 @@
+let labels = ["new", "urgent"]
+let ticket = { status: "open", labels: labels, count: 2 }
+print(length(ticket.labels))
+print(contains(labels, "urgent"))
+print(get(ticket, "missing", "not-set"))
+print(keys(ticket))
+print(values(ticket))
+print(entries(ticket))
+print(is_empty([]))
+let parsed = json_parse("{\"name\":\"SolveLang\",\"count\":2}")
+print(parsed.name)
+print(json_stringify({ name: parsed.name, count: parsed.count }))

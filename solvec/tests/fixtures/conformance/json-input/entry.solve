@@ -1,0 +1,2 @@
+print("classification prepared")
+print({ count: input.count, active: input.active, name: input.name })

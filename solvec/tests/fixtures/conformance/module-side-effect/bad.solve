@@ -1,0 +1,2 @@
+print("MUST NOT PRINT")
+export let value = 1
