@@ -1,0 +1,6 @@
+import "state.solve" as state
+fn read_state() {
+    let state = state.value
+    return state
+}
+print(read_state())

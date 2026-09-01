@@ -1,0 +1,2 @@
+import { private_value } from "module.solve"
+print("MUST NOT PRINT")

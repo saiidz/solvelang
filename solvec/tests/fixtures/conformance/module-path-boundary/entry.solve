@@ -1,0 +1,2 @@
+import "../outside.solve" as outside
+print(outside.value)

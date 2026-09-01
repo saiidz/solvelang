@@ -1,0 +1,2 @@
+import "bad.solve" as bad
+print(bad.value)

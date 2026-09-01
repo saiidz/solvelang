@@ -1,0 +1,131 @@
+{
+  "schema_version": "0.1",
+  "cases": [
+    {
+      "name": "lexical-contextual-and-escapes",
+      "directory": "lexical-contextual",
+      "entry": "entry.solve",
+      "args": ["run", "{entry}"],
+      "success": true,
+      "stdout": "10\nline\nnext\n"
+    },
+    {
+      "name": "values-functions-and-control-flow",
+      "directory": "values-control-flow",
+      "entry": "entry.solve",
+      "args": ["run", "{entry}"],
+      "success": true,
+      "stdout": "7\nMira\nopen\ntrue\nzero-false\n8\n1\n2\n3\n1\n3\n"
+    },
+    {
+      "name": "pure-builtins-in-hardened-mode",
+      "directory": "pure-builtins",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": true,
+      "stdout_contains": [
+        "NON-PRODUCTION ADVISORY ONLY",
+        "2\ntrue\nnot-set",
+        "[count, labels, status]",
+        "[[count, 2], [labels, [new, urgent]], [status, open]]",
+        "SolveLang"
+      ]
+    },
+    {
+      "name": "explicit-module-namespace-and-named-imports",
+      "directory": "explicit-modules",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": true,
+      "stdout": "NON-PRODUCTION ADVISORY ONLY\n4\n15\n17\n"
+    },
+    {
+      "name": "explicit-module-let-shadow-activates-after-initializer",
+      "directory": "module-shadow",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": true,
+      "stdout": "NON-PRODUCTION ADVISORY ONLY\n7\n"
+    },
+    {
+      "name": "legacy-include-remains-distinct",
+      "directory": "legacy-include",
+      "entry": "entry.solve",
+      "args": ["run", "{entry}"],
+      "success": true,
+      "stdout": "8\n"
+    },
+    {
+      "name": "named-import-private-export-fails-before-evaluation",
+      "directory": "module-missing-export",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": false,
+      "stderr_contains": ["does not export 'private_value'"],
+      "stdout_not_contains": ["MUST NOT PRINT"]
+    },
+    {
+      "name": "explicit-module-cycle-is-deterministic-error",
+      "directory": "module-cycle",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": false,
+      "stderr_contains": ["explicit module cycle detected", "a.solve", "b.solve"],
+      "stdout_not_contains": ["MUST NOT PRINT"]
+    },
+    {
+      "name": "module-top-level-side-effect-is-rejected",
+      "directory": "module-side-effect",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": false,
+      "stderr_contains": ["module top level may contain only imports, let declarations, and fn declarations"],
+      "stdout_not_contains": ["MUST NOT PRINT"]
+    },
+    {
+      "name": "explicit-module-parent-traversal-fails-closed",
+      "directory": "module-path-boundary",
+      "entry": "entry.solve",
+      "args": ["run", "--safe", "{entry}"],
+      "success": false,
+      "stderr_contains": ["explicit modules require a relative .solve path without parent traversal or backslashes"]
+    },
+    {
+      "name": "json-mode-preflights-capability-before-output",
+      "directory": "hardened-json-capability",
+      "entry": "entry.solve",
+      "args": ["run", "--json", "{entry}"],
+      "success": false,
+      "stderr": "",
+      "stdout_newlines": 1,
+      "stdout_contains": ["\"code\":\"capability_denied\"", "\"advisory_only\":true"],
+      "stdout_not_contains": ["MUST NOT PRINT"]
+    },
+    {
+      "name": "json-input-is-typed-and-single-document",
+      "directory": "json-input",
+      "entry": "entry.solve",
+      "args": ["run", "--json", "--input", "{case}/input.json", "{entry}"],
+      "success": true,
+      "stderr": "",
+      "stdout_newlines": 1,
+      "stdout_contains": ["\"ok\":true", "\"advisory_only\":true", "classification prepared", "\"count\":7", "\"active\":true"]
+    },
+    {
+      "name": "runtime-divide-by-zero-is-source-error",
+      "directory": "runtime-error",
+      "entry": "entry.solve",
+      "args": ["run", "{entry}"],
+      "success": false,
+      "stderr_contains": ["SolveLang Runtime Error", "divide by zero"]
+    },
+    {
+      "name": "out-of-range-source-number-is-rejected",
+      "directory": "invalid-source",
+      "entry": "entry.solve",
+      "args": ["run", "{entry}"],
+      "success": false,
+      "stderr_contains": ["outside the signed 32-bit integer range"]
+    }
+  ]
+}

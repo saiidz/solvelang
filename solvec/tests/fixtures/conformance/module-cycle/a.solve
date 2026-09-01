@@ -1,0 +1,2 @@
+import "b.solve" as b
+export let a_value = b.b_value

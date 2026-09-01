@@ -1,0 +1,5 @@
+import "math.solve" as math
+import { base, add } from "math.solve"
+print(base)
+print(math.add(2, 3))
+print(add(3, 4))
