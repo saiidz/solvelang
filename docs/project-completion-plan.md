@@ -1,6 +1,6 @@
 # SolveLang project completion plan
 
-_Canonical repository-completion checklist. Reconciled 2026-09-01 against `main` at `7938c1a2d39c5cda3a9afdef64ea65f95bb3ed43`; live GitHub state always wins if this checkpoint becomes stale._
+_Canonical repository-completion checklist. Reconciled 2026-09-01 against `main` at `b40757d7724825da226a5df01ddd51f063832b39`; live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work only. It does not authorize a deployment, an AWS/IAM/KMS/DNS/Cloudflare mutation, a customer/Admin mutation, email, live Stripe activity, a charge/refund, provider execution, or any audit remediation.
 
@@ -9,7 +9,11 @@ This plan records repository-safe work only. It does not authorize a deployment,
 - Live GitHub state wins over this document, historical handoffs, and old PR bodies.
 - #751 is merged and established the explicit-local-module runtime hardening baseline on `main`.
 - #753 is merged and adds bounded opened-document cross-file explicit-module definition, hover, and namespace completion with fail-closed private-export/path/shadowing behavior.
-- #723 remains stale/review-blocked Trusted Mac restoration and must not merge. Do not retrigger it or create a Mac successor until the one allocated SolveLang self-hosted Mac slot is demonstrably free.
+- #754 is merged and defines the repository release contract/changelog boundary.
+- #756 is merged and reconciles `SPEC.md` with the implemented explicit local-module contract.
+- #758 is merged and adds the first canonical `spec-0.1` explicit-module conformance fixture covering namespace calls, named aliasing, defining-module private scope, live exports, and post-initializer lexical-shadow activation.
+- #723 remains stale/review-blocked Trusted Mac history and must not merge.
+- #755 is also stale against current `main`: its exact-head self-hosted Mac attempt was queued while `main` advanced. Do not merge or retrigger that stale head. After the queued attempt is terminal and the one allocated SolveLang Mac slot is demonstrably free, rebuild exactly once on then-current `main` and require fresh Hosted CI + Rust/RustSec + self-hosted Trusted Mac success before superseding #723.
 - Production/account/Admin/TOTP facts are tracked separately from repository completion; a merge never acts as production authorization.
 
 ## Completed foundations — do not recreate
@@ -17,7 +21,7 @@ This plan records repository-safe work only. It does not authorize a deployment,
 - Repository Audit / Solve Graph: bounded, static, parse-only analysis; graph search, paths, alternatives, impact, affected validations, MCP surfaces, browser presentation, and local static adapters. Repository mutation/remediation remains disabled.
 - Server Audit: bounded, redacted, read-only evidence/reporting and relationship/posture work. Linux collector assumptions are not cross-platform support; remediation remains disabled.
 - Language/DX: Rust lexer/parser/AST/interpreter/CLI; conservative `check`/`lint`; formatter; loop control; pure collection helpers; source diagnostics; narrow non-executing LSP and opt-in VS Code support, including bounded cross-file navigation among already-open explicit-module documents through #753.
-- Explicit local modules: accepted syntax contract, parser/AST support, deterministic graph resolution, export-surface validation, frozen entry/module source identity, namespace/named imports, live exported values, transactional runtime behavior, exactly-once deterministic initialization, lexical-shadow isolation, cross-workflow state isolation, provenance, and hardened preflight are merged through #746–#751. Legacy include imports remain a separate compatibility mechanism. Remote packages/registries and manifest-based dependency resolution are not implemented.
+- Explicit local modules: accepted syntax contract, parser/AST support, deterministic graph resolution, export-surface validation, frozen entry/module source identity, namespace/named imports, live exported values, transactional runtime behavior, exactly-once deterministic initialization, lexical-shadow isolation, cross-workflow state isolation, provenance, and hardened preflight are merged through #746–#751. `SPEC.md` now reflects that implementation through #756, and canonical fixture-backed module conformance begins with #758. Legacy include imports remain a separate compatibility mechanism. Remote packages/registries and manifest-based dependency resolution are not implemented.
 - Production foundation: API/accounts/password authentication/Admin/TOTP infrastructure have separate live-state evidence. Billing, paid priority, provider execution, queue processing, and general managed workflow execution remain off unless separately authorized and proven live.
 
 See [active buildout handoff](active-buildout-handoff.md), [roadmap](../ROADMAP.md), [current production status](current-production-status-2026-08-20.md), and the historical [safe-buildout snapshot](full-safe-buildout-completion-2026-08-20.md) for source-specific detail.
@@ -28,7 +32,7 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 
 ### A. Truth, release, and validation contract
 
-- [ ] Reconcile README, ROADMAP, SPEC, strategy, handoff, public maturity/status copy, and Issues #157/#113 with live GitHub and production evidence.
+- [ ] Reconcile README, ROADMAP, strategy, handoff, public maturity/status copy, and Issues #157/#113 with live GitHub and production evidence. (`SPEC.md` was reconciled separately through #756.)
 - [x] Mark historical reports as historical instead of silently overwriting their evidence; historical snapshots remain distinct from current truth records.
 - [x] Define the release contract for versioning, compatibility surfaces, supported-platform truth, release-candidate gating, checksums/provenance, upgrade notes, rollback/yanking, and the separation between repository releases and production activation in `docs/release-contract.md`.
 - [x] Add `CHANGELOG.md` with an explicit Unreleased section and production-boundary disclaimer.
@@ -37,8 +41,8 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 
 ### B. Language contract and modules
 
-- [ ] Reconcile `SPEC.md` with the now-implemented explicit local-module syntax/runtime. The current draft still describes only legacy flattened includes in several sections and must be corrected before a versioned release.
-- [ ] Add fixture-based conformance coverage for every specified behavior. Do not specify unsupported strong typing, concurrency, remote packages, or hosted execution.
+- [x] Reconcile `SPEC.md` with the implemented explicit local-module syntax/runtime while keeping legacy flattened includes distinct and remote package/registry behavior explicitly unsupported. Merged through #756.
+- [ ] Complete fixture-based conformance coverage for every specified behavior. #758 establishes the explicit-module conformance slice; remaining specified language/CLI behavior still needs a complete fixture matrix before a versioned release.
 - [x] ADR 0001 defines module identity, local paths, explicit export/import namespaces, deterministic resolution, cycles, duplicate/shadowing rules, legacy-include migration, provenance, diagnostics, hardened-mode/symlink confinement, and the no-network registry boundary.
 - [x] Implement the smallest explicit local-module runtime required by the accepted syntax/runtime contract: deterministic local graph, exports, namespace/named imports, fail-before-evaluation validation, transactional initialization/state, provenance, and hardened preflight are merged through #746–#751.
 - [ ] Decide and implement only the remaining **local package metadata** subset if still desired before 1.0 (bounded inert manifest/package metadata). Bare specifiers, registry resolution, remote fetching, dependency installation, and semver solving remain separate future architecture decisions and are not prerequisites for the current explicit local-module language subset.
