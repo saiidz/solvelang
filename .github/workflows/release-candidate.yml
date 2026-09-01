@@ -7,6 +7,7 @@ on:
       - "scripts/prepare-release-candidate.sh"
       - ".github/workflows/release-candidate.yml"
       - "docs/release-contract.md"
+      - "docs/release-candidate-dry-run.md"
   workflow_dispatch:
     inputs:
       expected_version:
