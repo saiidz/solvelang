@@ -98,7 +98,7 @@ jobs:
           cmp "$first/$first_artifact" "$second/$first_artifact"
           cmp "$first/$first_checksum" "$second/$first_checksum"
           cmp "$first/$first_provenance" "$second/$first_provenance"
-          sha256sum --check "$first/$first_checksum"
+          (cd "$first" && sha256sum --check "$first_checksum")
           python3 - "$first/$first_provenance" "$SOURCE_SHA" <<'PY'
           import json
           import pathlib
@@ -110,19 +110,12 @@ jobs:
           assert payload["run_id"] != "local"
           assert payload["artifact_sha256"]
           PY
-          echo "artifact=$first_artifact" >> "$GITHUB_ENV"
-          echo "checksum=$first_checksum" >> "$GITHUB_ENV"
-          echo "provenance=$first_provenance" >> "$GITHUB_ENV"
-          echo "candidate_dir=$first" >> "$GITHUB_ENV"
 
       - name: Upload non-publishable candidate evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: solvelang-release-candidate-${{ env.SOURCE_SHA }}
-          path: |
-            ${{ env.candidate_dir }}/${{ env.artifact }}
-            ${{ env.candidate_dir }}/${{ env.checksum }}
-            ${{ env.candidate_dir }}/${{ env.provenance }}
+          path: ${{ runner.temp }}/release-candidate-first/
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
