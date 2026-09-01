@@ -742,6 +742,12 @@ fn definition(
         return export_location(&target_uri, target_text, &export);
     }
 
+    if namespace_import(text, &name).is_some()
+        && active_lexical_shadow(text, &name, line, character)
+    {
+        return Value::Null;
+    }
+
     let Some((location, kind)) = top_level_symbol(text, &name) else {
         return Value::Null;
     };
@@ -802,6 +808,12 @@ fn hover(
             return Value::Null;
         };
         return imported_hover(&import.local, &target_uri, &export);
+    }
+
+    if namespace_import(text, &name).is_some()
+        && active_lexical_shadow(text, &name, line, character)
+    {
+        return Value::Null;
     }
 
     let Some((_, kind)) = top_level_symbol(text, &name) else {
