@@ -681,11 +681,10 @@ fn active_lexical_shadow(text: &str, name: &str, line: usize, character: usize) 
                     .collect::<HashSet<_>>();
                 scopes.push(scope);
             }
-            lexer::Token::RightBrace => {
-                if scopes.len() > 1 {
-                    scopes.pop();
-                }
+            lexer::Token::RightBrace if scopes.len() > 1 => {
+                scopes.pop();
             }
+            lexer::Token::RightBrace => {}
             _ => {}
         }
     }
