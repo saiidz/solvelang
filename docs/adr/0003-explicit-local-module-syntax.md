@@ -46,15 +46,26 @@ namespace.
 
 ### Import bindings
 
-- `import "path.solve" as namespace` binds one namespace. A namespace is
-  required, must be a valid identifier, and exposes exactly the target's
-  exports. Its name cannot shadow a local variable, function, parameter,
-  built-in, the reserved injected `input` global, or another import binding in
-  the same module.
+- `import "path.solve" as namespace` binds one **module-scope** namespace. A
+  namespace is required, must be a valid identifier, and exposes exactly the
+  target's exports. Its module-scope name cannot collide with an existing
+  module-scope variable, function, built-in, the reserved injected `input`
+  global, or another import binding in the same module.
 - `import { exported as local, other } from "path.solve"` binds named exports
-  in the importing module. `as` is optional; without it the local name equals
-  the exported name. A braced list is non-empty, has no duplicate exported or
-  local names, and has the same collision rules as a namespace binding.
+  at module scope. `as` is optional; without it the local name equals the
+  exported name. A braced list is non-empty, has no duplicate exported or
+  local names, and has the same **module-scope** collision rules as a namespace
+  binding.
+- A function parameter, function-local `let`, nested-block `let`, or loop
+  variable may lexically shadow a namespace or named-import binding. The shadow
+  applies only within its lexical scope; it does not mutate, replace, or
+  re-export the imported binding. Runtime name/member/call resolution must
+  honor the active lexical binding before an import binding so shadowing does
+  not accidentally invoke or read the imported module.
+- A `let` shadow becomes active only after its initializer has been evaluated.
+  Therefore, in `let state = state.value`, the initializer's `state` still
+  refers to an otherwise-visible imported namespace, while later uses in the
+  local scope refer to the newly declared local binding.
 - `namespace.member` reads an exported value. `namespace.function(args)` calls
   an exported function. Namespace member reads and calls are read-only live
   bindings: reads observe the exporting module's current exported value.
@@ -89,10 +100,11 @@ evaluation.
 ### Diagnostics and compatibility
 
 Diagnostics identify the importing source and location for malformed imports,
-duplicate bindings, private/missing exports, and name collisions. Errors from
-the imported source retain its source provenance. The resolver never falls
-back to another extension, index file, manifest, package name, environment
-path, user directory, or remote source.
+duplicate bindings, private/missing exports, and module-scope name collisions.
+Lexical shadows are ordinary local bindings and follow the scope rules above.
+Errors from the imported source retain its source provenance. The resolver never
+falls back to another extension, index file, manifest, package name,
+environment path, user directory, or remote source.
 
 Hardened mode applies ADR 0001's import restrictions to both explicit module
 forms. In particular, absolute, parent-traversal, backslash, non-`.solve`,
@@ -108,12 +120,19 @@ those are implementation work, not a package manager. Package manifests,
 bare specifiers, remote registries, dependency installation, and network
 resolution remain unavailable.
 
+Permitting lexical shadows keeps normal local scoping consistent with the rest
+of the language while preserving import immutability at module scope. Static
+analysis, runtime dispatch, and editor tooling must all apply the same lexical
+precedence so an imported namespace/function cannot be invoked merely because a
+same-named local binding exists in an outer or current scope.
+
 ## Required verification
 
 The implementation must add native and hardened fixtures for exported values
 and functions, namespace and named aliases, contextual-word compatibility,
-private/missing exports, binding collisions (including `input`), live exported
-value updates through both namespace and named imports, deterministic cycles,
-top-level side-effect and call rejection,
-source provenance, root/symlink confinement, preflight of capability-bearing
-function bodies, and unchanged legacy includes with trailing comments.
+private/missing exports, module-scope binding collisions (including `input`),
+parameter/local/block/loop lexical shadows including initializer ordering, live
+exported value updates through both namespace and named imports, deterministic
+cycles, top-level side-effect and call rejection, source provenance,
+root/symlink confinement, preflight of capability-bearing function bodies, and
+unchanged legacy includes with trailing comments.
