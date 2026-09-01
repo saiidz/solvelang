@@ -12,7 +12,7 @@ fn required_str<'a>(value: &'a Value, key: &str, case: &str) -> &'a str {
         .unwrap_or_else(|| panic!("conformance case '{case}' is missing string field '{key}'"))
 }
 
-fn string_list(value: &Value, key: &str) -> Vec<&str> {
+fn string_list<'a>(value: &'a Value, key: &str) -> Vec<&'a str> {
     value
         .get(key)
         .and_then(Value::as_array)
