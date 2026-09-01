@@ -700,7 +700,7 @@ fn document_highlights(text: &str, line: usize, character: usize) -> Vec<Value> 
     lexer::lex(text)
         .into_iter()
         .filter_map(|located| match located.token {
-            lexer::Token::Identifier(candidate) if candidate == name => {
+            lexer::Token::Identifier(ref candidate) if candidate == name => {
                 let start = token_start_utf16(text, &located);
                 Some(json!({
                     "range": {
