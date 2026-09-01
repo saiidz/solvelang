@@ -3,6 +3,20 @@
 //!
 //! Host-capable runtime, filesystem/module loading, HTTP, environment,
 //! provider, process, and CLI code remain in the native `solvec` crate.
+//!
+//! Native-only modules are absent from the core public API:
+//!
+//! ```compile_fail
+//! use solvec_core::ai;
+//! ```
+//!
+//! ```compile_fail
+//! use solvec_core::ast_runtime;
+//! ```
+//!
+//! ```compile_fail
+//! use solvec_core::module_resolver;
+//! ```
 
 pub mod ast;
 pub mod diagnostics;

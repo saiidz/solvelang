@@ -3,6 +3,38 @@ use std::{
     path::{Path, PathBuf},
 };
 
+const FORBIDDEN_HOST_TOKENS: &[&str] = &[
+    "reqwest",
+    "std::fs",
+    "std::env",
+    "std::io",
+    "std::net",
+    "std::process",
+    "std::os",
+    "std::thread",
+    "std::time",
+    "print!(",
+    "println!(",
+    "eprint!(",
+    "eprintln!(",
+    "dbg!(",
+    "std::print",
+    "std::eprint",
+    "std::dbg",
+    "usestd::{",
+    "usestdas",
+    "externcratestd",
+    "#[path",
+    "include!",
+    "include_bytes!",
+    "include_str!",
+    "env!(",
+    "option_env!(",
+    "crate::ai",
+    "crate::ast_runtime",
+    "crate::module_resolver",
+];
+
 fn collect_rust_sources(directory: &Path, sources: &mut Vec<(PathBuf, String)>) {
     for entry in fs::read_dir(directory).expect("read solvec-core source directory") {
         let path = entry.expect("read solvec-core source entry").path();
@@ -54,22 +86,64 @@ fn core_package_contract_is_approved(manifest: &str) -> bool {
         ]
 }
 
-fn public_module_names(source: &str) -> Vec<&str> {
-    let tokens = source.split_whitespace().collect::<Vec<_>>();
-    tokens
-        .windows(3)
-        .filter(|tokens| tokens[0] == "pub" && tokens[1] == "mod")
-        .map(|tokens| {
-            tokens[2].trim_end_matches(|character: char| {
-                !character.is_ascii_alphanumeric() && character != '_'
-            })
-        })
-        .collect()
+fn core_library_root_is_approved(source: &str) -> bool {
+    let Some((public_surface, test_module)) = source.split_once("#[cfg(test)]") else {
+        return false;
+    };
+    let root_items = public_surface
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("//!"))
+        .collect::<Vec<_>>();
+
+    root_items
+        == [
+            "#![forbid(unsafe_code)]",
+            "pub mod ast;",
+            "pub mod diagnostics;",
+            "pub mod formatter;",
+            "pub mod lexer;",
+            "pub mod lint;",
+            "pub mod parser;",
+            "pub mod semantic;",
+            "pub mod value;",
+        ]
+        && !test_module.contains("pub")
+}
+
+fn forbidden_host_token(source: &str) -> Option<&'static str> {
+    let compact = source
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect::<String>();
+    FORBIDDEN_HOST_TOKENS
+        .iter()
+        .copied()
+        .find(|token| compact.contains(token))
 }
 
 #[test]
-fn inline_public_modules_are_included_in_the_export_inventory() {
-    assert_eq!(public_module_names("pub mod ai {}"), ["ai"]);
+fn library_root_rejects_inline_aliased_or_obscured_host_modules() {
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("lib.rs"),
+    )
+    .expect("read solvec-core library root");
+
+    assert!(core_library_root_is_approved(&source));
+    for addition in [
+        "pub mod ai {}",
+        "pub use ast as ai;",
+        "pub /* hidden */ mod ai;",
+        "macro_rules! expose_ai { () => { pub mod ai {} } }",
+    ] {
+        let mutated = source.replacen("#[cfg(test)]", &format!("{addition}\n\n#[cfg(test)]"), 1);
+        assert!(
+            !core_library_root_is_approved(&mutated),
+            "core library root accepted forbidden addition {addition:?}"
+        );
+    }
 }
 
 #[test]
@@ -89,48 +163,29 @@ serde_json = "1"
 }
 
 #[test]
-fn pure_core_source_set_has_no_host_capability_adapters() {
-    let forbidden = [
-        "reqwest",
-        "std::fs",
-        "std::env",
-        "std::io",
-        "std::net",
-        "std::process",
-        "std::os",
-        "std::thread",
-        "std::time",
-        "print!(",
-        "println!(",
-        "eprint!(",
-        "eprintln!(",
-        "dbg!(",
-        "usestd::{",
-        "usestdas",
-        "externcratestd",
-        "#[path",
-        "include!",
-        "include_bytes!",
-        "include_str!",
-        "env!(",
-        "option_env!(",
-        "crate::ai",
-        "crate::ast_runtime",
-        "crate::module_resolver",
-    ];
+fn qualified_or_aliased_output_macros_are_rejected() {
+    for source in [
+        "fn emit() { std::println!(\"x\"); }",
+        "use std::println as emit; fn run() { emit!(\"x\"); }",
+        "use std::eprintln as emit; fn run() { emit!(\"x\"); }",
+        "use std::dbg as emit; fn run() { emit!(1); }",
+    ] {
+        assert!(
+            forbidden_host_token(source).is_some(),
+            "core boundary accepted output-capable source {source:?}"
+        );
+    }
+}
 
+#[test]
+fn pure_core_source_set_has_no_host_capability_adapters() {
     for (path, source) in core_rust_sources() {
-        let compact = source
-            .chars()
-            .filter(|character| !character.is_whitespace())
-            .collect::<String>();
-        for token in forbidden {
-            assert!(
-                !compact.contains(token),
-                "pure core source {} unexpectedly contains host-capability token {token:?}",
-                path.display()
-            );
-        }
+        assert!(
+            forbidden_host_token(&source).is_none(),
+            "pure core source {} unexpectedly contains host-capability token {:?}",
+            path.display(),
+            forbidden_host_token(&source)
+        );
     }
 }
 
@@ -173,25 +228,9 @@ fn native_host_sources_are_not_owned_by_core() {
             .join("lib.rs"),
     )
     .expect("read solvec-core library root");
-    let exported_modules = public_module_names(&lib);
-
-    assert_eq!(
-        exported_modules,
-        [
-            "ast",
-            "diagnostics",
-            "formatter",
-            "lexer",
-            "lint",
-            "parser",
-            "semantic",
-            "value"
-        ],
-        "solvec-core must export only the reviewed pure source modules"
-    );
     assert!(
-        lib.contains("#![forbid(unsafe_code)]"),
-        "solvec-core must forbid unsafe code"
+        core_library_root_is_approved(&lib),
+        "solvec-core must retain its exact unsafe-free public module contract"
     );
     assert!(
         !lib.contains("#[path"),
