@@ -1,0 +1,47 @@
+name: Release Candidate CI
+
+on:
+  pull_request:
+    paths:
+      - "solvec/**"
+      - ".github/workflows/release-candidate-ci.yml"
+      - "docs/release-contract.md"
+      - "docs/release-candidate-dry-run.md"
+      - "CHANGELOG.md"
+      - "SPEC.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x86_64:
+    name: Linux x86_64 dry run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build non-publishable release candidate
+        env:
+          SOLVELANG_SOURCE_COMMIT: ${{ github.sha }}
+        run: ./solvec/scripts/build-release-candidate.sh
+
+      - name: Verify release candidate
+        run: ./solvec/scripts/verify-release-candidate.sh dist/release-candidate
+
+      - name: Upload dry-run evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: solvelang-release-candidate-linux-x86_64-${{ github.sha }}
+          path: dist/release-candidate/
+          if-no-files-found: error
+          retention-days: 7
