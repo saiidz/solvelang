@@ -494,8 +494,13 @@ fn binding_declaration_indexes(tokens: &[lexer::LocatedToken]) -> HashSet<usize>
                 }) else {
                     continue;
                 };
-                for candidate in left_paren + 1..right_paren {
-                    if matches!(&tokens[candidate].token, lexer::Token::Identifier(_)) {
+                for (candidate, token) in tokens
+                    .iter()
+                    .enumerate()
+                    .take(right_paren)
+                    .skip(left_paren + 1)
+                {
+                    if matches!(&token.token, lexer::Token::Identifier(_)) {
                         indexes.insert(candidate);
                     }
                 }
