@@ -1,0 +1,49 @@
+name: Branch format LSP 753
+
+on:
+  push:
+    branches:
+      - feature/lsp-open-module-navigation-20260901
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/lsp-open-module-navigation-20260901
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Apply borrow-safe fixups
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('solvec/src/bin/solvelsp.rs')
+          text = path.read_text()
+          text = text.replace('match token.token {', 'match &token.token {')
+          text = text.replace('matches!(tokens[index - 1].token, lexer::Token::Dot)', 'matches!(&tokens[index - 1].token, lexer::Token::Dot)')
+          text = text.replace('matches!(tokens[*candidate].token, lexer::Token::LeftParen)', 'matches!(&tokens[*candidate].token, lexer::Token::LeftParen)')
+          text = text.replace('matches!(tokens[*candidate].token, lexer::Token::RightParen)', 'matches!(&tokens[*candidate].token, lexer::Token::RightParen)')
+          text = text.replace('matches!(tokens[*candidate].token, lexer::Token::LeftBrace)', 'matches!(&tokens[*candidate].token, lexer::Token::LeftBrace)')
+          text = text.replace('matches!(candidate.token, lexer::Token::Identifier(_))', 'matches!(&candidate.token, lexer::Token::Identifier(_))')
+          text = text.replace('matches!(tokens[candidate].token, lexer::Token::Identifier(_))', 'matches!(&tokens[candidate].token, lexer::Token::Identifier(_))')
+          path.write_text(text)
+          PY
+      - name: Format Rust
+        run: cargo fmt --manifest-path solvec/Cargo.toml
+      - name: Commit branch-only formatting
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add solvec/src/bin/solvelsp.rs
+          git commit -m 'style(lsp): format open-module navigation'
+          git push origin HEAD:feature/lsp-open-module-navigation-20260901
