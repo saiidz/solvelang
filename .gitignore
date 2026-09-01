@@ -32,6 +32,8 @@ artifacts/launch-readiness/
 # Rust build output
 /target/
 /solvec/target/
+/solvec-core/target/
+/solvec-core/Cargo.lock
 
 # macOS
 .DS_Store

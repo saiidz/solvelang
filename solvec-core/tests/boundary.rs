@@ -1,17 +1,14 @@
 use std::fs;
 
 const PURE_SOURCES: &[(&str, &str)] = &[
-    ("ast", include_str!("../../solvec/src/ast.rs")),
-    (
-        "diagnostics",
-        include_str!("../../solvec/src/diagnostics.rs"),
-    ),
-    ("formatter", include_str!("../../solvec/src/formatter.rs")),
-    ("lexer", include_str!("../../solvec/src/lexer.rs")),
-    ("lint", include_str!("../../solvec/src/lint.rs")),
-    ("parser", include_str!("../../solvec/src/parser.rs")),
-    ("semantic", include_str!("../../solvec/src/semantic.rs")),
-    ("value", include_str!("../../solvec/src/value.rs")),
+    ("ast", include_str!("../src/ast.rs")),
+    ("diagnostics", include_str!("../src/diagnostics.rs")),
+    ("formatter", include_str!("../src/formatter.rs")),
+    ("lexer", include_str!("../src/lexer.rs")),
+    ("lint", include_str!("../src/lint.rs")),
+    ("parser", include_str!("../src/parser.rs")),
+    ("semantic", include_str!("../src/semantic.rs")),
+    ("value", include_str!("../src/value.rs")),
 ];
 
 #[test]
@@ -51,16 +48,14 @@ fn core_manifest_has_only_the_expected_runtime_dependency() {
 }
 
 #[test]
-fn core_crate_does_not_export_host_capable_native_modules() {
-    let lib = include_str!("../src/lib.rs");
-    for forbidden in [
-        "pub mod ai",
-        "pub mod ast_runtime",
-        "pub mod module_resolver",
-    ] {
+fn native_host_sources_are_not_owned_by_core() {
+    for forbidden in ["ai.rs", "ast_runtime.rs", "module_resolver.rs"] {
         assert!(
-            !lib.contains(forbidden),
-            "solvec-core unexpectedly exports {forbidden:?}"
+            !std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join(forbidden)
+                .exists(),
+            "solvec-core unexpectedly owns native host source {forbidden}"
         );
     }
 }
