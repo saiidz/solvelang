@@ -4216,11 +4216,20 @@ impl<H: RuntimeHost> Evaluator<H> {
                 if let Some(capability) = host_capability(name) {
                     self.authorize_at(capability, expression.location, budget)?;
                 } else if !is_pure_builtin(name) && !function_names.contains(name) {
-                    return Err(self.error_at(
+                    if module_imports.and_then(|imports| imports.get(name))
+                        == Some(&ExportKind::Let)
+                    {
+                        return Err(self.error_at(
+                            expression.location,
+                            format!("unknown function '{}'", name),
+                            None,
+                        ));
+                    }
+                    self.authorize_at(
+                        Capability::UnknownCall(name.clone()),
                         expression.location,
-                        format!("unknown function '{}'", name),
-                        None,
-                    ));
+                        budget,
+                    )?;
                 }
             }
             ExprKind::ModuleCall { args, .. } => {

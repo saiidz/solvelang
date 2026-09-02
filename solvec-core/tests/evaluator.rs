@@ -1039,13 +1039,13 @@ fn runtime_host_is_preflighted_then_receives_typed_requests() {
 }
 
 #[test]
-fn unknown_calls_fail_closed_even_when_the_host_allows_capabilities() {
-    let source = "print(\"must not print\")\nunsupported_call()\n";
+fn unknown_calls_are_authorized_before_runtime_resolution_when_host_allows_them() {
+    let source = "unsupported_call()\n";
     let mut evaluator = Evaluator::new(RecordingHost::default());
 
     let error = evaluator
         .run(&parse(source))
-        .expect_err("unknown calls are rejected during evaluator preflight");
+        .expect_err("runtime resolution rejects an actually unknown call");
 
     assert_eq!(error.kind(), RuntimeErrorKind::Evaluation);
     assert!(
@@ -1054,6 +1054,13 @@ fn unknown_calls_fail_closed_even_when_the_host_allows_capabilities() {
             .contains("unknown function 'unsupported_call'")
     );
     assert!(error.capability().is_none());
+    assert!(
+        evaluator
+            .host()
+            .authorized
+            .borrow()
+            .contains(&Capability::UnknownCall("unsupported_call".to_string()))
+    );
     assert!(evaluator.host().requests.is_empty());
     assert!(evaluator.host().outputs.is_empty());
     assert!(evaluator.outputs().is_empty());
@@ -1285,7 +1292,26 @@ fn default_evaluator_uses_the_deny_all_host() {
 }
 
 #[test]
-fn preflight_rejects_calls_before_declaration_without_resetting_prior_state() {
+fn permissive_preflight_preserves_forward_references_declared_before_runtime_call() {
+    let source = "fn first() { return later() }\nfn later() { return 1 }\nprint(first())\n";
+    let mut evaluator = Evaluator::new(RecordingHost::default());
+
+    evaluator
+        .run(&parse(source))
+        .expect("permissive policy preserves a valid forward function reference");
+
+    assert_eq!(evaluator.outputs(), &[Value::Number(1)]);
+    assert!(
+        evaluator
+            .host()
+            .authorized
+            .borrow()
+            .contains(&Capability::UnknownCall("later".to_string()))
+    );
+}
+
+#[test]
+fn deny_all_preflight_rejects_calls_before_declaration_without_resetting_prior_state() {
     let mut evaluator = Evaluator::with_input(
         DenyAllHost,
         "print(1)\n",
@@ -1301,11 +1327,13 @@ fn preflight_rejects_calls_before_declaration_without_resetting_prior_state() {
     evaluator.set_source_context(denied, "denied.solve");
     let error = evaluator
         .run(&parse(denied))
-        .expect_err("forward call is rejected during sequential preflight");
+        .expect_err("hardened preflight rejects a forward call before execution");
 
-    assert_eq!(error.kind(), RuntimeErrorKind::Evaluation);
-    assert!(error.message().contains("unknown function 'later'"));
-    assert!(error.capability().is_none());
+    assert_eq!(error.kind(), RuntimeErrorKind::CapabilityDenied);
+    assert_eq!(
+        error.capability(),
+        Some(&Capability::UnknownCall("later".to_string()))
+    );
     assert_eq!(error.source_name(), Some("denied.solve"));
     assert_eq!(evaluator.outputs(), &[Value::Number(1)]);
 }
