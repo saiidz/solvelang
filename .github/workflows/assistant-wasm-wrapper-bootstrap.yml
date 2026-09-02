@@ -33,20 +33,19 @@ jobs:
           from pathlib import Path
 
           path = Path("solvec-wasm/src/lib.rs")
-          text = path.read_text()
-          old = '''        assert!(response["error"]["message"]
-              .as_str()
-              .is_some_and(|message| message.contains("division by zero")));
-          '''
-          new = '''        assert!(response["error"]["message"]
-              .as_str()
-              .is_some_and(|message| !message.is_empty()));
-          assert_eq!(response["error"]["line"], 1);
-          assert_eq!(response["error"]["source_line"], "print(1 / 0)");
-          '''
-          if text.count(old) != 1:
-              raise SystemExit(f"expected one runtime wording assertion, found {text.count(old)}")
-          path.write_text(text.replace(old, new, 1))
+          lines = path.read_text().splitlines(keepends=True)
+          needle = '.is_some_and(|message| message.contains("division by zero")));'
+          matches = [index for index, line in enumerate(lines) if needle in line]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one runtime wording assertion, found {len(matches)}")
+          index = matches[0]
+          indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
+          lines[index:index + 1] = [
+              f'{indent}.is_some_and(|message| !message.is_empty()));\n',
+              '        assert_eq!(response["error"]["line"], 1);\n',
+              '        assert_eq!(response["error"]["source_line"], "print(1 / 0)");\n',
+          ]
+          path.write_text("".join(lines))
           PY
 
       - name: Generate reviewed lockfile and validate wrapper
