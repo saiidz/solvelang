@@ -16,6 +16,8 @@ The core currently has one runtime dependency, `serde_json`, because the canonic
 
 `solvec-wasm` is the first browser-targeted boundary over this core. It is a separate, non-publishable, stateless wrapper with a versioned single-source entry point, immutable `DenyAllHost`, bounded in-memory source and JSON input, deterministic typed JSON results, and a locked `wasm32-unknown-unknown` build. It has no native host adapter and is intentionally **not** wired into `/run/`.
 
-The browser preview is therefore still not canonical. The remaining accepted ADR 0002 sequence is shared native/WASM conformance with deterministic limits, followed by a static WASM import/resource audit and artifact evidence, before any browser runtime replacement.
+Semantic conformance is shared through the strict, versioned `conformance/browser-preview-v1.json` manifest. That manifest is consumed by the Rust wrapper tests, by the unchanged TypeScript `/run/` preview for its deliberately narrow overlap, and by a generated Node binding that executes the actual release `.wasm` artifact. The harness compares typed outputs and stable failure categories rather than human diagnostic wording. Actual-WASM qualification also exercises the fixed source, input, value, step, call-depth, and loop budgets so limit behavior cannot be inferred from a native-only build.
 
-No production, managed execution, package registry, filesystem import, network, provider, or source-mutation authority is created by either boundary crate.
+The browser preview is therefore still not canonical and has not been expanded or switched to WASM. The remaining accepted ADR 0002 gate before any browser runtime replacement is a static WASM import/resource audit with browser-target host-surface evidence, artifact-size bounds, and integrity/reproducibility evidence.
+
+No production, managed execution, package registry, filesystem import, network, provider, or source-mutation authority is created by either boundary crate or by the conformance harness.
