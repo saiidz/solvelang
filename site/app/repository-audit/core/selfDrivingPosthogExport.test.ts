@@ -185,7 +185,7 @@ test("adapter rejects person/profile identity fields and common identity values"
     { profile: "customer" },
     { safe_label: "person@example.com" },
     { safe_label: "192.0.2.1" },
-  ]) {
+  ] as Array<Record<string, string>>) {
     assert.throws(
       () => adaptSanitizedPostHogExport(exportFixture([
         record("event", { dimensions: unsafeDimensions }),
@@ -221,7 +221,7 @@ test("adapter rejects credential-shaped evidence through the downstream sanitize
     { api_key: "redacted" },
     { authorization: "redacted" },
     { safe_label: "Bearer abcdefghijklmnopqrstuvwxyz" },
-  ]) {
+  ] as Array<Record<string, string>>) {
     assert.throws(
       () => adaptSanitizedPostHogExport(exportFixture([
         record("event", { dimensions }),
