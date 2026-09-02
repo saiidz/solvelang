@@ -760,7 +760,11 @@ fn unknown_function_exits_with_runtime_error() {
     let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
 
     assert!(!success, "unexpected stdout: {}", stdout);
-    assert!(stdout.is_empty(), "unknown calls must fail before output");
+    assert_eq!(
+        stdout.trim(),
+        "must not print",
+        "plain runtime keeps output emitted before an unresolved call",
+    );
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("unknown function 'nope'"));
 }
