@@ -87,20 +87,24 @@ impl fmt::Display for Value {
             Value::Text(value) => write!(formatter, "{}", value),
             Value::Bool(value) => write!(formatter, "{}", value),
             Value::Array(values) => {
-                let text = values
-                    .iter()
-                    .map(|value| value.to_string())
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(formatter, "[{}]", text)
+                write!(formatter, "[")?;
+                for (index, value) in values.iter().enumerate() {
+                    if index > 0 {
+                        write!(formatter, ", ")?;
+                    }
+                    write!(formatter, "{}", value)?;
+                }
+                write!(formatter, "]")
             }
             Value::Object(entries) => {
-                let text = entries
-                    .iter()
-                    .map(|(key, value)| format!("{}: {}", key, value))
-                    .collect::<Vec<String>>()
-                    .join(", ");
-                write!(formatter, "{{{}}}", text)
+                write!(formatter, "{{")?;
+                for (index, (key, value)) in entries.iter().enumerate() {
+                    if index > 0 {
+                        write!(formatter, ", ")?;
+                    }
+                    write!(formatter, "{}: {}", key, value)?;
+                }
+                write!(formatter, "}}")
             }
             Value::Null => write!(formatter, "null"),
         }

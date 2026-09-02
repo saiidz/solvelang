@@ -8,6 +8,7 @@
 pub mod ai;
 pub mod ast_runtime;
 pub mod module_resolver;
+mod native_host;
 
 pub use solvec_core::{ast, diagnostics, formatter, lexer, lint, parser, semantic, value};
 

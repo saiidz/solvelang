@@ -1182,9 +1182,17 @@ fn preflight_statements(
 ) -> Result<(), CliFailure> {
     for statement in statements {
         match statement {
-            Stmt::LegacyInclude { .. } | Stmt::ModuleImport { .. } => {}
+            Stmt::LegacyInclude { .. } => {}
+            Stmt::ModuleImport { namespace, .. } => {
+                if input_injected && namespace == "input" {
+                    return Err(read_only_input_failure());
+                }
+            }
             Stmt::NamedModuleImport { bindings, .. } => {
                 for binding in bindings {
+                    if input_injected && binding.local == "input" {
+                        return Err(read_only_input_failure());
+                    }
                     function_names.insert(binding.local.clone());
                 }
             }
@@ -1270,7 +1278,15 @@ fn preflight_statements(
                 let mut body_function_names = function_names.clone();
                 preflight_statements(body, input_injected, hardened, &mut body_function_names)?;
             }
-            Stmt::For { iterable, body, .. } => {
+            Stmt::For {
+                name,
+                iterable,
+                body,
+                ..
+            } => {
+                if input_injected && name == "input" {
+                    return Err(read_only_input_failure());
+                }
                 preflight_expr(iterable, hardened, function_names)?;
                 let mut body_function_names = function_names.clone();
                 preflight_statements(body, input_injected, hardened, &mut body_function_names)?;

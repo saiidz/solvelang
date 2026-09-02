@@ -24,6 +24,18 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Check solvec-core formatting
+        working-directory: solvec-core
+        run: cargo fmt --check
+
+      - name: Run solvec-core clippy
+        working-directory: solvec-core
+        run: cargo clippy -- -D warnings
+
+      - name: Run solvec-core tests
+        working-directory: solvec-core
+        run: cargo test
+
       - name: Check formatting
         run: cargo fmt --check
 
