@@ -45,6 +45,8 @@ Scout classes encoded by the initial contract:
 
 A scout finding must retain provenance, confidence, impact, severity, and a bounded recommended next action.
 
+The first AI Scout intelligence stage is tracked by #785. It consumes only the sanitized provider-neutral Context contract and may report direct `outcome=failure` AI evidence plus caller-supplied retry, latency, token, or cost budget breaches. Missing budgets do not become implicit thresholds. The initial AI Scout has no raw-prompt, provider, credential, network, repository-write, or production-mutation authority and emits `inspect` findings only.
+
 ### Solve Inbox
 
 Solve Inbox is the deterministic presentation layer for Scout findings.
@@ -90,7 +92,7 @@ Solve Context is the adapter/evidence layer for approved external context such a
 - AI traces;
 - MCP/tool-call telemetry.
 
-The first provider-neutral envelope is `solvelang.self-driving.context.v0`. It accepts **already-sanitized** bounded signals only and deliberately performs no provider connection. It normalizes timestamps, dimensions, metrics, signal identity, candidate Scout routing, ordering, duplicate handling, and truncation truth while retaining analyze-only/observe-only policy.
+The first provider-neutral envelope `solvelang.self-driving.context.v0` is merged through #784. It accepts **already-sanitized** bounded signals only and deliberately performs no provider connection. It normalizes timestamps, dimensions, metrics, signal identity, candidate Scout routing, ordering, duplicate handling, and truncation truth while retaining analyze-only/observe-only policy.
 
 The initial Context contract rejects credential-shaped metadata keys, common secret-shaped values, multiline/raw-looking summaries, invalid timestamps, excessive metadata, and non-observe modes. Its policy explicitly records no network access, credential access, repository writes, production mutation, or external side effects.
 
@@ -142,14 +144,15 @@ Correlation must preserve the provenance of each input rather than collapsing mu
 
 1. **Observe contract — merged #780**: strict Scout types and deterministic bounded Solve Inbox; write-capable actions and non-observe modes fail closed.
 2. **Setup Agent plan — merged #782**: existing Repository Audit detections map to reviewable setup/context plans; no commands, credentials, or writes.
-3. **Provider-neutral Context envelope — #783**: normalize sanitized bounded runtime/product/AI signals with deterministic identity, ordering, Scout routing, duplicate handling, and safety rejection; no live providers.
-4. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
-5. **AI Scout intelligence**: standardized AI trace/MCP/tool/cost findings and repository correlation.
-6. **Suggestion mode**: produce non-applied patches and validation plans.
-7. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
-8. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
-9. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
-10. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
+3. **Provider-neutral Context envelope — merged #784**: sanitized bounded runtime/product/AI signals gain deterministic identity, ordering, Scout routing, duplicate handling, and safety rejection; no live providers.
+4. **AI Scout intelligence — #785**: direct AI failure evidence and explicit caller-budget breaches become deterministic observe-only findings without invented baselines or provider access.
+5. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
+6. **Experience/Incident/Rollout intelligence**: convert explicit bounded runtime/product evidence into conservative findings before any control-plane authority exists.
+7. **Suggestion mode**: produce non-applied patches and validation plans.
+8. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
+9. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
+10. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
+11. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
 
 ## Provider adapter rule
 
