@@ -127,14 +127,14 @@ test("AI Scout compares explicit metrics with caller-supplied latency, token, an
   assert.deepEqual(
     analysis.inbox.items.map((item) => item.title),
     [
+      "AI latency budget exceeded",
       "AI cost budget exceeded",
       "AI input-token budget exceeded",
       "AI output-token budget exceeded",
       "AI total-token budget exceeded",
-      "AI latency budget exceeded",
     ],
   );
-  assert.deepEqual(analysis.inbox.items.map((item) => item.scout), ["cost", "cost", "cost", "cost", "ai"]);
+  assert.deepEqual(analysis.inbox.items.map((item) => item.scout), ["ai", "cost", "cost", "cost", "cost"]);
   assert.ok(analysis.inbox.items.every((item) => item.confidence.score === 1));
   assert.ok(analysis.inbox.items.every((item) => item.recommendedAction.kind === "inspect"));
 });
