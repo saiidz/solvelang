@@ -37,7 +37,7 @@ jobs:
           required = [
               "return Err(self.error_at(",
               "expression.location,",
-              "format!(\"unknown function '{}',\"" if False else "format!(\"unknown function '{}'\", name),",
+              "format!(\"unknown function '{}'\", name),",
               "None,",
               "));",
           ]
@@ -46,6 +46,15 @@ jobs:
           indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
           replacement = [
               f"{indent}}} else if !is_pure_builtin(name) && !function_names.contains(name) {{\n",
+              f"{indent}    if module_imports.and_then(|imports| imports.get(name))\n",
+              f"{indent}        == Some(&ExportKind::Let)\n",
+              f"{indent}    {{\n",
+              f"{indent}        return Err(self.error_at(\n",
+              f"{indent}            expression.location,\n",
+              f"{indent}            format!(\"unknown function '{{}}'\", name),\n",
+              f"{indent}            None,\n",
+              f"{indent}        ));\n",
+              f"{indent}    }}\n",
               f"{indent}    self.authorize_at(\n",
               f"{indent}        Capability::UnknownCall(name.clone()),\n",
               f"{indent}        expression.location,\n",
