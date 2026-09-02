@@ -25,6 +25,11 @@ jobs:
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
 
+      - name: Set up Node for WASM conformance
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Check solvec-core formatting
         working-directory: solvec-core
         run: cargo fmt --check
@@ -52,6 +57,22 @@ jobs:
       - name: Build deny-all WASM wrapper
         working-directory: solvec-wasm
         run: cargo build --release --locked --target wasm32-unknown-unknown
+
+      - name: Install matching wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+
+      - name: Execute compiled WASM conformance
+        working-directory: .
+        run: |
+          rm -rf solvec-wasm/target/conformance-bindings
+          wasm-bindgen \
+            --target nodejs \
+            --no-typescript \
+            --out-dir solvec-wasm/target/conformance-bindings \
+            solvec-wasm/target/wasm32-unknown-unknown/release/solvec_wasm.wasm
+          node solvec-wasm/qa/wasm-conformance.cjs \
+            solvec-wasm/target/conformance-bindings/solvec_wasm.js \
+            conformance/browser-preview-v1.json
 
       - name: Check formatting
         run: cargo fmt --check
