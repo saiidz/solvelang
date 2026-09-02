@@ -235,11 +235,13 @@ SolveLang is organized around several related layers.
 - AST
 - diagnostics, formatting, lint, and conservative semantics
 - canonical in-memory values
+- deterministic evaluation, resource bounds, and path-free module state
+- a typed capability interface whose core default denies all host access
 
 `solvec/` provides the native façade and host-capable runtime:
 
-- interpreter
-- explicit local-module resolver/runtime
+- filesystem-backed explicit local-module resolution
+- filesystem, environment, HTTP, provider, and stdout adapters
 - CLI
 - runtime policy
 - AI-provider boundary
@@ -479,7 +481,7 @@ Near-term priorities are:
 
 1. keep implementation-backed language/spec/conformance truth aligned,
 2. implement the version/release artifact contract without conflating it with production activation,
-3. extract the pure Rust core required for safe browser/WASM parity,
+3. add and validate the deny-all WASM wrapper over the extracted pure Rust core,
 4. strengthen developer onboarding and documentation,
 5. continue bounded read-only audit intelligence and operational hardening,
 6. validate product demand before expanding managed execution.

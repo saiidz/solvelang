@@ -17,9 +17,14 @@
 //! ```compile_fail
 //! use solvec_core::module_resolver;
 //! ```
+//!
+//! ```compile_fail
+//! use solvec_core::native_host;
+//! ```
 
 pub mod ast;
 pub mod diagnostics;
+pub mod evaluator;
 pub mod formatter;
 pub mod lexer;
 pub mod lint;

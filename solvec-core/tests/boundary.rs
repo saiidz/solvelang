@@ -11,6 +11,7 @@ const FORBIDDEN_HOST_TOKENS: &[&str] = &[
     "std::net",
     "std::process",
     "std::os",
+    "std::path",
     "std::thread",
     "std::time",
     "print!(",
@@ -22,6 +23,8 @@ const FORBIDDEN_HOST_TOKENS: &[&str] = &[
     "std::eprint",
     "std::dbg",
     "usestd::{",
+    "use::std::{",
+    "use{stdas",
     "usestdas",
     "externcratestd",
     "#[path",
@@ -30,9 +33,19 @@ const FORBIDDEN_HOST_TOKENS: &[&str] = &[
     "include_str!",
     "env!(",
     "option_env!(",
+    "Command::new",
+    "fetch(",
+    "js_sys",
+    "package_registry",
+    "provider_client",
+    "remote_fetch",
+    "wasi::",
+    "wasm_bindgen",
+    "web_sys",
     "crate::ai",
     "crate::ast_runtime",
     "crate::module_resolver",
+    "crate::native_host",
 ];
 
 fn collect_rust_sources(directory: &Path, sources: &mut Vec<(PathBuf, String)>) {
@@ -101,6 +114,7 @@ fn core_library_root_is_approved(source: &str) -> bool {
             "#![forbid(unsafe_code)]",
             "pub mod ast;",
             "pub mod diagnostics;",
+            "pub mod evaluator;",
             "pub mod formatter;",
             "pub mod lexer;",
             "pub mod lint;",
@@ -112,7 +126,36 @@ fn core_library_root_is_approved(source: &str) -> bool {
 }
 
 fn forbidden_host_token(source: &str) -> Option<&'static str> {
-    let compact = source
+    let mut without_comments = String::with_capacity(source.len());
+    let mut characters = source.chars().peekable();
+    let mut block_depth = 0usize;
+    while let Some(character) = characters.next() {
+        if block_depth > 0 {
+            if character == '/' && characters.peek() == Some(&'*') {
+                characters.next();
+                block_depth += 1;
+            } else if character == '*' && characters.peek() == Some(&'/') {
+                characters.next();
+                block_depth -= 1;
+            }
+            continue;
+        }
+        if character == '/' && characters.peek() == Some(&'/') {
+            characters.next();
+            for character in characters.by_ref() {
+                if character == '\n' {
+                    without_comments.push('\n');
+                    break;
+                }
+            }
+        } else if character == '/' && characters.peek() == Some(&'*') {
+            characters.next();
+            block_depth = 1;
+        } else {
+            without_comments.push(character);
+        }
+    }
+    let compact = without_comments
         .chars()
         .filter(|character| !character.is_whitespace())
         .collect::<String>();
@@ -178,6 +221,21 @@ fn qualified_or_aliased_output_macros_are_rejected() {
 }
 
 #[test]
+fn obscured_or_grouped_standard_host_imports_are_rejected() {
+    for source in [
+        "fn probe() { std/* hidden */::fs::read(\"x\"); }",
+        "use ::std::{fs as host_fs};",
+        "use {std as host_std};",
+        "fn probe() { std::path::Path::new(\"x\").exists(); }",
+    ] {
+        assert!(
+            forbidden_host_token(source).is_some(),
+            "core boundary accepted obscured host source {source:?}"
+        );
+    }
+}
+
+#[test]
 fn pure_core_source_set_has_no_host_capability_adapters() {
     for (path, source) in core_rust_sources() {
         assert!(
@@ -237,7 +295,12 @@ fn native_host_sources_are_not_owned_by_core() {
         "solvec-core must not compile source through an external path"
     );
 
-    for forbidden in ["ai.rs", "ast_runtime.rs", "module_resolver.rs"] {
+    for forbidden in [
+        "ai.rs",
+        "ast_runtime.rs",
+        "module_resolver.rs",
+        "native_host.rs",
+    ] {
         assert!(
             !Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("src")
@@ -250,7 +313,7 @@ fn native_host_sources_are_not_owned_by_core() {
 
 #[test]
 fn release_candidate_ci_watches_core_sources() {
-    let workflow = fs::read_to_string(
+    let release_candidate = fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join(".github/workflows/release-candidate-ci.yml"),
@@ -258,7 +321,36 @@ fn release_candidate_ci_watches_core_sources() {
     .expect("read release candidate workflow");
 
     assert!(
-        workflow.contains("- \"solvec-core/**\""),
+        release_candidate.contains("- \"solvec-core/**\""),
         "Release Candidate CI must run when canonical solvec-core sources change"
     );
+    for required in [
+        "working-directory: solvec-core",
+        "run: cargo fmt --check",
+        "run: cargo clippy --target \"$TARGET\" -- -D warnings",
+        "run: cargo test --target \"$TARGET\"",
+    ] {
+        assert!(
+            release_candidate.contains(required),
+            "Release Candidate CI is missing independent core validation: {required}"
+        );
+    }
+
+    let hosted = fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(".github/workflows/ci.yml"),
+    )
+    .expect("read hosted workflow");
+    for required in [
+        "working-directory: solvec-core",
+        "run: cargo fmt --check",
+        "run: cargo clippy -- -D warnings",
+        "run: cargo test",
+    ] {
+        assert!(
+            hosted.contains(required),
+            "Hosted CI is missing independent core validation: {required}"
+        );
+    }
 }

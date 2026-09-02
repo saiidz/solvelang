@@ -22,7 +22,11 @@ impl Diagnostic {
     }
 
     pub fn format(&self, source_line: &str) -> String {
-        let pointer_padding = " ".repeat(self.column.saturating_sub(1));
+        let pointer_padding = " ".repeat(
+            self.column
+                .saturating_sub(1)
+                .min(source_line.chars().count()),
+        );
         format!(
             "SolveLang Error on line {}, column {}:\n{}\n{}\n{}^\nHint: {}",
             self.line, self.column, self.message, source_line, pointer_padding, self.hint
@@ -149,5 +153,20 @@ mod tests {
         let source = "print(\"say \\\\\"hello\\\\\"\") // \\\" { }\n";
 
         assert!(validate_source(source).is_ok());
+    }
+
+    #[test]
+    fn formatting_clamps_adversarial_columns_to_the_source_line() {
+        let diagnostic = Diagnostic::new(
+            1,
+            usize::MAX,
+            "Invalid location.",
+            "Use a valid source position.",
+        );
+
+        let formatted = diagnostic.format("x");
+        let pointer = formatted.lines().nth(3).expect("pointer line is present");
+
+        assert_eq!(pointer, " ^");
     }
 }

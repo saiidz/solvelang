@@ -54,6 +54,18 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           git diff --exit-code
 
+      - name: Check solvec-core formatting
+        working-directory: solvec-core
+        run: cargo fmt --check
+
+      - name: Run solvec-core clippy
+        working-directory: solvec-core
+        run: cargo clippy --target "$TARGET" -- -D warnings
+
+      - name: Run solvec-core tests
+        working-directory: solvec-core
+        run: cargo test --target "$TARGET"
+
       - name: Check formatting
         working-directory: solvec
         run: cargo fmt --check

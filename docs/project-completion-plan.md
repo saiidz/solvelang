@@ -52,8 +52,8 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 
 ### C. Shared Rust core and browser parity
 
-- [ ] Extract a dependency-minimal `solvec-core` with lexer/parser/AST/formatter/conservative semantics/pure evaluation/diagnostics and no host capability.
-- [ ] Move filesystem/import loading, environment, network, AI, process, and capability-policy host behavior outside the pure core; keep native CLI wiring separate and behavior-compatible.
+- [x] Extract a dependency-minimal `solvec-core` with lexer/parser/AST/formatter/conservative semantics/pure evaluation/diagnostics and no host capability. Completed through the source-ownership and pure-evaluator slices tracked by #771 and #772.
+- [x] Move filesystem/import loading, environment, network, AI, process, and capability-policy host behavior outside the pure core; keep native CLI wiring separate and behavior-compatible. Completed by #772; production and provider activation remain separate gates.
 - [ ] Add a deny-all `solvec-wasm` wrapper and shared native/WASM conformance corpus for the overlapping safe single-source language subset.
 - [ ] Add deterministic source/input/AST/output/work limits and browser tests proving capability-bearing and unknown calls fail before any output, including unreachable code.
 - [ ] Audit the WASM artifact/import table so no WASI, network, storage, dynamic-evaluation, provider, filesystem, or side-effect callback bridge is present before replacing the smaller browser preview.
