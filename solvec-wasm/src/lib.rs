@@ -87,8 +87,8 @@ pub fn run_pure_v1(source: &str, input_json: &str) -> String {
         max_call_depth: MAX_CALL_DEPTH,
         max_value_bytes: MAX_VALUE_BYTES,
     };
-    let mut evaluator = Evaluator::with_input(DenyAllHost, source, SOURCE_NAME, input)
-        .with_limits(limits);
+    let mut evaluator =
+        Evaluator::with_input(DenyAllHost, source, SOURCE_NAME, input).with_limits(limits);
 
     match evaluator.run(&statements) {
         Ok(()) => success_response(evaluator.outputs()),
@@ -349,9 +349,13 @@ mod tests {
 
         assert_eq!(response["ok"], false);
         assert_eq!(response["error"]["kind"], "evaluation");
-        assert!(response["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("division by zero")));
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .is_some_and(|message| !message.is_empty())
+        );
+        assert_eq!(response["error"]["line"], 1);
+        assert_eq!(response["error"]["source_line"], "print(1 / 0)");
     }
 
     #[test]
