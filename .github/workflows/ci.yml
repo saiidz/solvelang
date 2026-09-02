@@ -58,8 +58,19 @@ jobs:
         working-directory: solvec-wasm
         run: cargo build --release --locked --target wasm32-unknown-unknown
 
+      - name: Restore matching wasm-bindgen CLI
+        id: wasm-bindgen-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-bindgen
+          key: ${{ runner.os }}-wasm-bindgen-cli-0.2.127
+
       - name: Install matching wasm-bindgen CLI
+        if: steps.wasm-bindgen-cache.outputs.cache-hit != 'true'
         run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+
+      - name: Verify matching wasm-bindgen CLI
+        run: test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
 
       - name: Execute compiled WASM conformance
         working-directory: .
