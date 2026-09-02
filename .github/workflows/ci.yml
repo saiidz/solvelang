@@ -23,6 +23,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
 
       - name: Check solvec-core formatting
         working-directory: solvec-core
@@ -35,6 +36,22 @@ jobs:
       - name: Run solvec-core tests
         working-directory: solvec-core
         run: cargo test
+
+      - name: Check solvec-wasm formatting
+        working-directory: solvec-wasm
+        run: cargo fmt --check
+
+      - name: Run solvec-wasm clippy
+        working-directory: solvec-wasm
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run solvec-wasm tests
+        working-directory: solvec-wasm
+        run: cargo test --locked
+
+      - name: Build deny-all WASM wrapper
+        working-directory: solvec-wasm
+        run: cargo build --release --locked --target wasm32-unknown-unknown
 
       - name: Check formatting
         run: cargo fmt --check
