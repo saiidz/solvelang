@@ -1,0 +1,118 @@
+{
+  "schema": "solvelang.browser-preview-conformance",
+  "version": 1,
+  "cases": [
+    {
+      "id": "print-text",
+      "source": "print(\"hello\")\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": ["hello"]
+      }
+    },
+    {
+      "id": "print-integer",
+      "source": "print(42)\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": [42]
+      }
+    },
+    {
+      "id": "text-let-and-variable-print",
+      "source": "let message = \"ready\"\nprint(message)\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": ["ready"]
+      }
+    },
+    {
+      "id": "negative-integer-let-and-print",
+      "source": "let count = -7\nprint(count)\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": [-7]
+      }
+    },
+    {
+      "id": "comments-and-blank-lines",
+      "source": "// ignored comment\n\nlet value = 3\n\n// another comment\nprint(value)\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": [3]
+      }
+    },
+    {
+      "id": "equality-if-true",
+      "source": "let priority = \"urgent\"\nif priority == \"urgent\" {\n  print(\"escalate\")\n}\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": ["escalate"]
+      }
+    },
+    {
+      "id": "equality-if-false",
+      "source": "let priority = 2\nif priority == 3 {\n  print(\"must not print\")\n}\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": []
+      }
+    },
+    {
+      "id": "equality-right-variable",
+      "source": "let left = 2\nlet right = 2\nif left == right {\n  print(left)\n}\n",
+      "expect": {
+        "outcome": "success",
+        "outputs": [2]
+      }
+    },
+    {
+      "id": "unbound-let-value",
+      "source": "let value = missing\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "evaluation"
+      }
+    },
+    {
+      "id": "unbound-print-value",
+      "source": "print(missing)\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "evaluation"
+      }
+    },
+    {
+      "id": "unbound-if-left",
+      "source": "if missing == 1 {\n  print(1)\n}\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "evaluation"
+      }
+    },
+    {
+      "id": "unbound-if-right",
+      "source": "let value = 1\nif value == missing {\n  print(value)\n}\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "evaluation"
+      }
+    },
+    {
+      "id": "missing-if-closing-brace",
+      "source": "let value = 1\nif value == 1 {\n  print(value)\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "parse"
+      }
+    },
+    {
+      "id": "stray-closing-brace",
+      "source": "}\n",
+      "expect": {
+        "outcome": "failure",
+        "canonical_error": "parse"
+      }
+    }
+  ]
+}
