@@ -34,6 +34,7 @@ artifacts/launch-readiness/
 /solvec/target/
 /solvec-core/target/
 /solvec-core/Cargo.lock
+/solvec-wasm/target/
 
 # macOS
 .DS_Store

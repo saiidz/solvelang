@@ -14,6 +14,8 @@ Explicitly excluded from `solvec-core` are provider/AI implementations, filesyst
 
 The core currently has one runtime dependency, `serde_json`, because the canonical `Value` conversion contract uses it. Boundary tests reject obvious host-capability references and host-oriented dependencies in the core source set.
 
-This extraction still does **not** make the browser preview canonical. The remaining accepted sequence is to add a deny-all WASM wrapper, run shared native/WASM conformance with deterministic limits, and statically audit the WASM import/resource surface before browser replacement.
+`solvec-wasm` is the first browser-targeted boundary over this core. It is a separate, non-publishable, stateless wrapper with a versioned single-source entry point, immutable `DenyAllHost`, bounded in-memory source and JSON input, deterministic typed JSON results, and a locked `wasm32-unknown-unknown` build. It has no native host adapter and is intentionally **not** wired into `/run/`.
 
-No production, managed execution, package registry, filesystem import, network, provider, or source-mutation authority is created by this crate.
+The browser preview is therefore still not canonical. The remaining accepted ADR 0002 sequence is shared native/WASM conformance with deterministic limits, followed by a static WASM import/resource audit and artifact evidence, before any browser runtime replacement.
+
+No production, managed execution, package registry, filesystem import, network, provider, or source-mutation authority is created by either boundary crate.
