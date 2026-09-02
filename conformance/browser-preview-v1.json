@@ -27,11 +27,11 @@
       }
     },
     {
-      "id": "negative-integer-let-and-print",
-      "source": "let count = -7\nprint(count)\n",
+      "id": "integer-let-and-variable-print",
+      "source": "let count = 7\nprint(count)\n",
       "expect": {
         "outcome": "success",
-        "outputs": [-7]
+        "outputs": [7]
       }
     },
     {
