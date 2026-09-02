@@ -45,7 +45,9 @@ Scout classes encoded by the initial contract:
 
 A scout finding must retain provenance, confidence, impact, severity, and a bounded recommended next action.
 
-The first AI Scout intelligence stage is tracked by #785. It consumes only the sanitized provider-neutral Context contract and may report direct `outcome=failure` AI evidence plus caller-supplied retry, latency, token, or cost budget breaches. Missing budgets do not become implicit thresholds. The initial AI Scout has no raw-prompt, provider, credential, network, repository-write, or production-mutation authority and emits `inspect` findings only.
+The first AI Scout intelligence contract is merged through #786. It consumes only the sanitized provider-neutral Context contract and may report direct `outcome=failure` AI evidence plus caller-supplied retry, latency, token, or cost budget breaches. Missing budgets do not become implicit thresholds. The initial AI Scout has no raw-prompt, provider, credential, network, repository-write, or production-mutation authority and emits `inspect` findings only.
+
+The first Experience/Incident/Rollout intelligence stage is tracked by #787. Incident findings require direct error/failure state. Experience and rollout KPI findings require caller-supplied conversion, abandonment, error-rate, or latency budgets. The product Scouts explicitly do not infer that a deployment, flag, experiment, or code change caused a metric change, and they have no rollout-control authority.
 
 ### Solve Inbox
 
@@ -145,9 +147,9 @@ Correlation must preserve the provenance of each input rather than collapsing mu
 1. **Observe contract — merged #780**: strict Scout types and deterministic bounded Solve Inbox; write-capable actions and non-observe modes fail closed.
 2. **Setup Agent plan — merged #782**: existing Repository Audit detections map to reviewable setup/context plans; no commands, credentials, or writes.
 3. **Provider-neutral Context envelope — merged #784**: sanitized bounded runtime/product/AI signals gain deterministic identity, ordering, Scout routing, duplicate handling, and safety rejection; no live providers.
-4. **AI Scout intelligence — #785**: direct AI failure evidence and explicit caller-budget breaches become deterministic observe-only findings without invented baselines or provider access.
-5. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
-6. **Experience/Incident/Rollout intelligence**: convert explicit bounded runtime/product evidence into conservative findings before any control-plane authority exists.
+4. **AI Scout intelligence — merged #786**: direct AI failure evidence and explicit caller-budget breaches become deterministic observe-only findings without invented baselines or provider access.
+5. **Experience/Incident/Rollout intelligence — #787**: direct error/failure evidence and explicit KPI-budget breaches become conservative product findings without control-plane authority or causality claims.
+6. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
 7. **Suggestion mode**: produce non-applied patches and validation plans.
 8. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
 9. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
