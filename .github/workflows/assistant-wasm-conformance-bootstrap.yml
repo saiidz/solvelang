@@ -1,0 +1,81 @@
+name: Assistant WASM conformance bootstrap
+
+on:
+  push:
+    branches:
+      - test/issue-776-wasm-conformance
+    paths:
+      - .github/workflows/assistant-wasm-conformance-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test/issue-776-wasm-conformance
+          fetch-depth: 0
+
+      - name: Set up Rust with WASM target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Format and validate native wrapper conformance
+        shell: bash
+        run: |
+          cargo fmt --manifest-path solvec-wasm/Cargo.toml
+          cargo clippy --manifest-path solvec-wasm/Cargo.toml --all-targets -- -D warnings
+          cargo test --manifest-path solvec-wasm/Cargo.toml --locked
+          cargo build --release --locked --target wasm32-unknown-unknown --manifest-path solvec-wasm/Cargo.toml
+
+      - name: Install matching wasm-bindgen CLI
+        shell: bash
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+
+      - name: Execute actual WASM conformance and fixed limits
+        shell: bash
+        run: |
+          rm -rf solvec-wasm/target/conformance-bindings
+          wasm-bindgen \
+            --target nodejs \
+            --no-typescript \
+            --out-dir solvec-wasm/target/conformance-bindings \
+            solvec-wasm/target/wasm32-unknown-unknown/release/solvec_wasm.wasm
+          node solvec-wasm/qa/wasm-conformance.cjs \
+            solvec-wasm/target/conformance-bindings/solvec_wasm.js \
+            conformance/browser-preview-v1.json
+
+      - name: Validate unchanged browser preview against shared fixtures
+        working-directory: site
+        shell: bash
+        run: |
+          npm ci
+          npm run test:studio
+          npm run lint
+
+      - name: Verify patch hygiene
+        shell: bash
+        run: git diff --check
+
+      - name: Commit formatting and remove bootstrap workflow
+        shell: bash
+        run: |
+          git rm .github/workflows/assistant-wasm-conformance-bootstrap.yml
+          git add solvec-wasm/tests/conformance.rs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "test(wasm): validate shared conformance harness"
+          git push origin HEAD:test/issue-776-wasm-conformance
