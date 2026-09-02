@@ -11,11 +11,14 @@ const CONTRACT_VERSION: u64 = 1;
 
 #[test]
 fn browser_preview_v1_fixtures_match_the_canonical_pure_wrapper() {
-    let manifest: JsonValue = serde_json::from_str(FIXTURES).expect("fixture manifest is valid JSON");
+    let manifest: JsonValue =
+        serde_json::from_str(FIXTURES).expect("fixture manifest is valid JSON");
     let cases = validate_manifest(&manifest);
 
     for case in cases {
-        let object = case.as_object().expect("validated fixture case is an object");
+        let object = case
+            .as_object()
+            .expect("validated fixture case is an object");
         let id = object["id"].as_str().expect("validated case id is text");
         let source = object["source"]
             .as_str()
@@ -42,7 +45,10 @@ fn browser_preview_v1_fixtures_match_the_canonical_pure_wrapper() {
                     response["outputs"], expected["outputs"],
                     "{id}: typed output drifted"
                 );
-                assert!(response["error"].is_null(), "{id}: success carried an error");
+                assert!(
+                    response["error"].is_null(),
+                    "{id}: success carried an error"
+                );
             }
             "failure" => {
                 assert_eq!(response["ok"], false, "{id}: expected failure: {response}");
