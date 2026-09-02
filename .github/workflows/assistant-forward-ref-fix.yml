@@ -27,26 +27,34 @@ jobs:
           from pathlib import Path
 
           evaluator_path = Path("solvec-core/src/evaluator.rs")
-          evaluator = evaluator_path.read_text()
-          old = '''                } else if !is_pure_builtin(name) && !function_names.contains(name) {
-                      return Err(self.error_at(
-                          expression.location,
-                          format!("unknown function '{}'", name),
-                          None,
-                      ));
-                  }
-          '''
-          new = '''                } else if !is_pure_builtin(name) && !function_names.contains(name) {
-                      self.authorize_at(
-                          Capability::UnknownCall(name.clone()),
-                          expression.location,
-                          budget,
-                      )?;
-                  }
-          '''
-          if evaluator.count(old) != 1:
-              raise SystemExit(f"expected one evaluator target, found {evaluator.count(old)}")
-          evaluator_path.write_text(evaluator.replace(old, new, 1))
+          lines = evaluator_path.read_text().splitlines(keepends=True)
+          anchor = "} else if !is_pure_builtin(name) && !function_names.contains(name) {"
+          matches = [index for index, line in enumerate(lines) if anchor in line]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one evaluator anchor, found {len(matches)}")
+          index = matches[0]
+          window = "".join(lines[index:index + 7])
+          required = [
+              "return Err(self.error_at(",
+              "expression.location,",
+              "format!(\"unknown function '{}',\"" if False else "format!(\"unknown function '{}'\", name),",
+              "None,",
+              "));",
+          ]
+          if not all(fragment in window for fragment in required):
+              raise SystemExit(f"unexpected evaluator target window:\n{window}")
+          indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
+          replacement = [
+              f"{indent}}} else if !is_pure_builtin(name) && !function_names.contains(name) {{\n",
+              f"{indent}    self.authorize_at(\n",
+              f"{indent}        Capability::UnknownCall(name.clone()),\n",
+              f"{indent}        expression.location,\n",
+              f"{indent}        budget,\n",
+              f"{indent}    )?;\n",
+              f"{indent}}}\n",
+          ]
+          lines[index:index + 7] = replacement
+          evaluator_path.write_text("".join(lines))
 
           tests_path = Path("solvec-core/tests/evaluator.rs")
           tests = tests_path.read_text()
