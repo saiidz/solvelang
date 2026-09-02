@@ -143,7 +143,7 @@ test("Solve Context rejects common secret-shaped values even under safe metadata
   for (const value of [
     "Bearer abcdefghijklmnopqrstuvwxyz",
     "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ123456",
-    "sk-proj_abcdefghijklmnopqrstuvwxyz123456",
+    "sk-proj-abcdefghijklmnopqrstuvwxyz123456",
     "AKIAABCDEFGHIJKLMNOP",
     "-----BEGIN PRIVATE KEY-----",
   ]) {
