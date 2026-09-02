@@ -1,6 +1,6 @@
 # Solve Self-Driving
 
-Solve Self-Driving is the planned product layer that connects SolveLang's repository intelligence to bounded runtime/product signals, then turns those signals into reviewable engineering findings and, only in later explicitly gated stages, tested pull requests.
+Solve Self-Driving is the product layer that connects SolveLang's repository intelligence to bounded runtime/product signals, then turns those signals into reviewable engineering findings and, only in later explicitly gated stages, tested pull requests.
 
 This document is a product/architecture contract. It does not claim that live telemetry ingestion, GitHub write access, automatic remediation, rollout mutation, or managed execution is enabled today.
 
@@ -18,9 +18,11 @@ Solve Self-Driving should help teams:
 
 ### Setup Agent
 
-The Setup Agent will detect supported repository/framework context and generate a bounded integration plan. Later stages may configure approved SDKs, CI checks, MCP integrations, or repository metadata through a reviewable change.
+The Setup Agent detects supported repository/framework context and generates a bounded integration plan from the existing Repository Audit inventory.
 
-Initial repository analysis remains read-only.
+The initial planning contract is merged through #782. It is analyze-only and observe-only: it summarizes frameworks, languages, package managers, and deployment targets; maps recognized frameworks to candidate future Context adapters and Scout coverage; and emits plans rather than shell commands, dependency-install commands, credentials, repository writes, or live provider connections.
+
+Later stages may configure approved SDKs, CI checks, MCP integrations, or repository metadata only through separately reviewed write-side policy.
 
 ### Solve Graph
 
@@ -30,7 +32,7 @@ Runtime/product context may attach to graph nodes later, but runtime evidence mu
 
 ### Solve Scouts
 
-Planned scout classes:
+Scout classes encoded by the initial contract:
 
 - **Code Scout** — correctness, architecture, dependency, dead-code, and maintenance findings.
 - **Security Scout** — static security-boundary and permission findings.
@@ -47,7 +49,7 @@ A scout finding must retain provenance, confidence, impact, severity, and a boun
 
 Solve Inbox is the deterministic presentation layer for Scout findings.
 
-The initial contract is `solvelang.self-driving.inbox.v0` and is intentionally **observe-only**:
+The initial contract `solvelang.self-driving.inbox.v0` is merged through #780 and is intentionally **observe-only**:
 
 - analyze-only;
 - no repository write access;
@@ -75,7 +77,7 @@ No initial Self-Driving contract may mutate a feature flag, deployment, customer
 
 ### Solve Context
 
-Solve Context is the planned adapter layer for approved external evidence such as:
+Solve Context is the adapter/evidence layer for approved external context such as:
 
 - repository and CI metadata;
 - runtime events;
@@ -88,7 +90,11 @@ Solve Context is the planned adapter layer for approved external evidence such a
 - AI traces;
 - MCP/tool-call telemetry.
 
-Each adapter needs a separate evidence, redaction, bounds, credentials, tenancy, retention, and authority review before it is treated as production-ready.
+The first provider-neutral envelope is `solvelang.self-driving.context.v0`. It accepts **already-sanitized** bounded signals only and deliberately performs no provider connection. It normalizes timestamps, dimensions, metrics, signal identity, candidate Scout routing, ordering, duplicate handling, and truncation truth while retaining analyze-only/observe-only policy.
+
+The initial Context contract rejects credential-shaped metadata keys, common secret-shaped values, multiline/raw-looking summaries, invalid timestamps, excessive metadata, and non-observe modes. Its policy explicitly records no network access, credential access, repository writes, production mutation, or external side effects.
+
+Every real provider adapter still needs a separate evidence, redaction, bounds, credentials, tenancy, retention, and authority review before it is treated as production-ready. The provider-neutral envelope is not a claim that PostHog, Sentry, Datadog, OpenTelemetry, a warehouse, support provider, feature-flag provider, LLM provider, or MCP server is connected.
 
 ## Operating modes
 
@@ -130,31 +136,37 @@ or:
 
 `AI cost increase -> repeated MCP call loop -> agent definition -> source node -> prompt/tool patch -> validation`
 
-Correlation must preserve the provenance of each input rather than collapsing multiple evidence classes into an unsupported causal claim.
+Correlation must preserve the provenance of each input rather than collapsing multiple evidence classes into an unsupported causal claim. Candidate Scout routing from a signal is a routing hint, not a causal claim or a finding by itself.
 
-## Initial implementation slice
+## Current implementation sequence
 
-Issue #779 begins with a repository-only foundation:
+1. **Observe contract — merged #780**: strict Scout types and deterministic bounded Solve Inbox; write-capable actions and non-observe modes fail closed.
+2. **Setup Agent plan — merged #782**: existing Repository Audit detections map to reviewable setup/context plans; no commands, credentials, or writes.
+3. **Provider-neutral Context envelope — #783**: normalize sanitized bounded runtime/product/AI signals with deterministic identity, ordering, Scout routing, duplicate handling, and safety rejection; no live providers.
+4. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
+5. **AI Scout intelligence**: standardized AI trace/MCP/tool/cost findings and repository correlation.
+6. **Suggestion mode**: produce non-applied patches and validation plans.
+7. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
+8. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
+9. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
+10. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
 
-1. roadmap/product contract;
-2. strict Scout finding types;
-3. deterministic bounded Solve Inbox projection;
-4. explicit future operating-mode names with observe-only enforcement;
-5. tests for ordering, deduplication, provenance, bounds, and fail-closed action/mode rejection.
+## Provider adapter rule
 
-This first slice does not connect live analytics, logs, support systems, AI providers, feature-flag providers, warehouses, or deployment systems.
+A provider adapter must not be treated as a generic permission escalation. Each adapter should separately define:
 
-## Staged build order
+- exact read-only API/data surface;
+- tenant/project identity;
+- credential scope and storage boundary;
+- redaction before durable evidence;
+- maximum records/bytes/time window;
+- pagination and partial/truncation truth;
+- retention behavior;
+- retry/rate-limit behavior;
+- deterministic transformation into the provider-neutral Context contract;
+- evidence that no write/mutation endpoint is invoked.
 
-1. **Observe contract** — deterministic Scout/Inbox model with no side effects.
-2. **Setup Agent plans** — repository/framework detection mapped to reviewable setup plans; still no automatic write.
-3. **Context adapters** — add individually bounded read-only runtime/product sources.
-4. **AI Scout** — standardized AI trace/MCP/tool/cost finding contracts and repository correlation.
-5. **Suggestion mode** — produce non-applied patches and validation plans.
-6. **PR mode** — least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
-7. **Rollout observation** — correlate deploys/flags/experiments with outcomes.
-8. **Controlled rollout actions** — separately approved mutation policies with rollback/audit requirements.
-9. **Auto mode** — only for narrow, explicitly approved low-risk classes after sustained evidence.
+Provider credentials must never be accepted in Scout findings, Solve Inbox items, or exported sanitized Context signals.
 
 ## Solve Runners boundary
 
@@ -162,4 +174,4 @@ This first slice does not connect live analytics, logs, support systems, AI prov
 
 Self-Driving may later request compute from Solve Runners for analysis or PR validation, but runner provisioning, pricing, operating systems, registration, customer isolation, and execution capacity remain a separate product and security boundary.
 
-The Self-Driving roadmap must not use repository-analysis features as a back door to introduce managed runner authority.
+The Self-Driving roadmap must not use repository-analysis or Context features as a back door to introduce managed runner authority.
