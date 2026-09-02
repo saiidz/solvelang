@@ -1,3 +1,4 @@
+# Retry after narrowing fixtures to the canonical preview overlap.
 name: Assistant WASM conformance bootstrap
 
 on:
