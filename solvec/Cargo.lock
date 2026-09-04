@@ -1098,6 +1098,14 @@ version = "0.1.0"
 dependencies = [
  "reqwest",
  "serde_json",
+ "solvec-core",
+]
+
+[[package]]
+name = "solvec-core"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

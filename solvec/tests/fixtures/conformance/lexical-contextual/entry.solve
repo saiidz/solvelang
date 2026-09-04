@@ -1,0 +1,7 @@
+// Contextual module words remain ordinary identifiers outside complete module forms.
+let import = 1
+let export = 2
+let as = 3
+let from = 4
+print(import + export + as + from)
+print("line\nnext")

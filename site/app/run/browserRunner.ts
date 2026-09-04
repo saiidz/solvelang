@@ -3,6 +3,7 @@ type Value = string | number;
 type RunResult = {
   ok: boolean;
   output: string;
+  values: Value[];
   error?: string;
 };
 
@@ -28,15 +29,14 @@ function formatValue(value: Value): string {
   return String(value);
 }
 
-function evaluatePrint(line: string, variables: Record<string, Value>): string | undefined {
+function evaluatePrint(line: string, variables: Record<string, Value>): Value | undefined {
   const match = line.match(/^print\((.+)\)$/);
 
   if (!match) {
     return undefined;
   }
 
-  const value = parseValue(match[1], variables);
-  return value === undefined ? undefined : formatValue(value);
+  return parseValue(match[1], variables);
 }
 
 function conditionIsTrue(
@@ -66,9 +66,18 @@ function runnableLines(source: string): string[] {
     .filter((line) => line.length > 0 && !line.startsWith("//"));
 }
 
+function result(values: Value[], error?: string): RunResult {
+  return {
+    ok: error === undefined,
+    output: values.map(formatValue).join("\n"),
+    values: [...values],
+    ...(error === undefined ? {} : { error }),
+  };
+}
+
 export function runSolveLangPreview(source: string): RunResult {
   const variables: Record<string, Value> = {};
-  const output: string[] = [];
+  const values: Value[] = [];
   const lines = runnableLines(source);
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -79,11 +88,7 @@ export function runSolveLangPreview(source: string): RunResult {
       const value = parseValue(letMatch[2], variables);
 
       if (value === undefined) {
-        return {
-          ok: false,
-          output: output.join("\n"),
-          error: `Unsupported syntax in hosted preview: ${line}`,
-        };
+        return result(values, `Unsupported syntax in hosted preview: ${line}`);
       }
 
       variables[letMatch[1]] = value;
@@ -94,14 +99,10 @@ export function runSolveLangPreview(source: string): RunResult {
       const printed = evaluatePrint(line, variables);
 
       if (printed === undefined) {
-        return {
-          ok: false,
-          output: output.join("\n"),
-          error: `Unsupported syntax in hosted preview: ${line}`,
-        };
+        return result(values, `Unsupported syntax in hosted preview: ${line}`);
       }
 
-      output.push(printed);
+      values.push(printed);
       continue;
     }
 
@@ -116,20 +117,15 @@ export function runSolveLangPreview(source: string): RunResult {
       }
 
       if (index >= lines.length || lines[index] !== "}") {
-        return {
-          ok: false,
-          output: output.join("\n"),
-          error: "Unsupported syntax in hosted preview: missing closing } for if block",
-        };
+        return result(
+          values,
+          "Unsupported syntax in hosted preview: missing closing } for if block"
+        );
       }
 
       const isTrue = conditionIsTrue(ifMatch[1], variables);
       if (isTrue === undefined) {
-        return {
-          ok: false,
-          output: output.join("\n"),
-          error: `Unsupported syntax in hosted preview: ${line}`,
-        };
+        return result(values, `Unsupported syntax in hosted preview: ${line}`);
       }
 
       if (isTrue) {
@@ -137,14 +133,10 @@ export function runSolveLangPreview(source: string): RunResult {
           const printed = evaluatePrint(blockLine, variables);
 
           if (printed === undefined) {
-            return {
-              ok: false,
-              output: output.join("\n"),
-              error: `Unsupported syntax in hosted preview: ${blockLine}`,
-            };
+            return result(values, `Unsupported syntax in hosted preview: ${blockLine}`);
           }
 
-          output.push(printed);
+          values.push(printed);
         }
       }
 
@@ -152,22 +144,11 @@ export function runSolveLangPreview(source: string): RunResult {
     }
 
     if (line === "}") {
-      return {
-        ok: false,
-        output: output.join("\n"),
-        error: `Unsupported syntax in hosted preview: ${line}`,
-      };
+      return result(values, `Unsupported syntax in hosted preview: ${line}`);
     }
 
-    return {
-      ok: false,
-      output: output.join("\n"),
-      error: `Unsupported syntax in hosted preview: ${line}`,
-    };
+    return result(values, `Unsupported syntax in hosted preview: ${line}`);
   }
 
-  return {
-    ok: true,
-    output: output.join("\n"),
-  };
+  return result(values);
 }

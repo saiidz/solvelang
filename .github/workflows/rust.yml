@@ -24,6 +24,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
 
       - name: Resolve RustSec cache window
         id: rustsec-cache
@@ -47,6 +48,10 @@ jobs:
       - name: Audit dependencies
         run: cargo audit
 
+      - name: Audit solvec-wasm dependencies
+        working-directory: solvec-wasm
+        run: cargo audit
+
       - name: Check formatting
         run: cargo fmt --check
 
@@ -58,3 +63,18 @@ jobs:
 
       - name: Build release
         run: cargo build --release
+
+      - name: Validate host-incapable solvec-core boundary
+        working-directory: solvec-core
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+          cargo test
+
+      - name: Validate deny-all solvec-wasm boundary
+        working-directory: solvec-wasm
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --locked
+          cargo build --release --locked --target wasm32-unknown-unknown

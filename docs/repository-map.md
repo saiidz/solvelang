@@ -6,7 +6,8 @@ This document explains the major repository areas, their maturity, and where con
 
 ```text
 solvelang/
-├── solvec/                  # Canonical Rust CLI/runtime
+├── solvec-core/             # Host-incapable Rust language core
+├── solvec/                  # Canonical native Rust CLI/runtime
 ├── examples/                # Executable and scenario examples
 ├── docs/                    # Product, runtime, strategy, demo, and business documentation
 ├── site/                    # Website, browser preview, Studio, account UI
@@ -22,22 +23,24 @@ solvelang/
 
 This map describes current repository organization; it does not imply every directory represents production-ready functionality.
 
-## `solvec/` — canonical runtime
+## `solvec-core/` and `solvec/` — canonical Rust implementation
 
 **Status:** Working today, early beta.
 
-The Rust CLI is the canonical source of executable SolveLang behavior.
+`solvec-core/` owns pure language representation, analysis, deterministic evaluation, and path-free in-memory module state. The native Rust CLI in `solvec/` remains the canonical executable surface, supplies explicit host adapters, and re-exports the pure language modules under their existing Rust paths.
 
 Important files:
 
-- `src/lexer.rs` — tokenization and source scanning.
-- `src/parser.rs` — parser and syntax diagnostics.
-- `src/ast.rs` — syntax tree structures.
-- `src/ast_runtime.rs` — runtime evaluation and execution policy enforcement.
-- `src/value.rs` — runtime value representation and conversion behavior.
-- `src/diagnostics.rs` — source-located diagnostics.
-- `src/ai.rs` — experimental AI/provider behavior.
-- `src/main.rs` — CLI parsing, validation/run dispatch, hardened-mode setup, input/import policy.
+- `solvec-core/src/lexer.rs` — tokenization and source scanning.
+- `solvec-core/src/parser.rs` — parser and syntax diagnostics.
+- `solvec-core/src/ast.rs` — syntax tree structures.
+- `solvec-core/src/value.rs` — canonical value representation and conversion behavior.
+- `solvec-core/src/diagnostics.rs` — source-located diagnostics.
+- `solvec-core/src/evaluator.rs` — deterministic evaluation, limits, typed host requests, and transactional module state.
+- `solvec/src/ast_runtime.rs` — native compatibility façade and execution policy.
+- `solvec/src/native_host.rs` — native filesystem, environment, HTTP, provider, and stdout adapters.
+- `solvec/src/ai.rs` — experimental AI/provider behavior.
+- `solvec/src/main.rs` — CLI parsing, validation/run dispatch, hardened-mode setup, input/import policy.
 
 Start here for language, CLI, runtime, diagnostic, or execution-policy changes.
 
@@ -197,10 +200,11 @@ A cosmetic move alone is not enough.
 
 | I want to… | Start here |
 |---|---|
-| add syntax | `solvec/src/lexer.rs`, `parser.rs`, `ast.rs` |
-| change evaluation | `solvec/src/ast_runtime.rs` |
+| add syntax | `solvec-core/src/lexer.rs`, `solvec-core/src/parser.rs`, `solvec-core/src/ast.rs` |
+| change pure evaluation | `solvec-core/src/evaluator.rs` |
+| change native host behavior | `solvec/src/native_host.rs`, `solvec/src/ast_runtime.rs` |
 | improve CLI behavior | `solvec/src/main.rs` |
-| change runtime values/JSON | `solvec/src/value.rs` |
+| change runtime values/JSON | `solvec-core/src/value.rs`, `solvec-core/src/evaluator.rs` |
 | change AI provider prototype | `solvec/src/ai.rs` |
 | add executable example | `examples/` |
 | add business/demo narrative | `docs/examples/` |

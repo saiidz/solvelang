@@ -753,10 +753,18 @@ fn unknown_variable_exits_with_runtime_error() {
 
 #[test]
 fn unknown_function_exits_with_runtime_error() {
-    let file = write_temp_solve_file("solvelang_cli_unknown_function.solve", "print(nope())\n");
+    let file = write_temp_solve_file(
+        "solvelang_cli_unknown_function.solve",
+        "print(\"must not print\")\nprint(nope())\n",
+    );
     let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
 
     assert!(!success, "unexpected stdout: {}", stdout);
+    assert_eq!(
+        stdout.trim(),
+        "must not print",
+        "plain runtime keeps output emitted before an unresolved call",
+    );
     assert!(stderr.contains("SolveLang Runtime Error"));
     assert!(stderr.contains("unknown function 'nope'"));
 }
@@ -1549,12 +1557,32 @@ fn injected_input_is_read_only_and_cannot_be_shadowed() {
     let root = create_temp_workflow_dir("solvelang_json_read_only_input");
     let input = root.join("input.json");
     fs::write(&input, r#"{"value":1}"#).expect("failed to write input");
+    fs::write(root.join("state.solve"), "export let value = 2\n").expect("failed to write module");
     let input_arg = input.to_string_lossy().to_string();
 
-    for (name, source) in [
-        ("let", "let input = 2\n"),
-        ("assign", "input = 2\n"),
-        ("parameter", "fn change(input) {\n return input\n}\n"),
+    for (name, source, expected_code) in [
+        ("let", "let input = 2\n", "read_only_input"),
+        ("assign", "input = 2\n", "read_only_input"),
+        (
+            "parameter",
+            "fn change(input) {\n return input\n}\n",
+            "read_only_input",
+        ),
+        (
+            "namespace-import",
+            "import \"state.solve\" as input\n",
+            "invalid_workflow",
+        ),
+        (
+            "named-import",
+            "import { value as input } from \"state.solve\"\n",
+            "invalid_workflow",
+        ),
+        (
+            "for-binding",
+            "for input in [1] { print(input) }\n",
+            "read_only_input",
+        ),
     ] {
         let workflow = root.join(format!("{name}.solve"));
         fs::write(&workflow, source).expect("failed to write workflow");
@@ -1572,8 +1600,22 @@ fn injected_input_is_read_only_and_cannot_be_shadowed() {
         assert!(!success, "input mutation unexpectedly succeeded: {name}");
         assert!(stderr.is_empty());
         let error = parse_json_output(&stdout);
-        assert_eq!(error["errors"][0]["code"], "read_only_input");
+        assert_eq!(error["errors"][0]["code"], expected_code);
     }
+}
+
+#[test]
+fn plain_runtime_failures_preserve_already_emitted_output() {
+    let file = write_temp_solve_file(
+        "solvelang_plain_partial_output.solve",
+        "print(\"visible-before-error\")\nprint(10 / 0)\n",
+    );
+
+    let (success, stdout, stderr) = run_solvec_with_status(&["run", &file]);
+
+    assert!(!success);
+    assert_eq!(stdout, "visible-before-error\n");
+    assert!(stderr.contains("divide by zero"));
 }
 
 #[test]
@@ -2236,4 +2278,44 @@ fn upcomingsounds_cli_contract_example_runs_with_every_hardened_flag() {
     assert_eq!(output["outputs"][0]["decision"], "review");
     assert_eq!(output["outputs"][0]["owner"], "human-owner");
     assert_eq!(output["outputs"][0]["action_taken"], false);
+}
+
+#[test]
+fn cli_version_command_matches_package_metadata() {
+    let expected = format!("solvec {}\n", env!("CARGO_PKG_VERSION"));
+    for argument in ["version", "--version", "-V"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+            .arg(argument)
+            .output()
+            .expect("failed to execute solvec version command");
+        assert!(output.status.success(), "{argument} failed");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
+        assert!(output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn cli_version_rejects_extra_arguments_with_existing_usage_contract() {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .args(["version", "extra"])
+        .output()
+        .expect("failed to execute solvec version command");
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("SolveLang Compiler"));
+    assert!(stdout.contains("Usage:"));
+    assert!(stderr.contains("version does not accept extra arguments"));
+}
+
+#[test]
+fn cli_help_lists_version_command() {
+    let output = Command::new(env!("CARGO_BIN_EXE_solvec"))
+        .arg("--help")
+        .output()
+        .expect("failed to execute solvec help");
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("solvec version"));
+    assert!(stdout.contains("Print canonical package version"));
 }

@@ -1,0 +1,3 @@
+fn included() {
+    return 8
+}

@@ -34,7 +34,7 @@ flowchart TD
 
 **Working today.**
 
-Primary code: `solvec/src/`.
+Primary code: `solvec-core/src/` for pure language modules and `solvec/src/` for native evaluation and host adapters.
 
 Responsibilities include:
 - lexing and parsing

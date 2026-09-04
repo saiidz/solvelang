@@ -16,7 +16,8 @@
     "app/repository-audit/core/**/*.ts",
     "app/server-audit/core/**/*.ts",
     "app/account/core/**/*.ts",
-    "app/solve-graph/core/**/*.ts"
+    "app/solve-graph/core/**/*.ts",
+    "app/run/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", "out"]
 }

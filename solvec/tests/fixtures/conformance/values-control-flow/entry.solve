@@ -1,0 +1,29 @@
+let names = ["Saiid", "Mira"]
+let ticket = { status: "open", count: 2 }
+print(1 + 2 * 3)
+print(names[1])
+print(ticket.status)
+print(3 > 2 and not false)
+if 0 {
+    print("bad")
+} else {
+    print("zero-false")
+}
+fn twice(value) {
+    return value * 2
+}
+print(twice(4))
+let count = 1
+while count <= 3 {
+    print(count)
+    let count = count + 1
+}
+for item in [1, 2, 3, 4] {
+    if item == 2 {
+        continue
+    }
+    print(item)
+    if item == 3 {
+        break
+    }
+}

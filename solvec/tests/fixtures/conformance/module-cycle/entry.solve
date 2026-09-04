@@ -1,0 +1,2 @@
+import "a.solve" as a
+print("MUST NOT PRINT")

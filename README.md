@@ -22,22 +22,25 @@ The long-term goal is not to replace every workflow engine. SolveLang may be mos
 
 SolveLang is an **early beta and engineering prototype**.
 
-The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, examples, deterministic browser tooling, and test-mode API infrastructure. It does **not** yet provide a stable language specification, production managed execution, enterprise orchestration, or a general integration marketplace.
+The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, examples, deterministic browser tooling, and a separately deployed production customer-account/API/Admin foundation. It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, enabled subscription billing/paid priority, enterprise orchestration, or a general integration marketplace.
 
 Public claims should use these labels:
 
 ### Working today
 
 - Rust lexer, parser, AST, and interpreter prototype
-- CLI commands for running, validating, tokenizing, and inspecting ASTs
+- CLI commands for running, validating, checking, linting, formatting, tokenizing, and inspecting ASTs
 - conservative source-located semantic checks with `solvec check`
 - conservative source-located workflow warnings with `solvec lint`
-- variables, reassignment, conditions, loops, functions, arrays, objects, imports, JSON helpers, and pure collection/text helpers
-- source-located parser and runtime diagnostics
+- variables, reassignment, conditions, loops, functions, arrays, objects, JSON helpers, and pure collection/text helpers
+- legacy relative-file compatibility includes plus explicit local modules with exports, namespace imports, named imports, live read-only bindings, and deterministic local graph validation
+- source-located parser and runtime diagnostics, including imported/module provenance
 - deterministic local execution
 - hardened execution modes that deny network, file, environment, and agent capabilities
 - a local-first Workflow Intelligence Studio with deterministic analysis
 - a smaller browser-safe `/run` preview
+- bounded read-only Repository Audit / Solve Graph and Server Audit product surfaces
+- production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
 ### Experimental
@@ -49,21 +52,21 @@ Public claims should use these labels:
 - local AI fallback behavior
 - optional OpenAI-backed responses
 - Studio-to-`.solve` draft generation
-- test-mode API keys, subscription billing, usage metering, and priority queue foundations
+- subscription-billing, paid-priority, provider-execution, and managed-execution foundations that remain gated/off in production
 
 Experimental means implemented but unstable, narrow, provider-dependent, or not suitable for production promises.
 
 ### Planned
 
-- stable language specification
+- a separately reviewed stable 1.0 language contract
 - broader type checking
-- package and module system beyond file imports
+- local package metadata and any future package ecosystem beyond the implemented explicit local-module subset
 - additional AI providers
 - production integrations
 - runtime adapters for established orchestration platforms
 - full hosted Rust runtime
 - managed workflow execution
-- production packaging and releases
+- production packaging and versioned releases
 - enterprise governance, durability, and observability
 
 Planned capabilities are direction, not working product features.
@@ -135,6 +138,29 @@ cd solvec
 cargo run -- run ../examples/support_triage.solve
 ```
 
+## Explicit local modules
+
+SolveLang 0.1 supports local modules while keeping the older flattened include form as a distinct compatibility mechanism.
+
+```solve
+// math.solve
+let private_offset = 10
+export let base = 4
+export fn add(left, right) {
+    return left + right + private_offset
+}
+```
+
+```solve
+// entry.solve
+import "math.solve" as math
+import { base as starting_value } from "math.solve"
+
+print(math.add(starting_value, 2))
+```
+
+Explicit modules expose only exported names, keep importer bindings read-only/live, validate the complete local graph before execution, and do not introduce a registry, remote fetch, dependency installer, or package manager. See [`SPEC.md`](SPEC.md) and [`docs/adr/0003-explicit-local-module-syntax.md`](docs/adr/0003-explicit-local-module-syntax.md).
+
 ## CLI commands
 
 ```text
@@ -154,6 +180,8 @@ Backward-compatible token and AST flags are still supported:
 solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
+
+A canonical `solvec version` command and versioned release artifact workflow are still release-engineering work; do not infer a published binary-release contract merely from `Cargo.toml` metadata.
 
 ## Runtime safety
 
@@ -200,14 +228,22 @@ SolveLang is organized around several related layers.
 
 ### 1. Canonical language runtime
 
-`solvec/` contains the Rust implementation:
+`solvec-core/` owns the host-incapable Rust language modules:
 
 - lexer
 - parser
 - AST
-- interpreter
+- diagnostics, formatting, lint, and conservative semantics
+- canonical in-memory values
+- deterministic evaluation, resource bounds, and path-free module state
+- a typed capability interface whose core default denies all host access
+
+`solvec/` provides the native façade and host-capable runtime:
+
+- filesystem-backed explicit local-module resolution
+- filesystem, environment, HTTP, provider, and stdout adapters
 - CLI
-- runtime policy and diagnostics
+- runtime policy
 - AI-provider boundary
 
 The Rust CLI is the canonical validator and runtime.
@@ -232,11 +268,11 @@ Studio analysis is deterministic, not AI analysis. Studio’s broader workflow m
 
 The browser preview supports a smaller subset than the Rust runtime and should not be presented as equivalent to full hosted execution.
 
-### 4. API-access prototype
+### 4. Account/API/Admin foundation
 
-`services/api-access/` contains test-mode serverless infrastructure for API keys, customer accounts, subscription lifecycle, quotas, and authorization.
+`services/api-access/` and related repository infrastructure contain the API-key, customer-account, quota, authentication, Admin, billing-readiness, and priority-readiness code paths.
 
-This infrastructure is experimental and test-only. It is not a production managed API product.
+Separately verified production evidence records API access, customer password accounts, private Admin ingress/UI, and TOTP infrastructure as enabled/deployed. Subscription billing, paid priority, provider execution, queue processing, and general managed hosted SolveLang execution remain disabled/not live. Repository merges never substitute for the separate production evidence and approval gates.
 
 ### 5. Schemas, examples, and operations
 
@@ -251,9 +287,10 @@ This infrastructure is experimental and test-only. It is not a production manage
 
 ```text
 solvelang/
-├── solvec/              Rust lexer, parser, AST, interpreter, and CLI
+├── solvec-core/         Host-incapable Rust language core
+├── solvec/              Native interpreter, host adapters, and CLI
 ├── site/                Website, Studio, demos, and browser previews
-├── services/            Test-mode API and supporting services
+├── services/            API/account and supporting services
 ├── examples/            SolveLang workflows and demo assets
 ├── docs/                Product, language, safety, strategy, and operations docs
 ├── schemas/             JSON schemas and example payloads
@@ -268,8 +305,11 @@ solvelang/
 
 Start here:
 
+- [0.1 language specification](SPEC.md)
 - [Language reference](docs/language-reference.md)
 - [Runtime safety](docs/runtime-safety.md)
+- [Release contract](docs/release-contract.md)
+- [Project completion plan](docs/project-completion-plan.md)
 - [Competitive analysis](docs/competitive-analysis.md)
 - [Product strategy](docs/strategy.md)
 - [Studio specification](docs/product/workflow-intelligence-studio-v1.md)
@@ -304,7 +344,7 @@ npm run test:studio
 npm run build
 ```
 
-### API-access prototype
+### API/account services
 
 ```bash
 cd services/api-access
@@ -314,7 +354,7 @@ sam validate --lint --template template.yaml
 sam build --template template.yaml
 ```
 
-Do not deploy test infrastructure from an unreviewed branch.
+Do not deploy production infrastructure from an unreviewed branch or infer deployment authorization from a repository merge.
 
 ## Contributing
 
@@ -336,7 +376,7 @@ Good contributions improve readability, diagnostics, safety, examples, documenta
 
 SolveLang is not currently:
 
-- a stable production language runtime
+- a stable 1.0 production language/runtime contract
 - a replacement for Zapier, Make, or n8n
 - a durable execution engine comparable to Temporal
 - a data orchestration platform comparable to Airflow
@@ -350,10 +390,10 @@ Additional limitations include:
 - integer-focused numeric behavior
 - incomplete type checking
 - narrow standard library
-- basic file-include support through relative imports (not module namespaces)
+- local explicit modules only: no package manifest, bare-specifier resolver, dependency installer, registry, or remote-module fetching
 - experimental provider and side-effect features
 - limited browser runtime compatibility
-- no published production reliability or performance benchmarks
+- no published production reliability or performance benchmarks for managed workflow execution
 
 ## FAQ
 
@@ -363,7 +403,7 @@ No. SolveLang is a language and tooling project focused on readable, version-con
 
 ### Does SolveLang execute workflows today?
 
-Yes, the Rust CLI executes the currently supported language locally. A limited browser preview also exists. Full managed hosted execution is planned, not available today.
+Yes, the Rust CLI executes the currently supported language locally. A limited browser preview also exists. General managed hosted workflow execution is not live.
 
 ### Does SolveLang use AI?
 
@@ -377,9 +417,9 @@ Its current analysis is deterministic and local-first. It should not be describe
 
 That is not the current goal. A realistic early use is to document, review, and explain workflows that may ultimately run in another platform or custom system.
 
-### Is the API subscription system production-ready?
+### Is the account/API system production-ready?
 
-No. The repository includes test-mode API-access and billing infrastructure for engineering validation.
+A limited production customer-account/API/Admin foundation is separately deployed and verified. That does **not** mean the broader SaaS is launched: subscription billing, paid priority, provider execution, and general managed workflow execution remain off/not live and require separate protected rollout evidence.
 
 ### Why build a language instead of another visual builder?
 
@@ -394,7 +434,8 @@ SolveLang demonstrates work across several senior technical dimensions.
 - lexer, parser, AST, and interpreter design
 - runtime semantics and diagnostics
 - source locations and error reporting
-- imports, built-ins, and execution policy
+- legacy include compatibility and explicit local-module semantics
+- built-ins and execution policy
 
 ### Systems and platform engineering
 
@@ -403,7 +444,7 @@ SolveLang demonstrates work across several senior technical dimensions.
 - AWS SAM serverless infrastructure
 - DynamoDB transactions and consistency
 - IAM least privilege
-- API authentication, quotas, and billing lifecycle
+- API authentication, quotas, and billing lifecycle preparation
 - fail-closed configuration and deployment gates
 
 ### AI engineering
@@ -438,12 +479,12 @@ The strategic roadmap is maintained in [`docs/strategy.md`](docs/strategy.md). T
 
 Near-term priorities are:
 
-1. make the project easier to understand and demonstrate,
-2. standardize truthful examples and maturity labels,
-3. strengthen developer onboarding and documentation,
-4. package recruiter and consulting materials,
-5. improve engineering quality based on verified friction,
-6. validate demand before committing to managed SaaS infrastructure.
+1. keep implementation-backed language/spec/conformance truth aligned,
+2. implement the version/release artifact contract without conflating it with production activation,
+3. add and validate the deny-all WASM wrapper over the extracted pure Rust core,
+4. strengthen developer onboarding and documentation,
+5. continue bounded read-only audit intelligence and operational hardening,
+6. validate product demand before expanding managed execution.
 
 ## License
 
