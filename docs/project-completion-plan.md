@@ -1,6 +1,6 @@
 # SolveLang project completion plan
 
-_Canonical repository-completion checklist. Reconciled 2026-09-01 against `main` at `e4dd69fc38ebfecfc50e539951675bc825b20bec`; live GitHub state always wins if this checkpoint becomes stale._
+_Canonical repository-completion checklist. Reconciled 2026-09-04 against `main` at `93c6c8c94c0c058e010f219dd501144b1287777f` (#755, following #800); live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work only. It does not authorize a deployment, an AWS/IAM/KMS/DNS/Cloudflare mutation, a customer/Admin mutation, email, live Stripe activity, a charge/refund, provider execution, or any audit remediation.
 
@@ -15,8 +15,10 @@ This plan records repository-safe work only. It does not authorize a deployment,
 - #759 is merged and adds the manifest-driven canonical 0.1 CLI conformance corpus plus `docs/language-conformance.md`, covering every major compatibility section of `SPEC.md` while retaining deeper parser/runtime/CLI edge-case regressions.
 - #762 and #764 are merged and establish/harden the non-publishable Linux x86_64 release-candidate path: exact PR-head source identity, pinned read-only workflow actions, locked Rust validation, deterministic version/OS/arch archive packaging, SHA-256 evidence, provenance, double-package byte comparison, and extracted-binary smoke validation. They do **not** publish a tag/release or prove macOS/Windows support.
 - ADR 0004 fixes the 0.1 package decision: no local package manifest, bare package resolver, dependency installer, registry, remote fetch, lockfile solver, or semver dependency selection will be added to the 0.1 release line. Any future package design requires a new ADR after the release/CLI and pure-core/WASM boundaries stabilize.
-- #723 remains stale/review-blocked Trusted Mac history and must not merge.
-- #755 is also stale against current `main`: its exact-head self-hosted Mac attempt was queued while `main` advanced. Do not merge or retrigger that stale head. After the queued attempt is terminal and the one allocated SolveLang Mac slot is demonstrably free, rebuild exactly once on then-current `main` and require fresh Hosted CI + Rust/RustSec + self-hosted Trusted Mac success before superseding #723.
+- #755 is merged after one reconciliation onto #800 main, fresh Hosted CI/Rust/RustSec and Trusted Mac on `solve-mac-1`, and resolution of the non-owner skipped-job review finding. See the [handoff evidence](active-buildout-handoff.md#repository-refresh--2026-09-04). #723 is obsolete and must not merge.
+- #771/#773/#775/#777 complete pure-core ownership/evaluation, the deny-all WASM wrapper, shared conformance, and deterministic resource-limit foundations. The static browser-artifact audit remains a separate ADR 0002 gate; `/run/` still uses the narrower TypeScript preview.
+- #779–#800 advance Self-Driving only through observe-only contracts, offline adapters, injected fixture simulation, and bounded Observe Run/Inbox composition. No live telemetry connection, credential resolver, provider request, suggestion application, or PR/write authority is enabled.
+- Oracle qualification and Trusted Oracle CI (#778/#791) supplement Mac; they never replace required macOS evidence. Solve Runners remains a separate deferred product.
 - Production/account/Admin/TOTP facts are tracked separately from repository completion; a merge never acts as production authorization.
 
 ## Completed foundations — do not recreate
@@ -39,7 +41,7 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 - [x] Mark historical reports as historical instead of silently overwriting their evidence; historical snapshots remain distinct from current truth records.
 - [x] Define the release contract for versioning, compatibility surfaces, supported-platform truth, release-candidate gating, checksums/provenance, upgrade notes, rollback/yanking, and the separation between repository releases and production activation in `docs/release-contract.md`.
 - [x] Add `CHANGELOG.md` with an explicit Unreleased section and production-boundary disclaimer.
-- [ ] Complete the remaining release machinery required by the written contract. #762/#764 complete the non-publishable Linux x86_64 release-candidate archive, SHA-256, provenance, exact-source, deterministic double-package, and smoke-validation path. Still pending: canonical CLI version behavior, final tagged-artifact regeneration/publication controls, and exact-platform evidence for every platform claimed by a release.
+- [ ] Complete the remaining release machinery required by the written contract. #762/#764 complete the non-publishable Linux x86_64 release-candidate archive, SHA-256, provenance, exact-source, deterministic double-package, and smoke-validation path; #766 completes canonical CLI `version` behavior. Remaining CLI compatibility and regeneration controls require verification; platform claims require exact-platform evidence. Publication remains separately blocked by owner authorization.
 - [ ] Create `docs/project-completion-report.md` only when every unchecked repository item below is complete or explicitly blocked by an owner/external decision.
 
 ### B. Language contract and modules
@@ -52,10 +54,10 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 
 ### C. Shared Rust core and browser parity
 
-- [x] Extract a dependency-minimal `solvec-core` with lexer/parser/AST/formatter/conservative semantics/pure evaluation/diagnostics and no host capability. Completed through the source-ownership and pure-evaluator slices tracked by #771 and #772.
-- [x] Move filesystem/import loading, environment, network, AI, process, and capability-policy host behavior outside the pure core; keep native CLI wiring separate and behavior-compatible. Completed by #772; production and provider activation remain separate gates.
-- [ ] Add a deny-all `solvec-wasm` wrapper and shared native/WASM conformance corpus for the overlapping safe single-source language subset.
-- [ ] Add deterministic source/input/AST/output/work limits and browser tests proving capability-bearing and unknown calls fail before any output, including unreachable code.
+- [x] Extract a dependency-minimal `solvec-core` with lexer/parser/AST/formatter/conservative semantics/pure evaluation/diagnostics and no host capability. Completed through #771 and #773 (#772 was the tracking issue).
+- [x] Move filesystem/import loading, environment, network, AI, process, and capability-policy host behavior outside the pure core; keep native CLI wiring separate and behavior-compatible. Completed by #773; production and provider activation remain separate gates.
+- [x] Add a deny-all `solvec-wasm` wrapper and shared native/WASM conformance corpus for the overlapping safe single-source language subset. Merged through #775/#777.
+- [ ] Complete browser-targeted proof of capability/unknown-call denial before output, including unreachable code. Deterministic source/input/AST/output/work-limit foundations are merged through #777; native negative tests alone do not qualify the generated browser artifact. #801 proposes compiled-artifact negative cases and remains unmerged at this checkpoint.
 - [ ] Audit the WASM artifact/import table so no WASI, network, storage, dynamic-evaluation, provider, filesystem, or side-effect callback bridge is present before replacing the smaller browser preview.
 
 ### D. CLI and editor contract
