@@ -1,0 +1,104 @@
+name: Trusted Oracle CI
+
+on:
+  push:
+    branches:
+      - "agent/oracle-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trusted-oracle-solvelang-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cross-platform:
+    name: SolveLang on Oracle Linux ARM64
+    if: github.repository == 'saiidz/solvelang' && github.actor == 'saiidz'
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact source head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          clean: true
+
+      - name: Verify exact source head
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Reject draft locale preview
+        run: test "${I18N_DRAFT_PREVIEW:-false}" = "false"
+
+      - name: Run deterministic Studio and preflight tests
+        working-directory: site
+        run: npm run test:studio
+
+      - name: Run site lint
+        working-directory: site
+        run: npm run lint
+
+      - name: Build static site
+        working-directory: site
+        run: npm run build
+
+      - name: Verify exported document languages
+        working-directory: site
+        run: npm run verify:i18n-export
+
+      - name: Check static export output
+        working-directory: site
+        run: |
+          test -f out/index.html
+          test -f out/run/index.html
+          test -f out/pricing/index.html
+          test -f out/check/index.html
+          test -f out/sitemap.xml
+          test "$(find out -mindepth 1 -maxdepth 1 -type d \( -name fr -o -name ro -o -name ar -o -name he \) | wc -l)" -eq 0
+          grep -q '<html lang="en" dir="ltr"' out/index.html
+          test ! -d app/api
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Check solvec-core
+        working-directory: solvec-core
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+          cargo test
+
+      - name: Check solvec-wasm natively
+        working-directory: solvec-wasm
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test --locked
+
+      - name: Check solvec CLI
+        working-directory: solvec
+        run: |
+          cargo fmt --check
+          cargo clippy --locked -- -D warnings
+          cargo test --locked
+          cargo build --release --locked
