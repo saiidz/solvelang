@@ -140,7 +140,7 @@ test("provider connection bounds are positive, capped, and internally coherent",
 
   assert.throws(
     () => createProviderConnectionPlan(input({ bounds: { maxPages: 30, maxRequests: 20 } })),
-    /maxPages cannot exceed maxRequests/,
+    /bounds\.maxPages cannot exceed bounds\.maxRequests/,
   );
 });
 
