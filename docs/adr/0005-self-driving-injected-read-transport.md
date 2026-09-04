@@ -29,4 +29,6 @@ Injected dependencies are trusted code within the repository test process, not s
 
 ## Later authority stages
 
+The repository coordinator `selfDrivingInjectedTransport.ts` implements this fake-only boundary as an opt-in library function; Observe Run and production entrypoints do not call it. Its default is disabled. Tests supply all dependencies, verify request/handle/response binding, immutable request snapshots, cancellation and late completion, elapsed deadline checks, sanitized errors, and zero reported live activity. The timeout rejects late results but cannot preempt arbitrary synchronous JavaScript; injected code remains trusted repository code, not a sandbox.
+
 Suggestion mode may produce only bounded non-applied patch artifacts tied to exact source identity and a validation plan. It must not execute source, install dependencies, alter files, or create branches/PRs. A separate least-privilege GitHub write-policy ADR must precede any PR-mode implementation and cover allowed branches/paths, owner approvals, exact-head validation, credential scope, rollback, and immutable audit evidence. Neither that future ADR nor a finding grants permission to enable writes, rollout changes, automatic merges, or auto mode.
