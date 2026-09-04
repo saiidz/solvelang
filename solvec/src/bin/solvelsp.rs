@@ -1,7 +1,7 @@
 //! Minimal stdio LSP transport for full-document diagnostics and bounded open-document module navigation.
 //!
-//! Supported documents are cached only through `textDocument/didOpen`. Cross-file module tooling
-//! consults only those already-open documents; workspace indexing, filesystem crawling, source
+//! Versioned full-text changes update bounded opened-document state. Cross-file module tooling
+//! consults only those already-open documents; filesystem crawling, source
 //! execution, and network access are intentionally unsupported.
 
 use serde_json::{Value, json};
@@ -1192,16 +1192,123 @@ fn write_message(output: &mut impl Write, value: &Value) -> io::Result<()> {
     output.write_all(&body)
 }
 
+#[derive(Default)]
+struct Server {
+    documents: HashMap<String, String>,
+    versions: HashMap<String, i64>,
+}
+
+fn bounded_document(text: &str) -> bool {
+    if text.len() > 65_536 {
+        return false;
+    }
+    let tokens = lexer::lex(text);
+    if tokens.len() > 512 {
+        return false;
+    }
+    let mut depth = 0usize;
+    for token in tokens {
+        match token.token {
+            lexer::Token::LeftParen | lexer::Token::LeftBrace | lexer::Token::LeftBracket => {
+                depth += 1;
+                if depth > 64 {
+                    return false;
+                }
+            }
+            lexer::Token::RightParen | lexer::Token::RightBrace | lexer::Token::RightBracket => {
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+impl Server {
+    fn process(&mut self, message: Value) -> Vec<Value> {
+        let method = message["method"].as_str().unwrap_or("");
+        if !matches!(
+            method,
+            "textDocument/didOpen" | "textDocument/didChange" | "textDocument/didClose"
+        ) {
+            return process_message(message, &mut self.documents);
+        }
+        let document = &message["params"]["textDocument"];
+        let Some(uri) = document["uri"].as_str() else {
+            return Vec::new();
+        };
+        if uri.len() > 4096 || resolve_import_uri(uri, "entry.solve").is_none() {
+            return Vec::new();
+        }
+        if method == "textDocument/didClose" {
+            self.documents.remove(uri);
+            self.versions.remove(uri);
+            return vec![
+                json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":uri,"diagnostics":[]}}),
+            ];
+        }
+        let Some(version) = document["version"].as_i64() else {
+            return Vec::new();
+        };
+        if method == "textDocument/didOpen" {
+            if self.versions.contains_key(uri) || self.versions.len() >= 64 {
+                return Vec::new();
+            }
+        } else if self
+            .versions
+            .get(uri)
+            .is_none_or(|previous| version <= *previous)
+        {
+            return Vec::new();
+        }
+        self.versions.insert(uri.to_string(), version);
+        let text = if method == "textDocument/didOpen" {
+            document["text"].as_str()
+        } else {
+            message["params"]["contentChanges"]
+                .as_array()
+                .and_then(|changes| {
+                    (changes.len() == 1
+                        && changes[0].get("range").is_none()
+                        && changes[0].get("rangeLength").is_none())
+                    .then(|| changes[0]["text"].as_str())
+                    .flatten()
+                })
+        };
+        let diagnostics = if let Some(text) = text.filter(|text| bounded_document(text)) {
+            self.documents.insert(uri.to_string(), text.to_string());
+            diagnostics(text)
+        } else {
+            // Never answer later navigation requests using obsolete source.
+            self.documents.remove(uri);
+            vec![
+                json!({"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"severity":2,"source":"solvec","message":"Document unavailable: require one full-text change within editor source/token/depth limits"}),
+            ]
+        };
+        vec![
+            json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":uri,"version":version,"diagnostics":diagnostics}}),
+        ]
+    }
+}
+
 fn main() -> io::Result<()> {
     let mut input = BufReader::new(io::stdin().lock());
     let mut output = io::stdout().lock();
-    let mut documents = HashMap::new();
+    let mut server = Server::default();
     loop {
         let mut length = None;
+        let mut header_bytes = 0;
         loop {
             let mut line = String::new();
-            if input.read_line(&mut line)? == 0 {
+            if input.by_ref().take(8193).read_line(&mut line)? == 0 {
                 return Ok(());
+            }
+            header_bytes += line.len();
+            if header_bytes > 8192 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "LSP header exceeds limit",
+                ));
             }
             if line == "\r\n" || line == "\n" {
                 break;
@@ -1214,14 +1321,17 @@ fn main() -> io::Result<()> {
             continue;
         };
         if length > 1_048_576 {
-            continue;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "LSP body exceeds limit",
+            ));
         }
         let mut body = vec![0; length];
         input.read_exact(&mut body)?;
         let Ok(message) = serde_json::from_slice::<Value>(&body) else {
             continue;
         };
-        for response in process_message(message, &mut documents) {
+        for response in server.process(message) {
             write_message(&mut output, &response)?;
         }
         output.flush()?;
@@ -1230,6 +1340,40 @@ fn main() -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn full_text_changes_reject_stale_versions_and_close_clears_cache() {
+        let mut server = super::Server::default();
+        let uri = "file:///project/main.solve";
+        server.process(json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":1,"text":"let before = 1"}}}));
+        let change = |version, text| json!({"method":"textDocument/didChange","params":{"textDocument":{"uri":uri,"version":version},"contentChanges":[{"text":text}]}});
+        let response = server.process(change(2, "let after = 2"));
+        assert_eq!(response[0]["params"]["version"], 2);
+        assert!(server.process(change(1, "let stale = 3")).is_empty());
+        assert!(server.process(change(2, "let duplicate = 3")).is_empty());
+        assert_eq!(server.documents[uri], "let after = 2");
+        server.process(
+            json!({"method":"textDocument/didClose","params":{"textDocument":{"uri":uri}}}),
+        );
+        assert!(!server.documents.contains_key(uri));
+        assert!(server.process(change(3, "let closed = 4")).is_empty());
+    }
+
+    #[test]
+    fn rejected_new_changes_invalidate_stale_source_and_bounds_are_enforced() {
+        let mut server = super::Server::default();
+        let uri = "file:///project/main.solve";
+        server.process(json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":1,"text":"let old = 1"}}}));
+        server.process(json!({"method":"textDocument/didChange","params":{"textDocument":{"uri":uri,"version":2},"contentChanges":[{"range":{},"text":"x"}]}}));
+        assert!(!server.documents.contains_key(uri));
+        assert!(!super::bounded_document(&"(".repeat(65)));
+        assert!(!super::bounded_document(&"x".repeat(65_537)));
+        for index in 0..65 {
+            server.process(json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":format!("file:///project/{index}.solve"),"version":1,"text":"let x = 1"}}}));
+        }
+        assert!(server.versions.len() <= 64);
+        assert!(server.documents.len() <= 64);
+    }
+
     use super::{completions, process_message, symbols, top_level_symbol};
     use serde_json::json;
     use std::collections::HashMap;
