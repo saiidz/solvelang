@@ -1224,6 +1224,17 @@ fn bounded_document(text: &str) -> bool {
     true
 }
 
+fn local_document_uri(uri: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(uri) else {
+        return false;
+    };
+    parsed.scheme() == "file"
+        && parsed.host_str().is_none_or(|host| host == "localhost")
+        && parsed.query().is_none()
+        && parsed.fragment().is_none()
+        && parsed.path().ends_with(".solve")
+}
+
 impl Server {
     fn process(&mut self, message: Value) -> Vec<Value> {
         let method = message["method"].as_str().unwrap_or("");
@@ -1237,7 +1248,10 @@ impl Server {
         let Some(uri) = document["uri"].as_str() else {
             return Vec::new();
         };
-        if uri.len() > 4096 || resolve_import_uri(uri, "entry.solve").is_none() {
+        if uri.len() > 4096
+            || !local_document_uri(uri)
+            || resolve_import_uri(uri, "entry.solve").is_none()
+        {
             return Vec::new();
         }
         if method == "textDocument/didClose" {
@@ -1340,6 +1354,21 @@ fn main() -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn remote_and_non_file_document_uris_are_not_admitted() {
+        let mut server = super::Server::default();
+        for uri in [
+            "https://example.com/main.solve",
+            "vscode-remote://host/main.solve",
+            "file://remote/main.solve",
+            "file:///main.solve?query=x",
+            "file:///main.solve#fragment",
+        ] {
+            assert!(server.process(json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":1,"text":"let x = 1"}}})).is_empty());
+        }
+        assert!(server.documents.is_empty());
+        assert!(server.versions.is_empty());
+    }
     #[test]
     fn full_text_changes_reject_stale_versions_and_close_clears_cache() {
         let mut server = super::Server::default();
