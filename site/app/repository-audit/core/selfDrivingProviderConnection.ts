@@ -132,6 +132,17 @@ const hardMaximumBounds: ProviderConnectionBounds = Object.freeze({
   lookbackMinutes: 30 * 24 * 60,
 });
 
+const PROVIDER_CONNECTION_BOUND_KEYS = [
+  "maxPages",
+  "maxRecords",
+  "maxResponseBytes",
+  "maxRequests",
+  "timeoutMs",
+  "lookbackMinutes",
+] as const;
+
+type ProviderConnectionBoundKey = (typeof PROVIDER_CONNECTION_BOUND_KEYS)[number];
+
 const expectedSignalKindByCapability: Record<ProviderReadCapability, PostHogReadIntent["expectedSignalKind"]> = {
   "product-events": "runtime-event",
   errors: "error",
@@ -197,8 +208,20 @@ function normalizeCapabilities(values: ProviderReadCapability[]): ProviderReadCa
 }
 
 function normalizeBounds(overrides: Partial<ProviderConnectionBounds> | undefined): ProviderConnectionBounds {
-  const bounds = { ...defaultProviderConnectionBounds, ...(overrides ?? {}) };
-  for (const [key, value] of Object.entries(bounds) as Array<[keyof ProviderConnectionBounds, number]>) {
+  if (overrides !== undefined) {
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+      throw new Error("bounds must be an object.");
+    }
+    for (const key of Object.keys(overrides)) {
+      if (!PROVIDER_CONNECTION_BOUND_KEYS.includes(key as ProviderConnectionBoundKey)) {
+        throw new Error(`bounds contains unsupported key: ${key}`);
+      }
+    }
+  }
+
+  const bounds: ProviderConnectionBounds = { ...defaultProviderConnectionBounds, ...(overrides ?? {}) };
+  for (const key of PROVIDER_CONNECTION_BOUND_KEYS) {
+    const value = bounds[key];
     if (!Number.isSafeInteger(value) || value < 1) {
       throw new Error(`bounds.${key} must be a positive safe integer.`);
     }
@@ -223,6 +246,16 @@ function canonicalPlanIdentity(plan: Omit<ProviderConnectionPlan, "id">): string
     redaction: plan.redaction,
     policy: plan.policy,
   });
+}
+
+function freezeProviderConnectionPlan(plan: ProviderConnectionPlan): ProviderConnectionPlan {
+  Object.freeze(plan.tenant);
+  Object.freeze(plan.credential);
+  Object.freeze(plan.capabilities);
+  Object.freeze(plan.bounds);
+  Object.freeze(plan.redaction);
+  Object.freeze(plan.policy);
+  return Object.freeze(plan);
 }
 
 export function createProviderConnectionPlan(input: ProviderConnectionPlanInput): ProviderConnectionPlan {
@@ -278,21 +311,20 @@ export function createProviderConnectionPlan(input: ProviderConnectionPlanInput)
   };
 
   const identity = canonicalPlanIdentity(normalizedWithoutId);
-  return {
+  return freezeProviderConnectionPlan({
     ...normalizedWithoutId,
     id: `provider_${stableHash(identity)}`,
-  };
+  });
 }
 
-export function createPostHogReadIntent(
-  plan: ProviderConnectionPlan,
-  capability: ProviderReadCapability,
-): PostHogReadIntent {
+function revalidateProviderConnectionPlan(plan: ProviderConnectionPlan): ProviderConnectionPlan {
   if (!plan || typeof plan !== "object") throw new Error("A provider connection plan is required.");
   if (plan.schema !== "solvelang.self-driving.provider-connection.v0" || plan.mode !== "analyze-only") {
     throw new Error("PostHog read intents require a valid analyze-only provider connection plan.");
   }
-  if (plan.provider !== "posthog") throw new Error("PostHog read intents require a PostHog provider plan.");
+  if (!plan.policy || typeof plan.policy !== "object") {
+    throw new Error("Provider connection plan integrity check failed.");
+  }
   if (
     plan.policy.networkAccess !== false
     || plan.policy.credentialResolution !== false
@@ -301,21 +333,63 @@ export function createPostHogReadIntent(
   ) {
     throw new Error("Provider connection plan weakens the no-network/no-mutation policy boundary.");
   }
+  if (
+    !plan.tenant
+    || typeof plan.tenant !== "object"
+    || !plan.credential
+    || typeof plan.credential !== "object"
+    || !Array.isArray(plan.capabilities)
+    || !plan.bounds
+    || typeof plan.bounds !== "object"
+  ) {
+    throw new Error("Provider connection plan integrity check failed.");
+  }
+  if (plan.credential.kind !== "environment-variable-reference" || plan.credential.resolved !== false) {
+    throw new Error("Provider connection plan integrity check failed.");
+  }
+
+  let canonical: ProviderConnectionPlan;
+  try {
+    canonical = createProviderConnectionPlan({
+      provider: plan.provider,
+      region: plan.region,
+      tenant: { projectLocator: plan.tenant.projectLocator },
+      credentialRef: plan.credential.reference,
+      capabilities: [...plan.capabilities],
+      bounds: { ...plan.bounds },
+      requestedMode: "observe",
+    });
+  } catch {
+    throw new Error("Provider connection plan integrity check failed.");
+  }
+
+  if (JSON.stringify(plan) !== JSON.stringify(canonical)) {
+    throw new Error("Provider connection plan integrity check failed.");
+  }
+  return canonical;
+}
+
+export function createPostHogReadIntent(
+  plan: ProviderConnectionPlan,
+  capability: ProviderReadCapability,
+): PostHogReadIntent {
+  const canonicalPlan = revalidateProviderConnectionPlan(plan);
+  if (canonicalPlan.provider !== "posthog") throw new Error("PostHog read intents require a PostHog provider plan.");
   assertEnum(capability, PROVIDER_READ_CAPABILITIES, "capability");
-  if (!plan.capabilities.includes(capability)) {
-    throw new Error(`Capability '${capability}' is not allowlisted by provider connection plan ${plan.id}.`);
+  if (!canonicalPlan.capabilities.includes(capability)) {
+    throw new Error(`Capability '${capability}' is not allowlisted by provider connection plan ${canonicalPlan.id}.`);
   }
 
   return {
     schema: "solvelang.self-driving.posthog-read-intent.v0",
     mode: "analyze-only",
-    connectionPlanId: plan.id,
+    connectionPlanId: canonicalPlan.id,
     provider: "posthog",
-    region: plan.region,
-    tenant: { ...plan.tenant },
+    region: canonicalPlan.region,
+    tenant: { ...canonicalPlan.tenant },
     capability,
     expectedSignalKind: expectedSignalKindByCapability[capability],
-    bounds: { ...plan.bounds },
+    bounds: { ...canonicalPlan.bounds },
     execution: {
       status: "not-executed",
       networkRequests: 0,
