@@ -57,7 +57,7 @@ Each milestone must be a focused PR with a problem statement, scope, safety impa
 - [x] Extract a dependency-minimal `solvec-core` with lexer/parser/AST/formatter/conservative semantics/pure evaluation/diagnostics and no host capability. Completed through #771 and #773 (#772 was the tracking issue).
 - [x] Move filesystem/import loading, environment, network, AI, process, and capability-policy host behavior outside the pure core; keep native CLI wiring separate and behavior-compatible. Completed by #773; production and provider activation remain separate gates.
 - [x] Add a deny-all `solvec-wasm` wrapper and shared native/WASM conformance corpus for the overlapping safe single-source language subset. Merged through #775/#777.
-- [x] Add deterministic source/input/AST/output/work limits and browser tests proving capability-bearing and unknown calls fail before any output, including unreachable code. Foundation merged through #777; artifact admission is not implied.
+- [ ] Complete browser-targeted proof of capability/unknown-call denial before output, including unreachable code. Deterministic source/input/AST/output/work-limit foundations are merged through #777; native negative tests alone do not qualify the generated browser artifact. #801 proposes compiled-artifact negative cases and remains unmerged at this checkpoint.
 - [ ] Audit the WASM artifact/import table so no WASI, network, storage, dynamic-evaluation, provider, filesystem, or side-effect callback bridge is present before replacing the smaller browser preview.
 
 ### D. CLI and editor contract
