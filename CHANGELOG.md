@@ -16,6 +16,7 @@ This changelog does not imply that separately gated production services are enab
 
 ### CLI and runtime safety
 
+- Pinned public help/version aliases and added a version-1 hardened JSON envelope/schema. Invalid-argument usage now goes to stderr; failures use documented status categories 2–6 instead of the previous undifferentiated 1. See [CLI migration notes](docs/cli-contract.md); all nonzero statuses remain failures.
 - Added and hardened deterministic `check`, `lint`, and `fmt` tooling alongside `run`, `validate`, `tokens`, and `ast`.
 - Added loop-control and pure collection helpers while preserving hardened-mode denial of host-capability calls.
 - Hardened workflow/runtime reuse so prior module/entry state cannot leak into a later execution epoch.
