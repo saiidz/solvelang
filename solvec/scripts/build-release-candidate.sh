@@ -4,8 +4,8 @@ set -Eeuo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-  echo "release candidate build requires a clean tracked worktree" >&2
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "release candidate build requires a clean worktree including untracked files" >&2
   exit 1
 fi
 
@@ -35,11 +35,17 @@ case "$target" in
     ;;
 esac
 
+dist_dir="${SOLVELANG_RELEASE_DIST:-$repo_root/dist/release-candidate}"
+if [[ -e "$dist_dir" || -L "$dist_dir" ]]; then
+  echo "release candidate destination must not exist; use a fresh directory" >&2
+  exit 1
+fi
+# Never replace previous evidence; fail closed on concurrent creation too.
+mkdir -p "$(dirname "$dist_dir")"
+mkdir "$dist_dir"
+
 version="$({ cd solvec; cargo metadata --locked --no-deps --format-version 1; } | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "solvec"))')"
 artifact_name="solvelang-${version}-${target_os}-${target_arch}.tar.gz"
-dist_dir="${SOLVELANG_RELEASE_DIST:-$repo_root/dist/release-candidate}"
-rm -rf "$dist_dir"
-mkdir -p "$dist_dir"
 
 (
   cd solvec
