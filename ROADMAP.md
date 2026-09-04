@@ -11,7 +11,7 @@ This roadmap distinguishes four states deliberately:
 
 A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-20.md` take precedence over stale hashes or historical planning text.
 
-## Current implementation overlay — 2026-09-02
+## Current implementation overlay — 2026-09-04
 
 - Centralized account suspension/termination foundations and rollback-preservation hardening are merged in repository history through #147/#161. Repository merge does not authorize a live account mutation or deployment.
 - Imported-file source provenance is merged through #159.
@@ -39,14 +39,15 @@ A merged feature is not automatically production-enabled, and production account
 - Server Audit backup/log consistency evidence and redacted findings are merged through #575/#576. #579 composes them into canonical JSON/HTML reports while deduplicating exact overlap with legacy artifact findings by category/title/structural evidence identity; the initial duplicate-count regression was fixed before exact-head CI/Rust green merge.
 - Server Audit certificate-expiry fallback is merged through #581. Public-file evidence is hardened through #582/#583 so unavailable or sparse web-root references fail closed instead of becoming exposure/coverage claims, and #584 composes public-file coverage/integrity into canonical JSON/HTML reports. #584 also fixed a legacy baseline sparse-root crash found by Hosted CI before exact-head green merge.
 - Server Audit relationship and coverage truth is hardened through #617→#637: bounded service→process→listener, service→process, and scheduled-job→service/process findings/report composition; relationship construction/index/fanout bounds; certificate/web/service/process/package identity coverage; and canonical service/process/package identity report composition. Evidence remains structural/redacted and no collector/remediation capability is added.
-- Trusted Mac CI is push-only for owner-controlled `agent/mac-*` branches and targets `[self-hosted, macOS, ARM64]`; it remains mandatory wherever the repository contract requires it.
+- Trusted Mac CI on `main` is currently push-only hosted `macos-14` for owner-controlled `agent/mac-*` branches. PR #755 is the owner-controlled single-slot self-hosted `[self-hosted, macOS, ARM64]` successor and remains pending exact-head Mac-runner validation; Mac remains mandatory wherever the repository contract requires it.
+- Trusted Oracle CI is push-only for owner-controlled `agent/oracle-*` branches, requires the exact repository and owner actor, targets `[self-hosted, Linux, ARM64, oracle-free, solvelang-ci]`, pins external actions, verifies the exact branch head, and runs static-site plus native Rust validation. Oracle supplements but never substitutes for required Mac coverage.
 - Trusted Windows CI is push-only for owner-controlled `agent/windows-*` branches and targets `[self-hosted, Windows, X64]`; it is used for material Windows/cross-platform validation but never substitutes for a declared Trusted Mac requirement.
 - Customer-priority source/upload/API foundations, validation-only production preflight (#164), and dormant production queue-foundation rollout preparation (#169) are merged in repository history. #638 additionally fixes the repository preflight policy/test so the preflight role definition can read the priority stack through CloudFormation Describe/Get/List actions only. **Production customer priority remains OFF.** These merges do not establish a live IAM update, deployment retry, queue/provider activation, or customer-priority activation.
 - Production authenticator-app TOTP infrastructure is **deployed and environment-enabled** as re-verified on 2026-08-20. The dedicated production TOTP KMS stack/key/alias and the expected OIDC supplemental policies are live; specific customer-account enrollment remains a separate account-level state and no enrollment is authorized by repository state. Subscription billing remains OFF, paid priority remains OFF, and no real-charge authorization exists.
 - Local editor support is intentionally narrow: `solvelsp` now supports parser-backed diagnostics, symbols, definition, hover, highlights, completion, and semantic tokens for didOpen-cached documents (#503/#510/#512/#518/#521/#526/#529). The opt-in VS Code package (#515/#516) defaults executable launch settings to false. Incremental sync, workspace indexing, execution, and network access remain unsupported.
 - The language now includes deterministic `fmt`, `lint`, `check`, loop control, and pure helpers including `keys`, `values`, `entries`, and `is_empty` (#482/#485/#488/#492/#517/#520/#523/#525/#527/#543), with hardened execution still denying capability-bearing builtins. #577 additionally rejects a symlink final component for root-restricted writes so an allowed-root path cannot redirect an overwrite outside that root.
 - The browser/WASM safety train advanced through #773/#775/#777: the evaluator now has a pure host-incapable `solvec-core` boundary, `solvec-wasm` is a deny-all single-source wrapper, and shared native/TypeScript-preview/actual-compiled-WASM conformance plus deterministic resource-limit checks are merged. `/run/` remains the intentionally narrow TypeScript preview. The next ADR 0002 gate is a separate static WASM/browser-artifact security audit before any browser runtime replacement.
-- Solve Self-Driving is an approved main-product direction tracked from #779. Its initial implementation is repository-only and observe-only: Scouts may normalize evidence into a deterministic bounded Solve Inbox, but repository writes, production mutations, external side effects, live telemetry connections, PR creation, rollout changes, and automatic merging remain disabled until later explicit gates.
+- Solve Self-Driving is an approved main-product direction tracked from #779. Its observe-only authority train is merged through #780/#782/#784/#786/#788/#790/#793/#795/#797/#799: bounded repository/runtime/product evidence, provider-neutral Context, offline PostHog normalization, exact provider/query contracts, fixture-only transport simulation, and a composed Observe Run feed a deterministic bounded Solve Inbox. Repository writes, production mutations, external side effects, live telemetry connections, credential resolution, PR creation, rollout changes, and automatic merging remain disabled until later explicit gates.
 - **Solve Runners remains a separate product and security/commercial boundary.** Self-Driving may later request runner compute for analysis or validation, but runner provisioning/registration/pricing/OS support is not part of Repository Audit or Self-Driving authority.
 - Repository-only operational preparation includes safe restore-drill contract gates (#531) and a provider-neutral future monitoring readiness contract (#538); neither deploys or enables a live feature.
 - Additional repository-only operational contracts cover sanitized suspected API-key exposure handling (#550), evidence/reconciliation before re-enabling an emergency-disabled billing path (#553), and aggregate-only sanitized restore-drill evidence (#554). They authorize no live action.
@@ -114,7 +115,7 @@ Re-evaluate live state before every run. The current safe order is:
 4. complete the ADR 0002 static WASM/browser-artifact security audit—imports/host surfaces, artifact-size bounds, integrity/reproducibility evidence, and browser-target glue—before replacing `/run/`;
 5. preserve the merged selected-node request/race/identity hardening through #470/#472 while continuing bounded interaction and partial/truncation coverage only where it adds new evidence;
 6. continue Repository Audit query/path/impact explanation quality, MCP/Codex integration, local visual-explorer quality, conservative remaining framework/deployment/reference relationships, deterministic IDs/bounds/redaction, and cross-platform tests;
-7. build Solve Self-Driving in authority stages: observe-only Scout/Inbox contracts first, then bounded read-only Context adapters, AI/Experience/Incident/Rollout intelligence, suggestion mode, and only later least-privilege tested-PR mode after explicit write-side governance;
+7. extend the merged Solve Self-Driving observe-only Scout/Inbox, bounded Context, provider-contract/simulation, and composed Observe Run stages without expanding authority; separately review any real read-only transport/credential executor before suggestion mode, and permit least-privilege tested-PR mode only after explicit write-side governance;
 8. continue Solve Graph with richer bounded language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
 9. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
 10. continue language/runtime and developer-experience work, especially the conservative local module/package foundation, semantic quality, browser-safe runtime boundary, diagnostics, and non-executing editor support;
@@ -145,7 +146,7 @@ Repository Audit write/remediation mode is **not enabled**.
 
 ## Solve Self-Driving
 
-Solve Self-Driving is the main-product layer for turning bounded evidence into an engineering/product feedback loop. The product contract lives in `docs/product/solve-self-driving.md` and the initial work is tracked by #779.
+Solve Self-Driving is the main-product layer for turning bounded evidence into an engineering/product feedback loop. The product contract lives in `docs/product/solve-self-driving.md`; the direction was approved by #779, and its merged authority stages currently extend through the composed Observe Run in #799.
 
 The intended loop is:
 
@@ -161,11 +162,11 @@ The stages are authority-gated. The existence of a later stage in the roadmap is
 - **Solve Inbox** — deterministic findings with provenance, confidence, severity, impact, and bounded next actions.
 - **Fix with Solve** — later non-applied patch proposals and, after write-side approval, tested reviewable PRs.
 - **Rollout Monitor** — later observation of deploys, flags, experiments, error/latency health, and product KPIs.
-- **Solve Context** — future separately reviewed adapters for runtime events, errors, logs, traces, support, deployments, flags, experiments, warehouse aggregates, AI traces, and MCP/tool calls.
+- **Solve Context** — a merged provider-neutral sanitized envelope plus offline PostHog normalization, exact product-event query contracts, and fixture-only transport simulation. Any real provider adapter, transport, or credential resolver remains separately reviewed and disabled by default.
 
 ### Operating modes
 
-- `observe` — findings/evidence only; **initial implementation**;
+- `observe` — findings/evidence only; **implemented through the composed bounded Observe Run (#799)**;
 - `suggest` — findings plus a non-applied patch proposal; planned;
 - `pr` — create a tested reviewable branch/PR; planned and requires least-privilege GitHub write policy;
 - `auto` — automatically merge only explicitly approved low-risk classes; planned and requires the highest governance bar.
