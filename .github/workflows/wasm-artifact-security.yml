@@ -2,10 +2,8 @@ name: WASM artifact security
 on:
   pull_request:
     branches: [main]
-    paths: ["solvec-core/**", "solvec-wasm/**", "conformance/**", ".github/workflows/wasm-artifact-security.yml"]
   push:
     branches: [main]
-    paths: ["solvec-core/**", "solvec-wasm/**", "conformance/**", ".github/workflows/wasm-artifact-security.yml"]
 permissions:
   contents: read
 jobs:

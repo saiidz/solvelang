@@ -2,8 +2,9 @@
 set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
-git diff --quiet HEAD -- solvec-core solvec-wasm conformance
+test -z "$(git status --porcelain --untracked-files=all)"
 source_commit="$(git rev-parse HEAD)"
+test "$(node -p 'process.versions.node.split(".")[0]')" = "24"
 test "$(rustc +1.95.0 --version | cut -d ' ' -f 2)" = "1.95.0"
 test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
 audit_root="$(mktemp -d)"

@@ -10,6 +10,7 @@ const sha256 = bytes => crypto.createHash("sha256").update(bytes).digest("hex");
 const names = ["solvec_wasm.js", "solvec_wasm_bg.js", "solvec_wasm_bg.wasm"];
 
 function audit(directory, sourceCommit) {
+  assert.equal(process.versions.node.split(".")[0], "24", "Node 24 qualification runtime required");
   assert.match(sourceCommit, /^[a-f0-9]{40}$/, "full source commit required");
   assert.deepEqual(fs.readdirSync(directory).sort(), names, "unexpected artifact set");
   let totalBytes = 0;
@@ -35,7 +36,7 @@ function audit(directory, sourceCommit) {
   return {
     schema: "solvelang.wasm-artifact-audit", version: 1, sourceCommit,
     publishable: false, browserPreviewReplaced: false,
-    rust: policy.rust, wasmBindgen: policy.wasmBindgen,
+    rust: policy.rust, wasmBindgen: policy.wasmBindgen, node: process.versions.node,
     policySha256: sha256(fs.readFileSync(path.join(__dirname, "artifact-policy.json"))),
     totalBytes, files, imports: policy.imports, exports: policy.exports,
   };
