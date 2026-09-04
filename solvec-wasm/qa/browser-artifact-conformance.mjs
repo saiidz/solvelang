@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { audit } = require("./audit-artifact.cjs");
+const { runFixedLimitConformance } = require("./wasm-conformance.cjs");
 const directory = path.resolve(process.argv[2]);
 audit(directory, process.argv[3]);
 const binding = await import(pathToFileURL(path.join(directory, "solvec_wasm_bg.js")));
@@ -34,4 +35,5 @@ for (const call of calls) {
     assert.deepEqual(result.outputs, [], source);
   }
 }
-console.log(`Browser artifact PASS: ${manifest.cases.length} shared fixtures and ${calls.length * 3} deny-before-output cases`);
+runFixedLimitConformance(binding.run_pure_v1);
+console.log(`Browser artifact PASS: ${manifest.cases.length} shared fixtures, ${calls.length * 3} deny-before-output cases, and 6 fixed limit cases`);

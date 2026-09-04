@@ -8,10 +8,16 @@ test "$(node -p 'process.versions.node.split(".")[0]')" = "24"
 test "$(rustc +1.95.0 --version | cut -d ' ' -f 2)" = "1.95.0"
 test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
 audit_root="$(mktemp -d)"
+compiler="$(rustup which --toolchain 1.95.0 rustc)"
 for attempt in first second; do
-  CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$audit_root/$attempt/target" \
+  env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER -u RUSTC_BOOTSTRAP \
+    -u CARGO_ENCODED_RUSTFLAGS \
+    CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= \
+    CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$audit_root/$attempt/target" \
     RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang" \
-    cargo +1.95.0 build --manifest-path solvec-wasm/Cargo.toml --release --locked --target wasm32-unknown-unknown
+    cargo +1.95.0 --config "build.rustc=\"$compiler\"" \
+      --config 'build.rustc-wrapper=""' --config 'build.rustc-workspace-wrapper=""' \
+      build --manifest-path solvec-wasm/Cargo.toml --release --locked --target wasm32-unknown-unknown
   wasm-bindgen --target bundler --no-typescript --out-dir "$audit_root/$attempt/bundle" \
     "$audit_root/$attempt/target/wasm32-unknown-unknown/release/solvec_wasm.wasm"
   node solvec-wasm/qa/audit-artifact.cjs "$audit_root/$attempt/bundle" "$source_commit" > "$audit_root/$attempt/audit.json"

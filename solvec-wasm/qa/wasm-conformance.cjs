@@ -132,4 +132,5 @@ function main() {
   console.log(`WASM conformance PASS: ${fixtures.length} shared fixtures + 6 fixed limit cases`);
 }
 
-main();
+if (require.main === module) main();
+module.exports = { loadFixtures, runFixtureConformance, runFixedLimitConformance };
