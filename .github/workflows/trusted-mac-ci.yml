@@ -18,8 +18,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  authorize:
+    name: Authorize trusted Mac push
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require repository owner
+        env:
+          REPOSITORY: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: test "$REPOSITORY" = "saiidz/solvelang" && test "$ACTOR" = "saiidz"
+
   repository-audit-site:
     name: Repository Audit on Mac
+    needs: authorize
     if: github.repository == 'saiidz/solvelang' && github.actor == 'saiidz'
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 60
