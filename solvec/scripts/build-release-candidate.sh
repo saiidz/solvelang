@@ -52,7 +52,7 @@ source_binary="$build_root/target/$target/release/$binary_name"
 (
   cd solvec
   CARGO_TARGET_DIR="$build_root/target" \
-    RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang --remap-path-prefix=$build_root=/solvelang-build" \
+    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang"$'\x1f'"--remap-path-prefix=$build_root=/solvelang-build" \
     cargo build --release --locked --target "$target"
 )
 
