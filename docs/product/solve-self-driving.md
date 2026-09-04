@@ -104,9 +104,7 @@ Every real provider adapter still needs a separate evidence, redaction, bounds, 
 
 ### Provider connection policy
 
-Issue #792 introduces the gate that must exist before any live provider transport is considered.
-
-The provider connection policy is analyze-only and intentionally performs no network call. It requires:
+The provider connection policy is merged through #793. It is analyze-only and intentionally performs no network call. It requires:
 
 - an exact provider and region;
 - an exact tenant/project locator;
@@ -118,7 +116,27 @@ The provider connection policy is analyze-only and intentionally performs no net
 - no mutation endpoint authority;
 - observe-only mode.
 
-The first PostHog read-intent contract maps allowlisted product-event, error, deployment, feature-flag, experiment, AI-trace, and MCP-tool-call reads to expected Solve Context signal kinds, but records `status=not-executed`, zero network requests, and zero credential resolutions. A later transport PR must prove the exact API surface and redaction/pagination behavior separately.
+Provider plans are deeply immutable authorization artifacts, are revalidated before a read intent is created, and reject undeclared bound keys from untyped input. The PostHog read-intent contract maps allowlisted product-event, error, deployment, feature-flag, experiment, AI-trace, and MCP-tool-call reads to expected Solve Context signal kinds, but records `status=not-executed`, zero network requests, and zero credential resolutions.
+
+### Exact PostHog product-events query contract
+
+Issue #794 defines the first exact provider request/response surface, still without transport execution.
+
+For `product-events` only, the contract:
+
+- requires an exact numeric `project:<id>` tenant locator;
+- maps the approved US/EU region to a fixed PostHog Cloud host;
+- constructs only `POST /api/projects/<id>/query/`;
+- carries the already-approved opaque credential reference with declared `query:read` scope, never a credential value;
+- uses one internal `HogQLQuery` event-count aggregate template;
+- passes bounded lookback and row limit through typed query values rather than caller SQL interpolation;
+- selects only event name and aggregate sample count, not person/session/property identity;
+- records zero network requests and zero credential resolutions;
+- normalizes only strict `[event, samples]` rows and drops provider response metadata;
+- rejects identity-, credential-, multiline-, duplicate-, malformed-, and excessive aggregate rows;
+- marks provider `hasMore` or the query row limit as partial evidence.
+
+A complete aggregate result can enter the existing sanitized PostHog adapter only when the caller supplies an explicit observation timestamp. A partial aggregate result must **not** be bridged into Solve Context under the current export contract because the exact unseen-row count is unknown; SolveLang refuses to invent that count or claim completeness.
 
 ## Operating modes
 
@@ -170,13 +188,14 @@ Correlation must preserve the provenance of each input rather than collapsing mu
 4. **AI Scout intelligence — merged #786**: direct AI failure evidence and explicit caller-budget breaches become deterministic observe-only findings without invented baselines or provider access.
 5. **Experience/Incident/Rollout intelligence — merged #788**: direct error/failure evidence and explicit KPI-budget breaches become conservative product findings without control-plane authority or causality claims.
 6. **Offline PostHog adapter — merged #790**: strict sanitized PostHog exports normalize into Solve Context without API keys, network access, identity/session ingestion, or mutation authority.
-7. **Provider connection policy — #792**: exact tenant binding, opaque credential references, read-capability allowlists, hard transport budgets, mandatory redaction, and not-executed read intents before any network transport is enabled.
-8. **Live read-only provider transports — planned**: one provider/evidence class at a time, with exact API allowlists, credential resolution, pagination/rate-limit proof, redaction-before-durable-evidence, and no mutation calls.
-9. **Suggestion mode**: produce non-applied patches and validation plans.
-10. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
-11. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
-12. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
-13. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
+7. **Provider connection policy — merged #793**: exact tenant binding, opaque credential references, read-capability allowlists, hard transport budgets, mandatory redaction, immutable/revalidated authorization plans, and not-executed read intents.
+8. **Exact PostHog product-events query contract — #794**: fixed host/path/method/scope, parameterized bounded HogQL, strict aggregate-result normalization, and truth-preserving Context bridge rules; still no network execution.
+9. **Injected read-only transport executor — planned**: invoke only an exact approved request contract through a separately reviewed transport/credential resolver, with byte/request/timeout proof and redaction before durable evidence.
+10. **Suggestion mode**: produce non-applied patches and validation plans.
+11. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
+12. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
+13. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
+14. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
 
 ## Provider adapter rule
 
@@ -193,7 +212,7 @@ A provider adapter must not be treated as a generic permission escalation. Each 
 - deterministic transformation into the provider-neutral Context contract;
 - evidence that no write/mutation endpoint is invoked.
 
-Provider credentials must never be accepted in Scout findings, Solve Inbox items, exported sanitized Context signals, or provider read intents. Credential references may identify where a future approved transport resolves a credential, but the planning layer never resolves or emits the value.
+Provider credentials must never be accepted in Scout findings, Solve Inbox items, exported sanitized Context signals, provider read intents, or query-result artifacts. Credential references may identify where a future approved transport resolves a credential, but the planning/request layers never resolve or emit the value.
 
 ## Solve Runners boundary
 
@@ -201,4 +220,4 @@ Provider credentials must never be accepted in Scout findings, Solve Inbox items
 
 Self-Driving may later request compute from Solve Runners for analysis or PR validation, but runner provisioning, pricing, operating systems, registration, customer isolation, and execution capacity remain a separate product and security boundary.
 
-The Self-Driving roadmap must not use repository-analysis, Context, or provider-connection features as a back door to introduce managed runner authority.
+The Self-Driving roadmap must not use repository-analysis, Context, provider-connection, or provider-query features as a back door to introduce managed runner authority.
