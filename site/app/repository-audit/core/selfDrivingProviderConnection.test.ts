@@ -4,6 +4,7 @@ import {
   PROVIDER_READ_CAPABILITIES,
   createPostHogReadIntent,
   createProviderConnectionPlan,
+  type ProviderConnectionBounds,
   type ProviderConnectionPlan,
   type ProviderConnectionPlanInput,
   type ProviderReadCapability,
@@ -52,6 +53,27 @@ test("provider connection plans are deterministic, tenant-bound, redacted, and n
   assert.equal(first.policy.rolloutMutationAccess, false);
   assert.equal(first.policy.productionMutationAccess, false);
   assert.equal(first.policy.externalSideEffects, false);
+});
+
+test("provider connection plans are deeply immutable authorization artifacts", () => {
+  const plan = createProviderConnectionPlan(input());
+
+  for (const value of [
+    plan,
+    plan.tenant,
+    plan.credential,
+    plan.capabilities,
+    plan.bounds,
+    plan.redaction,
+    plan.policy,
+  ]) {
+    assert.equal(Object.isFrozen(value), true);
+  }
+
+  assert.throws(
+    () => plan.capabilities.push("experiments"),
+    TypeError,
+  );
 });
 
 test("provider connection plans accept credential references but reject raw credential values", () => {
@@ -144,6 +166,21 @@ test("provider connection bounds are positive, capped, and internally coherent",
   );
 });
 
+test("provider connection bounds reject every undeclared transport-shaped key", () => {
+  for (const unsafeBounds of [
+    { url: 123 },
+    { maxRetries: 3 },
+    { method: 1 },
+  ]) {
+    assert.throws(
+      () => createProviderConnectionPlan(input({
+        bounds: unsafeBounds as unknown as Partial<ProviderConnectionBounds>,
+      })),
+      /bounds contains unsupported key/,
+    );
+  }
+});
+
 test("PostHog read intents map each allowlisted capability to a bounded signal kind without executing transport", () => {
   const capabilities: ProviderReadCapability[] = [...PROVIDER_READ_CAPABILITIES];
   const plan = createProviderConnectionPlan(input({ capabilities }));
@@ -180,6 +217,37 @@ test("PostHog read intents reject capabilities that are valid globally but absen
   assert.throws(
     () => createPostHogReadIntent(plan, "errors"),
     /is not allowlisted by provider connection plan/,
+  );
+});
+
+test("PostHog read intents revalidate capabilities, tenant, and bounds against the original plan identity", () => {
+  const plan = createProviderConnectionPlan(input({ capabilities: ["product-events"] }));
+
+  const forgedCapabilities = {
+    ...plan,
+    capabilities: [...plan.capabilities, "errors"],
+  } as ProviderConnectionPlan;
+  assert.throws(
+    () => createPostHogReadIntent(forgedCapabilities, "errors"),
+    /integrity check failed/,
+  );
+
+  const forgedTenant = {
+    ...plan,
+    tenant: { projectLocator: "project:other" },
+  } as ProviderConnectionPlan;
+  assert.throws(
+    () => createPostHogReadIntent(forgedTenant, "product-events"),
+    /integrity check failed/,
+  );
+
+  const forgedBounds = {
+    ...plan,
+    bounds: { ...plan.bounds, maxRecords: plan.bounds.maxRecords + 1 },
+  } as ProviderConnectionPlan;
+  assert.throws(
+    () => createPostHogReadIntent(forgedBounds, "product-events"),
+    /integrity check failed/,
   );
 });
 
