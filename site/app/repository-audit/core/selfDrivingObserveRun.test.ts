@@ -58,12 +58,12 @@ test("Observe Run composes AI, Cost, Experience, Incident, and Rollout findings 
   assert.equal(run.mode, "analyze-only");
   assert.equal(run.execution.status, "complete");
   assert.deepEqual(run.execution.partialReasons, []);
-  assert.equal(run.execution.candidateFindings, 6);
-  assert.equal(run.execution.componentEmittedFindings, 6);
-  assert.equal(run.execution.combinedInputFindings, 6);
-  assert.equal(run.execution.combinedUniqueFindings, 6);
-  assert.equal(run.execution.emittedFindings, 6);
-  assert.equal(run.inbox.items.length, 6);
+  assert.equal(run.execution.candidateFindings, 7);
+  assert.equal(run.execution.componentEmittedFindings, 7);
+  assert.equal(run.execution.combinedInputFindings, 7);
+  assert.equal(run.execution.combinedUniqueFindings, 7);
+  assert.equal(run.execution.emittedFindings, 7);
+  assert.equal(run.inbox.items.length, 7);
   assert.deepEqual(new Set(run.inbox.items.map((item) => item.scout)), new Set([
     "ai",
     "cost",
@@ -79,7 +79,7 @@ test("Observe Run composes AI, Cost, Experience, Incident, and Rollout findings 
     "Product incident evidence requires inspection",
     "Deployment reported an explicit failure",
     "Rollout error-rate budget exceeded",
-  ].filter((title) => title !== "AI latency budget exceeded" || true)));
+  ]));
   assert.ok(run.inbox.items.every((item) => item.recommendedAction.kind === "inspect"));
 });
 
