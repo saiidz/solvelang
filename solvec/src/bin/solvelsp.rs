@@ -1206,17 +1206,28 @@ fn bounded_document(text: &str) -> bool {
     if tokens.len() > 512 {
         return false;
     }
-    let mut depth = 0usize;
+    let mut stack = Vec::new();
     for token in tokens {
         match token.token {
             lexer::Token::LeftParen | lexer::Token::LeftBrace | lexer::Token::LeftBracket => {
-                depth += 1;
-                if depth > 64 {
+                stack.push(match token.token {
+                    lexer::Token::LeftParen => b'(',
+                    lexer::Token::LeftBrace => b'{',
+                    _ => b'[',
+                });
+                if stack.len() > 64 {
                     return false;
                 }
             }
             lexer::Token::RightParen | lexer::Token::RightBrace | lexer::Token::RightBracket => {
-                depth = depth.saturating_sub(1);
+                let opening = match token.token {
+                    lexer::Token::RightParen => b'(',
+                    lexer::Token::RightBrace => b'{',
+                    _ => b'[',
+                };
+                if stack.last() == Some(&opening) {
+                    stack.pop();
+                }
             }
             _ => {}
         }
@@ -1395,6 +1406,12 @@ mod tests {
         server.process(json!({"method":"textDocument/didChange","params":{"textDocument":{"uri":uri,"version":2},"contentChanges":[{"range":{},"text":"x"}]}}));
         assert!(!server.documents.contains_key(uri));
         assert!(!super::bounded_document(&"(".repeat(65)));
+        assert!(!super::bounded_document(&format!(
+            "{}{}{}1",
+            "(".repeat(63),
+            "] +".repeat(63),
+            "(".repeat(63)
+        )));
         assert!(!super::bounded_document(&"x".repeat(65_537)));
         for index in 0..65 {
             server.process(json!({"method":"textDocument/didOpen","params":{"textDocument":{"uri":format!("file:///project/{index}.solve"),"version":1,"text":"let x = 1"}}}));
