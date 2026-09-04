@@ -40,6 +40,8 @@ Public claims should use these labels:
 - a local-first Workflow Intelligence Studio with deterministic analysis
 - a smaller browser-safe `/run` preview
 - bounded read-only Repository Audit / Solve Graph and Server Audit product surfaces
+- a pure Rust evaluator core and deny-all WASM wrapper with shared conformance and deterministic limits (#771–#777); the public `/run/` preview remains TypeScript pending the separate browser-artifact security/integration gate
+- observe-only Self-Driving contracts and fixture/offline Observe Run/Inbox composition through #799; no live provider connection, credential resolution, PR writes, or applied suggestions
 - production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
@@ -55,6 +57,8 @@ Public claims should use these labels:
 - subscription-billing, paid-priority, provider-execution, and managed-execution foundations that remain gated/off in production
 
 Experimental means implemented but unstable, narrow, provider-dependent, or not suitable for production promises.
+
+Repository validation retains both Trusted Mac and supplemental Oracle ARM64 lanes. CI-runner availability is not a released-platform support claim. Solve Runners remains a separate deferred product, not an enabled SolveLang execution service. See the [completion checklist](docs/project-completion-plan.md) for remaining repository work and explicit production/business/legal gates.
 
 ### Planned
 
