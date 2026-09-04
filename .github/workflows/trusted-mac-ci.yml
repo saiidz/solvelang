@@ -20,7 +20,7 @@ concurrency:
 jobs:
   repository-audit-site:
     name: Repository Audit on Mac
-    if: github.repository == 'saiidz/solvelang'
+    if: github.repository == 'saiidz/solvelang' && github.actor == 'saiidz'
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 60
     defaults:
@@ -28,10 +28,20 @@ jobs:
         working-directory: site
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact source head
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
           cache: npm
