@@ -94,6 +94,9 @@ function runFixtureConformance(runPure, fixtures) {
 }
 
 function runFixedLimitConformance(runPure) {
+  assertLimit(runPure, "parser-nesting", `print(${"(".repeat(5000)}1${")".repeat(5000)})`);
+  assertLimit(runPure, "parser-token-count", "let x = 1\n".repeat(1000));
+  assertLimit(runPure, "parser-prefix-depth", `print(${"not ".repeat(2000)}true)`);
   assertLimit(runPure, "source-bytes", "x".repeat(MAX_SOURCE_BYTES + 1));
 
   const oversizedInput = JSON.stringify("i".repeat(MAX_INPUT_BYTES));
@@ -129,7 +132,7 @@ function main() {
   const fixtures = loadFixtures(path.resolve(fixturePath));
   runFixtureConformance(binding.run_pure_v1, fixtures);
   runFixedLimitConformance(binding.run_pure_v1);
-  console.log(`WASM conformance PASS: ${fixtures.length} shared fixtures + 6 fixed limit cases`);
+  console.log(`WASM conformance PASS: ${fixtures.length} shared fixtures + 9 fixed limit cases`);
 }
 
 main();
