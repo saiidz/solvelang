@@ -229,6 +229,7 @@ export function createProviderConnectionPlan(input: ProviderConnectionPlanInput)
   if (!input || typeof input !== "object") throw new Error("Provider connection input must be an object.");
   assertEnum(input.provider, SELF_DRIVING_PROVIDERS, "provider");
   assertEnum(input.region, PROVIDER_REGIONS, "region");
+  if (!input.tenant || typeof input.tenant !== "object") throw new Error("tenant is required.");
 
   const requestedMode = input.requestedMode ?? "observe";
   if (requestedMode !== "observe") {
@@ -241,7 +242,7 @@ export function createProviderConnectionPlan(input: ProviderConnectionPlanInput)
     provider: input.provider,
     region: input.region,
     tenant: {
-      projectLocator: normalizeProjectLocator(input.tenant?.projectLocator),
+      projectLocator: normalizeProjectLocator(input.tenant.projectLocator),
     },
     credential: {
       kind: "environment-variable-reference",
