@@ -47,7 +47,7 @@ A scout finding must retain provenance, confidence, impact, severity, and a boun
 
 The first AI Scout intelligence contract is merged through #786. It consumes only the sanitized provider-neutral Context contract and may report direct `outcome=failure` AI evidence plus caller-supplied retry, latency, token, or cost budget breaches. Missing budgets do not become implicit thresholds. The initial AI Scout has no raw-prompt, provider, credential, network, repository-write, or production-mutation authority and emits `inspect` findings only.
 
-The first Experience/Incident/Rollout intelligence stage is tracked by #787. Incident findings require direct error/failure state. Experience and rollout KPI findings require caller-supplied conversion, abandonment, error-rate, or latency budgets. The product Scouts explicitly do not infer that a deployment, flag, experiment, or code change caused a metric change, and they have no rollout-control authority.
+The first Experience/Incident/Rollout intelligence contract is merged through #788. Incident findings require direct error/failure state. Experience and rollout KPI findings require caller-supplied conversion, abandonment, error-rate, or latency budgets. The product Scouts explicitly do not infer that a deployment, flag, experiment, or code change caused a metric change, and they have no rollout-control authority.
 
 ### Solve Inbox
 
@@ -98,7 +98,27 @@ The first provider-neutral envelope `solvelang.self-driving.context.v0` is merge
 
 The initial Context contract rejects credential-shaped metadata keys, common secret-shaped values, multiline/raw-looking summaries, invalid timestamps, excessive metadata, and non-observe modes. Its policy explicitly records no network access, credential access, repository writes, production mutation, or external side effects.
 
-Every real provider adapter still needs a separate evidence, redaction, bounds, credentials, tenancy, retention, and authority review before it is treated as production-ready. The provider-neutral envelope is not a claim that PostHog, Sentry, Datadog, OpenTelemetry, a warehouse, support provider, feature-flag provider, LLM provider, or MCP server is connected.
+The first provider-specific adapter is merged through #790 as an **offline/export-only PostHog adapter**. It accepts only a strict sanitized export contract, maps bounded product/error/deployment/flag/experiment/AI/MCP records into Solve Context, preserves provider partiality separately from Context truncation, and rejects person/profile identity, session replay, raw bodies, raw prompts/completions, headers/cookies, credential-shaped evidence, and arbitrary provider payloads. It has no API key, network, provider-project, or mutation authority.
+
+Every real provider adapter still needs a separate evidence, redaction, bounds, credentials, tenancy, retention, and authority review before it is treated as production-ready. The provider-neutral envelope and offline PostHog adapter are not claims that PostHog, Sentry, Datadog, OpenTelemetry, a warehouse, support provider, feature-flag provider, LLM provider, or MCP server is connected live.
+
+### Provider connection policy
+
+Issue #792 introduces the gate that must exist before any live provider transport is considered.
+
+The provider connection policy is analyze-only and intentionally performs no network call. It requires:
+
+- an exact provider and region;
+- an exact tenant/project locator;
+- an opaque credential **reference**, not a credential value;
+- an explicit read-capability allowlist rather than arbitrary endpoints;
+- hard bounds for pages, records, response bytes, request count, timeout, and lookback;
+- mandatory redaction rules for identities, session replay, raw request/response bodies, raw prompts/completions, credentials/secrets, headers, and cookies;
+- no caller-controlled URL, path, HTTP method, or request body surface;
+- no mutation endpoint authority;
+- observe-only mode.
+
+The first PostHog read-intent contract maps allowlisted product-event, error, deployment, feature-flag, experiment, AI-trace, and MCP-tool-call reads to expected Solve Context signal kinds, but records `status=not-executed`, zero network requests, and zero credential resolutions. A later transport PR must prove the exact API surface and redaction/pagination behavior separately.
 
 ## Operating modes
 
@@ -148,13 +168,15 @@ Correlation must preserve the provenance of each input rather than collapsing mu
 2. **Setup Agent plan — merged #782**: existing Repository Audit detections map to reviewable setup/context plans; no commands, credentials, or writes.
 3. **Provider-neutral Context envelope — merged #784**: sanitized bounded runtime/product/AI signals gain deterministic identity, ordering, Scout routing, duplicate handling, and safety rejection; no live providers.
 4. **AI Scout intelligence — merged #786**: direct AI failure evidence and explicit caller-budget breaches become deterministic observe-only findings without invented baselines or provider access.
-5. **Experience/Incident/Rollout intelligence — #787**: direct error/failure evidence and explicit KPI-budget breaches become conservative product findings without control-plane authority or causality claims.
-6. **Provider adapters — next**: add individually bounded read-only runtime/product sources, one provider/evidence class at a time.
-7. **Suggestion mode**: produce non-applied patches and validation plans.
-8. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
-9. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
-10. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
-11. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
+5. **Experience/Incident/Rollout intelligence — merged #788**: direct error/failure evidence and explicit KPI-budget breaches become conservative product findings without control-plane authority or causality claims.
+6. **Offline PostHog adapter — merged #790**: strict sanitized PostHog exports normalize into Solve Context without API keys, network access, identity/session ingestion, or mutation authority.
+7. **Provider connection policy — #792**: exact tenant binding, opaque credential references, read-capability allowlists, hard transport budgets, mandatory redaction, and not-executed read intents before any network transport is enabled.
+8. **Live read-only provider transports — planned**: one provider/evidence class at a time, with exact API allowlists, credential resolution, pagination/rate-limit proof, redaction-before-durable-evidence, and no mutation calls.
+9. **Suggestion mode**: produce non-applied patches and validation plans.
+10. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
+11. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
+12. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
+13. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
 
 ## Provider adapter rule
 
@@ -171,7 +193,7 @@ A provider adapter must not be treated as a generic permission escalation. Each 
 - deterministic transformation into the provider-neutral Context contract;
 - evidence that no write/mutation endpoint is invoked.
 
-Provider credentials must never be accepted in Scout findings, Solve Inbox items, or exported sanitized Context signals.
+Provider credentials must never be accepted in Scout findings, Solve Inbox items, exported sanitized Context signals, or provider read intents. Credential references may identify where a future approved transport resolves a credential, but the planning layer never resolves or emits the value.
 
 ## Solve Runners boundary
 
@@ -179,4 +201,4 @@ Provider credentials must never be accepted in Scout findings, Solve Inbox items
 
 Self-Driving may later request compute from Solve Runners for analysis or PR validation, but runner provisioning, pricing, operating systems, registration, customer isolation, and execution capacity remain a separate product and security boundary.
 
-The Self-Driving roadmap must not use repository-analysis or Context features as a back door to introduce managed runner authority.
+The Self-Driving roadmap must not use repository-analysis, Context, or provider-connection features as a back door to introduce managed runner authority.
