@@ -11,7 +11,7 @@ This roadmap distinguishes four states deliberately:
 
 A merged feature is not automatically production-enabled, and production account/Admin infrastructure is not evidence that general hosted SolveLang workflow execution exists. Live GitHub state, `docs/active-buildout-handoff.md`, and `docs/current-production-status-2026-08-20.md` take precedence over stale hashes or historical planning text.
 
-## Current implementation overlay — 2026-08-20
+## Current implementation overlay — 2026-09-02
 
 - Centralized account suspension/termination foundations and rollback-preservation hardening are merged in repository history through #147/#161. Repository merge does not authorize a live account mutation or deployment.
 - Imported-file source provenance is merged through #159.
@@ -45,7 +45,9 @@ A merged feature is not automatically production-enabled, and production account
 - Production authenticator-app TOTP infrastructure is **deployed and environment-enabled** as re-verified on 2026-08-20. The dedicated production TOTP KMS stack/key/alias and the expected OIDC supplemental policies are live; specific customer-account enrollment remains a separate account-level state and no enrollment is authorized by repository state. Subscription billing remains OFF, paid priority remains OFF, and no real-charge authorization exists.
 - Local editor support is intentionally narrow: `solvelsp` now supports parser-backed diagnostics, symbols, definition, hover, highlights, completion, and semantic tokens for didOpen-cached documents (#503/#510/#512/#518/#521/#526/#529). The opt-in VS Code package (#515/#516) defaults executable launch settings to false. Incremental sync, workspace indexing, execution, and network access remain unsupported.
 - The language now includes deterministic `fmt`, `lint`, `check`, loop control, and pure helpers including `keys`, `values`, `entries`, and `is_empty` (#482/#485/#488/#492/#517/#520/#523/#525/#527/#543), with hardened execution still denying capability-bearing builtins. #577 additionally rejects a symlink final component for root-restricted writes so an allowed-root path cannot redirect an overwrite outside that root.
-- Browser/WASM parity is deliberately deferred behind the pure-core extraction specified in ADR #537; the shared Rust library still exposes host adapters and is not safe to compile as the browser runtime.
+- The browser/WASM safety train advanced through #773/#775/#777: the evaluator now has a pure host-incapable `solvec-core` boundary, `solvec-wasm` is a deny-all single-source wrapper, and shared native/TypeScript-preview/actual-compiled-WASM conformance plus deterministic resource-limit checks are merged. `/run/` remains the intentionally narrow TypeScript preview. The next ADR 0002 gate is a separate static WASM/browser-artifact security audit before any browser runtime replacement.
+- Solve Self-Driving is an approved main-product direction tracked from #779. Its initial implementation is repository-only and observe-only: Scouts may normalize evidence into a deterministic bounded Solve Inbox, but repository writes, production mutations, external side effects, live telemetry connections, PR creation, rollout changes, and automatic merging remain disabled until later explicit gates.
+- **Solve Runners remains a separate product and security/commercial boundary.** Self-Driving may later request runner compute for analysis or validation, but runner provisioning/registration/pricing/OS support is not part of Repository Audit or Self-Driving authority.
 - Repository-only operational preparation includes safe restore-drill contract gates (#531) and a provider-neutral future monitoring readiness contract (#538); neither deploys or enables a live feature.
 - Additional repository-only operational contracts cover sanitized suspected API-key exposure handling (#550), evidence/reconciliation before re-enabling an emergency-disabled billing path (#553), and aggregate-only sanitized restore-drill evidence (#554). They authorize no live action.
 - Conservative lint recognizes direct unreachable code plus a statement after an `if` whose two explicit branches terminate (#551/#555), without condition evaluation or dynamic inference.
@@ -62,7 +64,8 @@ A merged feature is not automatically production-enabled, and production account
 - parser/runtime source locations and structured diagnostics;
 - hardened local execution modes that deny network, file, environment, AI, agent, and tool capabilities;
 - agent prototype syntax: `agent`, `tool`, `instruction`, `ask`;
-- local-first Workflow Intelligence Studio and browser-local Workflow Preflight.
+- local-first Workflow Intelligence Studio and browser-local Workflow Preflight;
+- pure host-incapable Rust evaluator core and a deny-all WASM wrapper with shared semantic-conformance/resource-limit coverage, not yet wired to the public browser runner.
 
 ### Production account/API/Admin foundation
 
@@ -92,13 +95,14 @@ The authoritative production-facing record is `docs/current-production-status-20
 
 ## Product direction
 
-SolveLang should grow into a safe language, analysis, and automation platform with three distinct audit/product surfaces:
+SolveLang should grow into a safe language, analysis, and automation platform with three distinct audit/product surfaces plus a separately gated self-driving product layer:
 
 1. **Workflow Preflight** — analyze exported workflow files before production.
 2. **Repository Audit** — analyze a repository and produce safe, prioritized architecture and cleanup recommendations.
 3. **Server Audit** — inspect a server through read-only evidence and produce operational/security findings.
+4. **Solve Self-Driving** — correlate approved repository and runtime/product evidence through Scouts, present deterministic findings in Solve Inbox, and only in later gated stages propose patches, create tested PRs, and monitor rollouts.
 
-These surfaces remain separate because their permissions, blast radius, evidence, and execution models differ.
+The audit surfaces remain separate because their permissions, blast radius, evidence, and execution models differ. Self-Driving composes evidence from those surfaces and future read-only context adapters; it does not erase their boundaries or automatically inherit their authority.
 
 ## Immediate engineering order
 
@@ -107,16 +111,18 @@ Re-evaluate live state before every run. The current safe order is:
 1. keep shared CI/security blockers cleared, including Rust/RustSec;
 2. drain existing safe non-production PRs before unrelated work whenever the safe queue exceeds six;
 3. keep roadmap/handoff/production truth synchronized with live repository state;
-4. preserve the merged selected-node request/race/identity hardening through #470/#472 while continuing bounded interaction and partial/truncation coverage only where it adds new evidence;
-5. continue Repository Audit query/path/impact explanation quality, MCP/Codex integration, local visual-explorer quality, conservative remaining framework/deployment/reference relationships, deterministic IDs/bounds/redaction, and cross-platform tests;
-6. continue Solve Graph with richer bounded language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
-7. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
-8. continue language/runtime and developer-experience work, especially the conservative local module/package foundation, semantic quality, pure-core extraction needed for browser parity, diagnostics, and non-executing editor support;
-9. continue safe Admin Panel repository preparation while treating every future live production change as a fresh protected action;
-10. continue dormant customer-priority engineering while queue/customer/provider gates stay OFF unless a separately approved live rollout proves otherwise;
-11. keep customer-account TOTP enrollment/login/backup-code canaries behind fresh owner approval; do not repeat the already-live IAM/KMS/API TOTP infrastructure rollout merely because older documentation described it as pending;
-12. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
-13. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
+4. complete the ADR 0002 static WASM/browser-artifact security audit—imports/host surfaces, artifact-size bounds, integrity/reproducibility evidence, and browser-target glue—before replacing `/run/`;
+5. preserve the merged selected-node request/race/identity hardening through #470/#472 while continuing bounded interaction and partial/truncation coverage only where it adds new evidence;
+6. continue Repository Audit query/path/impact explanation quality, MCP/Codex integration, local visual-explorer quality, conservative remaining framework/deployment/reference relationships, deterministic IDs/bounds/redaction, and cross-platform tests;
+7. build Solve Self-Driving in authority stages: observe-only Scout/Inbox contracts first, then bounded read-only Context adapters, AI/Experience/Incident/Rollout intelligence, suggestion mode, and only later least-privilege tested-PR mode after explicit write-side governance;
+8. continue Solve Graph with richer bounded language/reference adapters, query/path/impact quality, affected-test/workflow intelligence, architecture/security summaries, and MCP/Codex integration;
+9. continue Server Audit read-only-first with package/service/port/process/scheduled-job relationships, disk/log/cache/backup posture, web roots/domains/TLS/public-file evidence, ownership/permission/version findings, deterministic redacted reports, and cross-platform tests;
+10. continue language/runtime and developer-experience work, especially the conservative local module/package foundation, semantic quality, browser-safe runtime boundary, diagnostics, and non-executing editor support;
+11. continue safe Admin Panel repository preparation while treating every future live production change as a fresh protected action;
+12. continue dormant customer-priority engineering while queue/customer/provider gates stay OFF unless a separately approved live rollout proves otherwise;
+13. keep customer-account TOTP enrollment/login/backup-code canaries behind fresh owner approval; do not repeat the already-live IAM/KMS/API TOTP infrastructure rollout merely because older documentation described it as pending;
+14. continue billing readiness while production billing stays OFF and no real Stripe activity is authorized;
+15. keep security/account hardening, launch readiness, rollback, least privilege, operations, and truth documentation current.
 
 Production mutations remain separately gated even when implementation code, workflows, or prior production stages already exist.
 
@@ -132,9 +138,53 @@ Next read-only intelligence work:
 - continue conservative remaining framework/deployment/reference adapters;
 - improve visual-explorer ergonomics and bounded query quality;
 - keep Docker Compose evidence strictly static/analyze-only while improving reference quality where syntax can be handled without evaluation;
+- expose stable evidence/provenance that future Scouts can consume without changing Repository Audit's analyze-only authority;
 - keep deterministic cross-platform validation current.
 
 Repository Audit write/remediation mode is **not enabled**.
+
+## Solve Self-Driving
+
+Solve Self-Driving is the main-product layer for turning bounded evidence into an engineering/product feedback loop. The product contract lives in `docs/product/solve-self-driving.md` and the initial work is tracked by #779.
+
+The intended loop is:
+
+**Observe → Understand → Find → Propose → Test → PR → Deploy → Measure → Learn**
+
+The stages are authority-gated. The existence of a later stage in the roadmap is not permission to perform it.
+
+### Product components
+
+- **Setup Agent** — detect repository/framework context and prepare bounded integration/setup plans.
+- **Solve Graph** — structural repository context and dependency/impact relationships.
+- **Solve Scouts** — Code, Security, CI, Experience, Incident, Rollout, AI, and Cost scouts.
+- **Solve Inbox** — deterministic findings with provenance, confidence, severity, impact, and bounded next actions.
+- **Fix with Solve** — later non-applied patch proposals and, after write-side approval, tested reviewable PRs.
+- **Rollout Monitor** — later observation of deploys, flags, experiments, error/latency health, and product KPIs.
+- **Solve Context** — future separately reviewed adapters for runtime events, errors, logs, traces, support, deployments, flags, experiments, warehouse aggregates, AI traces, and MCP/tool calls.
+
+### Operating modes
+
+- `observe` — findings/evidence only; **initial implementation**;
+- `suggest` — findings plus a non-applied patch proposal; planned;
+- `pr` — create a tested reviewable branch/PR; planned and requires least-privilege GitHub write policy;
+- `auto` — automatically merge only explicitly approved low-risk classes; planned and requires the highest governance bar.
+
+Initial Self-Driving code must fail closed for `suggest`, `pr`, and `auto`. It must also reject write-capable recommended actions while operating in `observe` mode.
+
+### Customer/product intelligence targets
+
+- improve customer experience from bounded behavior, feedback, traffic, conversion, latency, and support signals;
+- find product problems by correlating errors, traces, logs, deploys, support context, and repository evidence;
+- ship changes with confidence by observing rollout/flag/experiment health before recommending expansion or rollback;
+- maintain AI products by analyzing AI traces, latency, token/cost signals, retries, model changes, MCP/tool failures, and agent loops;
+- connect approved context across repository, runtime, support, warehouse, deployment, and AI systems without silently expanding mutation authority.
+
+The default long-term rule is: **analyze automatically; modify through reviewable PRs**.
+
+### Solve Runners boundary
+
+Solve Runners is deliberately separate. Self-Driving may later consume runner capacity for tests or analysis, but runner provisioning, registration, isolation, pricing, operating-system support, and customer execution are a separate product/security boundary and remain deferred according to the separate Solve Runners plan.
 
 ## Server Audit
 
@@ -173,6 +223,9 @@ Do not automatically:
 - send email;
 - mutate production customer/CRM data;
 - upload or execute customer source in production;
+- connect new live analytics/log/support/warehouse/AI/feature-flag credentials merely because a Self-Driving adapter is planned;
+- turn a Scout finding into a repository write, PR, merge, rollout change, rollback, or production mutation without the later explicit authority gates;
+- treat Self-Driving as authority to provision/register Solve Runners;
 - treat a repository merge as live deployment authorization.
 
 If one track is blocked by a production gate or queued self-hosted validation, continue another safe engineering track instead of idling.
