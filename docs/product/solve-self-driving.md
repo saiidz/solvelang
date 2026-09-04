@@ -120,7 +120,7 @@ Provider plans are deeply immutable authorization artifacts, are revalidated bef
 
 ### Exact PostHog product-events query contract
 
-Issue #794 defines the first exact provider request/response surface, still without transport execution.
+PR #795 implements the first exact provider request/response surface, still without transport execution.
 
 For `product-events` only, the contract:
 
@@ -138,18 +138,30 @@ For `product-events` only, the contract:
 
 A complete aggregate result can enter the existing sanitized PostHog adapter only when the caller supplies an explicit observation timestamp. A partial aggregate result must **not** be bridged into Solve Context under the current export contract because the exact unseen-row count is unknown; SolveLang refuses to invent that count or claim completeness.
 
+### Fixture-only PostHog transport simulation
+
+PR #797 implements an in-memory, fixture-only simulation of the approved PostHog product-events request. It serializes only the exact request authorized by the provider plan and query contract, then enforces the immutable page, response-byte, request-count, timeout, terminal-HTTP-200, and one-request/one-response bounds before parsing JSON.
+
+The simulation exposes no callback, provider SDK, live transport, or credential resolver. It records zero network requests and zero credential resolutions, never persists a raw provider response, and exists to prove request integrity and bounded response handling without connecting to PostHog.
+
+### Composed Observe Run
+
+PR #799 composes the provider-neutral Context and the AI, Cost, Experience, Incident, and Rollout Scouts into `solvelang.self-driving.observe-run.v0`, producing one canonical bounded Solve Inbox.
+
+The run consumes already-sanitized Context, accepts caller-supplied budgets without inventing thresholds, bounds inputs to 500 signals and each Scout component to 5,000 findings, and leaves final truncation truth to the canonical Inbox. Its policy explicitly records no provider access, network access, credential resolution, repository write, rollout control, production mutation, or other external side effect.
+
 ## Operating modes
 
 The product direction encodes four operating modes:
 
 | Mode | Intended behavior | Current status |
 | --- | --- | --- |
-| `observe` | findings and evidence only | initial implementation |
+| `observe` | findings and evidence only | implemented through the composed bounded Observe Run (#799) |
 | `suggest` | findings plus non-applied patch proposal | planned |
 | `pr` | create a tested reviewable branch/PR | planned, requires write-side policy |
 | `auto` | automatically merge only explicitly approved low-risk classes | planned, highest governance bar |
 
-The existence of these mode names in a schema or type is not evidence that the mode is enabled. The initial implementation must fail closed for every mode except `observe`.
+The existence of these mode names in a schema or type is not evidence that the mode is enabled. The current implementation fails closed for every mode except `observe`.
 
 ## Evidence model
 
@@ -189,13 +201,15 @@ Correlation must preserve the provenance of each input rather than collapsing mu
 5. **Experience/Incident/Rollout intelligence — merged #788**: direct error/failure evidence and explicit KPI-budget breaches become conservative product findings without control-plane authority or causality claims.
 6. **Offline PostHog adapter — merged #790**: strict sanitized PostHog exports normalize into Solve Context without API keys, network access, identity/session ingestion, or mutation authority.
 7. **Provider connection policy — merged #793**: exact tenant binding, opaque credential references, read-capability allowlists, hard transport budgets, mandatory redaction, immutable/revalidated authorization plans, and not-executed read intents.
-8. **Exact PostHog product-events query contract — #794**: fixed host/path/method/scope, parameterized bounded HogQL, strict aggregate-result normalization, and truth-preserving Context bridge rules; still no network execution.
-9. **Injected read-only transport executor — planned**: invoke only an exact approved request contract through a separately reviewed transport/credential resolver, with byte/request/timeout proof and redaction before durable evidence.
-10. **Suggestion mode**: produce non-applied patches and validation plans.
-11. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
-12. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
-13. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
-14. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
+8. **Exact PostHog product-events query contract — merged #795**: fixed host/path/method/scope, parameterized bounded HogQL, strict aggregate-result normalization, and truth-preserving Context bridge rules; still no network execution.
+9. **Fixture-only PostHog transport simulation — merged #797**: exact-request serialization and bounded in-memory fixture response handling with no live transport or credential resolution.
+10. **Composed Observe Run — merged #799**: provider-neutral Context and the AI, Cost, Experience, Incident, and Rollout Scouts compose into one canonical bounded Solve Inbox without external side effects.
+11. **Injected read-only transport executor — planned**: invoke only an exact approved request contract through a separately reviewed transport/credential resolver, with byte/request/timeout proof and redaction before durable evidence.
+12. **Suggestion mode**: produce non-applied patches and validation plans.
+13. **PR mode**: least-privilege GitHub write side, protected branches, explicit policy, tested PR creation.
+14. **Rollout observation**: correlate deploys/flags/experiments with outcomes.
+15. **Controlled rollout actions**: separately approved mutation policies with rollback/audit requirements.
+16. **Auto mode**: only for narrow, explicitly approved low-risk classes after sustained evidence.
 
 ## Provider adapter rule
 
