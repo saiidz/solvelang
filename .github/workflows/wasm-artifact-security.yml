@@ -1,0 +1,40 @@
+name: WASM artifact security
+on:
+  pull_request:
+    branches: [main]
+    paths: ["solvec-core/**", "solvec-wasm/**", "conformance/**", ".github/workflows/wasm-artifact-security.yml"]
+  push:
+    branches: [main]
+    paths: ["solvec-core/**", "solvec-wasm/**", "conformance/**", ".github/workflows/wasm-artifact-security.yml"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify source identity
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          toolchain: 1.95.0
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install pinned binding generator
+        run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked
+      - name: Reproduce and audit browser artifact
+        run: bash solvec-wasm/qa/build-audited-artifact.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wasm-security-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: solvec-wasm/target/artifact-security-evidence/audit.json
+          if-no-files-found: error
+          retention-days: 7
