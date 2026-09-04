@@ -22,6 +22,12 @@ export type PostHogAggregateQueryRequest = {
     projectLocator: string;
     projectId: number;
   };
+  transportBounds: {
+    maxPages: number;
+    maxResponseBytes: number;
+    maxRequests: number;
+    timeoutMs: number;
+  };
   request: {
     host: "https://us.posthog.com" | "https://eu.posthog.com";
     path: string;
@@ -116,8 +122,15 @@ const hostsByRegion: Record<ProviderRegion, PostHogAggregateQueryRequest["reques
 };
 
 const HOGQL_QUERY = "SELECT event, count() AS samples FROM events WHERE timestamp >= now() - toIntervalMinute({lookback_minutes}) GROUP BY event ORDER BY samples DESC LIMIT {max_records}";
-const expectedColumns = ["event", "samples"] as const;
+const expectedColumns = Object.freeze(["event", "samples"] as const);
 const maxEventLength = 256;
+const maxProjectId = Number.MAX_SAFE_INTEGER;
+const maxTransportPages = 100;
+const maxTransportResponseBytes = 20 * 1024 * 1024;
+const maxTransportRequests = 100;
+const maxTransportTimeoutMs = 60_000;
+const maxQueryRecords = 5_000;
+const maxQueryLookbackMinutes = 30 * 24 * 60;
 
 const emailValuePattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ipv4ValuePattern = /^(?:\d{1,3}\.){3}\d{1,3}$/;
@@ -145,8 +158,21 @@ function stableHash(value: string): string {
   return left.toString(16).padStart(8, "0") + right.toString(16).padStart(8, "0");
 }
 
+function assertObject(value: unknown, name: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${name} must be an object.`);
+  }
+}
+
+function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[], name: string): void {
+  const allowedSet = new Set(allowed);
+  const unknown = Object.keys(value).filter((key) => !allowedSet.has(key)).sort(compareText);
+  if (unknown.length > 0) throw new Error(`${name} contains unsupported fields: ${unknown.join(", ")}.`);
+}
+
 function deepFreezeRequest(request: PostHogAggregateQueryRequest): PostHogAggregateQueryRequest {
   Object.freeze(request.tenant);
+  Object.freeze(request.transportBounds);
   Object.freeze(request.request.authorization.requiredScopes);
   Object.freeze(request.request.authorization);
   Object.freeze(request.request.body.query.values);
@@ -164,7 +190,7 @@ function parseNumericProjectLocator(projectLocator: string): number {
     throw new Error("PostHog query requests require tenant.projectLocator to use exact numeric project:<id> syntax.");
   }
   const projectId = Number(match[1]);
-  if (!Number.isSafeInteger(projectId) || projectId < 1) {
+  if (!Number.isSafeInteger(projectId) || projectId < 1 || projectId > maxProjectId) {
     throw new Error("PostHog project ID must be a positive safe integer.");
   }
   return projectId;
@@ -190,6 +216,12 @@ export function createPostHogProductEventsQueryRequest(
     tenant: {
       projectLocator: intent.tenant.projectLocator,
       projectId,
+    },
+    transportBounds: {
+      maxPages: intent.bounds.maxPages,
+      maxResponseBytes: intent.bounds.maxResponseBytes,
+      maxRequests: intent.bounds.maxRequests,
+      timeoutMs: intent.bounds.timeoutMs,
     },
     request: {
       host: hostsByRegion[intent.region],
@@ -242,10 +274,94 @@ export function createPostHogProductEventsQueryRequest(
   });
 }
 
-function assertObject(value: unknown, name: string): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${name} must be an object.`);
+function assertPositiveBound(value: unknown, name: string, maximum: number): asserts value is number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > maximum) {
+    throw new Error(`${name} must be a positive safe integer no greater than ${maximum}.`);
   }
+}
+
+export function assertPostHogProductEventsQueryRequestIntegrity(
+  request: PostHogAggregateQueryRequest,
+): PostHogAggregateQueryRequest {
+  if (!request || typeof request !== "object" || !Object.isFrozen(request)) {
+    throw new Error("PostHog query request integrity check requires the immutable request contract.");
+  }
+
+  const raw = request as unknown as Record<string, unknown>;
+  assertExactKeys(raw, ["schema", "mode", "id", "connectionPlanId", "provider", "capability", "region", "tenant", "transportBounds", "request", "execution", "policy"], "PostHog query request");
+  if (request.schema !== "solvelang.self-driving.posthog-query-request.v0" || request.mode !== "analyze-only") {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+  if (request.provider !== "posthog" || request.capability !== "product-events") {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+  if (request.region !== "us" && request.region !== "eu") throw new Error("PostHog query request integrity check failed.");
+
+  assertObject(request.tenant, "PostHog query request tenant");
+  assertExactKeys(request.tenant, ["projectLocator", "projectId"], "PostHog query request tenant");
+  const projectId = parseNumericProjectLocator(request.tenant.projectLocator);
+  if (request.tenant.projectId !== projectId) throw new Error("PostHog query request integrity check failed.");
+
+  assertObject(request.transportBounds, "PostHog query request transportBounds");
+  assertExactKeys(request.transportBounds, ["maxPages", "maxResponseBytes", "maxRequests", "timeoutMs"], "PostHog query request transportBounds");
+  assertPositiveBound(request.transportBounds.maxPages, "transportBounds.maxPages", maxTransportPages);
+  assertPositiveBound(request.transportBounds.maxResponseBytes, "transportBounds.maxResponseBytes", maxTransportResponseBytes);
+  assertPositiveBound(request.transportBounds.maxRequests, "transportBounds.maxRequests", maxTransportRequests);
+  assertPositiveBound(request.transportBounds.timeoutMs, "transportBounds.timeoutMs", maxTransportTimeoutMs);
+  if (request.transportBounds.maxPages > request.transportBounds.maxRequests) throw new Error("PostHog query request integrity check failed.");
+
+  assertObject(request.request, "PostHog query request transport");
+  assertExactKeys(request.request, ["host", "path", "method", "contentType", "authorization", "body"], "PostHog query request transport");
+  if (request.request.host !== hostsByRegion[request.region]) throw new Error("PostHog query request integrity check failed.");
+  if (request.request.path !== `/api/projects/${projectId}/query/` || request.request.method !== "POST" || request.request.contentType !== "application/json") {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+
+  assertObject(request.request.authorization, "PostHog query request authorization");
+  assertExactKeys(request.request.authorization, ["scheme", "credentialRef", "resolved", "requiredScopes"], "PostHog query request authorization");
+  if (request.request.authorization.scheme !== "bearer" || request.request.authorization.resolved !== false) throw new Error("PostHog query request integrity check failed.");
+  if (!/^env:[A-Z][A-Z0-9_]{1,127}$/.test(request.request.authorization.credentialRef)) throw new Error("PostHog query request integrity check failed.");
+  if (!Array.isArray(request.request.authorization.requiredScopes) || request.request.authorization.requiredScopes.length !== 1 || request.request.authorization.requiredScopes[0] !== "query:read") {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+
+  assertObject(request.request.body, "PostHog query request body");
+  assertExactKeys(request.request.body, ["query"], "PostHog query request body");
+  assertObject(request.request.body.query, "PostHog query request body.query");
+  assertExactKeys(request.request.body.query, ["kind", "name", "query", "values"], "PostHog query request body.query");
+  if (request.request.body.query.kind !== "HogQLQuery" || request.request.body.query.name !== "solvelang_product_event_summary_v0" || request.request.body.query.query !== HOGQL_QUERY) {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+  assertObject(request.request.body.query.values, "PostHog query request body.query.values");
+  assertExactKeys(request.request.body.query.values, ["lookback_minutes", "max_records"], "PostHog query request body.query.values");
+  assertPositiveBound(request.request.body.query.values.lookback_minutes, "query.values.lookback_minutes", maxQueryLookbackMinutes);
+  assertPositiveBound(request.request.body.query.values.max_records, "query.values.max_records", maxQueryRecords);
+
+  if (
+    request.execution.status !== "not-executed"
+    || request.execution.networkRequests !== 0
+    || request.execution.credentialResolutions !== 0
+    || request.policy.fixedHost !== true
+    || request.policy.fixedPath !== true
+    || request.policy.fixedMethod !== true
+    || request.policy.callerSuppliedSql !== false
+    || request.policy.parameterizedValuesOnly !== true
+    || request.policy.personIdentitySelected !== false
+    || request.policy.sessionIdentitySelected !== false
+    || request.policy.arbitraryUrlAccess !== false
+    || request.policy.arbitraryMethodAccess !== false
+    || request.policy.mutationEndpointAccess !== false
+    || request.policy.networkAccess !== false
+    || request.policy.credentialResolution !== false
+    || request.policy.externalSideEffects !== false
+  ) {
+    throw new Error("PostHog query request integrity check failed.");
+  }
+
+  const { id, ...withoutId } = request;
+  const expectedId = `posthog_query_${stableHash(requestIdentity(withoutId))}`;
+  if (id !== expectedId) throw new Error("PostHog query request integrity check failed.");
+  return request;
 }
 
 function normalizeEvent(value: unknown, rowIndex: number): string {
@@ -286,12 +402,7 @@ export function normalizePostHogProductEventsQueryResult(
   request: PostHogAggregateQueryRequest,
   raw: unknown,
 ): PostHogAggregateQueryResult {
-  if (!request || typeof request !== "object" || !Object.isFrozen(request)) {
-    throw new Error("PostHog aggregate response normalization requires the immutable request contract.");
-  }
-  if (request.schema !== "solvelang.self-driving.posthog-query-request.v0" || request.capability !== "product-events") {
-    throw new Error("PostHog aggregate response normalization requires a product-events query request.");
-  }
+  assertPostHogProductEventsQueryRequestIntegrity(request);
   assertObject(raw, "PostHog aggregate response");
   normalizeColumns(raw.columns);
   if (!Array.isArray(raw.results)) throw new Error("PostHog aggregate response results must be an array.");
