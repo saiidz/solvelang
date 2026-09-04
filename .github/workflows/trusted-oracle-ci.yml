@@ -99,6 +99,6 @@ jobs:
         working-directory: solvec
         run: |
           cargo fmt --check
-          cargo clippy -- -D warnings
-          cargo test
-          cargo build --release
+          cargo clippy --locked -- -D warnings
+          cargo test --locked
+          cargo build --release --locked
