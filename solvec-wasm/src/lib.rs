@@ -31,17 +31,28 @@ fn source_admitted(tokens: &[lexer::LocatedToken]) -> bool {
     if tokens.len() > MAX_SOURCE_TOKENS {
         return false;
     }
-    let mut depth = 0usize;
+    let mut stack = Vec::new();
     for located in tokens {
         match located.token {
             lexer::Token::LeftParen | lexer::Token::LeftBrace | lexer::Token::LeftBracket => {
-                depth += 1;
-                if depth > MAX_SYNTAX_DEPTH {
+                stack.push(match located.token {
+                    lexer::Token::LeftParen => b'(',
+                    lexer::Token::LeftBrace => b'{',
+                    _ => b'[',
+                });
+                if stack.len() > MAX_SYNTAX_DEPTH {
                     return false;
                 }
             }
             lexer::Token::RightParen | lexer::Token::RightBrace | lexer::Token::RightBracket => {
-                depth = depth.saturating_sub(1);
+                let opening = match located.token {
+                    lexer::Token::RightParen => b'(',
+                    lexer::Token::RightBrace => b'{',
+                    _ => b'[',
+                };
+                if stack.last() == Some(&opening) {
+                    stack.pop();
+                }
             }
             _ => {}
         }
@@ -56,6 +67,11 @@ fn parser_admission_rejects_deep_and_high_cardinality_source_before_output() {
         format!("print({}1{})", "(".repeat(65), ")".repeat(65)),
         format!("print({}true)", "not ".repeat(2000)),
         "let x = 1\n".repeat(1000),
+        format!(
+            "print({}{}1",
+            "(".repeat(63),
+            format!("{}{}", "] +".repeat(63), "(".repeat(63)).repeat(4)
+        ),
     ] {
         assert!(!source_admitted(&lexer::lex(&source)));
         let result: JsonValue = serde_json::from_str(&run_pure_v1(&source, "")).unwrap();
