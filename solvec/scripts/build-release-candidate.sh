@@ -26,7 +26,6 @@ case "$target" in
   x86_64-unknown-linux-gnu)
     target_os="linux"
     target_arch="x86_64"
-    source_binary="$repo_root/solvec/target/$target/release/solvec"
     binary_name="solvec"
     ;;
   *)
@@ -46,10 +45,15 @@ mkdir "$dist_dir"
 
 version="$({ cd solvec; cargo metadata --locked --no-deps --format-version 1; } | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "solvec"))')"
 artifact_name="solvelang-${version}-${target_os}-${target_arch}.tar.gz"
+build_root="$(mktemp -d)"
+trap 'rm -rf "$build_root"' EXIT
+source_binary="$build_root/target/$target/release/$binary_name"
 
 (
   cd solvec
-  cargo build --release --locked --target "$target"
+  CARGO_TARGET_DIR="$build_root/target" \
+    RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang --remap-path-prefix=$build_root=/solvelang-build" \
+    cargo build --release --locked --target "$target"
 )
 
 if [[ ! -f "$source_binary" || ! -x "$source_binary" ]]; then
@@ -58,8 +62,8 @@ if [[ ! -f "$source_binary" || ! -x "$source_binary" ]]; then
 fi
 
 source_date_epoch="$(git show -s --format=%ct "$source_commit")"
-staging_dir="$(mktemp -d)"
-trap 'rm -rf "$staging_dir"' EXIT
+staging_dir="$build_root/staging"
+mkdir "$staging_dir"
 cp "$source_binary" "$staging_dir/$binary_name"
 chmod 0755 "$staging_dir/$binary_name"
 
