@@ -1,5 +1,7 @@
 # PostHog feature-flag sanitizer
 
+The explicit `executeReviewedPostHogReadPipeline` composition selects this sanitizer for `read-feature-flags`; see [the composition contract](posthog-error-sanitizer.md). It still requires caller-injected auth and transport and grants no live-provider or mutation authority.
+
 `sanitizePostHogFlags` is an explicit pure sanitizer for the read pipeline injection point. It emits numeric flag ID, configuration update time, boolean active/deleted/archived state and numeric version. It never emits keys, names, targeting rules, filters, payloads, users, tags, arbitrary properties or permissions. Known serializer fields are excluded wholesale rather than traversed. Unknown fields and malformed evidence fail with fixed errors that contain no input values.
 
 The reviewed upstream source is PostHog commit `7a2c6545d6218e20ffd63b208a79a963fdaf2183`: `products/feature_flags/backend/api/feature_flag.py` (`FeatureFlagSerializer`, `FeatureFlagViewSet.list`) and `posthog/settings/web.py` (LimitOffsetPagination). The list route is `GET /api/projects/{project}/feature_flags/`. Synthetic fixtures only; no live provider call or credentials.

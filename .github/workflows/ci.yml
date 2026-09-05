@@ -123,6 +123,9 @@ jobs:
       - name: Run deterministic Studio and preflight tests
         run: npm run test:studio
 
+      - name: Verify static browser runtime package
+        run: node --test qa/wasm-preview-package.test.mjs
+
       - name: Run lint
         run: npm run lint
 
