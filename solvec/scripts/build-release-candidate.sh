@@ -4,8 +4,8 @@ set -Eeuo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-  echo "release candidate build requires a clean tracked worktree" >&2
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "release candidate build requires a clean worktree including untracked files" >&2
   exit 1
 fi
 
@@ -26,7 +26,6 @@ case "$target" in
   x86_64-unknown-linux-gnu)
     target_os="linux"
     target_arch="x86_64"
-    source_binary="$repo_root/solvec/target/$target/release/solvec"
     binary_name="solvec"
     ;;
   *)
@@ -35,15 +34,26 @@ case "$target" in
     ;;
 esac
 
+dist_dir="${SOLVELANG_RELEASE_DIST:-$repo_root/dist/release-candidate}"
+if [[ -e "$dist_dir" || -L "$dist_dir" ]]; then
+  echo "release candidate destination must not exist; use a fresh directory" >&2
+  exit 1
+fi
+# Never replace previous evidence; fail closed on concurrent creation too.
+mkdir -p "$(dirname "$dist_dir")"
+mkdir "$dist_dir"
+
 version="$({ cd solvec; cargo metadata --locked --no-deps --format-version 1; } | python3 -c 'import json,sys; data=json.load(sys.stdin); print(next(p["version"] for p in data["packages"] if p["name"] == "solvec"))')"
 artifact_name="solvelang-${version}-${target_os}-${target_arch}.tar.gz"
-dist_dir="${SOLVELANG_RELEASE_DIST:-$repo_root/dist/release-candidate}"
-rm -rf "$dist_dir"
-mkdir -p "$dist_dir"
+build_root="$(mktemp -d)"
+trap 'rm -rf "$build_root"' EXIT
+source_binary="$build_root/target/$target/release/$binary_name"
 
 (
   cd solvec
-  cargo build --release --locked --target "$target"
+  CARGO_TARGET_DIR="$build_root/target" \
+    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang"$'\x1f'"--remap-path-prefix=$build_root=/solvelang-build" \
+    cargo build --release --locked --target "$target"
 )
 
 if [[ ! -f "$source_binary" || ! -x "$source_binary" ]]; then
@@ -52,8 +62,8 @@ if [[ ! -f "$source_binary" || ! -x "$source_binary" ]]; then
 fi
 
 source_date_epoch="$(git show -s --format=%ct "$source_commit")"
-staging_dir="$(mktemp -d)"
-trap 'rm -rf "$staging_dir"' EXIT
+staging_dir="$build_root/staging"
+mkdir "$staging_dir"
 cp "$source_binary" "$staging_dir/$binary_name"
 chmod 0755 "$staging_dir/$binary_name"
 

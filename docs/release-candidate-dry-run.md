@@ -4,6 +4,8 @@ SolveLang release-candidate tooling is deliberately **non-publishing**. It prove
 
 This machinery implements only the dry-run portion of [`release-contract.md`](release-contract.md). Final publishable artifacts must still be regenerated from a clean checkout of the final annotated tag.
 
+Regeneration requires a clean checkout including untracked files and a **new, nonexistent** output directory. Existing directories and symlink destinations are refused, never erased or overwritten. Choose a new directory for each attempt; retain previous evidence. Before extraction/smoke testing, the verifier admits exactly one regular executable `solvec` entry (mode 0755, at most 100 MiB), rejecting links, paths, devices, and extra entries. Checksums prove byte identity, not trust: only smoke-test artifacts from the reviewed build workflow; this verifier is not a sandbox for untrusted binaries.
+
 ## Current supported target
 
 The implemented candidate target is exactly:

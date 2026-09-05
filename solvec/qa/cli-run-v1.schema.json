@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SolveLang hardened CLI run envelope v1",
+  "type": "object",
+  "required": ["schema", "version", "advisory", "advisory_only", "ok"],
+  "properties": {
+    "schema": {"const": "solvelang.cli-run"},
+    "version": {"const": 1},
+    "advisory": {"const": "NON-PRODUCTION ADVISORY ONLY"},
+    "advisory_only": {"const": true},
+    "ok": {"type": "boolean"},
+    "dry_run": {"type": "boolean"},
+    "outputs": {"type": "array"},
+    "errors": {
+      "type": "array", "minItems": 1, "maxItems": 1,
+      "items": {
+        "type": "object", "required": ["code", "message"],
+        "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+        "additionalProperties": false
+      }
+    }
+  },
+  "oneOf": [
+    {"properties": {"ok": {"const": true}}, "required": ["dry_run", "outputs"], "not": {"required": ["errors"]}},
+    {"properties": {"ok": {"const": false}}, "required": ["errors"], "not": {"anyOf": [{"required": ["outputs"]}, {"required": ["dry_run"]}]}}
+  ],
+  "additionalProperties": false
+}

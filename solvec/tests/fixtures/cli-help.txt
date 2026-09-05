@@ -1,0 +1,35 @@
+SolveLang Compiler
+
+Usage:
+  solvec run [options] <file.solve>  Run with the canonical AST runtime
+  solvec validate <file.solve>       Validate syntax without running
+  solvec check <file.solve>          Check conservative static semantics without running
+  solvec lint <file.solve>           Report conservative warnings without running
+  solvec fmt [--check] <file.solve>  Format source without changing meaning
+  solvec tokens <file.solve>         Print lexer tokens
+  solvec ast <file.solve>            Print parsed AST
+  solvec version                     Print canonical package version
+
+Local structured-run options:
+  --input <file>                     Inject strict JSON as read-only 'input'
+  --json                             Emit one hardened deterministic JSON envelope
+  --safe                             Deny runtime capabilities and unsafe tools
+  --dry-run                          Evaluate pure logic after static preflight
+  --no-network                       Enable strict hardened execution
+
+Unhardened capability options:
+  --allow-network                    Accepted only outside hardened modes
+  --allow-file-read                  Accepted only outside hardened modes
+  --allow-file-write                 Accepted only outside hardened modes
+  --allow-env                        Accepted only outside hardened modes
+  --allow-root <path>                Restrict unhardened file access to a root
+  --http-connect-timeout-ms <ms>     HTTP connect timeout, default 5000
+  --http-timeout-ms <ms>             HTTP request timeout, default 15000
+  --http-max-body-bytes <bytes>      HTTP response body limit, default 1048576
+
+Backwards-compatible flags:
+  solvec <file.solve> --tokens
+  solvec <file.solve> --ast
+
+Legacy runtime:
+  The public legacy command and --legacy flag have been removed.

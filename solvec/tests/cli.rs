@@ -1824,7 +1824,8 @@ fn allow_root_rejects_option_like_values_without_swallowing_safety_flags() {
     let (success, stdout, stderr) =
         run_solvec_with_status(&["run", "--allow-root", "--safe", "missing.solve"]);
     assert!(!success, "option-like root unexpectedly succeeded");
-    assert!(stdout.contains("SolveLang Compiler"));
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("SolveLang Compiler"));
     assert!(stderr.contains("--allow-root requires a path"));
     assert!(!stderr.contains("failed to resolve"));
     assert!(!stderr.contains("invalid execution policy"));
@@ -2303,8 +2304,9 @@ fn cli_version_rejects_extra_arguments_with_existing_usage_contract() {
     assert!(!output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stdout.contains("SolveLang Compiler"));
-    assert!(stdout.contains("Usage:"));
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("SolveLang Compiler"));
+    assert!(stderr.contains("Usage:"));
     assert!(stderr.contains("version does not accept extra arguments"));
 }
 
