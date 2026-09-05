@@ -74,7 +74,7 @@ export type ProviderConnectorResult = {
   records: unknown[];
 };
 
-const forbiddenOperationPattern = /(?:create|update|delete|remove|write|mutate|patch|post|put|flag|rollback|deploy|enable|disable|archive|restore|send)/i;
+const mutationVerbPattern = /(?:^|-)(?:create|update|delete|remove|write|mutate|patch|post|put|rollback|deploy|enable|disable|archive|restore|send)(?:-|$)/i;
 const absoluteUrlPattern = /^https?:\/\//i;
 
 function compareText(left: string, right: string): number {
@@ -92,6 +92,11 @@ function normalizeText(value: string, name: string, maxLength: number): string {
   if (normalized.length > maxLength) throw new Error(`${name} exceeds the ${maxLength}-character bound.`);
   if (/[\r\n\u0000-\u001f]/.test(normalized)) throw new Error(`${name} must be single-line sanitized text.`);
   return normalized;
+}
+
+function assertReadOperation(operation: string): void {
+  if (!operation.startsWith("read-")) throw new Error(`Operation '${operation}' is not explicitly read-only.`);
+  if (mutationVerbPattern.test(operation)) throw new Error(`Operation '${operation}' is mutation-shaped and is not allowed.`);
 }
 
 function validatePolicy(policy: ProviderConnectorPolicy): ProviderConnectorPolicy {
@@ -112,7 +117,7 @@ function validatePolicy(policy: ProviderConnectorPolicy): ProviderConnectorPolic
     const pathTemplate = normalizeText(item.pathTemplate, `policy.allowedOperations[${index}].pathTemplate`, 256);
     const tenantField = normalizeText(item.tenantField, `policy.allowedOperations[${index}].tenantField`, 64);
     if (itemProvider !== provider) throw new Error("Provider operation policy must match the connector provider.");
-    if (forbiddenOperationPattern.test(operation)) throw new Error(`Operation '${operation}' is mutation-shaped and is not allowed.`);
+    assertReadOperation(operation);
     if (absoluteUrlPattern.test(pathTemplate)) throw new Error("Provider operation paths must be relative allowlisted templates, not arbitrary absolute URLs.");
     if (!pathTemplate.startsWith("/")) throw new Error("Provider operation paths must start with '/'.");
     if (seen.has(operation)) throw new Error(`Duplicate provider operation policy '${operation}'.`);
@@ -127,9 +132,9 @@ function findOperation(policy: ProviderConnectorPolicy, request: ProviderConnect
     throw new Error(`Provider connector mode '${request.requestedMode}' is not enabled. The connector is observe-only.`);
   }
   if (request.provider !== policy.provider) throw new Error("Provider request does not match the connector policy provider.");
+  assertReadOperation(request.operation);
   const operation = policy.allowedOperations.find((item) => item.operation === request.operation);
   if (!operation) throw new Error(`Provider operation '${request.operation}' is not allowlisted for read-only collection.`);
-  if (forbiddenOperationPattern.test(request.operation)) throw new Error(`Provider operation '${request.operation}' is mutation-shaped and is not allowed.`);
   return operation;
 }
 
@@ -173,7 +178,6 @@ export async function collectReadOnlyProvider(
     }
 
     let page: ProviderConnectorPage | undefined;
-    let lastError: unknown;
     for (let attempt = 0; attempt <= policy.maxRetries; attempt += 1) {
       try {
         page = await fetchPage({
@@ -186,13 +190,11 @@ export async function collectReadOnlyProvider(
           attempt,
         });
         break;
-      } catch (error) {
-        lastError = error;
+      } catch {
         if (attempt < policy.maxRetries) retries += 1;
       }
     }
     if (!page) {
-      void lastError;
       partialReasons.add("retry-exhausted");
       break;
     }
