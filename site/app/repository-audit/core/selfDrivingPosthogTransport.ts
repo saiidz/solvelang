@@ -243,6 +243,9 @@ export async function executePostHogReadPlan(
       `timeoutMs must be a positive safe integer no greater than ${POSTHOG_READONLY_CONNECTOR_POLICY.maxWallClockMs}.`,
     );
   }
+  if (options.signal?.aborted) {
+    throw failure("cancelled", "PostHog read was cancelled.");
+  }
 
   const expectedUrl = postHogRequestPlanUrl(plan);
   const controller = new AbortController();
@@ -264,8 +267,7 @@ export async function executePostHogReadPlan(
   };
   const onExternalAbort = () => stop("cancelled");
 
-  if (externalSignal?.aborted) stop("cancelled");
-  else externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
+  externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
   const timer = setTimeout(() => stop("timeout"), timeoutMs);
 
   try {
