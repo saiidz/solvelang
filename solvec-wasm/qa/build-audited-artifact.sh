@@ -54,7 +54,7 @@ for attempt in first second; do
   HOME="$audit_home" CARGO_HOME="$audit_cargo_home" \
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$attempt_root/target" \
     CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= \
-    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$attempt_root=/solvelang-build" \
+    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$attempt_root/source=/solvelang" \
     CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="$linker" \
     "$cargo_bin" --config "build.rustc=\"$compiler\"" \
       --config 'build.rustc-wrapper=""' --config 'build.rustc-workspace-wrapper=""' \
