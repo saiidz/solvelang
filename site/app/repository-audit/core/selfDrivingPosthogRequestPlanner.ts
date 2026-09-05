@@ -136,6 +136,10 @@ export function planPostHogReadRequest(input: PostHogRequestPlannerInput): PostH
   const origin = normalizeOrigin(input.origin, input.allowSelfHostedOrigin === true);
   const operation = operationPolicy(input.operation);
   const project = normalizeProject(input.project);
+  if (operation.operation === "read-errors" || operation.operation === "read-feature-flags") {
+    if (!/^[1-9][0-9]{0,19}$/.test(project)) throw new Error("Sanitized PostHog reads require a canonical positive numeric project identifier.");
+    if (input.cursor !== undefined) throw new Error("Sanitized PostHog reads support first-page requests only; cursor pagination is not supported.");
+  }
   if (!Number.isSafeInteger(input.pageSize) || input.pageSize < 1 || input.pageSize > POSTHOG_READONLY_CONNECTOR_POLICY.maxPageSize) {
     throw new Error(`pageSize must be a positive safe integer no greater than ${POSTHOG_READONLY_CONNECTOR_POLICY.maxPageSize}.`);
   }

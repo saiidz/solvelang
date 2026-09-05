@@ -15,6 +15,20 @@ const plan = planPostHogReadRequest({
 
 const auth = async () => ({ authorization: "Bearer fixture_readonly_token_123456" });
 
+test("error and flag legacy paths or injected cursor cannot resolve credentials or invoke transport", async () => {
+  for (const operation of ["read-errors", "read-feature-flags"]) {
+    const firstPage = planPostHogReadRequest({ origin: "https://us.posthog.com", operation, project: "12345", pageSize: 50 });
+    for (const request of [
+      { ...firstPage.request, pathname: firstPage.request.pathname.replace(/\/$/, "") },
+      { ...firstPage.request, query: { ...firstPage.request.query, cursor: "next" } },
+    ]) {
+      let calls = 0;
+      await assert.rejects(executePostHogReadPlan({ ...firstPage, request }, async () => { calls++; return auth(); }, async () => { calls++; throw new Error("must not run"); }), /intact canonical request plan/);
+      assert.equal(calls, 0);
+    }
+  }
+});
+
 function assertFailureCategory(category: string, forbidden?: string) {
   return (error: unknown) => {
     assert.ok(error instanceof PostHogTransportFailure);

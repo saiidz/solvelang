@@ -259,8 +259,8 @@ export const POSTHOG_READONLY_CONNECTOR_POLICY: ProviderConnectorPolicy = Object
   provider: "posthog",
   allowedOperations: [
     { provider: "posthog", operation: "read-events", pathTemplate: "/api/projects/{project}/events", tenantField: "project" },
-    { provider: "posthog", operation: "read-errors", pathTemplate: "/api/projects/{project}/error_tracking/issues", tenantField: "project" },
-    { provider: "posthog", operation: "read-feature-flags", pathTemplate: "/api/projects/{project}/feature_flags", tenantField: "project" },
+    { provider: "posthog", operation: "read-errors", pathTemplate: "/api/projects/{project}/error_tracking/issues/", tenantField: "project" },
+    { provider: "posthog", operation: "read-feature-flags", pathTemplate: "/api/projects/{project}/feature_flags/", tenantField: "project" },
   ],
   maxPageSize: 100,
   maxPages: 20,
