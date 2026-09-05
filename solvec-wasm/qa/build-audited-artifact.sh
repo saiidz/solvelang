@@ -7,8 +7,18 @@ source_commit="$(git rev-parse HEAD)"
 test "$(node -p 'process.versions.node.split(".")[0]')" = "24"
 test "$(rustc +1.95.0 --version | cut -d ' ' -f 2)" = "1.95.0"
 test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
-audit_root="$(mktemp -d)"
+
+# Rust/Cargo metadata can retain physical build paths even after source-path
+# remapping. The first reviewed Linux qualification for the pinned browser
+# payload used this exact root, so keep it as the versioned canonical v1 build
+# root. `mkdir` intentionally fails closed if anything already occupies it;
+# the cleanup trap removes only the directory created by this invocation.
+audit_root="/tmp/tmp.0vdImgrjRg"
+mkdir "$audit_root"
+trap 'rm -rf "$audit_root"' EXIT
+audit_root="$(cd "$audit_root" && pwd -P)"
 evidence_root="$repo_root/solvec-wasm/target/artifact-security-evidence"
+
 # Only tracked commit contents become compiler inputs. Ignored build.rs/config
 # files in the caller checkout are never copied into this isolated snapshot.
 mkdir "$audit_root/source"

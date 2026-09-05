@@ -571,18 +571,18 @@ Use `run --json --safe --dry-run --no-network` when you want deterministic advis
 
 ## Browser Preview Vs Rust CLI
 
-The hosted `/run` browser preview is intentionally smaller and safer than the Rust CLI runtime. It runs in the browser and does not call a server.
+The repository's `/run` static preview uses a pinned, audited WebAssembly build of the canonical pure Rust core. It fetches same-origin runtime assets, then executes scripts locally without sending source to a server. Deployment of a new build is a separate operational gate.
 
 The browser preview currently supports:
 
 - `let` variables
-- string and number values
+- strings, numbers, booleans, arrays and objects
 - `print(...)`
 - simple variable reads
-- basic `if` blocks using `==`
+- `if` / `else`, comparisons, functions and bounded loops
 - comments with `//`
 
-The browser preview does not support the full Rust CLI language. Features such as arrays, objects, functions, loops, imports, `else`, AI agents, HTTP helpers, file helpers, JSON helpers, and environment reads should be tested with the Rust CLI.
+The browser preview does not grant host capabilities. Imports, AI agents, HTTP, file helpers and environment reads are denied, including unreachable calls. Execution has deterministic source, input, output, depth and step limits. Missing or corrupt assets produce a visible error and permit retry, never a TypeScript, native or server fallback. Full host-capability examples still require the Rust CLI.
 
 Use the Rust CLI as the source of truth for full-language examples:
 

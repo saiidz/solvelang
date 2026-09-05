@@ -40,7 +40,7 @@ Public claims should use these labels:
 - a local-first Workflow Intelligence Studio with deterministic analysis
 - a smaller browser-safe `/run` preview
 - bounded read-only Repository Audit / Solve Graph and Server Audit product surfaces
-- a pure Rust evaluator core and deny-all WASM wrapper with shared conformance and deterministic limits (#771–#777); the public `/run/` preview remains TypeScript pending the separate browser-artifact security/integration gate
+- a pure Rust evaluator core and deny-all WASM wrapper with shared conformance and deterministic limits; `/run/` uses a pinned audited artifact in the static build, with no server fallback (deployment remains separately verified)
 - observe-only Self-Driving contracts and fixture/offline Observe Run/Inbox composition through #799; no live provider connection, credential resolution, PR writes, or applied suggestions
 - production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
 - repository examples, tests, schemas, documentation, and launch-readiness controls
