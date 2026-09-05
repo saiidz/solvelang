@@ -64,6 +64,8 @@ node solvec-wasm/qa/browser-artifact-conformance.mjs "$audit_root/first/bundle" 
 SOLVELANG_WASM_AUDIT_DIR="$audit_root/first/bundle" SOLVELANG_WASM_SOURCE_COMMIT="$source_commit" \
   node --test solvec-wasm/qa/package-artifact.test.cjs
 node solvec-wasm/qa/package-artifact.cjs "$audit_root/first/bundle" "$audit_root/qualified-package" "$source_commit"
+node --test solvec-wasm/qa/browser-loader.test.mjs
+node solvec-wasm/qa/browser-loader-conformance.mjs "$audit_root/qualified-package" "$source_commit"
 mkdir -p "$evidence_root"
 cp "$audit_root/first/audit.json" "$evidence_root/audit.json"
 node solvec-wasm/qa/package-artifact.cjs --retain "$audit_root/qualified-package" "$evidence_root/package" "$source_commit"
