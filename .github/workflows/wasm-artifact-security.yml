@@ -42,6 +42,8 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: wasm-security-evidence-${{ github.event.pull_request.head.sha || github.sha }}
-          path: solvec-wasm/target/artifact-security-evidence/audit.json
+          path: |
+            solvec-wasm/target/artifact-security-evidence/audit.json
+            solvec-wasm/target/artifact-security-evidence/package/
           if-no-files-found: error
           retention-days: 7
