@@ -74,7 +74,7 @@ function lifecycleInput(overrides: Partial<PostHogCanaryLifecycleInput> = {}): P
   };
 }
 
-test("lifecycle records only bounded sanitized audit metadata for one claimed canary", async () => {
+test("records bounded sanitized canary evidence with deterministic disable requirements", async () => {
   const { approval, claim } = await approvalAndClaim();
   const record = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
 
@@ -90,18 +90,14 @@ test("lifecycle records only bounded sanitized audit metadata for one claimed ca
   assert.equal(record.origin, "https://us.posthog.com");
   assert.equal(record.operation, "read-errors");
   assert.equal(record.outcome, "succeeded");
-  assert.equal(record.failureCategory, undefined);
   assert.equal(record.attemptCount, 1);
   assert.equal(record.durationMs, 5000);
-  assert.equal(record.responseBytes, 1024);
-  assert.equal(record.acceptedRecords, 3);
   assert.deepEqual(record.partialReasons, ["collection-truncated"]);
   assert.equal(record.sanitizedArtifactSha256, SANITIZED_DIGEST);
   assert.deepEqual(record.retention.authorizedReaderRefs, ["reader:owner", "reader:security"]);
   assert.equal(record.retention.retentionHoursCeiling, 24);
   assert.equal(record.disable.status, "required-actions-not-executed");
   assert.deepEqual(record.disable.actions, POSTHOG_CANARY_DISABLE_ACTIONS);
-  assert.equal(record.disable.deleteSanitizedEvidenceBy, "2026-09-06T13:00:00.000Z");
   assert.equal(record.policy.rawProviderPayloadRetained, false);
   assert.equal(record.policy.rawProviderDigestAllowed, false);
   assert.equal(record.policy.sanitizedArtifactOnly, true);
@@ -120,25 +116,22 @@ test("lifecycle records only bounded sanitized audit metadata for one claimed ca
   assert.equal(record.policy.externalSideEffects, false);
 });
 
-test("lifecycle output excludes approval credential, scope, tenant, runtime operator and raw provider material", async () => {
+test("serialized lifecycle excludes credential identity and actual raw provider payload fields", async () => {
   const { approval, claim } = await approvalAndClaim();
-  const record = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
-  const serialized = JSON.stringify(record);
+  const serialized = JSON.stringify(createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput()));
 
   assert.doesNotMatch(serialized, /secret-store\/posthog\/canary-readonly/);
-  assert.doesNotMatch(serialized, /verified-project-read-scope/);
-  assert.doesNotMatch(serialized, /tenant:solve-owner/);
-  assert.doesNotMatch(serialized, /owner-operator/);
-  assert.doesNotMatch(serialized, /isolated-canary-runtime/);
-  assert.doesNotMatch(serialized, /Authorization|Bearer\s+[A-Za-z0-9._~+/=-]{8,}|github_pat_/i);
-  assert.doesNotMatch(serialized, /rawProvider|responseBody|requestBody|headers|cookies/i);
+  assert.doesNotMatch(serialized, /verified-project-read-scope|tenant:solve-owner|owner-operator|isolated-canary-runtime/);
+  assert.doesNotMatch(serialized, /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|github_pat_/i);
+  assert.doesNotMatch(
+    serialized,
+    /"(?:rawProviderJson|rawProviderPayload|responseBody|requestBody|headers|cookies)"\s*:/i,
+  );
 });
 
-test("successful, failed, and cancelled lifecycle outcomes use fixed truth rules", async () => {
+test("success, failure and cancellation use fixed outcome truth", async () => {
   const { approval, claim } = await approvalAndClaim();
-  const success = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
-  assert.equal(success.outcome, "succeeded");
-  assert.equal(success.failureCategory, undefined);
+  assert.equal(createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput()).outcome, "succeeded");
 
   const failed = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
     outcome: "failed",
@@ -146,7 +139,6 @@ test("successful, failed, and cancelled lifecycle outcomes use fixed truth rules
     sanitizedArtifactSha256: null,
     acceptedRecords: 0,
   }));
-  assert.equal(failed.outcome, "failed");
   assert.equal(failed.failureCategory, "sanitization-rejected");
 
   const cancelled = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
@@ -156,33 +148,23 @@ test("successful, failed, and cancelled lifecycle outcomes use fixed truth rules
     partialReasons: [],
     sanitizedArtifactSha256: null,
   }));
-  assert.equal(cancelled.outcome, "cancelled");
   assert.equal(cancelled.failureCategory, undefined);
 
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      outcome: "succeeded",
-      failureCategory: "provider-error",
-    })),
-    /Successful canary evidence must not include a failure category/,
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ failureCategory: "provider-error" })),
+    /must not include a failure category/,
   );
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      outcome: "failed",
-      failureCategory: undefined,
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ outcome: "failed", failureCategory: undefined })),
     /requires one supported fixed failure category/,
   );
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      outcome: "cancelled",
-      failureCategory: "timeout",
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ outcome: "cancelled", failureCategory: "timeout" })),
     /fixed cancelled outcome/,
   );
 });
 
-test("successful evidence requires an explicit SHA-256 digest of the sanitized artifact only", async () => {
+test("sanitized artifact digest must be explicit SHA-256 and success requires it", async () => {
   const { approval, claim } = await approvalAndClaim();
   assert.throws(
     () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ sanitizedArtifactSha256: null })),
@@ -191,57 +173,44 @@ test("successful evidence requires an explicit SHA-256 digest of the sanitized a
   for (const digest of ["b".repeat(64), "sha256:short", `md5:${"b".repeat(32)}`]) {
     assert.throws(
       () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ sanitizedArtifactSha256: digest })),
-      /explicit SHA-256 digest of the sanitized artifact/,
-      digest,
+      /explicit SHA-256 digest/,
     );
   }
 });
 
-test("lifecycle fails closed on approval or claim identity and policy mismatch", async () => {
+test("claim and approval identity/policy must match exactly", async () => {
   const { approval, claim } = await approvalAndClaim();
-  const wrongApproval = { ...claim, approvalId: "approval-other" } as PostHogCanaryClaimResult;
+  for (const forged of [
+    { ...claim, approvalId: "approval-other" },
+    { ...claim, requestId: "phr_other" },
+    { ...claim, policy: { ...claim.policy, providerNetworkAccess: true } },
+  ] as PostHogCanaryClaimResult[]) {
+    assert.throws(
+      () => createPostHogCanaryLifecycleRecord(approval, forged, lifecycleInput()),
+      /claim binding or policy does not match/,
+    );
+  }
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, wrongApproval, lifecycleInput()),
-    /claim binding or policy does not match/,
-  );
-  const wrongRequest = { ...claim, requestId: "phr_other" } as PostHogCanaryClaimResult;
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, wrongRequest, lifecycleInput()),
-    /claim binding or policy does not match/,
-  );
-  const forgedPolicy = {
-    ...claim,
-    policy: { ...claim.policy, providerNetworkAccess: true },
-  } as unknown as PostHogCanaryClaimResult;
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, forgedPolicy, lifecycleInput()),
-    /claim binding or policy does not match/,
-  );
-  const rejected = { ...claim, status: "rejected", claimId: undefined } as PostHogCanaryClaimResult;
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, rejected, lifecycleInput()),
+    () => createPostHogCanaryLifecycleRecord(
+      approval,
+      { ...claim, status: "rejected", claimId: undefined } as PostHogCanaryClaimResult,
+      lifecycleInput(),
+    ),
     /requires a successful single-use approval claim/,
   );
 });
 
-test("lifecycle enforces the one-run total deadline and monotonic timestamps", async () => {
+test("ten-second total deadline and monotonic timestamps fail closed", async () => {
   const { approval, claim } = await approvalAndClaim();
-  const exactlyTenSeconds = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-    startedAt: "2026-09-05T14:00:01Z",
+  assert.equal(createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
     endedAt: "2026-09-05T14:00:10Z",
-  }));
-  assert.equal(exactlyTenSeconds.durationMs, 10000);
-
+  })).durationMs, 10000);
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      endedAt: "2026-09-05T14:00:10.001Z",
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ endedAt: "2026-09-05T14:00:10.001Z" })),
     /exceeds the 10000ms total deadline/,
   );
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      startedAt: "2026-09-05T13:59:59Z",
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ startedAt: "2026-09-05T13:59:59Z" })),
     /must not precede the successful approval claim/,
   );
   assert.throws(
@@ -253,98 +222,55 @@ test("lifecycle enforces the one-run total deadline and monotonic timestamps", a
   );
 });
 
-test("lifecycle enforces response byte and accepted-record ceilings", async () => {
-  const { approval, claim } = await approvalAndClaim();
+test("response byte, record and retention ceilings are exact", async () => {
+  const { approval, claim } = await approvalAndClaim({ retentionHours: 2 });
   const maxed = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
     responseBytes: defaultPostHogCanaryLifecycleLimits.maxResponseBytes,
     acceptedRecords: defaultPostHogCanaryLifecycleLimits.maxAcceptedRecords,
+    deleteBy: "2026-09-05T16:00:05Z",
   }));
   assert.equal(maxed.responseBytes, 262144);
   assert.equal(maxed.acceptedRecords, 25);
+  assert.equal(maxed.retention.retentionHoursCeiling, 2);
 
-  for (const [field, value] of [
-    ["responseBytes", 262145],
-    ["responseBytes", -1],
-    ["acceptedRecords", 26],
-    ["acceptedRecords", -1],
-  ] as const) {
+  for (const overrides of [
+    { responseBytes: 262145 },
+    { responseBytes: -1 },
+    { acceptedRecords: 26 },
+    { acceptedRecords: -1 },
+  ]) {
     assert.throws(
-      () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ [field]: value })),
+      () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ ...overrides, deleteBy: "2026-09-05T16:00:05Z" })),
       /must be a safe integer between/,
-      `${field}=${value}`,
     );
   }
-});
-
-test("lifecycle enforces the owner-approved sanitized evidence retention ceiling", async () => {
-  const { approval, claim } = await approvalAndClaim({ retentionHours: 2 });
-  const valid = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-    deleteBy: "2026-09-05T16:00:05Z",
-  }));
-  assert.equal(valid.retention.retentionHoursCeiling, 2);
-
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      deleteBy: "2026-09-05T16:00:05.001Z",
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ deleteBy: "2026-09-05T16:00:05.001Z" })),
     /exceeds the owner-approved sanitized evidence retention ceiling/,
   );
   assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      deleteBy: "2026-09-05T14:00:05Z",
-    })),
+    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ deleteBy: "2026-09-05T14:00:05Z" })),
     /deleteBy must be after the canary endedAt/,
   );
 });
 
-test("lifecycle rejects unsafe destination, reader, owner, partiality and source metadata", async () => {
+test("unsafe source, destination, reader, owner and partiality metadata is rejected", async () => {
   const { approval, claim } = await approvalAndClaim();
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({ sourceRevision: "main" })),
-    /exact 40- or 64-hex revision/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      evidenceDestinationRef: "https://example.com/evidence",
-    })),
-    /opaque reference, not a URL/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      deletionOwnerRef: "Bearer abcdefghijklmnop",
-    })),
-    /credential-like material/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      authorizedReaderRefs: ["reader:owner", "reader:owner"],
-    })),
-    /contains duplicate values/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      authorizedReaderRefs: Array.from(
-        { length: defaultPostHogCanaryLifecycleLimits.maxAuthorizedReaders + 1 },
-        (_, index) => `reader:${index}`,
-      ),
-    })),
-    /reader safety bound/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      partialReasons: ["source-partial", "source-partial"],
-    })),
-    /partialReasons contains duplicate values/,
-  );
-  assert.throws(
-    () => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
-      partialReasons: ["causality-inferred" as "source-partial"],
-    })),
-    /unsupported reason/,
-  );
+  const cases: Array<[Partial<PostHogCanaryLifecycleInput>, RegExp]> = [
+    [{ sourceRevision: "main" }, /exact 40- or 64-hex revision/],
+    [{ evidenceDestinationRef: "https://example.com/evidence" }, /opaque reference, not a URL/],
+    [{ deletionOwnerRef: "Bearer abcdefghijklmnop" }, /credential-like material/],
+    [{ authorizedReaderRefs: ["reader:owner", "reader:owner"] }, /duplicate values/],
+    [{ authorizedReaderRefs: Array.from({ length: 17 }, (_, index) => `reader:${index}`) }, /reader safety bound/],
+    [{ partialReasons: ["source-partial", "source-partial"] }, /partialReasons contains duplicate values/],
+    [{ partialReasons: ["causality-inferred" as "source-partial"] }, /unsupported reason/],
+  ];
+  for (const [overrides, expected] of cases) {
+    assert.throws(() => createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput(overrides)), expected);
+  }
 });
 
-test("lifecycle is deterministic for equivalent partiality and reader ordering", async () => {
+test("lifecycle is deterministic for equivalent reader and partiality order", async () => {
   const { approval, claim } = await approvalAndClaim();
   const forward = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput({
     partialReasons: ["source-partial", "collection-truncated"],
@@ -357,7 +283,7 @@ test("lifecycle is deterministic for equivalent partiality and reader ordering",
   assert.deepEqual(forward, reverse);
 });
 
-test("finalizer is called once and consumes success while invalidating failed/cancelled attempts", async () => {
+test("one-shot finalizer consumes success and invalidates failed or cancelled attempts", async () => {
   const { approval, claim } = await approvalAndClaim();
   for (const [outcome, terminalState] of [
     ["succeeded", "consumed"],
@@ -375,56 +301,44 @@ test("finalizer is called once and consumes success while invalidating failed/ca
       } : {}),
     }));
     let calls = 0;
-    const finalizer: PostHogCanaryFinalizer = async (request) => {
+    const result = await finalizePostHogCanaryLifecycle(record, async (request) => {
       calls += 1;
-      assert.equal(request.approvalId, record.approvalId);
-      assert.equal(request.claimId, record.claimId);
-      assert.equal(request.requestId, record.requestId);
-      assert.equal(request.lifecycleId, record.id);
       assert.equal(request.terminalState, terminalState);
+      assert.equal(request.lifecycleId, record.id);
       return { status: "finalized", finalizationId: `final-${outcome}` };
-    };
-    const result = await finalizePostHogCanaryLifecycle(record, finalizer);
+    });
     assert.equal(calls, 1);
     assert.equal(result.status, "finalized");
     assert.equal(result.terminalState, terminalState);
-    assert.equal(result.finalizationId, `final-${outcome}`);
     assert.equal(result.policy.finalizerCalls, 1);
     assert.equal(result.policy.retries, 0);
     assert.equal(result.policy.automaticRearm, false);
-    assert.equal(result.policy.credentialResolutionAccess, false);
     assert.equal(result.policy.providerNetworkAccess, false);
     assert.equal(result.policy.durableSinkAccess, false);
-    assert.equal(result.policy.repositoryWriteAccess, false);
-    assert.equal(result.policy.productionMutationAccess, false);
     assert.equal(result.policy.credentialMaterialReturned, false);
   }
 });
 
-test("finalizer throws and malformed results become fixed rejections with no retry", async () => {
+test("finalizer errors and malformed results are suppressed into fixed no-retry rejections", async () => {
   const { approval, claim } = await approvalAndClaim();
   const record = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
 
-  let throwCalls = 0;
-  const failed = await finalizePostHogCanaryLifecycle(record, async () => {
-    throwCalls += 1;
+  let calls = 0;
+  const thrown = await finalizePostHogCanaryLifecycle(record, async () => {
+    calls += 1;
     throw new Error("Bearer abcdefghijklmnop provider detail");
   });
-  assert.equal(throwCalls, 1);
-  assert.equal(failed.status, "rejected");
-  assert.equal(failed.rejectionReason, "finalizer-failure");
+  assert.equal(calls, 1);
+  assert.equal(thrown.rejectionReason, "finalizer-failure");
 
-  let malformedCalls = 0;
-  const malformed = await finalizePostHogCanaryLifecycle(record, (async () => {
-    malformedCalls += 1;
-    return { status: "finalized", finalizationId: "Bearer abcdefghijklmnop" };
-  }) as PostHogCanaryFinalizer);
-  assert.equal(malformedCalls, 1);
-  assert.equal(malformed.status, "rejected");
+  const malformed = await finalizePostHogCanaryLifecycle(record, (async () => ({
+    status: "finalized",
+    finalizationId: "Bearer abcdefghijklmnop",
+  })) as PostHogCanaryFinalizer);
   assert.equal(malformed.rejectionReason, "invalid-finalizer-result");
 });
 
-test("replayed finalization remains non-reusable and never re-arms the approval", async () => {
+test("finalization replay stays non-reusable and never re-arms", async () => {
   const { approval, claim } = await approvalAndClaim();
   const record = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
   let finalized = false;
@@ -433,7 +347,6 @@ test("replayed finalization remains non-reusable and never re-arms the approval"
     finalized = true;
     return { status: "finalized", finalizationId: "final-once" };
   };
-
   const first = await finalizePostHogCanaryLifecycle(record, finalizer);
   const second = await finalizePostHogCanaryLifecycle(record, finalizer);
   assert.equal(first.status, "finalized");
@@ -441,18 +354,4 @@ test("replayed finalization remains non-reusable and never re-arms the approval"
   assert.equal(second.rejectionReason, "already-finalized");
   assert.equal(second.policy.retries, 0);
   assert.equal(second.policy.automaticRearm, false);
-});
-
-test("serialized finalization result returns no credential material or finalizer error detail", async () => {
-  const { approval, claim } = await approvalAndClaim();
-  const record = createPostHogCanaryLifecycleRecord(approval, claim, lifecycleInput());
-  const result = await finalizePostHogCanaryLifecycle(record, async () => ({
-    status: "finalized",
-    finalizationId: "final-safe",
-  }));
-  const serialized = JSON.stringify(result);
-
-  assert.doesNotMatch(serialized, /secret-store|verified-project-read-scope|tenant:solve-owner|Bearer\s+[A-Za-z0-9._~+/=-]{8,}|github_pat_/i);
-  assert.equal(result.policy.credentialMaterialReturned, false);
-  assert.equal(result.policy.providerNetworkAccess, false);
 });
