@@ -32,7 +32,8 @@ fn source_admitted(tokens: &[lexer::LocatedToken]) -> bool {
         return false;
     }
     let mut stack = Vec::new();
-    for located in tokens {
+    let mut needs_primary = true;
+    for (index, located) in tokens.iter().enumerate() {
         match located.token {
             lexer::Token::LeftParen | lexer::Token::LeftBrace | lexer::Token::LeftBracket => {
                 stack.push(match located.token {
@@ -43,18 +44,58 @@ fn source_admitted(tokens: &[lexer::LocatedToken]) -> bool {
                 if stack.len() > MAX_SYNTAX_DEPTH {
                     return false;
                 }
+                needs_primary = true;
             }
-            lexer::Token::RightParen | lexer::Token::RightBrace | lexer::Token::RightBracket => {
+            lexer::Token::RightParen => {
+                // A ')' presented while the recursive-descent parser still needs
+                // a primary expression is consumed by Parser::primary as an
+                // invalid token; it does not unwind the surrounding grouped
+                // expression. Keep that frame charged against the depth budget.
+                // The only immediate-empty parenthesis accepted by the grammar
+                // is an identifier call/parameter list such as f().
+                let empty_call_or_parameters = needs_primary
+                    && index >= 2
+                    && matches!(&tokens[index - 1].token, lexer::Token::LeftParen)
+                    && matches!(&tokens[index - 2].token, lexer::Token::Identifier(_));
+                if stack.last() == Some(&b'(') && (!needs_primary || empty_call_or_parameters) {
+                    stack.pop();
+                }
+                needs_primary = false;
+            }
+            lexer::Token::RightBrace | lexer::Token::RightBracket => {
                 let opening = match located.token {
-                    lexer::Token::RightParen => b'(',
                     lexer::Token::RightBrace => b'{',
                     _ => b'[',
                 };
                 if stack.last() == Some(&opening) {
                     stack.pop();
                 }
+                needs_primary = false;
             }
-            _ => {}
+            lexer::Token::Plus
+            | lexer::Token::Minus
+            | lexer::Token::Star
+            | lexer::Token::Slash
+            | lexer::Token::Join
+            | lexer::Token::EqualEqual
+            | lexer::Token::BangEqual
+            | lexer::Token::Greater
+            | lexer::Token::Less
+            | lexer::Token::GreaterEqual
+            | lexer::Token::LessEqual
+            | lexer::Token::And
+            | lexer::Token::Or
+            | lexer::Token::Equal
+            | lexer::Token::Comma
+            | lexer::Token::Colon
+            | lexer::Token::Not
+            | lexer::Token::Newline => {
+                needs_primary = true;
+            }
+            lexer::Token::Eof => {}
+            _ => {
+                needs_primary = false;
+            }
         }
     }
     true
@@ -72,6 +113,7 @@ fn parser_admission_rejects_deep_and_high_cardinality_source_before_output() {
             "(".repeat(63),
             format!("{}{}", "] +".repeat(63), "(".repeat(63)).repeat(4)
         ),
+        format!("print({}{}1", "(".repeat(63), ") + (".repeat(300)),
     ] {
         assert!(!source_admitted(&lexer::lex(&source)));
         let result: JsonValue = serde_json::from_str(&run_pure_v1(&source, "")).unwrap();
@@ -79,6 +121,13 @@ fn parser_admission_rejects_deep_and_high_cardinality_source_before_output() {
         assert_eq!(result["error"]["kind"], "limit_exceeded");
         assert_eq!(result["outputs"], json!([]));
     }
+
+    let nearby_valid = format!("print({})", vec!["(1)"; 100].join(" + "));
+    assert!(source_admitted(&lexer::lex(&nearby_valid)));
+    let result: JsonValue = serde_json::from_str(&run_pure_v1(&nearby_valid, "")).unwrap();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["outputs"], json!([100]));
+    assert!(source_admitted(&lexer::lex("missing()")));
 }
 
 /// Execute one bounded, in-memory SolveLang source string with an immutable
