@@ -95,8 +95,8 @@ function normalizeText(value: string, name: string, maxLength: number): string {
 }
 
 function assertReadOperation(operation: string): void {
-  if (!operation.startsWith("read-")) throw new Error(`Operation '${operation}' is not explicitly read-only.`);
   if (mutationVerbPattern.test(operation)) throw new Error(`Operation '${operation}' is mutation-shaped and is not allowed.`);
+  if (!operation.startsWith("read-")) throw new Error(`Operation '${operation}' is not explicitly read-only.`);
 }
 
 function validatePolicy(policy: ProviderConnectorPolicy): ProviderConnectorPolicy {
