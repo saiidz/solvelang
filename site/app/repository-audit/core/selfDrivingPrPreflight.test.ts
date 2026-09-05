@@ -291,7 +291,10 @@ test("serialized PR preflight is a requirement artifact, not a token or write ex
   const result = createSelfDrivingPrPreflight(source, input(source));
   const serialized = JSON.stringify(result);
 
-  assert.doesNotMatch(serialized, /Authorization|Bearer |github_pat_|accessToken|tokenValue|privateKey/i);
+  assert.doesNotMatch(
+    serialized,
+    /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}|github_pat_[A-Za-z0-9_]{12,}|"(?:accessToken|tokenValue|privateKey|Authorization)"\s*:/i,
+  );
   assert.match(serialized, /ready-for-separate-write-authorization/);
   assert.match(serialized, /not-executed/);
   assert.equal(result.policy.githubApiAccess, false);
