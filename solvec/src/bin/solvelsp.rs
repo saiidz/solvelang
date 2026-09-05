@@ -197,7 +197,6 @@ fn member_at_position(text: &str, line: usize, character: usize) -> Option<(Stri
     };
     Some((namespace.clone(), member.clone()))
 }
-
 fn namespace_before_completion(text: &str, line: usize, character: usize) -> Option<String> {
     let source_line = text.lines().nth(line)?;
     let mut prefix = String::new();
@@ -1197,7 +1196,6 @@ struct Server {
     documents: HashMap<String, String>,
     versions: HashMap<String, i64>,
 }
-
 fn bounded_document(text: &str) -> bool {
     if text.len() > 65_536 {
         return false;
@@ -1240,7 +1238,7 @@ fn local_document_uri(uri: &str) -> bool {
         return false;
     };
     parsed.scheme() == "file"
-        && parsed.host_str().is_none_or(|host| host == "localhost")
+        && parsed.host_str().is_none()
         && parsed.query().is_none()
         && parsed.fragment().is_none()
         && parsed.path().ends_with(".solve")
@@ -1372,6 +1370,7 @@ mod tests {
             "https://example.com/main.solve",
             "vscode-remote://host/main.solve",
             "file://remote/main.solve",
+            "file://localhost/main.solve",
             "file:///main.solve?query=x",
             "file:///main.solve#fragment",
         ] {
@@ -1397,7 +1396,6 @@ mod tests {
         assert!(!server.documents.contains_key(uri));
         assert!(server.process(change(3, "let closed = 4")).is_empty());
     }
-
     #[test]
     fn rejected_new_changes_invalidate_stale_source_and_bounds_are_enforced() {
         let mut server = super::Server::default();
