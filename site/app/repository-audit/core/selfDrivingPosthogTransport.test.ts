@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planPostHogReadRequest } from "./selfDrivingPosthogRequestPlanner";
-import { executePostHogReadPlan } from "./selfDrivingPosthogTransport";
+import {
+  executePostHogReadPlan,
+  PostHogTransportFailure,
+} from "./selfDrivingPosthogTransport";
 
 const plan = planPostHogReadRequest({
   origin: "https://us.posthog.com",
@@ -11,6 +14,15 @@ const plan = planPostHogReadRequest({
 });
 
 const auth = async () => ({ authorization: "Bearer fixture_readonly_token_123456" });
+
+function assertFailureCategory(category: string, forbidden?: string) {
+  return (error: unknown) => {
+    assert.ok(error instanceof PostHogTransportFailure);
+    assert.equal(error.category, category);
+    if (forbidden) assert.equal(error.message.includes(forbidden), false);
+    return true;
+  };
+}
 
 test("executor uses exact GET plan and returns bounded JSON metadata", async () => {
   const calls: unknown[] = [];
@@ -25,11 +37,17 @@ test("executor uses exact GET plan and returns bounded JSON metadata", async () 
   });
 
   assert.equal(calls.length, 1);
-  const call = calls[0] as { method: string; url: string; headers: Record<string, string> };
+  const call = calls[0] as {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    signal: AbortSignal;
+  };
   assert.equal(call.method, "GET");
   assert.equal(call.url, "https://us.posthog.com/api/projects/12345/events?limit=50");
   assert.equal(call.headers.Accept, "application/json");
   assert.equal(call.headers.Authorization, "Bearer fixture_readonly_token_123456");
+  assert.equal(call.signal.aborted, false);
   assert.equal(result.source.requestId, plan.request.id);
   assert.equal(result.source.status, 200);
   assert.deepEqual(result.json, { results: [{ id: 1 }] });
@@ -113,51 +131,113 @@ test("executor suppresses provider error bodies and thrown transport details", a
     () => executePostHogReadPlan(plan, auth, async () => {
       throw new Error("transport leaked token fixture_readonly_token_123456");
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /failed without exposing/);
-      assert.equal(error.message.includes("fixture_readonly_token_123456"), false);
-      return true;
-    },
+    assertFailureCategory("transport", "fixture_readonly_token_123456"),
   );
 });
 
-test("executor validates ephemeral Bearer auth without persisting it", async () => {
+test("authorization failures are bounded, categorized, and sanitized", async () => {
   for (const authorization of ["", "Basic abc", "Bearer short", "token raw"] as const) {
     await assert.rejects(
       () => executePostHogReadPlan(plan, async () => ({ authorization }), async () => {
         throw new Error("transport should not run");
       }),
-      /authorization/,
+      assertFailureCategory("authorization"),
     );
   }
-});
 
-test("executor rejects forged plans that weaken GET/read-only boundary", async () => {
-  const forgedMethod = {
-    ...plan,
-    request: { ...plan.request, method: "POST" },
-  } as unknown as typeof plan;
   await assert.rejects(
-    () => executePostHogReadPlan(forgedMethod, auth, async () => {
+    () => executePostHogReadPlan(plan, async () => {
+      throw new Error("credential callback leaked SECRET_AUTH_DETAIL");
+    }, async () => {
       throw new Error("transport should not run");
     }),
-    /GET plans only/,
+    assertFailureCategory("authorization", "SECRET_AUTH_DETAIL"),
   );
 
-  const forgedPolicy = {
-    ...plan,
-    policy: { ...plan.policy, requestBodyAllowed: true },
-  } as unknown as typeof plan;
   await assert.rejects(
-    () => executePostHogReadPlan(forgedPolicy, auth, async () => {
+    () => executePostHogReadPlan(plan, async () => ({
+      authorization: `Bearer ${"x".repeat(5_000)}`,
+    }), async () => {
       throw new Error("transport should not run");
     }),
-    /weakens the read-only/,
+    assertFailureCategory("authorization"),
   );
 });
 
-test("executor validates response status and body bounds", async () => {
+test("executor rejects forged canonical-plan fields before authorization or transport", async () => {
+  let calls = 0;
+  const noAuth = async () => {
+    calls += 1;
+    return { authorization: "Bearer fixture_readonly_token_123456" };
+  };
+  const noTransport = async () => {
+    calls += 1;
+    throw new Error("transport should not run");
+  };
+
+  const forgedPlans = [
+    { ...plan, request: { ...plan.request, method: "POST" } },
+    { ...plan, request: { ...plan.request, origin: "https://evil.example" } },
+    { ...plan, request: { ...plan.request, pathname: "/api/projects/12345/not-allowlisted" } },
+    { ...plan, request: { ...plan.request, id: "phr_deadbeefdeadbeef" } },
+    { ...plan, request: { ...plan.request, query: { ...plan.request.query, limit: "1000" } } },
+    { ...plan, request: { ...plan.request, query: { ...plan.request.query, host: "evil.example" } } },
+    { ...plan, policy: { ...plan.policy, requestBodyAllowed: true } },
+    { ...plan, policy: { ...plan.policy, arbitraryHostAccess: true } },
+  ] as unknown as Array<typeof plan>;
+
+  for (const forged of forgedPlans) {
+    await assert.rejects(
+      () => executePostHogReadPlan(forged, noAuth, noTransport),
+      /intact canonical request plan/,
+    );
+  }
+  assert.equal(calls, 0);
+});
+
+test("executor bounds timeout and caller cancellation with sanitized categories", async () => {
+  await assert.rejects(
+    () => executePostHogReadPlan(
+      plan,
+      auth,
+      async (request) => new Promise((_, reject) => {
+        request.signal.addEventListener(
+          "abort",
+          () => reject(new Error("late transport leaked SECRET_TIMEOUT_DETAIL")),
+          { once: true },
+        );
+      }),
+      { timeoutMs: 5 },
+    ),
+    assertFailureCategory("timeout", "SECRET_TIMEOUT_DETAIL"),
+  );
+
+  const controller = new AbortController();
+  let authSawSignal = false;
+  const pending = executePostHogReadPlan(
+    plan,
+    async ({ signal }) => new Promise((_, reject) => {
+      authSawSignal = true;
+      signal.addEventListener(
+        "abort",
+        () => reject(new Error("late auth leaked SECRET_CANCEL_DETAIL")),
+        { once: true },
+      );
+    }),
+    async () => {
+      throw new Error("transport should not run");
+    },
+    { signal: controller.signal, timeoutMs: 1_000 },
+  );
+  controller.abort();
+  await assert.rejects(
+    () => pending,
+    assertFailureCategory("cancelled", "SECRET_CANCEL_DETAIL"),
+  );
+  assert.equal(authSawSignal, true);
+});
+
+test("executor validates response status and execution bounds", async () => {
   await assert.rejects(
     () => executePostHogReadPlan(plan, auth, async (request) => ({
       status: 999,
@@ -174,6 +254,15 @@ test("executor validates response status and body bounds", async () => {
         throw new Error("transport should not run");
       }, { maxBodyBytes }),
       /maxBodyBytes/,
+    );
+  }
+
+  for (const timeoutMs of [0, -1, 15_001, 1.5]) {
+    await assert.rejects(
+      () => executePostHogReadPlan(plan, auth, async () => {
+        throw new Error("transport should not run");
+      }, { timeoutMs }),
+      /timeoutMs/,
     );
   }
 });
