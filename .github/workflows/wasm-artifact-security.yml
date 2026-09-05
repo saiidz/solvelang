@@ -28,8 +28,17 @@ jobs:
           node-version: 24
       - name: Install pinned binding generator
         run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked
-      - name: Reproduce and audit browser artifact
-        run: bash solvec-wasm/qa/build-audited-artifact.sh
+      - name: Reproduce and audit browser artifact under hostile caller Cargo config
+        run: |
+          hostile="$RUNNER_TEMP/hostile-cargo-home"
+          mkdir -p "$hostile"
+          cat > "$hostile/config.toml" <<'EOF'
+          [source.crates-io]
+          replace-with = "poison"
+          [source.poison]
+          directory = "/definitely/not/a/cargo-vendor-source"
+          EOF
+          CARGO_HOME="$hostile" bash solvec-wasm/qa/build-audited-artifact.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: wasm-security-evidence-${{ github.event.pull_request.head.sha || github.sha }}
