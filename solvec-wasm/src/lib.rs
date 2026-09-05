@@ -20,10 +20,115 @@ pub const MAX_VALUE_BYTES: usize = 1_048_576;
 pub const MAX_LOOP_ITERATIONS: usize = 10_000;
 pub const MAX_STEPS: usize = 1_000_000;
 pub const MAX_CALL_DEPTH: usize = 256;
+pub const MAX_SOURCE_TOKENS: usize = 1024;
+pub const MAX_SYNTAX_DEPTH: usize = 64;
 
 const CONTRACT: &str = "solvelang.run_pure";
 const CONTRACT_VERSION: u8 = 1;
 const SOURCE_NAME: &str = "<browser>";
+
+fn source_admitted(tokens: &[lexer::LocatedToken]) -> bool {
+    if tokens.len() > MAX_SOURCE_TOKENS {
+        return false;
+    }
+    let mut stack = Vec::new();
+    let mut needs_primary = true;
+    for (index, located) in tokens.iter().enumerate() {
+        match located.token {
+            lexer::Token::LeftParen | lexer::Token::LeftBrace | lexer::Token::LeftBracket => {
+                stack.push(match located.token {
+                    lexer::Token::LeftParen => b'(',
+                    lexer::Token::LeftBrace => b'{',
+                    _ => b'[',
+                });
+                if stack.len() > MAX_SYNTAX_DEPTH {
+                    return false;
+                }
+                needs_primary = true;
+            }
+            lexer::Token::RightParen => {
+                // A ')' presented while the recursive-descent parser still needs
+                // a primary expression is consumed by Parser::primary as an
+                // invalid token; it does not unwind the surrounding grouped
+                // expression. Keep that frame charged against the depth budget.
+                // The only immediate-empty parenthesis accepted by the grammar
+                // is an identifier call/parameter list such as f().
+                let empty_call_or_parameters = needs_primary
+                    && index >= 2
+                    && matches!(&tokens[index - 1].token, lexer::Token::LeftParen)
+                    && matches!(&tokens[index - 2].token, lexer::Token::Identifier(_));
+                if stack.last() == Some(&b'(') && (!needs_primary || empty_call_or_parameters) {
+                    stack.pop();
+                }
+                needs_primary = false;
+            }
+            lexer::Token::RightBrace | lexer::Token::RightBracket => {
+                let opening = match located.token {
+                    lexer::Token::RightBrace => b'{',
+                    _ => b'[',
+                };
+                if stack.last() == Some(&opening) {
+                    stack.pop();
+                }
+                needs_primary = false;
+            }
+            lexer::Token::Plus
+            | lexer::Token::Minus
+            | lexer::Token::Star
+            | lexer::Token::Slash
+            | lexer::Token::Join
+            | lexer::Token::EqualEqual
+            | lexer::Token::BangEqual
+            | lexer::Token::Greater
+            | lexer::Token::Less
+            | lexer::Token::GreaterEqual
+            | lexer::Token::LessEqual
+            | lexer::Token::And
+            | lexer::Token::Or
+            | lexer::Token::Equal
+            | lexer::Token::Comma
+            | lexer::Token::Colon
+            | lexer::Token::Not
+            | lexer::Token::Newline => {
+                needs_primary = true;
+            }
+            lexer::Token::Eof => {}
+            _ => {
+                needs_primary = false;
+            }
+        }
+    }
+    true
+}
+
+#[test]
+fn parser_admission_rejects_deep_and_high_cardinality_source_before_output() {
+    for source in [
+        format!("print({}1{})", "(".repeat(5000), ")".repeat(5000)),
+        format!("print({}1{})", "(".repeat(65), ")".repeat(65)),
+        format!("print({}true)", "not ".repeat(2000)),
+        "let x = 1\n".repeat(1000),
+        format!(
+            "print({}{}1",
+            "(".repeat(63),
+            format!("{}{}", "] +".repeat(63), "(".repeat(63)).repeat(4)
+        ),
+        format!("print({}{}1", "(".repeat(63), ") + (".repeat(300)),
+    ] {
+        assert!(!source_admitted(&lexer::lex(&source)));
+        let result: JsonValue = serde_json::from_str(&run_pure_v1(&source, "")).unwrap();
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["error"]["kind"], "limit_exceeded");
+        assert_eq!(result["outputs"], json!([]));
+    }
+
+    let nearby_valid = format!("print({})", vec!["(1)"; 100].join(" + "));
+    assert!(source_admitted(&lexer::lex(&nearby_valid)));
+    let result: JsonValue = serde_json::from_str(&run_pure_v1(&nearby_valid, "")).unwrap();
+    assert_eq!(result["ok"], true);
+    assert_eq!(result["outputs"], json!([100]));
+    assert!(source_admitted(&lexer::lex("missing()")));
+}
 
 /// Execute one bounded, in-memory SolveLang source string with an immutable
 /// deny-all host policy.
@@ -51,7 +156,22 @@ pub fn run_pure_v1(source: &str, input_json: &str) -> String {
         Err(response) => return response,
     };
 
-    let statements = match Parser::new(lexer::lex(source)).parse() {
+    let tokens = lexer::lex(source);
+    if !source_admitted(&tokens) {
+        return error_response(
+            "limit_exceeded",
+            format!(
+                "source exceeded {MAX_SOURCE_TOKENS} tokens or syntax depth {MAX_SYNTAX_DEPTH}"
+            ),
+            None,
+            None,
+            None,
+            None,
+            JsonValue::Null,
+            Vec::new(),
+        );
+    }
+    let statements = match Parser::new(tokens).parse() {
         Ok(statements) => statements,
         Err(diagnostics) => {
             let first = diagnostics.first();
