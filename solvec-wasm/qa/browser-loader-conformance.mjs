@@ -6,6 +6,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { stopBrowser } from "./browser-process.mjs";
 const require = createRequire(import.meta.url);
 const { verifyPackage } = require("./package-artifact.cjs");
 const directory = path.resolve(process.argv[2]);
@@ -91,9 +92,11 @@ try {
     "--remote-debugging-port=0", "about:blank",
   ], { stdio: ["ignore", "ignore", "pipe"], timeout: 90000 });
   const endpoint = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Chrome debugging startup timed out")), 10000);
     let buffer = "";
+    const diagnostic = () => ["crashpad", "database is required", "error while loading shared libraries", "Permission denied", "No usable sandbox", "DevTools listening", "Cannot fork", "Trace/breakpoint trap"].filter(value => buffer.includes(value)).join(", ") || "no recognized startup diagnostic";
+    const timer = setTimeout(() => reject(new Error(`Chrome debugging startup timed out (${diagnostic()}; exit=${browser.exitCode}; signal=${browser.signalCode})`)), 10000);
     browser.once("error", error => { clearTimeout(timer); reject(error); });
+    browser.once("exit", (code, signal) => { clearTimeout(timer); reject(new Error(`Chrome exited before qualification (${diagnostic()}; exit=${code}; signal=${signal})`)); });
     browser.stderr.on("data", bytes => {
       buffer = (buffer + bytes).slice(-4096);
       const match = /DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[a-zA-Z0-9-]+)/.exec(buffer);
@@ -132,13 +135,7 @@ try {
   console.log(`Packaged browser adapter PASS: ${fixtures.cases.length} shared cases, 30 denied cases, 6 bounds, 4 visible load failures`);
 } finally {
   socket?.close();
-  if (browser && browser.exitCode === null) {
-    const stopped = new Promise(resolve => browser.once("exit", resolve));
-    browser.kill();
-    const timer = setTimeout(() => browser.kill("SIGKILL"), 2000);
-    await stopped;
-    clearTimeout(timer);
-  }
+  await stopBrowser(browser);
   server.closeAllConnections();
   if (server.listening) await new Promise(resolve => server.close(resolve));
   fs.rmSync(profile, { recursive: true, force: true });

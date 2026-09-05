@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { loadAuditedWasm, WASM_LOAD_FAILURE } from "../browser/loader.mjs";
+import { stopBrowser } from "./browser-process.mjs";
+
+test("cleanup never waits for an exit event that already fired after a signal", async () => {
+  for (const state of [{ exitCode: null, signalCode: "SIGTERM" }, { exitCode: 0, signalCode: null }]) {
+    await stopBrowser({ ...state, kill() { assert.fail("already stopped"); }, once() { assert.fail("exit already fired"); } });
+  }
+  await stopBrowser(undefined);
+});
 
 test("loader refuses server-side execution without fetching or falling back", async () => {
   const original = globalThis.fetch;
