@@ -85,6 +85,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           first="$RUNNER_TEMP/release-candidate-first"
+          python3 solvec/scripts/test-release-candidate.py
           second="$RUNNER_TEMP/release-candidate-second"
 
           SOLVELANG_RELEASE_DIST="$first" ./solvec/scripts/build-release-candidate.sh
