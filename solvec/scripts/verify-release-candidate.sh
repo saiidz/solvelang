@@ -18,6 +18,7 @@ from pathlib import Path
 import json
 import re
 import sys
+import tarfile
 
 out = Path(sys.argv[1])
 expected_source_commit = sys.argv[2]
@@ -75,6 +76,15 @@ if not isinstance(workflow, dict):
 extra = sorted(p.name for p in out.iterdir() if p.name not in {artifact_name, "SHA256SUMS", "provenance.json"})
 if extra:
     raise SystemExit(f"unexpected release-candidate files: {extra}")
+
+# Inspect before extraction or executable launch. Admit only one bounded regular
+# file, excluding path traversal, links, devices, and extra payloads.
+with tarfile.open(artifact, "r:gz") as archive:
+    member = archive.next()
+    if (member is None or member.name != "solvec" or not member.isfile()
+            or member.size <= 0 or member.size > 100 * 1024 * 1024
+            or member.mode != 0o755 or archive.next() is not None):
+        raise SystemExit("archive must contain exactly one regular executable solvec")
 PY
 
 artifact="$(python3 - "$dist_dir/provenance.json" <<'PY'

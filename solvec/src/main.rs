@@ -258,6 +258,17 @@ struct CliFailure {
 }
 
 impl CliFailure {
+    fn exit_status(&self) -> i32 {
+        match self.code {
+            "invalid_arguments" => 2,
+            "source_load_error" | "invalid_input" | "input_too_large" => 3,
+            "invalid_workflow" => 4,
+            "import_denied" | "capability_denied" | "read_only_input" => 5,
+            "runtime_error" => 6,
+            _ => 1,
+        }
+    }
+
     fn arguments(message: impl Into<String>) -> Self {
         Self {
             code: "invalid_arguments",
@@ -336,10 +347,10 @@ fn main() {
         } else {
             eprintln!("{}", error.human_message);
             if error.show_usage {
-                print_usage();
+                eprint!("{}", usage());
             }
         }
-        process::exit(1);
+        process::exit(error.exit_status());
     }
 }
 
@@ -347,7 +358,7 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
     let (command, filename) = parse_args(args).map_err(CliFailure::arguments)?;
 
     if matches!(command, Command::Help) {
-        print_usage();
+        print!("{}", usage());
         return Ok(());
     }
     if matches!(command, Command::Version) {
@@ -456,6 +467,8 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
             .map(Value::to_json)
             .collect::<Vec<_>>();
         let envelope = serde_json::json!({
+            "schema": "solvelang.cli-run",
+            "version": 1,
             "advisory": ADVISORY_LABEL,
             "advisory_only": true,
             "dry_run": options.dry_run,
@@ -473,6 +486,8 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
 
 fn emit_json_error(error: &CliFailure) {
     let envelope = serde_json::json!({
+        "schema": "solvelang.cli-run",
+        "version": 1,
         "advisory": ADVISORY_LABEL,
         "advisory_only": true,
         "errors": [{
@@ -1425,44 +1440,43 @@ fn read_only_input_failure() -> CliFailure {
     )
 }
 
-fn print_usage() {
-    println!("SolveLang Compiler");
-    println!();
-    println!("Usage:");
-    println!("  solvec run [options] <file.solve>  Run with the canonical AST runtime");
-    println!("  solvec validate <file.solve>       Validate syntax without running");
-    println!(
-        "  solvec check <file.solve>          Check conservative static semantics without running"
-    );
-    println!("  solvec lint <file.solve>           Report conservative warnings without running");
-    println!("  solvec fmt [--check] <file.solve>  Format source without changing meaning");
-    println!("  solvec tokens <file.solve>         Print lexer tokens");
-    println!("  solvec ast <file.solve>            Print parsed AST");
-    println!("  solvec version                     Print canonical package version");
-    println!();
-    println!("Local structured-run options:");
-    println!("  --input <file>                     Inject strict JSON as read-only 'input'");
-    println!("  --json                             Emit one hardened deterministic JSON envelope");
-    println!("  --safe                             Deny runtime capabilities and unsafe tools");
-    println!("  --dry-run                          Evaluate pure logic after static preflight");
-    println!("  --no-network                       Enable strict hardened execution");
-    println!();
-    println!("Unhardened capability options:");
-    println!("  --allow-network                    Accepted only outside hardened modes");
-    println!("  --allow-file-read                  Accepted only outside hardened modes");
-    println!("  --allow-file-write                 Accepted only outside hardened modes");
-    println!("  --allow-env                        Accepted only outside hardened modes");
-    println!("  --allow-root <path>                Restrict unhardened file access to a root");
-    println!("  --http-connect-timeout-ms <ms>     HTTP connect timeout, default 5000");
-    println!("  --http-timeout-ms <ms>             HTTP request timeout, default 15000");
-    println!("  --http-max-body-bytes <bytes>      HTTP response body limit, default 1048576");
-    println!();
-    println!("Backwards-compatible flags:");
-    println!("  solvec <file.solve> --tokens");
-    println!("  solvec <file.solve> --ast");
-    println!();
-    println!("Legacy runtime:");
-    println!("  The public legacy command and --legacy flag have been removed.");
+fn usage() -> &'static str {
+    "SolveLang Compiler
+
+Usage:
+  solvec run [options] <file.solve>  Run with the canonical AST runtime
+  solvec validate <file.solve>       Validate syntax without running
+  solvec check <file.solve>          Check conservative static semantics without running
+  solvec lint <file.solve>           Report conservative warnings without running
+  solvec fmt [--check] <file.solve>  Format source without changing meaning
+  solvec tokens <file.solve>         Print lexer tokens
+  solvec ast <file.solve>            Print parsed AST
+  solvec version                     Print canonical package version
+
+Local structured-run options:
+  --input <file>                     Inject strict JSON as read-only 'input'
+  --json                             Emit one hardened deterministic JSON envelope
+  --safe                             Deny runtime capabilities and unsafe tools
+  --dry-run                          Evaluate pure logic after static preflight
+  --no-network                       Enable strict hardened execution
+
+Unhardened capability options:
+  --allow-network                    Accepted only outside hardened modes
+  --allow-file-read                  Accepted only outside hardened modes
+  --allow-file-write                 Accepted only outside hardened modes
+  --allow-env                        Accepted only outside hardened modes
+  --allow-root <path>                Restrict unhardened file access to a root
+  --http-connect-timeout-ms <ms>     HTTP connect timeout, default 5000
+  --http-timeout-ms <ms>             HTTP request timeout, default 15000
+  --http-max-body-bytes <bytes>      HTTP response body limit, default 1048576
+
+Backwards-compatible flags:
+  solvec <file.solve> --tokens
+  solvec <file.solve> --ast
+
+Legacy runtime:
+  The public legacy command and --legacy flag have been removed.
+"
 }
 
 #[cfg(test)]
