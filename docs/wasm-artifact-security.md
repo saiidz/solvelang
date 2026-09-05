@@ -1,5 +1,11 @@
 # Static WASM artifact security gate
 
+## Qualification package
+
+The same pinned audit recipe now retains a non-publishable qualification package containing exactly the three reviewed bundler files and `manifest.json`. The manifest is the audited source-commit, policy, toolchain, import/export, size, and checksum record. `package-artifact.cjs` copies only audited inputs and re-verifies the complete package. Qualification rejects missing, extra, corrupt, oversized, symbolic-link, and mismatched-manifest inputs. Two packages of the same audited bytes must be byte-identical.
+
+GitHub retains this package with its audit evidence for seven days. It is not automatically installed into `site/public`, published, or consumed by the production build. Browser-loader qualification and the `/run/` switch remain outstanding under #818; the static export still has no Rust toolchain requirement.
+
 This repository-only audit covers the `solvec-wasm` bundler artifact. It does not replace `/run/`, publish artifacts, or enable managed execution. `/run/` remains the disclosed TypeScript subset preview and the canonical local CLI remains the fallback for unsupported preview behavior.
 
 Run `bash solvec-wasm/qa/build-audited-artifact.sh` with Rust 1.95.0, its `wasm32-unknown-unknown` target, Node 24, and wasm-bindgen-cli 0.2.127 installed. Cargo uses the committed lockfile. Two independent target directories must produce identical WASM, JavaScript, and integrity manifests. The workflow checks out and verifies the actual proposed commit, rather than a synthetic PR merge.
