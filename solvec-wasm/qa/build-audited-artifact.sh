@@ -8,6 +8,7 @@ test "$(node -p 'process.versions.node.split(".")[0]')" = "24"
 test "$(rustc +1.95.0 --version | cut -d ' ' -f 2)" = "1.95.0"
 test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
 audit_root="$(mktemp -d)"
+audit_root="$(cd "$audit_root" && pwd -P)"
 evidence_root="$repo_root/solvec-wasm/target/artifact-security-evidence"
 # Only tracked commit contents become compiler inputs. Ignored build.rs/config
 # files in the caller checkout are never copied into this isolated snapshot.
@@ -35,17 +36,20 @@ while IFS='=' read -r name _; do
       ;;
   esac
 done < <(env)
-audit_home="$audit_root/home"
-audit_cargo_home="$audit_root/cargo-home"
-mkdir -p "$audit_home" "$audit_cargo_home"
 cargo_bin="$(rustup which --toolchain 1.95.0 cargo)"
 test -x "$cargo_bin"
 
 for attempt in first second; do
+  attempt_root="$audit_root/$attempt"
+  audit_home="$attempt_root/home"
+  audit_cargo_home="$attempt_root/cargo-home"
+  mkdir -p "$audit_home" "$audit_cargo_home"
+  cp -R "$repo_root" "$attempt_root/source"
+  cd "$attempt_root/source"
   HOME="$audit_home" CARGO_HOME="$audit_cargo_home" \
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$audit_root/$attempt/target" \
     CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= \
-    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang" \
+    CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$attempt_root=/solvelang-build" \
     CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="$linker" \
     "$cargo_bin" --config "build.rustc=\"$compiler\"" \
       --config 'build.rustc-wrapper=""' --config 'build.rustc-workspace-wrapper=""' \
@@ -55,6 +59,7 @@ for attempt in first second; do
     "$audit_root/$attempt/target/wasm32-unknown-unknown/release/solvec_wasm.wasm"
   node solvec-wasm/qa/audit-artifact.cjs "$audit_root/$attempt/bundle" "$source_commit" > "$audit_root/$attempt/audit.json"
 done
+cd "$repo_root"
 cmp "$audit_root/first/audit.json" "$audit_root/second/audit.json"
 for artifact in solvec_wasm.js solvec_wasm_bg.js solvec_wasm_bg.wasm; do
   cmp "$audit_root/first/bundle/$artifact" "$audit_root/second/bundle/$artifact"
