@@ -47,3 +47,7 @@ jobs:
             solvec-wasm/target/artifact-security-evidence/package/
           if-no-files-found: error
           retention-days: 7
+      - name: Compare site pin with qualified Linux artifact
+        run: |
+          node --test solvec-wasm/qa/verify-site-artifact.test.cjs
+          node solvec-wasm/qa/verify-site-artifact.cjs solvec-wasm/target/artifact-security-evidence/package "$(git rev-parse HEAD)"

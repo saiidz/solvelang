@@ -69,5 +69,4 @@ node solvec-wasm/qa/browser-loader-conformance.mjs "$audit_root/qualified-packag
 mkdir -p "$evidence_root"
 cp "$audit_root/first/audit.json" "$evidence_root/audit.json"
 node solvec-wasm/qa/package-artifact.cjs --retain "$audit_root/qualified-package" "$evidence_root/package" "$source_commit"
-node solvec-wasm/qa/verify-site-artifact.cjs "$audit_root/qualified-package" "$source_commit"
 printf 'Two clean pinned builds are byte-identical. Evidence: solvec-wasm/target/artifact-security-evidence/audit.json\n'
