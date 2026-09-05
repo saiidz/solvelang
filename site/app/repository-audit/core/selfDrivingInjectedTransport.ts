@@ -97,7 +97,7 @@ export async function runInjectedFixtureTransport(
     if (stopped || !handle || handle.kind !== "fixture-only" || handle.binding !== binding
         || Object.keys(handle).sort().join(",") !== "binding,kind") throw new Error("rejected");
     transportInvocations++;
-    const response = await read(invocation, fixtureCredential(binding));
+    const response = await read(invocation, handle);
     checkStopped();
     if (stopped || !response || typeof response !== "object" || Array.isArray(response)
         || Object.keys(response).sort().join(",") !== "fixture,requestId") throw new Error("rejected");
