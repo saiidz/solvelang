@@ -1234,6 +1234,9 @@ fn bounded_document(text: &str) -> bool {
 }
 
 fn local_document_uri(uri: &str) -> bool {
+    if !uri.starts_with("file:///") {
+        return false;
+    }
     let Ok(parsed) = reqwest::Url::parse(uri) else {
         return false;
     };
