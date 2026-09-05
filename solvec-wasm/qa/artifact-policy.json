@@ -1,0 +1,26 @@
+{
+  "schema": "solvelang.wasm-artifact-policy",
+  "version": 1,
+  "rust": "1.95.0",
+  "wasmBindgen": "0.2.127",
+  "maxWasmBytes": 600000,
+  "maxBundleBytes": 620000,
+  "glueSha256": {
+    "solvec_wasm.js": "745587693de0b3132bf036ef21ccb528cf29a504186d5d524cf399c8a64efe4c",
+    "solvec_wasm_bg.js": "d0f5cb357d1493cb9632f884b053d8c98e7f8e021e19913544cb7b7f11ae3921"
+  },
+  "imports": [
+    { "module": "./solvec_wasm_bg.js", "name": "__wbindgen_init_externref_table", "kind": "function" }
+  ],
+  "exports": [
+    { "name": "memory", "kind": "memory" },
+    { "name": "run_pure_v1", "kind": "function" },
+    { "name": "__abort_handler", "kind": "global" },
+    { "name": "__instance_terminated", "kind": "global" },
+    { "name": "__wbindgen_externrefs", "kind": "table" },
+    { "name": "__wbindgen_malloc", "kind": "function" },
+    { "name": "__wbindgen_realloc", "kind": "function" },
+    { "name": "__wbindgen_free", "kind": "function" },
+    { "name": "__wbindgen_start", "kind": "function" }
+  ]
+}

@@ -1,0 +1,13 @@
+# Static WASM artifact security gate
+
+This repository-only audit covers the `solvec-wasm` bundler artifact. It does not replace `/run/`, publish artifacts, or enable managed execution. `/run/` remains the disclosed TypeScript subset preview and the canonical local CLI remains the fallback for unsupported preview behavior.
+
+Run `bash solvec-wasm/qa/build-audited-artifact.sh` with Rust 1.95.0, its `wasm32-unknown-unknown` target, Node 24, and wasm-bindgen-cli 0.2.127 installed. Cargo uses the committed lockfile. Two independent target directories must produce identical WASM, JavaScript, and integrity manifests. The workflow checks out and verifies the actual proposed commit, rather than a synthetic PR merge.
+
+The audit admits exactly three generated bundler files, at most 600,000 bytes per WASM artifact and 620,000 bytes in total. It records SHA-256 and SRI hashes, source commit, tool versions, and the policy digest. Uploaded evidence is temporary and explicitly non-publishable. Reproducibility means two clean builds with the pinned toolchain in the same qualification environment; it does not claim bit-identical output across arbitrary toolchains or operating systems.
+
+`WebAssembly.Module.imports` inspects the actual compiled module without instantiating it. The sole approved import initializes the module's internal externref table with undefined, null, true, and false. It performs no external I/O. The exact reviewed generated glue is hash-pinned, so an import with the same name cannot silently acquire new behavior. All other imports and export-surface drift fail. This excludes WASI, filesystem, network, storage, environment, provider, process, dynamic evaluation, and side-effect callback bridges. The bundler entry contains only static relative module imports; the network-capable default web loader is not included.
+
+Policy changes require source review of both generated JavaScript files and the compiled import/export tables. Never update the glue hashes automatically to make CI green. Mutation tests prove rejection of injected JavaScript, WASI imports, oversize and extra files. A separate execution check uses the already-audited artifact, shared fixtures, and denied/unknown calls in direct, unreachable-branch, and unused-function positions, all before any output.
+
+The existing native and compiled-WASM conformance/resource suites remain required. This static artifact gate is one part of ADR 0002; browser UI integration, load-failure UX, and a reviewed decision to expand the public subset remain separate. No browser/runtime replacement is authorized by this audit.
