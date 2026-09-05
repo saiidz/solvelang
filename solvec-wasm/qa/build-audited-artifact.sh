@@ -20,17 +20,34 @@ git archive "$source_commit" | tar -x -C "$audit_root/source"
 repo_root="$audit_root/source"
 cd "$repo_root"
 compiler="$(rustup which --toolchain 1.95.0 rustc)"
-compiler_host="$("$compiler" -vV | sed -n 's/^host: //p')"
-linker="$("$compiler" --print sysroot)/lib/rustlib/$compiler_host/bin/rust-lld"
+linker="$("$compiler" --print sysroot)/lib/rustlib/$("$compiler" -vV | sed -n 's/^host: //p')/bin/rust-lld"
 test -x "$linker"
+
+# Caller/user Cargo configuration is not part of the audited source commit and
+# therefore must not influence dependency resolution or the compiled evidence.
+# Remove every inherited Cargo/Rust compiler override, then give Cargo a fresh
+# private HOME/CARGO_HOME. Repository-local tracked .cargo configuration, if
+# present in the archived commit, remains reviewable input.
+while IFS='=' read -r name _; do
+  case "$name" in
+    CARGO_*|RUSTC|RUSTC_*|RUSTFLAGS|RUSTDOCFLAGS)
+      unset "$name"
+      ;;
+  esac
+done < <(env)
+audit_home="$audit_root/home"
+audit_cargo_home="$audit_root/cargo-home"
+mkdir -p "$audit_home" "$audit_cargo_home"
+cargo_bin="$(rustup which --toolchain 1.95.0 cargo)"
+test -x "$cargo_bin"
+
 for attempt in first second; do
-  env -u RUSTC -u RUSTC_WRAPPER -u RUSTC_WORKSPACE_WRAPPER -u RUSTC_BOOTSTRAP \
-    -u RUSTFLAGS \
-    CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= \
+  HOME="$audit_home" CARGO_HOME="$audit_cargo_home" \
     CARGO_INCREMENTAL=0 CARGO_TARGET_DIR="$audit_root/$attempt/target" \
+    CARGO_BUILD_RUSTC_WRAPPER= CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER= \
     CARGO_ENCODED_RUSTFLAGS="--remap-path-prefix=$repo_root=/solvelang" \
     CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="$linker" \
-    cargo +1.95.0 --config "build.rustc=\"$compiler\"" \
+    "$cargo_bin" --config "build.rustc=\"$compiler\"" \
       --config 'build.rustc-wrapper=""' --config 'build.rustc-workspace-wrapper=""' \
       --config "target.wasm32-unknown-unknown.linker=\"$linker\"" \
       build --manifest-path solvec-wasm/Cargo.toml --release --locked --target wasm32-unknown-unknown
