@@ -34,17 +34,29 @@ test("planner supports EU cloud origin and bounded opaque cursor", () => {
   const plan = planPostHogReadRequest({
     ...base,
     origin: "https://eu.posthog.com",
-    operation: "read-feature-flags",
+    operation: "read-events",
     cursor: "cursor_ABC-123:next",
   });
 
   assert.equal(plan.request.origin, "https://eu.posthog.com");
-  assert.equal(plan.request.pathname, "/api/projects/12345/feature_flags");
+  assert.equal(plan.request.pathname, "/api/projects/12345/events");
   assert.deepEqual(plan.request.query, { limit: "50", cursor: "cursor_ABC-123:next" });
   assert.equal(
     postHogRequestPlanUrl(plan),
-    "https://eu.posthog.com/api/projects/12345/feature_flags?cursor=cursor_ABC-123%3Anext&limit=50",
+    "https://eu.posthog.com/api/projects/12345/events?cursor=cursor_ABC-123%3Anext&limit=50",
   );
+});
+
+test("sanitized error and flag endpoints use exact first-page paths and numeric projects", () => {
+  for (const [operation, suffix] of [["read-errors", "error_tracking/issues/"], ["read-feature-flags", "feature_flags/"]]) {
+    const plan = planPostHogReadRequest({ ...base, operation });
+    assert.equal(postHogRequestPlanUrl(plan), `https://us.posthog.com/api/projects/12345/${suffix}?limit=50`);
+    assert.deepEqual(plan.request.query, { limit: "50" });
+    assert.throws(() => planPostHogReadRequest({ ...base, operation, cursor: "next" }), /first.page/);
+    for (const project of ["0", "00042", "project-a", "1.2", "1e3", "123456789012345678901"]) {
+      assert.throws(() => planPostHogReadRequest({ ...base, operation, project }), /numeric project/);
+    }
+  }
 });
 
 test("self-hosted origins require explicit opt-in and strict HTTPS DNS hostname", () => {
