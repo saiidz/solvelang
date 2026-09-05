@@ -14,6 +14,15 @@ const issue = {
 const input = (json: unknown) => ({ operation: "read-errors", project: "42", requestId: "phr_0123456789abcdef", json });
 const page = () => ({ count: 1, next: null, previous: null, results: [{ ...issue }] });
 
+test("calendar overflow fails instead of changing the evidence date", () => {
+  for (const first_seen of ["2026-02-30T00:00:00Z", "2026-02-29T00:00:00Z", "2100-02-29T00:00:00Z", "2026-04-31T01:00:00+02:00", "2026-01-01T24:00:00Z", "2026-00-01T00:00:00Z", "2026-01-00T00:00:00Z", "2026-01-01T00:60:00Z", "2026-01-01T00:00:60Z", "2026-01-01T00:00:00+24:00"]) {
+    assert.throws(() => sanitizePostHogErrors(input({ ...page(), results: [{ ...issue, first_seen }] })), /safe sanitizer contract/);
+  }
+  for (const [first_seen, expected] of [["2000-02-29T01:00:00+01:00", "2000-02-29T00:00:00.000Z"], ["2024-02-29T23:30:00-01:00", "2024-03-01T00:30:00.000Z"]]) {
+    assert.equal(sanitizePostHogErrors(input({ ...page(), results: [{ ...issue, first_seen }] })).records[0].observedAt, expected);
+  }
+});
+
 test("error sanitizer emits deterministic structural evidence with no raw content or identities", () => {
   const result = sanitizePostHogErrors(input(page()));
   assert.deepEqual(result, sanitizePostHogErrors(input(page())));

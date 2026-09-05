@@ -6,6 +6,17 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const statuses = new Set(["active", "resolved", "suppressed", "archived", "pending_release"]);
 const issueKeys = new Set(["id", "status", "severity", "name", "description", "first_seen", "assignee", "external_issues", "cohort"]);
 
+function timestamp(value: unknown): string {
+  if (typeof value !== "string" || value.length > 40) throw failure();
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(value);
+  if (!parts) throw failure();
+  const [year, month, day, hour, minute, second] = parts.slice(1, 7).map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59 || Number(parts[7] ?? 0) > 23 || Number(parts[8] ?? 0) > 59 || !Number.isFinite(Date.parse(value))) throw failure();
+  return new Date(value).toISOString();
+}
+
 function object(value: unknown, keys: ReadonlySet<string>): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw failure();
   for (const key of Reflect.ownKeys(value)) {
@@ -27,12 +38,12 @@ export function sanitizePostHogErrors(input: PostHogResponseSanitizerInput): Pos
   const records = Array.from(page.results, value => {
     const issue = object(value, issueKeys);
     if (typeof issue.id !== "string" || !uuid.test(issue.id) || typeof issue.status !== "string" || !statuses.has(issue.status)) throw failure();
-    if (typeof issue.first_seen !== "string" || issue.first_seen.length > 40 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(issue.first_seen) || !Number.isFinite(Date.parse(issue.first_seen))) throw failure();
+    const observedAt = timestamp(issue.first_seen);
     // Identity-rich and arbitrary text fields are excluded as a whole, never traversed or interpolated.
     return {
       kind: "error" as const,
       locator: `issue:${issue.id.toLowerCase()}`,
-      observedAt: new Date(issue.first_seen).toISOString(),
+      observedAt,
       summary: "PostHog tracked error issue.",
       dimensions: { status: issue.status },
       sanitized: true as const,
