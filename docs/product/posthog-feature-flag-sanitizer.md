@@ -1,0 +1,9 @@
+# PostHog feature-flag sanitizer
+
+`sanitizePostHogFlags` is an explicit pure sanitizer for the read pipeline injection point. It emits numeric flag ID, configuration update time, boolean active/deleted/archived state and numeric version. It never emits keys, names, targeting rules, filters, payloads, users, tags, arbitrary properties or permissions. Known serializer fields are excluded wholesale rather than traversed. Unknown fields and malformed evidence fail with fixed errors that contain no input values.
+
+The reviewed upstream source is PostHog commit `7a2c6545d6218e20ffd63b208a79a963fdaf2183`: `products/feature_flags/backend/api/feature_flag.py` (`FeatureFlagSerializer`, `FeatureFlagViewSet.list`) and `posthog/settings/web.py` (LimitOffsetPagination). The list route is `GET /api/projects/{project}/feature_flags/`. Synthetic fixtures only; no live provider call or credentials.
+
+At most 100 records from the first page are accepted. Count minus returned records is preserved as explicit truncation; pagination links are not copied or followed. Later pages are rejected until the planner's cursor versus upstream offset mismatch is resolved. Coverage describes this returned collection, not every flag, customer rollout, runtime exposure or performance outcome. Configuration timestamps do not prove a deployment or causality. No metrics or performance thresholds are invented.
+
+This does not install a default transport or default sanitizer, evaluate flags, activate credentials, mutate rollout state or enable production execution. Live path/pagination qualification and owner-authorized canary activation remain separate gates. Error and flag sanitizers share strict object and calendar validation, retaining their operation-specific fixed diagnostics.
