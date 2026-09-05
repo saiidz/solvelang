@@ -1,19 +1,13 @@
-import {
-  createSolveInbox,
-  type SelfDrivingMode,
-  type SolveInbox,
-} from "./selfDriving";
-import {
-  analyzeAiContext,
-  type AiScoutAnalysis,
-  type AiScoutBudgetPolicy,
-} from "./selfDrivingAiScout";
-import {
-  analyzeProductContext,
-  type ExperienceScoutBudgets,
-  type ProductScoutAnalysis,
-  type RolloutScoutBudgets,
+import type { SelfDrivingMode, SolveInbox } from "./selfDriving";
+import type { AiScoutBudgetPolicy } from "./selfDrivingAiScout";
+import type {
+  ExperienceScoutBudgets,
+  RolloutScoutBudgets,
 } from "./selfDrivingProductScouts";
+import {
+  runSelfDrivingObserve,
+  type SelfDrivingObserveRun,
+} from "./selfDrivingObserveRun";
 import {
   adaptSanitizedPostHogExport,
   type PostHogOfflineAdapterResult,
@@ -62,7 +56,7 @@ export type PostHogReadPipelineResult = {
   mode: "analyze-only";
   source: {
     provider: "posthog";
-    operation: string;
+    operation: "read-errors" | "read-feature-flags";
     project: string;
     requestId: string;
     sanitizedCoverage: "complete" | "partial";
@@ -73,6 +67,7 @@ export type PostHogReadPipelineResult = {
     effectiveMode: "observe";
     injectedTransportOnly: true;
     injectedSanitizerRequired: true;
+    rawGetEventPayloadsAllowed: false;
     rawProviderJsonReturned: false;
     credentialMaterialReturned: false;
     rawHeadersReturned: false;
@@ -93,12 +88,11 @@ export type PostHogReadPipelineResult = {
   };
   transport: Omit<PostHogTransportResult, "json">;
   context: PostHogOfflineAdapterResult["context"];
-  product: ProductScoutAnalysis;
-  ai: AiScoutAnalysis;
+  observe: SelfDrivingObserveRun;
   inbox: SolveInbox;
 };
 
-export type PostHogReadPipelineFailureCategory = "sanitization";
+export type PostHogReadPipelineFailureCategory = "sanitization" | "unsupported-operation";
 
 export class PostHogReadPipelineFailure extends Error {
   readonly category: PostHogReadPipelineFailureCategory;
@@ -110,13 +104,21 @@ export class PostHogReadPipelineFailure extends Error {
   }
 }
 
-const allowedContextKindsByOperation = Object.freeze({
-  "read-events": new Set(["runtime-event", "ai-trace", "mcp-tool-call"]),
+const allowedContextKindsByOperation: Readonly<Record<
+  "read-errors" | "read-feature-flags",
+  ReadonlySet<string>
+>> = Object.freeze({
   "read-errors": new Set(["error"]),
   "read-feature-flags": new Set(["feature-flag"]),
-} as const);
+});
+
+type SupportedPipelineOperation = keyof typeof allowedContextKindsByOperation;
 
 function identifyPlan(plan: PostHogRequestPlan): { operation: string; project: string } {
+  if (!plan || typeof plan !== "object" || !plan.request || typeof plan.request.pathname !== "string") {
+    throw new Error("PostHog read pipeline requires a request plan.");
+  }
+
   const pathname = plan.request.pathname;
   const matches: Array<{ operation: string; project: string }> = [];
 
@@ -145,6 +147,17 @@ function identifyPlan(plan: PostHogRequestPlan): { operation: string; project: s
   return matches[0];
 }
 
+function assertSupportedOperation(operation: string): asserts operation is SupportedPipelineOperation {
+  if (!(operation in allowedContextKindsByOperation)) {
+    throw new PostHogReadPipelineFailure(
+      "unsupported-operation",
+      operation === "read-events"
+        ? "Raw PostHog GET event payloads are not accepted by this pipeline; use the bounded aggregate product-events contract instead."
+        : "This PostHog read operation does not yet have an approved sanitizer pipeline.",
+    );
+  }
+}
+
 function stripTransportJson(result: PostHogTransportResult): Omit<PostHogTransportResult, "json"> {
   return {
     schema: result.schema,
@@ -164,18 +177,15 @@ function sanitizedFailure(): PostHogReadPipelineFailure {
 
 function assertSanitizedIdentity(
   adapted: PostHogOfflineAdapterResult,
-  operation: string,
+  operation: SupportedPipelineOperation,
   project: string,
   requestId: string,
 ): void {
   if (adapted.source.projectLocator !== `project:${project}`) throw sanitizedFailure();
   if (adapted.source.exportLocator !== `request:${requestId}`) throw sanitizedFailure();
 
-  const allowed = allowedContextKindsByOperation[
-    operation as keyof typeof allowedContextKindsByOperation
-  ];
-  if (!allowed) throw sanitizedFailure();
-  if (adapted.context.signals.some((signal) => !allowed.has(signal.kind as never))) {
+  const allowed = allowedContextKindsByOperation[operation];
+  if (adapted.context.signals.some((signal) => !allowed.has(signal.kind))) {
     throw sanitizedFailure();
   }
 }
@@ -195,13 +205,15 @@ export async function executePostHogReadPipeline(
     throw new Error("PostHog read pipeline requires an injected response sanitizer.");
   }
 
+  const identity = identifyPlan(plan);
+  assertSupportedOperation(identity.operation);
+
   const transportResult = await executePostHogReadPlan(
     plan,
     authProvider,
     transport,
     options.transport,
   );
-  const identity = identifyPlan(plan);
 
   let sanitizedExport: PostHogSanitizedExportV0;
   try {
@@ -233,35 +245,32 @@ export async function executePostHogReadPipeline(
   }
 
   const context = adapted.context;
-  const product = analyzeProductContext(context, {
+  const observe = runSelfDrivingObserve(context, {
     requestedMode: "observe",
+    ...(options.aiBudgets === undefined ? {} : { aiBudgets: options.aiBudgets }),
     ...(options.experienceBudgets === undefined
       ? {}
       : { experienceBudgets: options.experienceBudgets }),
     ...(options.rolloutBudgets === undefined
       ? {}
       : { rolloutBudgets: options.rolloutBudgets }),
+    ...(options.maxFindings === undefined ? {} : { maxFindings: options.maxFindings }),
   });
-  const ai = analyzeAiContext(context, {
-    requestedMode: "observe",
-    ...(options.aiBudgets === undefined ? {} : { budgets: options.aiBudgets }),
-  });
-  const inbox = createSolveInbox(
-    [...product.inbox.items, ...ai.inbox.items],
-    {
-      requestedMode: "observe",
-      ...(options.maxFindings === undefined ? {} : { maxFindings: options.maxFindings }),
-    },
-  );
 
   const partialReasons: PostHogReadPipelinePartialReason[] = [];
   if (adapted.source.coverage === "partial") partialReasons.push("source-partial");
   if (context.execution.truncated || context.execution.status === "partial") {
     partialReasons.push("context-truncated");
   }
-  if (product.inbox.execution.truncated) partialReasons.push("product-inbox-truncated");
-  if (ai.inbox.execution.truncated) partialReasons.push("ai-inbox-truncated");
-  if (inbox.execution.truncated) partialReasons.push("inbox-truncated");
+  if (observe.execution.partialReasons.includes("product-inbox-truncated")) {
+    partialReasons.push("product-inbox-truncated");
+  }
+  if (observe.execution.partialReasons.includes("ai-inbox-truncated")) {
+    partialReasons.push("ai-inbox-truncated");
+  }
+  if (observe.execution.partialReasons.includes("combined-inbox-truncated")) {
+    partialReasons.push("inbox-truncated");
+  }
 
   return {
     schema: "solvelang.self-driving.posthog-read-pipeline.v0",
@@ -279,6 +288,7 @@ export async function executePostHogReadPipeline(
       effectiveMode: "observe",
       injectedTransportOnly: true,
       injectedSanitizerRequired: true,
+      rawGetEventPayloadsAllowed: false,
       rawProviderJsonReturned: false,
       credentialMaterialReturned: false,
       rawHeadersReturned: false,
@@ -293,14 +303,13 @@ export async function executePostHogReadPipeline(
       partialReasons,
       transportBodyBytes: transportResult.execution.bodyBytes,
       contextSignals: context.execution.emittedSignals,
-      productFindings: product.inbox.execution.emittedFindings,
-      aiFindings: ai.inbox.execution.emittedFindings,
-      emittedFindings: inbox.execution.emittedFindings,
+      productFindings: observe.components.product.emittedFindings,
+      aiFindings: observe.components.ai.emittedFindings,
+      emittedFindings: observe.execution.emittedFindings,
     },
     transport: stripTransportJson(transportResult),
     context,
-    product,
-    ai,
-    inbox,
+    observe,
+    inbox: observe.inbox,
   };
 }
