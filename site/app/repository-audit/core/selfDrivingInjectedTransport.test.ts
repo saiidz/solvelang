@@ -38,6 +38,26 @@ test("valid fake runs retain deterministic sanitized evidence and zero live acti
   assert.ok(!JSON.stringify(first).includes('bodyText\\":\\"{'));
 });
 
+test("transport receives the exact resolver-issued opaque fixture handle", async () => {
+  const issued = new WeakSet<object>();
+  let observedHandle: object | undefined;
+  const deps: FixtureDependencies = {
+    resolve: async binding => {
+      const handle = fixtureCredential(binding);
+      issued.add(handle);
+      return handle;
+    },
+    read: async (invocation, handle) => {
+      observedHandle = handle;
+      assert.equal(issued.has(handle), true);
+      return { requestId: invocation.requestId, fixture };
+    },
+  };
+  const result = await runInjectedFixtureTransport(request(), { mode: "fixture", dependencies: deps });
+  assert.equal(result.status, "complete");
+  assert.ok(observedHandle);
+});
+
 test("tampering fails before resolution and wrong credential binding before transport", async () => {
   let calls = 0;
   const deps = dependencies();
