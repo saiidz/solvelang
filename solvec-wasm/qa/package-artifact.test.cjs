@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { packageArtifact, verifyPackage } = require("./package-artifact.cjs");
+const { packageArtifact, verifyPackage, retainPackage } = require("./package-artifact.cjs");
 const bundle = process.env.SOLVELANG_WASM_AUDIT_DIR;
 const commit = process.env.SOLVELANG_WASM_SOURCE_COMMIT;
 assert.ok(bundle && commit, "real audited artifact and exact source commit are required");
@@ -39,3 +39,26 @@ for (const mutation of ["missing", "extra", "corrupt", "oversized", "symlink", "
     assert.throws(() => verifyPackage(destination, commit));
   }));
 }
+
+test("retention replaces stale entries and verifies the actual retained directory", () => fixture(root => {
+  const source = path.join(root, "source");
+  const retained = path.join(root, "retained");
+  packageArtifact(bundle, source, commit);
+  fs.mkdirSync(retained);
+  fs.writeFileSync(path.join(retained, "stale.js"), "obsolete");
+  retainPackage(source, retained, commit);
+  assert.deepEqual(fs.readdirSync(retained).sort(), fs.readdirSync(source).sort());
+}));
+
+test("verification preserves recorded Node 24 patch provenance across patch changes", () => fixture(root => {
+  const destination = path.join(root, "package");
+  packageArtifact(bundle, destination, commit);
+  const manifestPath = path.join(destination, "manifest.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath));
+  manifest.node = "24.0.0";
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  assert.equal(verifyPackage(destination, commit).node, "24.0.0");
+  manifest.node = "22.0.0";
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+  assert.throws(() => verifyPackage(destination, commit), /Node 24/);
+}));

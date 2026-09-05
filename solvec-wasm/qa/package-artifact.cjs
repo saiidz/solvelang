@@ -38,12 +38,24 @@ function verifyPackage(directory, sourceCommit) {
       assert.ok(fs.statSync(file).size <= 600000, "package entry exceeds byte bound");
       fs.copyFileSync(file, path.join(temporary, name));
     }
-    assert.deepEqual(manifest, audit(temporary, sourceCommit), "package manifest does not match audited source/artifact");
+    assert.match(manifest.node, /^24\.\d+\.\d+$/, "package must record a Node 24 qualification runtime");
+    const currentAudit = audit(temporary, sourceCommit);
+    assert.deepEqual(manifest, { ...currentAudit, node: manifest.node }, "package manifest does not match audited source/artifact");
     return manifest;
   } finally {
     fs.rmSync(temporary, { recursive: true, force: true });
   }
 }
 
-if (require.main === module) packageArtifact(process.argv[2], process.argv[3], process.argv[4]);
-module.exports = { packageArtifact, verifyPackage };
+function retainPackage(source, destination, sourceCommit) {
+  verifyPackage(source, sourceCommit);
+  fs.rmSync(destination, { recursive: true, force: true });
+  fs.cpSync(source, destination, { recursive: true, errorOnExist: true, force: false });
+  return verifyPackage(destination, sourceCommit);
+}
+
+if (require.main === module) {
+  if (process.argv[2] === "--retain") retainPackage(process.argv[3], process.argv[4], process.argv[5]);
+  else packageArtifact(process.argv[2], process.argv[3], process.argv[4]);
+}
+module.exports = { packageArtifact, verifyPackage, retainPackage };
