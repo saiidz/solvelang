@@ -66,6 +66,7 @@ export type SelfDrivingPrWriteAtomicClaimRequest = Readonly<{
   schema: typeof SELF_DRIVING_PR_WRITE_CLAIM_SCHEMA;
   expectedState: "approved";
   approvalId: string;
+  approvalBindingSha256: string;
   requestedAt: string;
   binding: NormalizedSelfDrivingPrWriteApproval;
 }>;
@@ -94,12 +95,14 @@ export type SelfDrivingPrWriteClaimResult = {
   schema: typeof SELF_DRIVING_PR_WRITE_CLAIM_SCHEMA;
   status: "claimed" | "rejected";
   approvalId: string;
+  approvalBindingSha256: string;
   preflightId: string;
   requestedAt: string;
   claimId?: string;
   rejectionReason?: SelfDrivingPrWriteClaimRejectionReason | "claimer-failure" | "invalid-claim-result";
   policy: {
     atomicSingleUseClaimRequired: true;
+    cryptographicApprovalBindingRequired: true;
     freshBranchProtectionEvidenceRequired: true;
     writeAuthorizationClaimMutationAttempted: true;
     retries: 0;
@@ -158,6 +161,7 @@ const severityRank: Record<(typeof severities)[number], number> = {
   low: 3,
   info: 4,
 };
+const textEncoder = new TextEncoder();
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -508,6 +512,16 @@ export function normalizeSelfDrivingPrWriteApproval(
   });
 }
 
+export async function computeSelfDrivingPrWriteApprovalBindingSha256(
+  approval: NormalizedSelfDrivingPrWriteApproval,
+): Promise<string> {
+  if (!approval || typeof approval !== "object") throw new Error("A normalized PR write approval is required for SHA-256 binding.");
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error("SHA-256 digest support is required for PR write approval claims.");
+  const digest = await subtle.digest("SHA-256", textEncoder.encode(JSON.stringify(approval)));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export async function claimSelfDrivingPrWriteApproval(
   preflight: SelfDrivingPrPreflight,
   input: SelfDrivingPrWriteApprovalInput,
@@ -528,11 +542,13 @@ export async function claimSelfDrivingPrWriteApproval(
   if (nowEpoch - branchProtectionObservedAt > defaultSelfDrivingPrWriteAuthorizationLimits.maxBranchProtectionEvidenceAgeMs) {
     throw new Error("Branch-protection evidence is stale for PR write authorization.");
   }
+  const approvalBindingSha256 = await computeSelfDrivingPrWriteApprovalBindingSha256(approval);
 
   const claimRequest: SelfDrivingPrWriteAtomicClaimRequest = Object.freeze({
     schema: SELF_DRIVING_PR_WRITE_CLAIM_SCHEMA,
     expectedState: "approved",
     approvalId: approval.approvalId,
+    approvalBindingSha256,
     requestedAt,
     binding: approval,
   });
@@ -540,10 +556,12 @@ export async function claimSelfDrivingPrWriteApproval(
   const base: Omit<SelfDrivingPrWriteClaimResult, "status"> = {
     schema: SELF_DRIVING_PR_WRITE_CLAIM_SCHEMA,
     approvalId: approval.approvalId,
+    approvalBindingSha256,
     preflightId: approval.binding.preflightId,
     requestedAt,
     policy: {
       atomicSingleUseClaimRequired: true,
+      cryptographicApprovalBindingRequired: true,
       freshBranchProtectionEvidenceRequired: true,
       writeAuthorizationClaimMutationAttempted: true,
       retries: 0,
