@@ -131,7 +131,7 @@ test("PR write approval binds the exact canonical no-write preflight and remains
   assert.equal(Object.isFrozen(approval.binding.selectedProposals), true);
 });
 
-test("atomic PR write claim calls only the injected claimer once and returns no write execution authority", async () => {
+test("atomic PR write claim binds the complete normalized approval and returns no write execution authority", async () => {
   const preflight = preflightArtifact();
   let calls = 0;
   let captured: SelfDrivingPrWriteAtomicClaimRequest | undefined;
@@ -153,7 +153,14 @@ test("atomic PR write claim calls only the injected claimer once and returns no 
   assert.equal(result.claimId, "claim-pr-write-001");
   assert.equal(result.preflightId, preflight.id);
   assert.equal(captured?.expectedState, "approved");
-  assert.equal(captured?.binding.preflightId, preflight.id);
+  assert.equal(captured?.binding.approvalId, "pr-write-approval-001");
+  assert.equal(captured?.binding.operator, "owner:saiidz");
+  assert.equal(captured?.binding.runtime, "isolated-pr-writer-v0");
+  assert.equal(captured?.binding.notBefore, new Date(NOT_BEFORE).toISOString());
+  assert.equal(captured?.binding.expiresAt, new Date(EXPIRES_AT).toISOString());
+  assert.equal(captured?.binding.binding.preflightId, preflight.id);
+  assert.equal(captured?.binding.binding.repository, preflight.repository);
+  assert.equal(captured?.binding.binding.baseRevision, preflight.baseRevision);
   assert.equal(result.policy.atomicSingleUseClaimRequired, true);
   assert.equal(result.policy.writeAuthorizationClaimMutationAttempted, true);
   assert.equal(result.policy.retries, 0);
