@@ -383,7 +383,7 @@ test("forged execution-plan SHA or policy is rejected before any adapter or fina
     () => executeSelfDrivingPrWritePlan({
       ...plan,
       policy: { ...plan.policy, automaticMergeAllowed: true },
-    } as typeof plan, dependencies),
+    } as unknown as typeof plan, dependencies),
     /safe no-write execution-plan policy/,
   );
   assert.equal(calls, 0);
