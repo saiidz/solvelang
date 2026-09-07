@@ -21,6 +21,8 @@ The boundary revalidates the preflight's least-privilege permissions, fixed `cre
 
 The approval has explicit UTC `notBefore` and `expiresAt` timestamps and a maximum 15-minute lifetime. Claiming requires an injected atomic compare-and-set style dependency. The dependency is invoked once, with zero retry and no automatic re-arm. Fixture concurrency tests prove one approval can yield only one successful claim when the injected store enforces atomicity.
 
+The claim request carries the **complete normalized approval**—approval ID, operator, runtime, activation window, and the full canonical preflight binding—so an external atomic store can enforce exact approval identity rather than only matching the repository/branch subset.
+
 The only represented external state mutation is the approval claim itself. Claimer failures and malformed results are reduced to fixed rejection categories; raw errors and credential-like values are not returned.
 
 ## Still no write execution
