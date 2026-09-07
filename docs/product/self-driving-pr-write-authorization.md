@@ -25,6 +25,8 @@ The claim additionally requires branch-protection evidence observed no more than
 
 The claim request carries the **complete normalized approval**—approval ID, operator, runtime, activation window, and the full canonical preflight binding—so an external atomic store can enforce exact approval identity rather than only matching the repository/branch subset.
 
+Before the atomic store is invoked, core computes SHA-256 over the complete normalized approval. The request and sanitized claim result both carry that 64-hex binding. A later execution boundary must recompute it from the approval and compare it with the claim/store record before accepting the claim, preventing accidental substitution of another approval that reuses the same approval/preflight IDs. SHA-256 availability is fail-closed; there is no non-cryptographic fallback.
+
 The only represented external state mutation is the approval claim itself. Claimer failures and malformed results are reduced to fixed rejection categories; raw errors and credential-like values are not returned.
 
 ## Still no write execution
@@ -43,4 +45,4 @@ A successful claim is authorization evidence for a later separately reviewed exe
 - no merge authority;
 - no rollout, production, billing, provider, or Solve Runner authority.
 
-The next executor stage must separately prove exact claimed approval binding, patch/base-blob integrity at execution time, fresh live branch-protection and base-revision checks, least-privilege credential resolution, bounded one-shot GitHub calls, protected-branch safety, no direct base write, no force push, no auto-merge, sanitized failure handling, and terminal claim finalization. Live activation must remain separate from repository implementation.
+The next executor stage must separately prove exact claimed approval SHA-256 binding, patch/base-blob integrity at execution time, fresh live branch-protection and base-revision checks, least-privilege credential resolution, bounded one-shot GitHub calls, protected-branch safety, no direct base write, no force push, no auto-merge, sanitized failure handling, and terminal claim finalization. Live activation must remain separate from repository implementation.
