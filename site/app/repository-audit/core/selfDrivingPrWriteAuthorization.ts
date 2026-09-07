@@ -67,7 +67,7 @@ export type SelfDrivingPrWriteAtomicClaimRequest = Readonly<{
   expectedState: "approved";
   approvalId: string;
   requestedAt: string;
-  binding: SelfDrivingPrWriteBinding;
+  binding: NormalizedSelfDrivingPrWriteApproval;
 }>;
 
 export const SELF_DRIVING_PR_WRITE_CLAIM_REJECTION_REASONS = [
@@ -507,7 +507,7 @@ export async function claimSelfDrivingPrWriteApproval(
     expectedState: "approved",
     approvalId: approval.approvalId,
     requestedAt,
-    binding: approval.binding,
+    binding: approval,
   });
 
   const base: Omit<SelfDrivingPrWriteClaimResult, "status"> = {
