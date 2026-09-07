@@ -100,6 +100,7 @@ export type SelfDrivingPrWriteClaimResult = {
   rejectionReason?: SelfDrivingPrWriteClaimRejectionReason | "claimer-failure" | "invalid-claim-result";
   policy: {
     atomicSingleUseClaimRequired: true;
+    freshBranchProtectionEvidenceRequired: true;
     writeAuthorizationClaimMutationAttempted: true;
     retries: 0;
     automaticRearm: false;
@@ -135,6 +136,7 @@ export const defaultSelfDrivingPrWriteAuthorizationLimits = Object.freeze({
   maxProtectedBranches: 32,
   maxRequiredChecks: 32,
   maxAuthorizationWindowMs: 15 * 60 * 1000,
+  maxBranchProtectionEvidenceAgeMs: 5 * 60 * 1000,
 });
 
 const credentialLikePatterns = [
@@ -149,6 +151,13 @@ const credentialLikePatterns = [
 ] as const;
 
 const severities = ["critical", "high", "medium", "low", "info"] as const;
+const severityRank: Record<(typeof severities)[number], number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -189,6 +198,10 @@ function normalizeRepository(value: string): string {
   const normalized = normalizeText(value, "repository", 201);
   if (!/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(normalized)) {
     throw new Error("repository must use exact owner/name syntax.");
+  }
+  const [owner, name] = normalized.split("/");
+  if (owner === "." || owner === ".." || name === "." || name === "..") {
+    throw new Error("repository contains an unsafe owner or name.");
   }
   return normalized;
 }
@@ -378,6 +391,13 @@ function normalizePreflightBinding(preflight: SelfDrivingPrPreflight): SelfDrivi
       severity,
     });
   });
+  const canonicalSelectedProposals = [...selectedProposals].sort((left, right) =>
+    severityRank[left.severity] - severityRank[right.severity]
+    || compareText(left.findingId, right.findingId)
+    || compareText(left.validationId, right.validationId));
+  if (selectedProposals.some((proposal, index) => proposal.validationId !== canonicalSelectedProposals[index].validationId)) {
+    throw new Error("selectedProposals must use canonical PR preflight ordering.");
+  }
 
   const normalizedBranchProtection = Object.freeze({
     protectedBranches: Object.freeze([...protectedBranches]),
@@ -501,6 +521,13 @@ export async function claimSelfDrivingPrWriteApproval(
   const nowEpoch = Date.parse(requestedAt);
   if (nowEpoch < Date.parse(approval.notBefore)) throw new Error("PR write approval is not active yet.");
   if (nowEpoch >= Date.parse(approval.expiresAt)) throw new Error("PR write approval is expired.");
+  const branchProtectionObservedAt = Date.parse(approval.binding.branchProtection.observedAt);
+  if (branchProtectionObservedAt > nowEpoch) {
+    throw new Error("Branch-protection evidence cannot be observed in the future.");
+  }
+  if (nowEpoch - branchProtectionObservedAt > defaultSelfDrivingPrWriteAuthorizationLimits.maxBranchProtectionEvidenceAgeMs) {
+    throw new Error("Branch-protection evidence is stale for PR write authorization.");
+  }
 
   const claimRequest: SelfDrivingPrWriteAtomicClaimRequest = Object.freeze({
     schema: SELF_DRIVING_PR_WRITE_CLAIM_SCHEMA,
@@ -517,6 +544,7 @@ export async function claimSelfDrivingPrWriteApproval(
     requestedAt,
     policy: {
       atomicSingleUseClaimRequired: true,
+      freshBranchProtectionEvidenceRequired: true,
       writeAuthorizationClaimMutationAttempted: true,
       retries: 0,
       automaticRearm: false,
