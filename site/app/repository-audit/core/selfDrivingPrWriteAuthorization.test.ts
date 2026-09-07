@@ -35,7 +35,7 @@ function signal(overrides: Partial<SolveContextSignalInput> = {}): SolveContextS
   };
 }
 
-function preflightArtifact(): SelfDrivingPrPreflight {
+function preflightArtifact(options: { branchProtectionObservedAt?: string } = {}): SelfDrivingPrPreflight {
   const context = createSolveContextSnapshot([signal()]);
   const run = runSelfDrivingObserve(context);
   const finding = run.inbox.items[0];
@@ -78,7 +78,7 @@ function preflightArtifact(): SelfDrivingPrPreflight {
       allowsForcePush: false,
       requiredApprovals: 1,
       requiredChecks: ["WASM artifact security", "CI", "Rust"],
-      observedAt: "2026-09-06T19:12:00Z",
+      observedAt: options.branchProtectionObservedAt ?? "2026-09-06T20:02:00Z",
       evidenceLocator: "github:ruleset-snapshot:def456",
     },
   });
@@ -162,6 +162,7 @@ test("atomic PR write claim binds the complete normalized approval and returns n
   assert.equal(captured?.binding.binding.repository, preflight.repository);
   assert.equal(captured?.binding.binding.baseRevision, preflight.baseRevision);
   assert.equal(result.policy.atomicSingleUseClaimRequired, true);
+  assert.equal(result.policy.freshBranchProtectionEvidenceRequired, true);
   assert.equal(result.policy.writeAuthorizationClaimMutationAttempted, true);
   assert.equal(result.policy.retries, 0);
   assert.equal(result.policy.automaticRearm, false);
@@ -210,7 +211,7 @@ test("PR write approval rejects binding drift before the atomic claimer can run"
   }
 });
 
-test("PR write approval rejects forged weaker preflight policy and canonical identity drift", () => {
+test("PR write approval rejects forged weaker preflight policy, unsafe repository identity, and canonical ordering drift", () => {
   const preflight = preflightArtifact();
   const weakened = {
     ...preflight,
@@ -228,6 +229,27 @@ test("PR write approval rejects forged weaker preflight policy and canonical ide
   assert.throws(
     () => normalizeSelfDrivingPrWriteApproval(forgedId, approvalInput(forgedId)),
     /identity does not match its canonical write binding/,
+  );
+
+  for (const repository of ["../repo", "owner/.."] as const) {
+    const unsafeRepository = { ...preflight, repository } as SelfDrivingPrPreflight;
+    assert.throws(
+      () => normalizeSelfDrivingPrWriteApproval(unsafeRepository, approvalInput(unsafeRepository)),
+      /unsafe owner or name/,
+    );
+  }
+
+  const sourceProposal = preflight.selectedProposals[0];
+  const reordered = {
+    ...preflight,
+    selectedProposals: [
+      { ...sourceProposal, validationId: "validation_low", findingId: "finding_low", severity: "low" as const },
+      { ...sourceProposal, validationId: "validation_critical", findingId: "finding_critical", severity: "critical" as const },
+    ],
+  } as SelfDrivingPrPreflight;
+  assert.throws(
+    () => normalizeSelfDrivingPrWriteApproval(reordered, approvalInput(reordered)),
+    /canonical PR preflight ordering/,
   );
 });
 
@@ -272,6 +294,31 @@ test("PR write approval enforces a short explicit UTC authorization window befor
     /expired/,
   );
   assert.equal(calls, 0);
+});
+
+test("PR write claim rejects stale or future branch-protection evidence before the atomic store", async () => {
+  const cases = [
+    { observedAt: "2026-09-06T19:59:59Z", pattern: /stale/ },
+    { observedAt: "2026-09-06T20:05:01Z", pattern: /future/ },
+  ];
+
+  for (const item of cases) {
+    const preflight = preflightArtifact({ branchProtectionObservedAt: item.observedAt });
+    let calls = 0;
+    await assert.rejects(
+      () => claimSelfDrivingPrWriteApproval(
+        preflight,
+        approvalInput(preflight),
+        async () => {
+          calls += 1;
+          return { status: "claimed", claimId: "must-not-run" };
+        },
+        { now: NOW },
+      ),
+      item.pattern,
+    );
+    assert.equal(calls, 0);
+  }
 });
 
 test("PR write approval rejects credential-like metadata without exposing token material", () => {
