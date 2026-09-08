@@ -162,8 +162,8 @@ test("credential provider signs exact bounded RS256 claims, mints once, validate
   assert.equal(observed?.installationRef, "github-app/installation:12345");
   assert.deepEqual(observed?.repositories, ["saiidz/solvelang"]);
   assert.deepEqual(observed?.permissions, { metadata: "read", contents: "write", pullRequests: "write" });
-  assert.equal(observed?.issuedAt, REQUESTED_AT);
-  assert.equal(observed?.expiresAt, TOKEN_EXPIRES_AT);
+  assert.equal(observed?.issuedAt, new Date(Date.parse(REQUESTED_AT)).toISOString());
+  assert.equal(observed?.expiresAt, new Date(Date.parse(TOKEN_EXPIRES_AT)).toISOString());
   assert.match(observed?.credentialId ?? "", /^github-installation-token-[0-9a-f]{32}$/);
 });
 
