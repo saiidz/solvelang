@@ -304,7 +304,7 @@ function validateJwt(jwt: string, request: SelfDrivingGitHubAppJwtSignRequest, n
 }
 
 function validJsonContentType(value: string | undefined): boolean {
-  if (value === undefined || value === "") return true;
+  if (typeof value !== "string" || !value.trim()) return false;
   return /^application\/(?:[A-Za-z0-9.+-]*\+)?json(?:\s*;|$)/i.test(value.trim());
 }
 
@@ -411,6 +411,76 @@ export function createSelfDrivingGitHubInstallationTokenCredentialProvider(
   let terminallyFailed = false;
   let boundRequest: SelfDrivingGitHubInstallationCredentialRequest | undefined;
   let cached: CachedCredential | undefined;
+  let mintInFlight: Promise<SelfDrivingGitHubInstallationCredential> | undefined;
+
+  const mintCredential = async (
+    request: SelfDrivingGitHubInstallationCredentialRequest,
+    now: string,
+  ): Promise<SelfDrivingGitHubInstallationCredential> => {
+    const plan = planSelfDrivingGitHubInstallationTokenMint(request);
+    validateMintPlan(plan);
+    const jwtRequest = makeJwtSignRequest(issuer, now);
+    let jwtCallbackActive = true;
+    let jwtCallbackEntered = false;
+    let jwtCallbackCompleted = false;
+    let jwtSignerReentered = false;
+    let callbackCredential: SelfDrivingGitHubInstallationCredential | undefined;
+    let signerCredential: SelfDrivingGitHubInstallationCredential;
+    try {
+      signerCredential = await dependencies.jwtSigner<SelfDrivingGitHubInstallationCredential>(jwtRequest, async (rawJwt) => {
+        if (!jwtCallbackActive) throw new Error("GitHub App JWT signer callback is no longer active.");
+        if (jwtCallbackEntered) {
+          jwtSignerReentered = true;
+          throw new Error("GitHub App JWT signer re-entered the callback.");
+        }
+        jwtCallbackEntered = true;
+        const jwt = validateJwt(rawJwt, jwtRequest, now);
+        const transportRequest: SelfDrivingGitHubInstallationTokenMintTransportRequest = Object.freeze({
+          method: "POST" as const,
+          url: plan.url,
+          headers: Object.freeze({
+            Accept: SELF_DRIVING_GITHUB_TOKEN_ACCEPT,
+            "X-GitHub-Api-Version": SELF_DRIVING_GITHUB_TOKEN_API_VERSION,
+            Authorization: `Bearer ${jwt}`,
+            "Content-Type": "application/json" as const,
+          }),
+          bodyText: JSON.stringify(plan.body),
+          redirect: "error" as const,
+        });
+
+        let transportResponse: SelfDrivingGitHubInstallationTokenMintTransportResponse;
+        try {
+          transportResponse = await dependencies.transport(transportRequest);
+        } catch {
+          throw new Error("Installation-token transport failed.");
+        }
+        if (!transportResponse || transportResponse.url !== plan.url) throw new Error("Installation-token response URL drifted.");
+        if (transportResponse.status !== 201) throw new Error("Installation-token response status was unexpected.");
+        if (typeof transportResponse.bodyText !== "string" || byteLength(transportResponse.bodyText) > plan.maxResponseBytes) {
+          throw new Error("Installation-token response exceeded the bounded size.");
+        }
+        if (!validJsonContentType(transportResponse.contentType)) throw new Error("Installation-token response content type is invalid.");
+        let responseBody: unknown;
+        try {
+          responseBody = JSON.parse(transportResponse.bodyText);
+        } catch {
+          throw new Error("Installation-token response JSON is invalid.");
+        }
+        const credential = await normalizeTokenResponse(request, responseBody);
+        callbackCredential = credential;
+        jwtCallbackCompleted = true;
+        return credential;
+      });
+    } catch {
+      throw new Error("GitHub App JWT signer or installation-token mint failed.");
+    } finally {
+      jwtCallbackActive = false;
+    }
+    if (!jwtCallbackEntered || !jwtCallbackCompleted || jwtSignerReentered || !Object.is(signerCredential, callbackCredential)) {
+      throw new Error("GitHub App JWT signer violated the exact single-callback result contract.");
+    }
+    return signerCredential;
+  };
 
   return async function credentialProvider<T>(
     request: SelfDrivingGitHubInstallationCredentialRequest,
@@ -423,61 +493,14 @@ export function createSelfDrivingGitHubInstallationTokenCredentialProvider(
       if (!boundRequest) boundRequest = request;
       else if (!sameMintIdentity(boundRequest, request)) throw new Error("Installation-token provider request identity changed during one execution.");
 
+      let credential: SelfDrivingGitHubInstallationCredential;
       if (cached) {
-        if (Date.parse(cached.credential.expiresAt) <= Date.parse(now) + defaultSelfDrivingGitHubInstallationTokenMintLimits.cachedTokenMinRemainingMs) {
-          throw new Error("Cached installation token is too close to expiration; reminting inside one execution is forbidden.");
-        }
-        return withCredential(cached.credential);
-      }
-
-      const plan = planSelfDrivingGitHubInstallationTokenMint(request);
-      validateMintPlan(plan);
-      const jwtRequest = makeJwtSignRequest(issuer, now);
-      let jwtCallbackEntered = false;
-      let jwtCallbackCompleted = false;
-      let jwtSignerReentered = false;
-      let callbackResult: T | undefined;
-      let signerResult: T;
-      try {
-        signerResult = await dependencies.jwtSigner<T>(jwtRequest, async (rawJwt) => {
-          if (jwtCallbackEntered) {
-            jwtSignerReentered = true;
-            throw new Error("GitHub App JWT signer re-entered the callback.");
-          }
-          jwtCallbackEntered = true;
-          const jwt = validateJwt(rawJwt, jwtRequest, now);
-          const transportRequest: SelfDrivingGitHubInstallationTokenMintTransportRequest = Object.freeze({
-            method: "POST" as const,
-            url: plan.url,
-            headers: Object.freeze({
-              Accept: SELF_DRIVING_GITHUB_TOKEN_ACCEPT,
-              "X-GitHub-Api-Version": SELF_DRIVING_GITHUB_TOKEN_API_VERSION,
-              Authorization: `Bearer ${jwt}`,
-              "Content-Type": "application/json" as const,
-            }),
-            bodyText: JSON.stringify(plan.body),
-            redirect: "error" as const,
-          });
-
-          let transportResponse: SelfDrivingGitHubInstallationTokenMintTransportResponse;
-          try {
-            transportResponse = await dependencies.transport(transportRequest);
-          } catch {
-            throw new Error("Installation-token transport failed.");
-          }
-          if (!transportResponse || transportResponse.url !== plan.url) throw new Error("Installation-token response URL drifted.");
-          if (transportResponse.status !== 201) throw new Error("Installation-token response status was unexpected.");
-          if (typeof transportResponse.bodyText !== "string" || byteLength(transportResponse.bodyText) > plan.maxResponseBytes) {
-            throw new Error("Installation-token response exceeded the bounded size.");
-          }
-          if (!validJsonContentType(transportResponse.contentType)) throw new Error("Installation-token response content type is invalid.");
-          let responseBody: unknown;
-          try {
-            responseBody = JSON.parse(transportResponse.bodyText);
-          } catch {
-            throw new Error("Installation-token response JSON is invalid.");
-          }
-          const credential = await normalizeTokenResponse(request, responseBody);
+        credential = cached.credential;
+      } else {
+        if (!mintInFlight) mintInFlight = mintCredential(request, now);
+        credential = await mintInFlight;
+        if (terminallyFailed) throw new Error("Installation-token provider became terminally failed during token minting.");
+        if (!cached) {
           cached = Object.freeze({
             activationId: request.activationId,
             planId: request.planId,
@@ -487,21 +510,19 @@ export function createSelfDrivingGitHubInstallationTokenCredentialProvider(
             token: credential.token,
             credential,
           });
-          const result = await withCredential(credential);
-          callbackResult = result;
-          jwtCallbackCompleted = true;
-          return result;
-        });
-      } catch {
-        throw new Error("GitHub App JWT signer or installation-token mint failed.");
+        }
+        mintInFlight = undefined;
       }
-      if (!jwtCallbackEntered || !jwtCallbackCompleted || jwtSignerReentered || !Object.is(signerResult, callbackResult)) {
-        throw new Error("GitHub App JWT signer violated the exact single-callback result contract.");
+
+      if (Date.parse(credential.expiresAt) <= Date.parse(now) + defaultSelfDrivingGitHubInstallationTokenMintLimits.cachedTokenMinRemainingMs) {
+        throw new Error("Cached installation token is too close to expiration; reminting inside one execution is forbidden.");
       }
-      return signerResult;
+      if (terminallyFailed) throw new Error("Installation-token provider is terminally failed.");
+      return await withCredential(credential);
     } catch (error) {
       terminallyFailed = true;
       cached = undefined;
+      mintInFlight = undefined;
       throw error;
     }
   };
