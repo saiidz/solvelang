@@ -319,7 +319,7 @@ function isCancellation(error: unknown, signal?: AbortSignal): boolean {
 function normalizeLivePreflight(
   plan: SelfDrivingPrWriteExecutionPlan,
   live: SelfDrivingPrWriteLivePreflight,
-  startedAt: string,
+  checkedAt: string,
 ): void {
   if (!live || typeof live !== "object" || live.schema !== SELF_DRIVING_PR_WRITE_LIVE_PREFLIGHT_SCHEMA || live.status !== "ready") {
     throw new Error("Live PR write preflight did not return the canonical ready contract.");
@@ -333,9 +333,9 @@ function normalizeLivePreflight(
   if (live.headBranchExists !== false) throw new Error("Planned PR head branch already exists.");
   const observedAt = normalizeUtcTimestamp(live.observedAt, "live.observedAt");
   const observedEpoch = Date.parse(observedAt);
-  const startedEpoch = Date.parse(startedAt);
-  if (observedEpoch > startedEpoch) throw new Error("Live PR write preflight evidence may not be future-dated.");
-  if (startedEpoch - observedEpoch > defaultSelfDrivingPrWriteExecutorLimits.maxLivePreflightAgeMs) {
+  const checkedEpoch = Date.parse(checkedAt);
+  if (observedEpoch > checkedEpoch) throw new Error("Live PR write preflight evidence may not be future-dated.");
+  if (checkedEpoch - observedEpoch > defaultSelfDrivingPrWriteExecutorLimits.maxLivePreflightAgeMs) {
     throw new Error("Live PR write preflight evidence is stale.");
   }
   if (observedAt < plan.claimedAt) throw new Error("Live PR write preflight must be observed after the authorization claim.");
@@ -437,7 +437,11 @@ export async function executeSelfDrivingPrWritePlan(
     assertNotAborted(dependencies.signal);
     livePreflight = 1;
     const live = await dependencies.adapter.verifyLivePreflight(plan, dependencies.signal);
-    normalizeLivePreflight(plan, live, startedAt);
+    const liveCheckedAt = normalizeUtcTimestamp(dependencies.now(), "livePreflightCheckedAt");
+    if (Date.parse(liveCheckedAt) < Date.parse(startedAt)) {
+      throw new Error("Live preflight check time cannot precede execution start.");
+    }
+    normalizeLivePreflight(plan, live, liveCheckedAt);
 
     assertNotAborted(dependencies.signal);
     stage = "create-branch";
