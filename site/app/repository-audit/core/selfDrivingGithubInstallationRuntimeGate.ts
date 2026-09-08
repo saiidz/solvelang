@@ -156,6 +156,22 @@ const credentialLikePatterns = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
 ] as const;
 
+type InstallationIdentity = Readonly<{ installationRef: string; installationId: number }>;
+type ActivationCanonical = Readonly<{
+  planId: string;
+  approvalId: string;
+  approvalBindingSha256: string;
+  claimId: string;
+  repository: string;
+  installationRef: string;
+  installationId: number;
+  permissions: SelfDrivingGitHubInstallationPermissions;
+  operator: string;
+  runtime: string;
+  notBefore: string;
+  expiresAt: string;
+}>;
+
 function normalizeText(value: string, name: string, maxLength: number): string {
   if (typeof value !== "string") throw new Error(`${name} must be a string.`);
   const normalized = value.trim();
@@ -186,7 +202,7 @@ function normalizeUtc(value: string, name: string): string {
   return new Date(epoch).toISOString();
 }
 
-function parseInstallationRef(value: string): { installationRef: string; installationId: number } {
+function parseInstallationRef(value: string): InstallationIdentity {
   const installationRef = normalizeText(value, "installationRef", 128);
   const match = /^github-app\/installation:([1-9]\d{0,15})$/.exec(installationRef);
   if (!match) throw new Error("installationRef must use github-app/installation:<positive-id> syntax.");
@@ -194,10 +210,29 @@ function parseInstallationRef(value: string): { installationRef: string; install
   if (!Number.isSafeInteger(installationId) || installationId <= 0) {
     throw new Error("installationRef installation ID is outside the safe integer range.");
   }
-  return { installationRef, installationId };
+  return Object.freeze({ installationRef, installationId });
 }
 
-function assertPlan(plan: SelfDrivingPrWriteExecutionPlan): { installationRef: string; installationId: number } {
+function exactPermissions(value: SelfDrivingGitHubInstallationPermissions): boolean {
+  if (!value || typeof value !== "object") return false;
+  const keys = Object.keys(value).sort();
+  return keys.length === 3
+    && keys[0] === "contents"
+    && keys[1] === "metadata"
+    && keys[2] === "pullRequests"
+    && value.metadata === "read"
+    && value.contents === "write"
+    && value.pullRequests === "write";
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) throw new Error("SHA-256 support is required for GitHub installation activation.");
+  const digest = await subtle.digest("SHA-256", textEncoder.encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function assertPlan(plan: SelfDrivingPrWriteExecutionPlan): Promise<InstallationIdentity> {
   if (!plan || typeof plan !== "object" || plan.schema !== "solvelang.self-driving.pr-write-execution-plan.v0") {
     throw new Error("A canonical PR write execution plan is required.");
   }
@@ -206,6 +241,7 @@ function assertPlan(plan: SelfDrivingPrWriteExecutionPlan): { installationRef: s
   }
   if (!/^pr_write_plan_[0-9a-f]{64}$/.test(plan.id)) throw new Error("Execution plan ID is malformed.");
   if (!/^[0-9a-f]{64}$/.test(plan.approvalBindingSha256)) throw new Error("Execution plan approval binding is malformed.");
+  normalizeUtc(plan.claimedAt, "plan.claimedAt");
   if (
     plan.requiredPermissions.metadata !== "read"
     || plan.requiredPermissions.contents !== "write"
@@ -238,30 +274,28 @@ function assertPlan(plan: SelfDrivingPrWriteExecutionPlan): { installationRef: s
   ) {
     throw new Error("GitHub installation runtime requires the safe reviewed execution-plan policy.");
   }
+  const canonicalPlan = {
+    repository: plan.repository,
+    baseBranch: plan.baseBranch,
+    baseRevision: plan.baseRevision,
+    headBranch: plan.headBranch,
+    installationRef: plan.installationRef,
+    approvalId: plan.approvalId,
+    approvalBindingSha256: plan.approvalBindingSha256,
+    claimId: plan.claimId,
+    claimedAt: plan.claimedAt,
+    requiredPermissions: plan.requiredPermissions,
+    plannedActions: plan.plannedActions,
+    requiredLiveChecks: plan.requiredLiveChecks,
+    branchProtectionEvidence: plan.branchProtectionEvidence,
+    selectedProposals: plan.selectedProposals,
+    files: plan.files,
+    limits: plan.limits,
+    totals: plan.totals,
+  };
+  const expectedId = `pr_write_plan_${await sha256Hex(JSON.stringify(canonicalPlan))}`;
+  if (plan.id !== expectedId) throw new Error("GitHub installation runtime execution-plan SHA-256 identity is invalid.");
   return parseInstallationRef(plan.installationRef);
-}
-
-function exactPermissions(value: SelfDrivingGitHubInstallationPermissions): boolean {
-  if (!value || typeof value !== "object") return false;
-  const keys = Object.keys(value).sort();
-  return keys.length === 3
-    && keys[0] === "contents"
-    && keys[1] === "metadata"
-    && keys[2] === "pullRequests"
-    && value.metadata === "read"
-    && value.contents === "write"
-    && value.pullRequests === "write";
-}
-
-function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const subtle = globalThis.crypto?.subtle;
-  if (!subtle) throw new Error("SHA-256 support is required for GitHub installation activation.");
-  const digest = await subtle.digest("SHA-256", textEncoder.encode(value));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function activationPolicy(): SelfDrivingGitHubInstallationActivation["policy"] {
@@ -292,22 +326,21 @@ function activationPolicy(): SelfDrivingGitHubInstallationActivation["policy"] {
 
 function activationCanonical(
   plan: SelfDrivingPrWriteExecutionPlan,
-  installation: { installationRef: string; installationId: number },
+  installation: InstallationIdentity,
   input: SelfDrivingGitHubInstallationActivationInput,
-) {
+): ActivationCanonical {
   const operator = normalizeText(input.operator, "operator", defaultSelfDrivingGitHubInstallationRuntimeLimits.maxOperatorLength);
   const runtime = normalizeText(input.runtime, "runtime", defaultSelfDrivingGitHubInstallationRuntimeLimits.maxRuntimeLength);
   const notBefore = normalizeUtc(input.notBefore, "notBefore");
   const expiresAt = normalizeUtc(input.expiresAt, "expiresAt");
   const start = Date.parse(notBefore);
   const end = Date.parse(expiresAt);
+  const claimed = Date.parse(normalizeUtc(plan.claimedAt, "plan.claimedAt"));
   if (end <= start) throw new Error("GitHub installation activation expiresAt must be after notBefore.");
   if (end - start > defaultSelfDrivingGitHubInstallationRuntimeLimits.maxActivationWindowMs) {
     throw new Error("GitHub installation activation exceeds the 15-minute window.");
   }
-  if (notBefore < plan.claimedAt) {
-    throw new Error("GitHub installation activation may not begin before the PR-write claim.");
-  }
+  if (start < claimed) throw new Error("GitHub installation activation may not begin before the PR-write claim.");
   return Object.freeze({
     planId: plan.id,
     approvalId: plan.approvalId,
@@ -328,7 +361,7 @@ export async function createSelfDrivingGitHubInstallationActivation(
   plan: SelfDrivingPrWriteExecutionPlan,
   input: SelfDrivingGitHubInstallationActivationInput,
 ): Promise<SelfDrivingGitHubInstallationActivation> {
-  const installation = assertPlan(plan);
+  const installation = await assertPlan(plan);
   if (!input || input.state !== "approved") throw new Error("An explicit approved GitHub installation activation is required.");
   const canonical = activationCanonical(plan, installation, input);
   const binding = await sha256Hex(JSON.stringify(canonical));
@@ -345,7 +378,7 @@ async function assertActivation(
   plan: SelfDrivingPrWriteExecutionPlan,
   activation: SelfDrivingGitHubInstallationActivation,
 ): Promise<SelfDrivingGitHubInstallationActivation> {
-  const installation = assertPlan(plan);
+  const installation = await assertPlan(plan);
   if (!activation || activation.schema !== SELF_DRIVING_GITHUB_INSTALLATION_ACTIVATION_SCHEMA || activation.state !== "approved") {
     throw new Error("A canonical approved GitHub installation activation is required.");
   }
@@ -391,7 +424,13 @@ async function assertActivation(
   ) {
     throw new Error("GitHub installation activation policy is not the canonical disabled-by-default policy.");
   }
-  return activation;
+  return Object.freeze({
+    schema: SELF_DRIVING_GITHUB_INSTALLATION_ACTIVATION_SCHEMA,
+    state: "approved" as const,
+    id: expectedId,
+    ...canonical,
+    policy: activationPolicy(),
+  });
 }
 
 function assertDependencies(value: SelfDrivingGitHubInstallationRuntimeDependencies): void {
@@ -410,16 +449,17 @@ function normalizeToken(value: string): string {
   return value;
 }
 
-function normalizeCredential(
+async function normalizeCredential(
   credential: SelfDrivingGitHubInstallationCredential,
   activation: SelfDrivingGitHubInstallationActivation,
   checkedAt: string,
-): Readonly<{
+): Promise<Readonly<{
   token: string;
+  tokenBindingSha256: string;
   credentialId: string;
   issuedAt: string;
   expiresAt: string;
-}> {
+}>> {
   if (!credential || typeof credential !== "object") throw new Error("GitHub installation credential is required.");
   const token = normalizeToken(credential.token);
   const credentialId = normalizeOpaqueId(
@@ -441,9 +481,7 @@ function normalizeCredential(
   const issued = Date.parse(issuedAt);
   const expires = Date.parse(expiresAt);
   const checked = Date.parse(checkedAt);
-  if (issued < Date.parse(activation.notBefore)) {
-    throw new Error("GitHub installation credential was issued before the activation window.");
-  }
+  if (issued < Date.parse(activation.notBefore)) throw new Error("GitHub installation credential was issued before the activation window.");
   if (issued > checked) throw new Error("GitHub installation credential may not be future-issued.");
   if (expires <= checked + defaultSelfDrivingGitHubInstallationRuntimeLimits.minCredentialRemainingMs) {
     throw new Error("GitHub installation credential does not have enough remaining lifetime.");
@@ -451,7 +489,13 @@ function normalizeCredential(
   if (expires <= issued || expires - issued > defaultSelfDrivingGitHubInstallationRuntimeLimits.maxCredentialLifetimeMs) {
     throw new Error("GitHub installation credential lifetime exceeds the bounded short-lived contract.");
   }
-  return Object.freeze({ token, credentialId, issuedAt, expiresAt });
+  return Object.freeze({
+    token,
+    tokenBindingSha256: await sha256Hex(token),
+    credentialId,
+    issuedAt,
+    expiresAt,
+  });
 }
 
 function assertPermission(permission: SelfDrivingGitHubRestPermission): void {
@@ -494,6 +538,92 @@ function makeCredentialRequest(
   });
 }
 
+function makeAuthorizationBroker(
+  activation: SelfDrivingGitHubInstallationActivation,
+  dependencies: SelfDrivingGitHubInstallationRuntimeDependencies,
+): SelfDrivingGitHubAuthorizationBroker {
+  let lastCheckedEpoch: number | undefined;
+  let terminallyFailed = false;
+  let credentialSession: Readonly<{
+    credentialId: string;
+    tokenBindingSha256: string;
+    issuedAt: string;
+    expiresAt: string;
+  }> | undefined;
+
+  return async function broker<T>(permission: SelfDrivingGitHubRestPermission, withToken: (token: string) => Promise<T>): Promise<T> {
+    if (terminallyFailed) throw new Error("GitHub installation runtime is terminally failed.");
+    try {
+      assertPermission(permission);
+      const checkedAt = normalizeUtc(dependencies.now(), "runtime.checkedAt");
+      const checkedEpoch = Date.parse(checkedAt);
+      if (lastCheckedEpoch !== undefined && checkedEpoch < lastCheckedEpoch) {
+        throw new Error("GitHub installation runtime clock moved backwards.");
+      }
+      lastCheckedEpoch = checkedEpoch;
+      if (checkedEpoch < Date.parse(activation.notBefore) || checkedEpoch >= Date.parse(activation.expiresAt)) {
+        throw new Error("GitHub installation runtime activation is not currently active.");
+      }
+
+      let gate: SelfDrivingGitHubInstallationRuntimeGateResult;
+      try {
+        gate = await dependencies.runtimeGate(makeGateRequest(activation, permission, checkedAt));
+      } catch {
+        throw new Error("GitHub installation runtime gate failed.");
+      }
+      if (!gate || gate.status !== "allowed" || gate.activationId !== activation.id) {
+        throw new Error("GitHub installation runtime gate did not allow the exact activation.");
+      }
+      normalizeOpaqueId(gate.gateEvidenceId, "gateEvidenceId", defaultSelfDrivingGitHubInstallationRuntimeLimits.maxEvidenceIdLength);
+
+      const request = makeCredentialRequest(activation, permission, checkedAt);
+      let callbackEntered = false;
+      let callbackCompleted = false;
+      let providerReentered = false;
+      let callbackResult: T | undefined;
+      let providerResult: T;
+      try {
+        providerResult = await dependencies.credentialProvider<T>(request, async (credential) => {
+          if (callbackEntered) {
+            providerReentered = true;
+            throw new Error("GitHub installation credential provider re-entered the credential callback.");
+          }
+          callbackEntered = true;
+          const normalized = await normalizeCredential(credential, activation, checkedAt);
+          if (!credentialSession) {
+            credentialSession = Object.freeze({
+              credentialId: normalized.credentialId,
+              tokenBindingSha256: normalized.tokenBindingSha256,
+              issuedAt: normalized.issuedAt,
+              expiresAt: normalized.expiresAt,
+            });
+          } else if (
+            credentialSession.credentialId !== normalized.credentialId
+            || credentialSession.tokenBindingSha256 !== normalized.tokenBindingSha256
+            || credentialSession.issuedAt !== normalized.issuedAt
+            || credentialSession.expiresAt !== normalized.expiresAt
+          ) {
+            throw new Error("GitHub installation credential provider changed credential session during one execution.");
+          }
+          const result = await withToken(normalized.token);
+          callbackResult = result;
+          callbackCompleted = true;
+          return result;
+        });
+      } catch {
+        throw new Error("GitHub installation credential provider failed.");
+      }
+      if (!callbackEntered || !callbackCompleted || providerReentered || !Object.is(providerResult, callbackResult)) {
+        throw new Error("GitHub installation credential provider violated the exact single-callback result contract.");
+      }
+      return providerResult;
+    } catch (error) {
+      terminallyFailed = true;
+      throw error;
+    }
+  };
+}
+
 export async function createSelfDrivingGitHubInstallationRuntimeAdapter(
   plan: SelfDrivingPrWriteExecutionPlan,
   activationInput: SelfDrivingGitHubInstallationActivation,
@@ -501,83 +631,22 @@ export async function createSelfDrivingGitHubInstallationRuntimeAdapter(
 ): Promise<SelfDrivingPrWriteAdapter> {
   const activation = await assertActivation(plan, activationInput);
   assertDependencies(dependencies);
-  let lastCheckedAt: string | undefined;
-  let credentialSession: Readonly<{ credentialId: string; issuedAt: string; expiresAt: string }> | undefined;
-  let terminallyFailed = false;
-
-  const broker: SelfDrivingGitHubAuthorizationBroker = async (permission, withToken) => {
-    if (terminallyFailed) throw new Error("GitHub installation runtime is terminally failed.");
-    assertPermission(permission);
-    const checkedAt = normalizeUtc(dependencies.now(), "runtime.checkedAt");
-    if (lastCheckedAt && checkedAt < lastCheckedAt) {
-      terminallyFailed = true;
-      throw new Error("GitHub installation runtime clock moved backwards.");
-    }
-    lastCheckedAt = checkedAt;
-    if (checkedAt < activation.notBefore || checkedAt >= activation.expiresAt) {
-      terminallyFailed = true;
-      throw new Error("GitHub installation runtime activation is not currently active.");
-    }
-
-    let gate: SelfDrivingGitHubInstallationRuntimeGateResult;
-    try {
-      gate = await dependencies.runtimeGate(makeGateRequest(activation, permission, checkedAt));
-    } catch {
-      terminallyFailed = true;
-      throw new Error("GitHub installation runtime gate failed.");
-    }
-    if (
-      !gate
-      || gate.status !== "allowed"
-      || gate.activationId !== activation.id
-      || !normalizeOpaqueId(gate.gateEvidenceId, "gateEvidenceId", defaultSelfDrivingGitHubInstallationRuntimeLimits.maxEvidenceIdLength)
-    ) {
-      terminallyFailed = true;
-      throw new Error("GitHub installation runtime gate did not allow the exact activation.");
-    }
-
-    const request = makeCredentialRequest(activation, permission, checkedAt);
-    let callbackEntered = false;
-    let providerReentered = false;
-    let providerResult: unknown;
-    try {
-      providerResult = await dependencies.credentialProvider(request, async (credential) => {
-        if (callbackEntered) {
-          providerReentered = true;
-          throw new Error("GitHub installation credential provider re-entered the credential callback.");
-        }
-        callbackEntered = true;
-        const normalized = normalizeCredential(credential, activation, checkedAt);
-        if (!credentialSession) {
-          credentialSession = Object.freeze({
-            credentialId: normalized.credentialId,
-            issuedAt: normalized.issuedAt,
-            expiresAt: normalized.expiresAt,
-          });
-        } else if (
-          credentialSession.credentialId !== normalized.credentialId
-          || credentialSession.issuedAt !== normalized.issuedAt
-          || credentialSession.expiresAt !== normalized.expiresAt
-        ) {
-          terminallyFailed = true;
-          throw new Error("GitHub installation credential provider changed credential session during one execution.");
-        }
-        return withToken(normalized.token);
-      });
-    } catch {
-      terminallyFailed = true;
-      throw new Error("GitHub installation credential provider failed.");
-    }
-    if (!callbackEntered || providerReentered) {
-      terminallyFailed = true;
-      throw new Error("GitHub installation credential provider violated the single-callback contract.");
-    }
-    return providerResult as Awaited<ReturnType<typeof withToken>>;
-  };
-
-  return createSelfDrivingGitHubPrWriteAdapter({
-    authorizationBroker: broker,
+  const boundPlanId = plan.id;
+  const concrete = createSelfDrivingGitHubPrWriteAdapter({
+    authorizationBroker: makeAuthorizationBroker(activation, dependencies),
     transport: dependencies.transport,
     now: dependencies.now,
+  });
+  return Object.freeze({
+    verifyLivePreflight: async (candidatePlan, signal) => {
+      await assertPlan(candidatePlan);
+      if (candidatePlan.id !== boundPlanId) {
+        throw new Error("GitHub installation runtime adapter received a different execution plan.");
+      }
+      return concrete.verifyLivePreflight(candidatePlan, signal);
+    },
+    createBranch: concrete.createBranch,
+    createCommit: concrete.createCommit,
+    openPullRequest: concrete.openPullRequest,
   });
 }
