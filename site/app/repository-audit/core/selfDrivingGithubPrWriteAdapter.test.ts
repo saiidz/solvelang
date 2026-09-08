@@ -129,9 +129,9 @@ function jsonResponse(
 function createFakeGitHub(options: FakeOptions = {}) {
   const calls: SelfDrivingGitHubRestTransportRequest[] = [];
   const permissions: string[] = [];
-  const authorizationBroker: SelfDrivingGitHubAuthorizationBroker = async (permission, useToken) => {
+  const authorizationBroker: SelfDrivingGitHubAuthorizationBroker = async (permission, withToken) => {
     permissions.push(permission);
-    return useToken(TOKEN);
+    return withToken(TOKEN);
   };
   const transport: SelfDrivingGitHubRestTransport = async (request) => {
     calls.push(request);
@@ -317,7 +317,7 @@ test("concurrent re-entry makes failure terminal and cannot re-arm in-flight pre
     }
     return jsonResponse(request, 200, { name: "main", protected: true, commit: { sha: BASE } });
   };
-  const broker: SelfDrivingGitHubAuthorizationBroker = async (_permission, useToken) => useToken(TOKEN);
+  const broker: SelfDrivingGitHubAuthorizationBroker = async (_permission, withToken) => withToken(TOKEN);
   const adapter = createSelfDrivingGitHubPrWriteAdapter({ authorizationBroker: broker, transport, now: () => OBSERVED_AT });
 
   const first = adapter.verifyLivePreflight(plan);
