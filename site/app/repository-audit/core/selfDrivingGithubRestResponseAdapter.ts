@@ -3,6 +3,8 @@ import {
   planSelfDrivingGitHubBaseTreeRequest,
   planSelfDrivingGitHubCreateBranchRequest,
   planSelfDrivingGitHubCreateCommitRequest,
+  planSelfDrivingGitHubCreateTreeRequest,
+  planSelfDrivingGitHubLivePreflightRequests,
   planSelfDrivingGitHubOpenPullRequestRequest,
   planSelfDrivingGitHubUpdateHeadRefRequest,
   type SelfDrivingGitHubFileModeEvidence,
@@ -16,6 +18,7 @@ import {
 import {
   defaultSelfDrivingPatchMaterializationLimits,
   type SelfDrivingPatchBaseFileInput,
+  type SelfDrivingPatchMaterialization,
 } from "./selfDrivingPatchMaterialization";
 import {
   SELF_DRIVING_PR_WRITE_LIVE_PREFLIGHT_SCHEMA,
@@ -82,6 +85,13 @@ function asString(value: unknown, name: string, maxLength = 4096): string {
   if (!normalized || normalized.length > maxLength) throw new Error(`${name} must be bounded non-empty text.`);
   if (/\u0000/.test(normalized)) throw new Error(`${name} contains a NUL byte.`);
   return normalized;
+}
+
+function asBase64Content(value: unknown, name: string, maxLength: number): string {
+  if (typeof value !== "string") throw new Error(`${name} must be a string.`);
+  if (value.length > maxLength) throw new Error(`${name} exceeds the bounded base64 response size.`);
+  if (/\u0000/.test(value)) throw new Error(`${name} contains a NUL byte.`);
+  return value.replace(/\s+/g, "");
 }
 
 function asInteger(value: unknown, name: string, min = 0, max = Number.MAX_SAFE_INTEGER): number {
@@ -211,8 +221,13 @@ function decodeGitHubBlob(body: unknown, expectedSha: string): string {
   if (asString(blob.encoding, `baseBlob[${expectedSha}].encoding`, 16).toLowerCase() !== "base64") {
     throw new Error(`Base blob ${expectedSha} must use GitHub base64 encoding.`);
   }
-  const size = asInteger(blob.size, `baseBlob[${expectedSha}].size`, 0, defaultSelfDrivingPatchMaterializationLimits.maxBaseBytesPerFile);
-  const encoded = asString(blob.content, `baseBlob[${expectedSha}].content`, 2_200_000).replace(/\s+/g, "");
+  const size = asInteger(
+    blob.size,
+    `baseBlob[${expectedSha}].size`,
+    0,
+    defaultSelfDrivingPatchMaterializationLimits.maxBaseBytesPerFile,
+  );
+  const encoded = asBase64Content(blob.content, `baseBlob[${expectedSha}].content`, 2_200_000);
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
     throw new Error(`Base blob ${expectedSha} contains malformed base64.`);
   }
@@ -259,10 +274,7 @@ export function assembleSelfDrivingGitHubRestPreflightEvidence(
   }
 
   const branchProtection = parseRules(plan, responses.baseRules.body);
-
-  if (responses.headRef.httpStatus !== 404) {
-    throw new Error("Planned GitHub PR head branch already exists.");
-  }
+  if (responses.headRef.httpStatus !== 404) throw new Error("Planned GitHub PR head branch already exists.");
 
   const commitBody = asRecord(responses.baseCommit.body, "baseCommit.body");
   if (normalizeGitSha(commitBody.sha, "baseCommit.body.sha") !== plan.baseRevision) {
@@ -396,14 +408,19 @@ export function parseSelfDrivingGitHubBranchCreated(
 
 export function parseSelfDrivingGitHubCommitWriteSequence(
   request: SelfDrivingPrWriteCommitRequest,
-  createTreeRequest: SelfDrivingGitHubRestRequestPlan,
+  baseTreeSha: string,
+  fileModes: readonly SelfDrivingGitHubFileModeEvidence[],
+  materialization: SelfDrivingPatchMaterialization,
   treeResponse: SelfDrivingGitHubRestSuccess,
   commitResponse: SelfDrivingGitHubRestSuccess,
   updateRefResponse: SelfDrivingGitHubRestSuccess,
 ): Readonly<{ status: "committed"; branch: string; parentRevision: string; commitSha: string }> {
-  if (createTreeRequest.operation !== "create-tree" || createTreeRequest.method !== "POST") {
-    throw new Error("Commit sequence requires the exact create-tree request plan.");
-  }
+  const createTreeRequest = planSelfDrivingGitHubCreateTreeRequest(
+    request,
+    baseTreeSha,
+    fileModes,
+    materialization,
+  );
   assertResponseForPlan(treeResponse, createTreeRequest, "create-tree");
   const treeBody = asRecord(treeResponse.body, "createTree.body");
   const treeSha = normalizeGitSha(treeBody.sha, "createTree.body.sha");
@@ -474,6 +491,14 @@ export function parseSelfDrivingGitHubPullRequestOpened(
   }
   if (normalizeGitSha(head.sha, "openPullRequest.body.head.sha") !== request.headRevision) {
     throw new Error("Created pull request head revision drifted.");
+  }
+  const baseRepo = asRecord(base.repo, "openPullRequest.body.base.repo");
+  const headRepo = asRecord(head.repo, "openPullRequest.body.head.repo");
+  if (asString(baseRepo.full_name, "openPullRequest.body.base.repo.full_name", 201) !== request.repository) {
+    throw new Error("Created pull request base repository drifted.");
+  }
+  if (asString(headRepo.full_name, "openPullRequest.body.head.repo.full_name", 201) !== request.repository) {
+    throw new Error("Created pull request head repository drifted.");
   }
   return Object.freeze({
     status: "opened" as const,
