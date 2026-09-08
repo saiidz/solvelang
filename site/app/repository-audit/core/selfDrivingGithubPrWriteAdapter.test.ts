@@ -216,12 +216,13 @@ function createFakeGitHub(options: FakeOptions = {}) {
       assert.equal(body.base, "main");
       assert.equal(body.draft, false);
       assert.equal(body.maintainer_can_modify, false);
+      const repo = { full_name: "saiidz/solvelang" };
       return jsonResponse(request, 201, {
         number: 860,
         state: "open",
         draft: false,
-        base: { ref: "main" },
-        head: { ref: HEAD, sha: COMMIT },
+        base: { ref: "main", repo },
+        head: { ref: HEAD, sha: COMMIT, repo },
       });
     }
     throw new Error(`unexpected fake GitHub request ${request.method} ${path}`);
