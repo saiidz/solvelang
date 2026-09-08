@@ -102,28 +102,30 @@ export function createSelfDrivingGitHubPrWriteAdapter(
   assertDependencies(dependencies);
 
   let stage: SelfDrivingGitHubPrWriteAdapterStage = "idle";
+  let permanentlyFailed = false;
   let boundPlan: SelfDrivingPrWriteExecutionPlan | undefined;
   let preflightEvidence: SelfDrivingGitHubRestPreflightEvidence | undefined;
   let materialization: SelfDrivingPatchMaterialization | undefined;
   let createdCommitSha: string | undefined;
 
   const fail = (error: unknown): never => {
+    permanentlyFailed = true;
     stage = "failed";
     throw error;
   };
 
-  const requireStage = (expected: SelfDrivingGitHubPrWriteAdapterStage, operation: string): void => {
-    if (stage !== expected) {
+  const requireActiveStage = (expected: SelfDrivingGitHubPrWriteAdapterStage, operation: string): void => {
+    if (permanentlyFailed || stage !== expected) {
       const actual = stage;
+      permanentlyFailed = true;
       stage = "failed";
       throw new Error(`GitHub PR write adapter ${operation} requires stage ${expected}; current stage is ${actual}.`);
     }
   };
 
   const requireBoundPlan = (planId: string): SelfDrivingPrWriteExecutionPlan => {
-    if (!boundPlan || boundPlan.id !== planId) {
-      stage = "failed";
-      throw new Error("GitHub PR write adapter request does not match the bound execution plan.");
+    if (permanentlyFailed || !boundPlan || boundPlan.id !== planId) {
+      return fail(new Error("GitHub PR write adapter request does not match the bound execution plan."));
     }
     return boundPlan;
   };
@@ -132,6 +134,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
     request: SelfDrivingGitHubRestRequestPlan,
     signal?: AbortSignal,
   ): Promise<SelfDrivingGitHubRestSuccess> => {
+    if (permanentlyFailed) throw new Error("GitHub PR write adapter is terminally failed.");
     assertNotAborted(signal);
     const result = await executeSelfDrivingGitHubRestRequest(
       request,
@@ -139,6 +142,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
       dependencies.transport,
     );
     assertNotAborted(signal);
+    if (permanentlyFailed) throw new Error("GitHub PR write adapter became terminally failed during an in-flight request.");
     if (result.status !== "success") {
       throw new Error(`GitHub REST ${request.operation} failed (${result.failureCode}).`);
     }
@@ -179,7 +183,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
 
   const adapter: SelfDrivingPrWriteAdapter = {
     verifyLivePreflight: async (plan, signal) => {
-      requireStage("idle", "verifyLivePreflight");
+      requireActiveStage("idle", "verifyLivePreflight");
       stage = "preflight-running";
       boundPlan = plan;
       try {
@@ -210,6 +214,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
         );
         const materialized = await materializeSelfDrivingPatchPlan(plan, evidence.baseFiles);
         assertNotAborted(signal);
+        requireActiveStage("preflight-running", "verifyLivePreflight completion");
 
         preflightEvidence = evidence;
         materialization = materialized;
@@ -221,7 +226,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
     },
 
     createBranch: async (request: SelfDrivingPrWriteBranchRequest, signal) => {
-      requireStage("preflight-ready", "createBranch");
+      requireActiveStage("preflight-ready", "createBranch");
       const plan = requireBoundPlan(request.planId);
       if (
         request.repository !== plan.repository
@@ -235,6 +240,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
         const requestPlan = planSelfDrivingGitHubCreateBranchRequest(request);
         const response = await execute(requestPlan, signal);
         const parsed = parseSelfDrivingGitHubBranchCreated(request, response);
+        requireActiveStage("branch-running", "createBranch completion");
         stage = "branch-created";
         return parsed;
       } catch (error) {
@@ -243,7 +249,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
     },
 
     createCommit: async (request: SelfDrivingPrWriteCommitRequest, signal) => {
-      requireStage("branch-created", "createCommit");
+      requireActiveStage("branch-created", "createCommit");
       const plan = requireBoundPlan(request.planId);
       if (
         request.repository !== plan.repository
@@ -276,6 +282,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
           request.expectedParentRevision,
         );
         assertNotAborted(signal);
+        if (permanentlyFailed) throw new Error("GitHub PR write adapter is terminally failed before ref update.");
 
         const updateRefPlan = planSelfDrivingGitHubUpdateHeadRefRequest(request, commitSha);
         const updateRefResponse = await execute(updateRefPlan, signal);
@@ -288,6 +295,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
           commitResponse,
           updateRefResponse,
         );
+        requireActiveStage("commit-running", "createCommit completion");
         createdCommitSha = parsed.commitSha;
         stage = "committed";
         return parsed;
@@ -297,7 +305,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
     },
 
     openPullRequest: async (request: SelfDrivingPrWritePullRequestRequest, signal) => {
-      requireStage("committed", "openPullRequest");
+      requireActiveStage("committed", "openPullRequest");
       const plan = requireBoundPlan(request.planId);
       if (
         request.repository !== plan.repository
@@ -314,6 +322,7 @@ export function createSelfDrivingGitHubPrWriteAdapter(
         const requestPlan = planSelfDrivingGitHubOpenPullRequestRequest(request);
         const response = await execute(requestPlan, signal);
         const parsed = parseSelfDrivingGitHubPullRequestOpened(request, response);
+        requireActiveStage("pull-request-running", "openPullRequest completion");
         stage = "pull-request-opened";
         return parsed;
       } catch (error) {
