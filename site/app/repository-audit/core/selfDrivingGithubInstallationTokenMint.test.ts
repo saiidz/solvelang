@@ -337,7 +337,7 @@ test("cached token near expiration fails rather than silently reminting a second
     jwtSigner: signer(signerCounter),
     transport: async (request) => {
       transports += 1;
-      return jsonTransportResponse(request, tokenResponse({ expires_at: "2026-09-08T09:01:00Z" }));
+      return jsonTransportResponse(request, tokenResponse({ expires_at: "2026-09-08T09:01:01Z" }));
     },
     now: () => clockCalls++ === 0 ? REQUESTED_AT : "2026-09-08T09:00:30Z",
   });
