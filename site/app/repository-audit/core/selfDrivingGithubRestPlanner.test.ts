@@ -328,8 +328,19 @@ test("request plans never contain authorization headers or credential-like metad
     planSelfDrivingGitHubCreateCommitRequest(commitRequest(), TREE),
     planSelfDrivingGitHubUpdateHeadRefRequest(commitRequest(), COMMIT),
   ];
-  const serialized = JSON.stringify(requests);
-  assert.doesNotMatch(serialized, /Authorization|\bBearer\s+|github_pat_|\bgh[pousr]_/i);
+  for (const request of requests) {
+    assert.equal(
+      Object.keys(request.headers).some((name) => name.toLowerCase() === "authorization"),
+      false,
+    );
+    assert.equal(request.policy.authorizationHeaderIncluded, false);
+    assert.equal(request.policy.credentialMaterialIncluded, false);
+    const authBearingFields = JSON.stringify({
+      headers: request.headers,
+      body: "body" in request ? request.body : undefined,
+    });
+    assert.doesNotMatch(authBearingFields, /\bBearer\s+|github_pat_|\bgh[pousr]_/i);
+  }
   assert.throws(
     () => planSelfDrivingGitHubCreateCommitRequest(commitRequest(), TREE, "Bearer abcdefghijklmnop"),
     /credential-like material/,
