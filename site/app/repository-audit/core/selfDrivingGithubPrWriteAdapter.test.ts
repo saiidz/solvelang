@@ -143,10 +143,10 @@ function createFakeGitHub(options: FakeOptions = {}) {
 
     const url = new URL(request.url);
     const path = `${url.pathname}${url.search}`;
-    if (request.method === "GET" && path.endsWith("/branches/main")) {
+    if (request.method === "GET" && path === "/repos/saiidz/solvelang/branches/main") {
       return jsonResponse(request, 200, { name: "main", protected: true, commit: { sha: BASE } });
     }
-    if (request.method === "GET" && path.endsWith("/rules/branches/main")) {
+    if (request.method === "GET" && path === "/repos/saiidz/solvelang/rules/branches/main") {
       return jsonResponse(request, 200, [
         { type: "pull_request", parameters: { required_approving_review_count: 1, required_reviewers: [] } },
         {
