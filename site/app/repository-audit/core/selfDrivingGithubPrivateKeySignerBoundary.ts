@@ -302,6 +302,23 @@ async function assertBinding(
   return binding;
 }
 
+async function assertBindingSourceChain(
+  plan: SelfDrivingPrWriteExecutionPlan,
+  activation: SelfDrivingGitHubInstallationActivation,
+  bindingInput: SelfDrivingGitHubPrivateKeySignerBinding,
+): Promise<SelfDrivingGitHubPrivateKeySignerBinding> {
+  const normalized = await assertBinding(bindingInput);
+  const recreated = await createSelfDrivingGitHubPrivateKeySignerBinding(plan, activation, {
+    appIssuer: normalized.appIssuer,
+    keyRef: normalized.keyRef,
+    publicKeyFingerprintSha256: normalized.publicKeyFingerprintSha256,
+  });
+  if (JSON.stringify(normalized) !== JSON.stringify(recreated)) {
+    throw new Error("GitHub private-key signer binding does not match the exact approved plan/activation source chain.");
+  }
+  return normalized;
+}
+
 function validateSignRequest(
   binding: SelfDrivingGitHubPrivateKeySignerBinding,
   request: SelfDrivingGitHubAppJwtSignRequest,
@@ -392,10 +409,12 @@ function normalizeSignature(value: string): string {
 }
 
 export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
+  plan: SelfDrivingPrWriteExecutionPlan,
+  activation: SelfDrivingGitHubInstallationActivation,
   bindingInput: SelfDrivingGitHubPrivateKeySignerBinding,
   dependencies: SelfDrivingGitHubPrivateKeySignerDependencies,
 ): Promise<SelfDrivingGitHubAppJwtSigner> {
-  const binding = await assertBinding(bindingInput);
+  const binding = await assertBindingSourceChain(plan, activation, bindingInput);
   if (!dependencies || typeof dependencies !== "object") throw new Error("GitHub private-key signer dependencies are required.");
   if (typeof dependencies.leaseProvider !== "function") throw new Error("An injected private-key lease provider is required.");
   if (typeof dependencies.now !== "function") throw new Error("An injected UTC clock is required.");
@@ -473,14 +492,7 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
         throw new Error("Private-key lease provider violated the exact single-callback result contract.");
       }
 
-      let consumerCalls = 0;
-      let consumerResult: T | undefined;
-      consumerCalls += 1;
       const result = await withJwt(providerJwt);
-      consumerResult = result;
-      if (consumerCalls !== 1 || !Object.is(result, consumerResult)) {
-        throw new Error("GitHub App JWT consumer violated the single-callback contract.");
-      }
       signerUsed = true;
       signerInFlight = false;
       return result;
