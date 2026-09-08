@@ -395,7 +395,7 @@ test("captured lease callback is revoked after provider settles and cannot sign 
   const signer = await createSelfDrivingGitHubPrivateKeyJwtSigner(plan, active, bound, {
     leaseProvider: async (_request, withLease) => {
       captured = withLease as (leaseValue: SelfDrivingGitHubPrivateKeyLease) => Promise<string>;
-      return "replaced-provider-result";
+      return "replaced-provider-result" as never;
     },
     now: () => NOW,
   });
