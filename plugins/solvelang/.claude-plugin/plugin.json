@@ -1,0 +1,22 @@
+{
+  "name": "solvelang",
+  "version": "0.2.0",
+  "description": "Deterministic, read-only SolveLang workflow and repository graph analysis for Claude.",
+  "author": {
+    "name": "SolveLang",
+    "url": "https://solve-lang.com"
+  },
+  "homepage": "https://solve-lang.com",
+  "repository": "https://github.com/saiidz/solvelang",
+  "license": "MIT",
+  "keywords": [
+    "solvelang",
+    "mcp",
+    "claude",
+    "workflow-analysis",
+    "solve-graph",
+    "n8n",
+    "repository-analysis"
+  ],
+  "mcpServers": "./.mcp.json"
+}
