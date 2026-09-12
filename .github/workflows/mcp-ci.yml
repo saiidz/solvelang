@@ -8,6 +8,9 @@ on:
       - 'packages/mcp-server/**'
       - 'plugins/codex/**'
       - 'plugins/claude/**'
+      - 'plugins/solvelang/**'
+      - '.agents/plugins/marketplace.json'
+      - '.claude-plugin/marketplace.json'
       - '.github/workflows/mcp-ci.yml'
   push:
     branches:
@@ -16,6 +19,9 @@ on:
       - 'packages/mcp-server/**'
       - 'plugins/codex/**'
       - 'plugins/claude/**'
+      - 'plugins/solvelang/**'
+      - '.agents/plugins/marketplace.json'
+      - '.claude-plugin/marketplace.json'
       - '.github/workflows/mcp-ci.yml'
 
 jobs:
@@ -33,5 +39,7 @@ jobs:
           cache-dependency-path: packages/mcp-server/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: Validate Codex and Claude plugin packaging
+        run: node scripts/validate-plugin-packaging.mjs
       - name: Verify packed consumer install and npx entrypoint
         run: npm run test:packed
