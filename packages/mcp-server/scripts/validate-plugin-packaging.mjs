@@ -68,4 +68,13 @@ for (const path of [
   assert.ok(text.trim().length > 0, `${path} must not be empty`);
 }
 
+const skill = await readFile(
+  resolve(root, "plugins/solvelang/skills/solvelang-workflow-review/SKILL.md"),
+  "utf8",
+);
+const frontmatter = skill.match(/^---\n([\s\S]*?)\n---\n/);
+assert.ok(frontmatter, "Codex skill must start with YAML frontmatter");
+assert.match(frontmatter[1], /^name:\s*solvelang-workflow-review\s*$/m, "Codex skill frontmatter must declare the exact skill name");
+assert.match(frontmatter[1], /^description:\s*\S.+$/m, "Codex skill frontmatter must include a non-empty description");
+
 console.log(`SolveLang Codex/Claude plugin packaging PASS at MCP version ${packageJson.version}`);
