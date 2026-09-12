@@ -293,11 +293,17 @@ function validateJwt(jwt: string, request: SelfDrivingGitHubAppJwtSignRequest, n
   }
   if (Object.keys(payload).sort().join(",") !== "exp,iat,iss") throw new Error("GitHub App JWT payload contains unsupported claims.");
   if (payload.iss !== request.issuer) throw new Error("GitHub App JWT issuer drifted from the signing request.");
-  if (asInteger(payload.iat, "JWT iat") !== request.issuedAtEpochSeconds || asInteger(payload.exp, "JWT exp") !== request.expiresAtEpochSeconds) {
+  const issuedAt = asInteger(payload.iat, "JWT iat");
+  const expiresAt = asInteger(payload.exp, "JWT exp");
+  if (
+    issuedAt !== request.issuedAtEpochSeconds
+    || expiresAt <= issuedAt
+    || expiresAt > request.expiresAtEpochSeconds
+  ) {
     throw new Error("GitHub App JWT time claims drifted from the signing request.");
   }
   const nowSeconds = Math.floor(Date.parse(now) / 1000);
-  if ((payload.exp as number) <= nowSeconds || (payload.exp as number) - nowSeconds > defaultSelfDrivingGitHubInstallationTokenMintLimits.jwtMaximumFutureSeconds) {
+  if (expiresAt <= nowSeconds || expiresAt - nowSeconds > defaultSelfDrivingGitHubInstallationTokenMintLimits.jwtMaximumFutureSeconds) {
     throw new Error("GitHub App JWT expiration is outside GitHub's bounded future window.");
   }
   return value;
