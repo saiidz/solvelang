@@ -1,7 +1,7 @@
 {
   "name": "@solvelang/mcp-server",
   "version": "0.2.0",
-  "description": "Local-first, read-only MCP server for deterministic SolveLang and n8n workflow validation",
+  "description": "Local-first and remote-ready, read-only MCP server for deterministic SolveLang and n8n workflow validation",
   "private": false,
   "type": "module",
   "license": "MIT",
@@ -24,7 +24,8 @@
     "validation"
   ],
   "bin": {
-    "solvelang-mcp": "dist/src/index.js"
+    "solvelang-mcp": "dist/src/index.js",
+    "solvelang-mcp-remote": "dist/src/remote-cli.js"
   },
   "files": [
     "dist/src/*.js",
@@ -40,7 +41,8 @@
     "test": "npm run build && node --test dist/test/*.test.js",
     "test:packed": "node scripts/smoke-packed.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
-    "start": "node dist/src/index.js"
+    "start": "node dist/src/index.js",
+    "start:remote": "node dist/src/remote-cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
