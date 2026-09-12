@@ -114,6 +114,8 @@ export type SelfDrivingGitHubPrivateKeySignerDependencies = Readonly<{
   now: () => string;
 }>;
 
+class SafeSignerValidationError extends Error {}
+
 const textEncoder = new TextEncoder();
 const credentialLikePatterns = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
@@ -201,6 +203,10 @@ async function recreateActivation(
     || activation.repository !== recreated.repository
     || activation.installationRef !== recreated.installationRef
     || activation.installationId !== recreated.installationId
+    || activation.operator !== recreated.operator
+    || activation.runtime !== recreated.runtime
+    || activation.notBefore !== recreated.notBefore
+    || activation.expiresAt !== recreated.expiresAt
     || JSON.stringify(activation.permissions) !== JSON.stringify(recreated.permissions)
     || JSON.stringify(activation.policy) !== JSON.stringify(recreated.policy)
   ) {
@@ -323,25 +329,53 @@ function validateSignRequest(
   binding: SelfDrivingGitHubPrivateKeySignerBinding,
   request: SelfDrivingGitHubAppJwtSignRequest,
   now: string,
-): void {
+): number {
   if (!request || request.schema !== "solvelang.self-driving.github-app-jwt-sign-request.v0") {
-    throw new Error("GitHub App signer requires the canonical JWT sign request.");
+    throw new SafeSignerValidationError("GitHub App signer requires the canonical JWT sign request.");
   }
-  if (request.algorithm !== "RS256") throw new Error("GitHub App signer only permits RS256.");
-  if (request.issuer !== binding.appIssuer) throw new Error("GitHub App signer issuer drifted from the bound app issuer.");
+  if (request.algorithm !== "RS256") throw new SafeSignerValidationError("GitHub App signer only permits RS256.");
+  if (request.issuer !== binding.appIssuer) {
+    throw new SafeSignerValidationError("GitHub App signer issuer drifted from the bound app issuer.");
+  }
   if (!Number.isSafeInteger(request.issuedAtEpochSeconds) || !Number.isSafeInteger(request.expiresAtEpochSeconds)) {
-    throw new Error("GitHub App signer JWT timestamps must be safe integer seconds.");
+    throw new SafeSignerValidationError("GitHub App signer JWT timestamps must be safe integer seconds.");
   }
-  if (request.expiresAtEpochSeconds <= request.issuedAtEpochSeconds
-    || request.expiresAtEpochSeconds - request.issuedAtEpochSeconds > defaultSelfDrivingGitHubPrivateKeySignerLimits.maxJwtLifetimeSeconds) {
-    throw new Error("GitHub App signer JWT lifetime exceeds the ten-minute bound.");
+  if (
+    request.expiresAtEpochSeconds <= request.issuedAtEpochSeconds
+    || request.expiresAtEpochSeconds - request.issuedAtEpochSeconds > defaultSelfDrivingGitHubPrivateKeySignerLimits.maxJwtLifetimeSeconds
+  ) {
+    throw new SafeSignerValidationError("GitHub App signer JWT lifetime exceeds the ten-minute bound.");
   }
   const nowEpoch = Date.parse(now);
-  if (nowEpoch < Date.parse(binding.notBefore) || nowEpoch >= Date.parse(binding.expiresAt)) {
-    throw new Error("GitHub private-key signer binding is outside its activation window.");
+  const activationStart = Date.parse(binding.notBefore);
+  const activationEnd = Date.parse(binding.expiresAt);
+  if (nowEpoch < activationStart || nowEpoch >= activationEnd) {
+    throw new SafeSignerValidationError("GitHub private-key signer binding is outside its activation window.");
   }
-  if (request.expiresAtEpochSeconds * 1000 > Date.parse(binding.expiresAt)) {
-    throw new Error("GitHub App JWT may not outlive the signer activation window.");
+  const effectiveExpiresAtEpochSeconds = Math.min(
+    request.expiresAtEpochSeconds,
+    Math.floor(activationEnd / 1000),
+  );
+  if (
+    effectiveExpiresAtEpochSeconds <= request.issuedAtEpochSeconds
+    || effectiveExpiresAtEpochSeconds * 1000 <= nowEpoch
+  ) {
+    throw new SafeSignerValidationError("GitHub App JWT has no usable lifetime inside the signer activation window.");
+  }
+  return effectiveExpiresAtEpochSeconds;
+}
+
+function validateReleaseWindow(
+  binding: SelfDrivingGitHubPrivateKeySignerBinding,
+  effectiveExpiresAtEpochSeconds: number,
+  now: string,
+): void {
+  const nowEpoch = Date.parse(now);
+  if (nowEpoch < Date.parse(binding.notBefore) || nowEpoch >= Date.parse(binding.expiresAt)) {
+    throw new SafeSignerValidationError("GitHub private-key signer binding expired before JWT release.");
+  }
+  if (effectiveExpiresAtEpochSeconds * 1000 <= nowEpoch) {
+    throw new SafeSignerValidationError("GitHub App JWT expired before release.");
   }
 }
 
@@ -435,12 +469,12 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
     signerInFlight = true;
     try {
       const now = normalizeUtc(dependencies.now(), "signer.now");
-      validateSignRequest(binding, request, now);
+      const effectiveExpiresAtEpochSeconds = validateSignRequest(binding, request, now);
       if (typeof withJwt !== "function") throw new Error("GitHub App JWT consumer callback is required.");
       const header = base64UrlJson({ typ: "JWT", alg: "RS256" });
       const payload = base64UrlJson({
         iat: request.issuedAtEpochSeconds,
-        exp: request.expiresAtEpochSeconds,
+        exp: effectiveExpiresAtEpochSeconds,
         iss: request.issuer,
       });
       const signingInput = `${header}.${payload}`;
@@ -461,7 +495,6 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
           }
           leaseCallbackEntered = true;
           const lease = validateLease(binding, rawLease, now);
-          let signatureCalls = 0;
           const signatureRequest: SelfDrivingGitHubRs256SignatureRequest = Object.freeze({
             schema: SELF_DRIVING_GITHUB_RS256_SIGNATURE_REQUEST_SCHEMA,
             bindingId: binding.id,
@@ -471,12 +504,16 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
           });
           let rawSignature: string;
           try {
-            signatureCalls += 1;
             rawSignature = await lease.signRs256(signatureRequest);
           } catch {
             throw new Error("Isolated RS256 signing capability failed.");
           }
-          if (signatureCalls !== 1) throw new Error("RS256 signing capability must be called exactly once.");
+          if (!leaseCallbackActive) throw new Error("Private-key lease callback is no longer active.");
+          const afterSign = normalizeUtc(dependencies.now(), "signer.afterSign");
+          validateReleaseWindow(binding, effectiveExpiresAtEpochSeconds, afterSign);
+          if (Date.parse(lease.expiresAt) <= Date.parse(afterSign)) {
+            throw new Error("Private-key lease expired before signature release.");
+          }
           const signature = normalizeSignature(rawSignature);
           const jwt = `${signingInput}.${signature}`;
           callbackJwt = jwt;
@@ -492,6 +529,8 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
         throw new Error("Private-key lease provider violated the exact single-callback result contract.");
       }
 
+      const beforeRelease = normalizeUtc(dependencies.now(), "signer.beforeJwtRelease");
+      validateReleaseWindow(binding, effectiveExpiresAtEpochSeconds, beforeRelease);
       const result = await withJwt(providerJwt);
       signerUsed = true;
       signerInFlight = false;
@@ -499,13 +538,15 @@ export async function createSelfDrivingGitHubPrivateKeyJwtSigner(
     } catch (error) {
       terminallyFailed = true;
       signerInFlight = false;
-      throw error instanceof Error && (
+      if (error instanceof SafeSignerValidationError) throw error;
+      if (error instanceof Error && (
         error.message === "GitHub private-key signer is single-use per activation binding."
         || error.message === "GitHub private-key lease/signing failed."
         || error.message === "Private-key lease provider violated the exact single-callback result contract."
-      )
-        ? error
-        : new Error("GitHub private-key signer failed.");
+      )) {
+        throw error;
+      }
+      throw new Error("GitHub private-key signer failed.");
     }
   };
 
