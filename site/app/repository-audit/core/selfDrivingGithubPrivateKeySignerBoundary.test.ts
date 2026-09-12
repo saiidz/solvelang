@@ -153,6 +153,19 @@ async function activation(plan: SelfDrivingPrWriteExecutionPlan): Promise<SelfDr
   });
 }
 
+async function shortActivation(
+  plan: SelfDrivingPrWriteExecutionPlan,
+  expiresAt = "2026-09-08T08:04:00Z",
+): Promise<SelfDrivingGitHubInstallationActivation> {
+  return createSelfDrivingGitHubInstallationActivation(plan, {
+    state: "approved",
+    operator: "owner:saiidz",
+    runtime: "isolated-github-pr-writer-v0",
+    notBefore: "2026-09-08T08:00:10Z",
+    expiresAt,
+  });
+}
+
 async function binding(
   plan: SelfDrivingPrWriteExecutionPlan,
   active: SelfDrivingGitHubInstallationActivation,
@@ -335,12 +348,11 @@ test("a structurally valid but source-substituted binding is rejected before key
   assert.equal(leaseCalls, 0);
 });
 
-test("issuer drift, excessive JWT lifetime, expired activation, or JWT beyond activation fail before lease access", async () => {
+test("issuer drift, excessive JWT lifetime, or expired activation fail before lease access", async () => {
   const cases: Array<readonly [Partial<SelfDrivingGitHubAppJwtSignRequest>, string, RegExp]> = [
     [{ issuer: "WrongIssuer" }, NOW, /issuer drifted/],
     [{ expiresAtEpochSeconds: signRequest().issuedAtEpochSeconds + 601 }, NOW, /ten-minute bound/],
     [{}, "2026-09-08T08:10:10Z", /outside its activation window/],
-    [{ expiresAtEpochSeconds: Math.floor(Date.parse("2026-09-08T08:10:11Z") / 1000) }, NOW, /may not outlive/],
   ];
   for (const [requestOverrides, now, expected] of cases) {
     const plan = await executionPlan();
@@ -357,6 +369,24 @@ test("issuer drift, excessive JWT lifetime, expired activation, or JWT beyond ac
     await assert.rejects(() => signer(signRequest(requestOverrides), async () => true), expected);
     assert.equal(leaseCalls, 0);
   }
+});
+
+test("JWT expiration is capped to the remaining activation window", async () => {
+  const plan = await executionPlan();
+  const active = await shortActivation(plan);
+  const bound = await binding(plan, active);
+  const signer = await createSelfDrivingGitHubPrivateKeyJwtSigner(plan, active, bound, {
+    leaseProvider: async (_request, withLease) => withLease(lease({ value: 0 })),
+    now: () => NOW,
+  });
+  let observedExp = 0;
+  await signer(signRequest(), async (jwt) => {
+    const payload = decodeBase64UrlJson(jwt.split(".")[1]);
+    observedExp = payload.exp as number;
+    return true;
+  });
+  assert.equal(observedExp, Math.floor(Date.parse(active.expiresAt) / 1000));
+  assert.ok(observedExp < signRequest().expiresAtEpochSeconds);
 });
 
 test("lease key/fingerprint/algorithm/expiry drift and raw-key-like extra fields fail before signature capability", async () => {
@@ -406,6 +436,63 @@ test("captured lease callback is revoked after provider settles and cannot sign 
   assert.ok(captured);
   await assert.rejects(() => captured!(lease(signCalls)), /no longer active/);
   assert.equal(signCalls.value, 0);
+});
+
+test("an already-running lease callback is revoked if the provider settles before signing completes", async () => {
+  const plan = await executionPlan();
+  const active = await activation(plan);
+  const bound = await binding(plan, active);
+  const signCalls = { value: 0 };
+  let releaseSignature: (() => void) | undefined;
+  let pendingCallback: Promise<unknown> | undefined;
+  const signer = await createSelfDrivingGitHubPrivateKeyJwtSigner(plan, active, bound, {
+    leaseProvider: async (_request, withLease) => {
+      pendingCallback = withLease(lease(signCalls, {
+        signRs256: async () => {
+          signCalls.value += 1;
+          await new Promise<void>((resolve) => { releaseSignature = resolve; });
+          return SIGNATURE;
+        },
+      }));
+      await Promise.resolve();
+      return "provider-settled-without-callback" as never;
+    },
+    now: () => NOW,
+  });
+  await assert.rejects(
+    () => signer(signRequest(), async () => true),
+    /single-callback result contract/,
+  );
+  assert.ok(pendingCallback);
+  assert.ok(releaseSignature);
+  releaseSignature!();
+  await assert.rejects(pendingCallback!, /no longer active/);
+  assert.equal(signCalls.value, 1);
+});
+
+test("activation and JWT are rechecked after signing and immediately before JWT release", async () => {
+  const plan = await executionPlan();
+  const active = await shortActivation(plan, "2026-09-08T08:01:30Z");
+  const bound = await binding(plan, active);
+  let clockCalls = 0;
+  let consumerCalls = 0;
+  const signer = await createSelfDrivingGitHubPrivateKeyJwtSigner(plan, active, bound, {
+    leaseProvider: async (_request, withLease) => withLease(lease({ value: 0 })),
+    now: () => {
+      clockCalls += 1;
+      if (clockCalls <= 2) return NOW;
+      return "2026-09-08T08:01:30Z";
+    },
+  });
+  await assert.rejects(
+    () => signer(signRequest(), async () => {
+      consumerCalls += 1;
+      return true;
+    }),
+    /expired before JWT release/,
+  );
+  assert.equal(consumerCalls, 0);
+  assert.ok(clockCalls >= 3);
 });
 
 test("lease provider callback re-entry or result substitution fails closed", async () => {
