@@ -307,7 +307,7 @@ test("kill switch is rechecked after lease access and activation expiry prevents
   });
   await assert.rejects(
     () => expiringProvider({ signal: new AbortController().signal }),
-    /isolated credential lease failed/,
+    /outside its approved window/,
   );
 });
 
