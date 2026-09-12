@@ -1,28 +1,30 @@
 # SolveLang for Codex and Claude
 
-SolveLang ships one local-first MCP server and thin client-specific guidance.
+SolveLang ships a canonical cross-platform plugin bundle backed by the published local-first MCP server.
+
+The maintained plugin root is `plugins/solvelang/` and contains both Codex and Claude manifests, one shared MCP configuration, and the SolveLang workflow-review skill. Legacy setup examples under `plugins/codex/` and `plugins/claude/` remain useful for manual configuration, but new installs should prefer the canonical plugin.
 
 ## Prerequisite
 
-Install Node.js 20 or newer. The published package runs through `npx`; a global install and SolveLang source checkout are not required.
+Install Node.js 20 or newer. The local plugin runs the published `@solvelang/mcp-server@0.2.0` package through `npx`; a global install and SolveLang source checkout are not required.
 
-## Codex
+## Codex plugin
 
-1. Add the following to Codex configuration, replacing the workspace path:
+The repository contains a Codex marketplace at `.agents/plugins/marketplace.json` and a valid plugin manifest at `plugins/solvelang/.codex-plugin/plugin.json`.
 
-   ```toml
-   [mcp_servers.solvelang]
-   command = "npx"
-   args = ["--yes", "@solvelang/mcp-server"]
+Add the SolveLang repository as a Codex marketplace:
 
-   [mcp_servers.solvelang.env]
-   SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
-   # Optional, needed only for solvelang_validate_solve:
-   # SOLVELANG_SOLVEC = "/absolute/path/to/solvec"
-   ```
+```bash
+codex plugin marketplace add saiidz/solvelang --ref main
+```
 
-2. Restart Codex and call `solvelang_capabilities` to confirm the four `solvelang_*` tools are available.
-3. Install or import `plugins/codex/skills/solvelang-workflow-review/SKILL.md` as a reusable skill.
+Then install the plugin:
+
+```bash
+codex plugin add solvelang@solvelang
+```
+
+The installed plugin provides the SolveLang MCP server plus the `solvelang-workflow-review` skill. Start a new Codex thread after installation or upgrade so the plugin surfaces are loaded cleanly.
 
 Suggested prompt:
 
@@ -30,19 +32,40 @@ Suggested prompt:
 Use SolveLang to review workflows/order-routing.json. Report critical and high findings first, then generate a Markdown preflight report.
 ```
 
-## Claude Code
+### Manual Codex MCP configuration
 
-Register the server from the target project directory:
+For clients that do not use plugin marketplaces, add the following to Codex configuration, replacing the workspace path:
 
-```bash
-claude mcp add --transport stdio \
-  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \
-  solvelang -- npx --yes @solvelang/mcp-server
+```toml
+[mcp_servers.solvelang]
+command = "npx"
+args = ["--yes", "@solvelang/mcp-server@0.2.0"]
+
+[mcp_servers.solvelang.env]
+SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
+# Optional, needed only for solvelang_validate_solve:
+# SOLVELANG_SOLVEC = "/absolute/path/to/solvec"
 ```
 
-Or copy `plugins/claude/.mcp.json.example` to `.mcp.json` and replace the workspace path. Add `SOLVELANG_SOLVEC` only when `.solve` validation is needed.
+Restart Codex and call `solvelang_capabilities` to confirm the SolveLang tools are available.
 
-Copy the guidance in `plugins/claude/CLAUDE.md` into the project when durable workflow-review behavior is desired.
+## Claude plugin
+
+The repository also contains a Claude-compatible marketplace at `.claude-plugin/marketplace.json` and a plugin manifest at `plugins/solvelang/.claude-plugin/plugin.json`.
+
+In Claude Code, add the marketplace:
+
+```text
+/plugin marketplace add saiidz/solvelang
+```
+
+Install SolveLang:
+
+```text
+/plugin install solvelang@solvelang
+```
+
+Reload plugins or begin a new Claude Code session after installation.
 
 Suggested prompt:
 
@@ -50,9 +73,29 @@ Suggested prompt:
 Analyze workflows/order-routing.json with the SolveLang MCP tools. Do not claim runtime execution or credential verification.
 ```
 
-## Local-only v1
+### Manual Claude Code MCP configuration
 
-This release uses stdio and is designed for local coding agents. A future authenticated Streamable HTTP service can reuse the same tool contracts after remote auth, retention, rate limiting, and privacy controls are implemented.
+Register the server from the target project directory:
+
+```bash
+claude mcp add --transport stdio \
+  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \
+  solvelang -- npx --yes @solvelang/mcp-server@0.2.0
+```
+
+The older `plugins/claude/.mcp.json.example` remains available for projects that want explicit project-local MCP configuration.
+
+## Local plugin authority
+
+The packaged plugin uses stdio and is designed for local coding-agent sessions. The MCP tools are read-only analysis surfaces. Installing the plugin does not authorize repository writes, production execution, credential access, external API calls, billing changes, or infrastructure mutation.
+
+Workspace-path tools remain bounded to the configured workspace. Raw JSON workflow and Solve Graph inputs remain the preferred portable inputs where no local file access is needed.
+
+## Hosted Claude/API and cloud-app lane
+
+Claude's server-side MCP connector cannot directly connect to a local stdio process. A future public SolveLang cloud integration therefore requires an authenticated HTTPS MCP endpoint using Streamable HTTP, with a deliberately reduced remote tool surface and explicit auth, rate limits, request-size bounds, retention/deletion rules, privacy controls, and deployment approval.
+
+That hosted endpoint is a separate security and production boundary. The local Codex/Claude plugin manifests do not claim that it is live.
 
 ## Source checkout and package verification
 
@@ -69,4 +112,4 @@ npm run test:packed
 
 ## Releases
 
-`@solvelang/mcp-server@0.1.0` is live on the public npm registry. Trusted Publishing through `.github/workflows/npm-release.yml` is the required release path; releases retain the protected `npm-production` environment, repository-variable gate, version checks, tests, and packed-install verification without an npm access token.
+SolveLang MCP Server v0.2.0 is the current repository release line for this plugin bundle. Publishing remains restricted to the protected npm release workflow and its existing validation gates; plugin packaging does not grant publication authority.

@@ -1,0 +1,40 @@
+{
+  "name": "solvelang",
+  "version": "0.2.0",
+  "description": "Deterministic, read-only SolveLang workflow and repository graph analysis for Codex.",
+  "author": {
+    "name": "SolveLang",
+    "url": "https://solve-lang.com"
+  },
+  "homepage": "https://solve-lang.com",
+  "repository": "https://github.com/saiidz/solvelang",
+  "license": "MIT",
+  "keywords": [
+    "solvelang",
+    "mcp",
+    "codex",
+    "workflow-analysis",
+    "solve-graph",
+    "n8n",
+    "repository-analysis"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "SolveLang",
+    "shortDescription": "Deterministic workflow and repository graph analysis",
+    "longDescription": "Use SolveLang from Codex to analyze n8n workflows and canonical Solve Graph documents, trace dependencies and impact, explain structural risk, and validate local .solve files through a bounded read-only MCP server.",
+    "developerName": "SolveLang",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://solve-lang.com",
+    "defaultPrompt": [
+      "Review this workflow with SolveLang",
+      "Trace the impact of this change with Solve Graph",
+      "Explain the riskiest dependencies in this repository graph"
+    ]
+  }
+}

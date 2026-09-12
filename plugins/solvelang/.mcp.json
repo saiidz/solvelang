@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "solvelang": {
+      "command": "npx",
+      "args": [
+        "--yes",
+        "@solvelang/mcp-server@0.2.0"
+      ]
+    }
+  }
+}
