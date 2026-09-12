@@ -3,6 +3,7 @@ import { JsonLd } from "../components/JsonLd";
 import { LanguageSuggestion } from "../components/LanguageSuggestion";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css";
+import { LegalFooter } from "../components/LegalFooter";
 
 // This route tree is materialized only for an explicit draft preview build.
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -18,6 +19,7 @@ export default async function LocaleLayout({ children, params }: Readonly<{ chil
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={{ "@context": "https://schema.org", "@type": "WebSite", name: "SolveLang", url: "https://www.solve-lang.com/" }} />
         {children}
+        <LegalFooter />
         <LanguageSuggestion countryHintEndpoint="" />
       </body>
     </html>

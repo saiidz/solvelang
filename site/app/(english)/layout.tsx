@@ -4,6 +4,7 @@ import { brandFacts } from "../brandFacts";
 import { JsonLd } from "../components/JsonLd";
 import { LanguageSuggestion } from "../components/LanguageSuggestion";
 import "../globals.css";
+import { LegalFooter } from "../components/LegalFooter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -121,7 +122,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
         {children}
-        <LanguageSuggestion countryHintEndpoint={process.env.NEXT_PUBLIC_COUNTRY_HINT_ENDPOINT ?? ""} />
+        <LegalFooter />
+        <LanguageSuggestion countryHintEndpoint="" />
       </body>
     </html>
   );

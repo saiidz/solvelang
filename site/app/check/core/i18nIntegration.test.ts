@@ -14,14 +14,10 @@ test("production locale generation has no sentinel and preview remains the only 
   assert.match(localizedPage, /productionLocalizedParams\(\)/);
 });
 
-test("country hints use the single optional documented public endpoint variable", async () => {
-  const [layout, documentation] = await Promise.all([
-    source("app/(english)/layout.tsx"),
-    readFile(path.join(siteRoot, "../docs/country-hint.md"), "utf8"),
-  ]);
-  assert.match(layout, /process\.env\.NEXT_PUBLIC_COUNTRY_HINT_ENDPOINT/);
-  assert.doesNotMatch(layout, /process\.env\.I18N_COUNTRY_HINT_ENDPOINT/);
-  assert.match(documentation, /NEXT_PUBLIC_COUNTRY_HINT_ENDPOINT/);
+test("language suggestions do not enable a country lookup from deployment environment variables", async () => {
+  const layout = await source("app/(english)/layout.tsx");
+  assert.match(layout, /<LanguageSuggestion countryHintEndpoint=""\s*\/>/);
+  assert.doesNotMatch(layout, /process\.env\.(?:NEXT_PUBLIC_|I18N_)COUNTRY_HINT_ENDPOINT/);
 });
 
 test("metadata titles rely on the root template without duplicating the SolveLang suffix", async () => {

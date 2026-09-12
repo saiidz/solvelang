@@ -8,6 +8,8 @@ export const publicRoutes = [
   { segment: "refunds", classification: "localizable-public", sitemap: true },
   { segment: "terms", classification: "localizable-public", sitemap: true },
   { segment: "refund-policy", classification: "localizable-public", sitemap: true },
+  { segment: "privacy-policy", classification: "english-only-technical", sitemap: true },
+  { segment: "cookie-policy", classification: "english-only-technical", sitemap: true },
   { segment: "preflight-privacy", classification: "localizable-public", sitemap: true },
   { segment: "withdraw", classification: "localizable-public", sitemap: false },
   { segment: "resources", classification: "localizable-public", sitemap: true },
