@@ -266,7 +266,7 @@ test("invalid kill-switch evidence and raw state-reader errors fail closed witho
     now: () => NOW,
   });
   const invalidProvider = await createPostHogCanaryRuntimeAuthProvider(approval, claim, activation, invalidDependencies);
-  await assert.rejects(() => invalidProvider({ signal: new AbortController().signal }), /kill-switch check failed/);
+  await assert.rejects(() => invalidProvider({ signal: new AbortController().signal }), /runtime authorization failed/);
 
   const next = await fixture();
   const throwingDependencies = createPostHogCanaryIsolatedRuntimeDependencies(next.activation, {
@@ -284,7 +284,7 @@ test("invalid kill-switch evidence and raw state-reader errors fail closed witho
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
-  assert.equal(message, "PostHog canary kill-switch check failed.");
+  assert.equal(message, "PostHog canary runtime authorization failed.");
   assert.doesNotMatch(message, /isolated_fixture_posthog_token/);
 });
 
