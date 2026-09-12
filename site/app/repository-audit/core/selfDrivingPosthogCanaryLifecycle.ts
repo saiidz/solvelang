@@ -187,6 +187,23 @@ function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Canonical lifecycle data contains a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => {
+      if (record[key] === undefined) throw new Error("Canonical lifecycle data contains undefined.");
+      return `${JSON.stringify(key)}:${canonicalJson(record[key])}`;
+    }).join(",")}}`;
+  }
+  throw new Error("Canonical lifecycle data contains unsupported data.");
+}
+
 function stableHash(value: string): string {
   let left = 0x811c9dc5;
   let right = 0x9e3779b9;
@@ -299,6 +316,47 @@ function normalizeBoundedCount(value: number, name: string, max: number): number
   return value;
 }
 
+function canonicalClaimPolicy() {
+  return {
+    atomicSingleUseClaimRequired: true,
+    approvalClaimMutationAttempted: true,
+    retries: 0,
+    automaticRearm: false,
+    credentialResolutionAccess: false,
+    providerNetworkAccess: false,
+    repositoryWriteAccess: false,
+    rolloutMutationAccess: false,
+    productionMutationAccess: false,
+    billingMutationAccess: false,
+    solveRunnerAuthority: false,
+    credentialMaterialReturned: false,
+  } as const;
+}
+
+function canonicalLifecyclePolicy(): PostHogCanaryLifecycleRecord["policy"] {
+  return {
+    rawProviderPayloadRetained: false,
+    rawProviderDigestAllowed: false,
+    sanitizedArtifactOnly: true,
+    maxAttempts: 1,
+    retries: 0,
+    automaticRearm: false,
+    maxResponseBytes: defaultPostHogCanaryLifecycleLimits.maxResponseBytes,
+    maxAcceptedRecords: defaultPostHogCanaryLifecycleLimits.maxAcceptedRecords,
+    totalDeadlineMs: defaultPostHogCanaryLifecycleLimits.totalDeadlineMs,
+    credentialResolutionAccess: false,
+    providerNetworkAccess: false,
+    durableSinkAccess: false,
+    keyRevocationApiAccess: false,
+    repositoryWriteAccess: false,
+    rolloutMutationAccess: false,
+    productionMutationAccess: false,
+    billingMutationAccess: false,
+    solveRunnerAuthority: false,
+    externalSideEffects: false,
+  };
+}
+
 function assertSafeApproval(approval: NormalizedPostHogCanaryApproval): void {
   if (!approval || typeof approval !== "object") throw new Error("A normalized PostHog canary approval is required.");
   if (approval.schema !== "solvelang.self-driving.posthog-canary-approval.v0" || approval.state !== "approved") {
@@ -325,22 +383,21 @@ function assertSafeClaim(approval: NormalizedPostHogCanaryApproval, claim: PostH
   if (claim.schema !== POSTHOG_CANARY_CLAIM_SCHEMA || claim.status !== "claimed" || !claim.claimId) {
     throw new Error("Canary lifecycle requires a successful single-use approval claim.");
   }
-  if (
-    claim.approvalId !== approval.approvalId
-    || claim.requestId !== approval.requestPlan.request.id
-    || claim.policy.atomicSingleUseClaimRequired !== true
-    || claim.policy.approvalClaimMutationAttempted !== true
-    || claim.policy.retries !== 0
-    || claim.policy.automaticRearm !== false
-    || claim.policy.credentialResolutionAccess !== false
-    || claim.policy.providerNetworkAccess !== false
-    || claim.policy.repositoryWriteAccess !== false
-    || claim.policy.productionMutationAccess !== false
-    || claim.policy.credentialMaterialReturned !== false
-  ) {
+  const claimId = normalizeText(claim.claimId, "claim.claimId", 128);
+  const requestedAt = normalizeUtcTimestamp(claim.requestedAt, "claim.requestedAt");
+  const expected = {
+    schema: POSTHOG_CANARY_CLAIM_SCHEMA,
+    status: "claimed" as const,
+    approvalId: approval.approvalId,
+    requestedAt,
+    requestId: approval.requestPlan.request.id,
+    claimId,
+    policy: canonicalClaimPolicy(),
+  };
+  if (canonicalJson(claim) !== canonicalJson(expected)) {
     throw new Error("Canary lifecycle claim binding or policy does not match the approved request.");
   }
-  return normalizeText(claim.claimId, "claim.claimId", 128);
+  return claimId;
 }
 
 function normalizeFinalizerResult(value: PostHogCanaryFinalizerDependencyResult): PostHogCanaryFinalizerDependencyResult | null {
@@ -475,27 +532,7 @@ export function createPostHogCanaryLifecycleRecord(
       actions: [...POSTHOG_CANARY_DISABLE_ACTIONS],
       deleteSanitizedEvidenceBy: deleteBy,
     },
-    policy: {
-      rawProviderPayloadRetained: false,
-      rawProviderDigestAllowed: false,
-      sanitizedArtifactOnly: true,
-      maxAttempts: 1,
-      retries: 0,
-      automaticRearm: false,
-      maxResponseBytes: defaultPostHogCanaryLifecycleLimits.maxResponseBytes,
-      maxAcceptedRecords: defaultPostHogCanaryLifecycleLimits.maxAcceptedRecords,
-      totalDeadlineMs: defaultPostHogCanaryLifecycleLimits.totalDeadlineMs,
-      credentialResolutionAccess: false,
-      providerNetworkAccess: false,
-      durableSinkAccess: false,
-      keyRevocationApiAccess: false,
-      repositoryWriteAccess: false,
-      rolloutMutationAccess: false,
-      productionMutationAccess: false,
-      billingMutationAccess: false,
-      solveRunnerAuthority: false,
-      externalSideEffects: false,
-    },
+    policy: canonicalLifecyclePolicy(),
   };
 }
 
@@ -506,21 +543,7 @@ export async function finalizePostHogCanaryLifecycle(
   if (!record || typeof record !== "object" || record.schema !== POSTHOG_CANARY_LIFECYCLE_SCHEMA) {
     throw new Error("A canonical PostHog canary lifecycle record is required.");
   }
-  if (
-    record.policy.rawProviderPayloadRetained !== false
-    || record.policy.rawProviderDigestAllowed !== false
-    || record.policy.sanitizedArtifactOnly !== true
-    || record.policy.maxAttempts !== 1
-    || record.policy.retries !== 0
-    || record.policy.automaticRearm !== false
-    || record.policy.credentialResolutionAccess !== false
-    || record.policy.providerNetworkAccess !== false
-    || record.policy.durableSinkAccess !== false
-    || record.policy.keyRevocationApiAccess !== false
-    || record.policy.repositoryWriteAccess !== false
-    || record.policy.productionMutationAccess !== false
-    || record.policy.externalSideEffects !== false
-  ) {
+  if (canonicalJson(record.policy) !== canonicalJson(canonicalLifecyclePolicy())) {
     throw new Error("Canary finalization requires the safe canonical lifecycle policy boundary.");
   }
   if (typeof finalizer !== "function") throw new Error("An injected atomic canary lifecycle finalizer is required.");
