@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "solvelang",
+  "description": "SolveLang developer tools for Claude",
+  "owner": {
+    "name": "SolveLang"
+  },
+  "plugins": [
+    {
+      "name": "solvelang",
+      "description": "Deterministic, read-only workflow and repository graph analysis through the SolveLang MCP server.",
+      "version": "0.2.0",
+      "author": {
+        "name": "SolveLang"
+      },
+      "source": "./plugins/solvelang",
+      "category": "development",
+      "homepage": "https://solve-lang.com"
+    }
+  ]
+}
