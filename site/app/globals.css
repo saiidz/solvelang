@@ -43,3 +43,6 @@ body {
 .text-balance {
   text-wrap: balance;
 }
+
+/* Visible keyboard focus across public forms and navigation. */
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:3px solid #b45309; outline-offset:3px; }

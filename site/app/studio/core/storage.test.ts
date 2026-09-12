@@ -99,13 +99,15 @@ test("version history is capped at 30 and project artifacts remain isolated", ()
   assert.equal(artifacts.loadVersions(second.id).length, 1);
 });
 
-test("product analytics stores only aggregate counters", () => {
+test("product analytics keeps aggregate counters in memory without persistent storage", () => {
   const storage = new MemoryStorage();
   const analytics = createLocalAnalytics(storage);
   analytics.track("studio_opened");
   analytics.track("studio_opened");
   const snapshot = analytics.snapshot();
   assert.equal(snapshot.studio_opened!.count, 2);
+  assert.equal(storage.getItem("solvelang.studio.analytics.v1"), null);
+  assert.equal(createLocalAnalytics(storage).snapshot().studio_opened, undefined);
   assert.deepEqual(Object.keys(snapshot.studio_opened!).sort(), ["count", "lastOccurredAt"]);
 });
 
