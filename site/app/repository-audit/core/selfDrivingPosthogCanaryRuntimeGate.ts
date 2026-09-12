@@ -1,5 +1,6 @@
 import {
   normalizePostHogCanaryApproval,
+  POSTHOG_CANARY_CLAIM_SCHEMA,
   type NormalizedPostHogCanaryApproval,
   type PostHogCanaryClaimResult,
   type PostHogCanaryOperation,
@@ -171,6 +172,23 @@ function normalizeUtc(value: string, name: string): string {
   return new Date(epoch).toISOString();
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Canonical data contains a non-finite number.");
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => {
+      if (record[key] === undefined) throw new Error("Canonical data contains undefined.");
+      return `${JSON.stringify(key)}:${canonicalJson(record[key])}`;
+    }).join(",")}}`;
+  }
+  throw new Error("Canonical data contains unsupported data.");
+}
+
 async function sha256Hex(value: string): Promise<string> {
   if (!globalThis.crypto?.subtle) throw new Error("SHA-256 support is required for PostHog canary runtime activation.");
   const digest = await globalThis.crypto.subtle.digest("SHA-256", textEncoder.encode(value));
@@ -199,6 +217,23 @@ function activationPolicy(): PostHogCanaryRuntimeActivation["policy"] {
   });
 }
 
+function canonicalClaimPolicy(): PostHogCanaryClaimResult["policy"] {
+  return {
+    atomicSingleUseClaimRequired: true,
+    approvalClaimMutationAttempted: true,
+    retries: 0,
+    automaticRearm: false,
+    credentialResolutionAccess: false,
+    providerNetworkAccess: false,
+    repositoryWriteAccess: false,
+    rolloutMutationAccess: false,
+    productionMutationAccess: false,
+    billingMutationAccess: false,
+    solveRunnerAuthority: false,
+    credentialMaterialReturned: false,
+  };
+}
+
 function recreateApproval(approval: NormalizedPostHogCanaryApproval): NormalizedPostHogCanaryApproval {
   if (!approval || typeof approval !== "object") throw new Error("A normalized PostHog canary approval is required.");
   const recreated = normalizePostHogCanaryApproval({
@@ -219,7 +254,7 @@ function recreateApproval(approval: NormalizedPostHogCanaryApproval): Normalized
     expiresAt: approval.expiresAt,
     retentionHours: approval.retentionHours,
   });
-  if (JSON.stringify(recreated) !== JSON.stringify(approval)) {
+  if (canonicalJson(recreated) !== canonicalJson(approval)) {
     throw new Error("PostHog canary runtime requires the exact canonical approval source artifact.");
   }
   return recreated;
@@ -234,19 +269,16 @@ function assertClaim(
   }
   const claimId = normalizeText(claim.claimId, "claim.claimId", 128);
   const requestedAt = normalizeUtc(claim.requestedAt, "claim.requestedAt");
-  if (
-    claim.approvalId !== approval.approvalId
-    || claim.requestId !== approval.requestPlan.request.id
-    || claim.policy.atomicSingleUseClaimRequired !== true
-    || claim.policy.approvalClaimMutationAttempted !== true
-    || claim.policy.retries !== 0
-    || claim.policy.automaticRearm !== false
-    || claim.policy.credentialResolutionAccess !== false
-    || claim.policy.providerNetworkAccess !== false
-    || claim.policy.repositoryWriteAccess !== false
-    || claim.policy.productionMutationAccess !== false
-    || claim.policy.credentialMaterialReturned !== false
-  ) {
+  const expected = {
+    schema: POSTHOG_CANARY_CLAIM_SCHEMA,
+    status: "claimed" as const,
+    approvalId: approval.approvalId,
+    requestedAt,
+    requestId: approval.requestPlan.request.id,
+    claimId,
+    policy: canonicalClaimPolicy(),
+  };
+  if (canonicalJson(claim) !== canonicalJson(expected)) {
     throw new Error("PostHog canary runtime claim binding or policy drifted from the approved request.");
   }
   const claimEpoch = Date.parse(requestedAt);
@@ -300,7 +332,7 @@ export async function createPostHogCanaryRuntimeActivation(
     expiresAt,
     killSwitchRef,
   });
-  const identity = await sha256Hex(JSON.stringify(canonical));
+  const identity = await sha256Hex(canonicalJson(canonical));
   return Object.freeze({
     schema: POSTHOG_CANARY_RUNTIME_ACTIVATION_SCHEMA,
     state: "approved" as const,
@@ -326,7 +358,7 @@ async function assertActivation(
     expiresAt: activation.expiresAt,
     killSwitchRef: activation.killSwitchRef,
   });
-  if (JSON.stringify(recreated) !== JSON.stringify(activation)) {
+  if (canonicalJson(recreated) !== canonicalJson(activation)) {
     throw new Error("PostHog canary runtime activation does not match its exact approval/claim source chain.");
   }
   return activation;
@@ -414,13 +446,15 @@ function validateLease(
     throw new Error("PostHog canary credential lease contains unsupported fields.");
   }
   const leaseId = normalizeText(lease.leaseId, "lease.leaseId", 128);
-  const credentialRef = normalizeOpaqueRef(lease.credentialRef, "lease.credentialRef");
+  if (typeof lease.credentialRef !== "string" || lease.credentialRef !== activation.credentialRef) {
+    throw new Error("PostHog canary credential lease drifted from the activation binding.");
+  }
+  const credentialRef = activation.credentialRef;
   const credentialScope = normalizeText(lease.credentialScope, "lease.credentialScope", 256);
   const project = normalizeText(lease.project, "lease.project", 20);
   const origin = normalizeText(lease.origin, "lease.origin", 256);
   if (
-    credentialRef !== activation.credentialRef
-    || credentialScope !== activation.credentialScope
+    credentialScope !== activation.credentialScope
     || project !== activation.project
     || origin !== activation.origin
   ) {
@@ -472,10 +506,11 @@ export async function createPostHogCanaryRuntimeAuthProvider(
     }
     inFlight = true;
     try {
-      const beforeLease = assertActiveWindow(activation, dependencies.now());
-      await checkKillSwitch(activation, dependencies.killSwitch, beforeLease);
+      const beforeCredentialCheck = assertActiveWindow(activation, dependencies.now());
+      await checkKillSwitch(activation, dependencies.killSwitch, beforeCredentialCheck);
+      const leaseRequestedAt = assertActiveWindow(activation, dependencies.now());
       if (context.signal.aborted) throw new SafeCanaryRuntimeError("PostHog canary runtime authorization was cancelled.");
-      const request = makeLeaseRequest(activation, beforeLease);
+      const request = makeLeaseRequest(activation, leaseRequestedAt);
 
       let callbackActive = true;
       let callbackEntered = false;
@@ -491,13 +526,17 @@ export async function createPostHogCanaryRuntimeAuthProvider(
             throw new Error("PostHog credential lease provider re-entered the callback.");
           }
           callbackEntered = true;
-          const lease = validateLease(activation, rawLease, beforeLease);
-          const beforeRelease = assertActiveWindow(activation, dependencies.now());
-          if (!callbackActive) throw new Error("PostHog credential lease callback is no longer active.");
-          if (Date.parse(lease.expiresAt) <= Date.parse(beforeRelease)) {
+          const callbackNow = assertActiveWindow(activation, dependencies.now());
+          const lease = validateLease(activation, rawLease, callbackNow);
+          const beforeReleaseCheck = assertActiveWindow(activation, dependencies.now());
+          if (Date.parse(lease.expiresAt) <= Date.parse(beforeReleaseCheck)) {
             throw new Error("PostHog credential lease expired before authorization release.");
           }
-          await checkKillSwitch(activation, dependencies.killSwitch, beforeRelease);
+          await checkKillSwitch(activation, dependencies.killSwitch, beforeReleaseCheck);
+          const afterReleaseCheck = assertActiveWindow(activation, dependencies.now());
+          if (Date.parse(lease.expiresAt) <= Date.parse(afterReleaseCheck)) {
+            throw new Error("PostHog credential lease expired before authorization release.");
+          }
           if (!callbackActive) throw new Error("PostHog credential lease callback is no longer active.");
           if (context.signal.aborted) throw new SafeCanaryRuntimeError("PostHog canary runtime authorization was cancelled.");
           const auth = Object.freeze({ authorization: lease.authorization });
@@ -514,8 +553,9 @@ export async function createPostHogCanaryRuntimeAuthProvider(
       if (!callbackEntered || !callbackCompleted || providerReentered || !Object.is(providerAuth, callbackAuth)) {
         throw new Error("PostHog canary credential lease provider violated the exact single-callback result contract.");
       }
-      const finalCheck = assertActiveWindow(activation, dependencies.now());
-      await checkKillSwitch(activation, dependencies.killSwitch, finalCheck);
+      const beforeFinalCheck = assertActiveWindow(activation, dependencies.now());
+      await checkKillSwitch(activation, dependencies.killSwitch, beforeFinalCheck);
+      assertActiveWindow(activation, dependencies.now());
       if (context.signal.aborted) throw new SafeCanaryRuntimeError("PostHog canary runtime authorization was cancelled.");
       used = true;
       inFlight = false;
