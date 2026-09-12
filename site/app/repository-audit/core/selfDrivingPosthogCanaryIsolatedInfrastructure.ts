@@ -292,7 +292,10 @@ function createCredentialLeaseProvider(
   let sourceUsed = false;
   let terminallyFailed = false;
 
-  return async function isolatedCredentialLease<T>(request, withLease): Promise<T> {
+  return async function isolatedCredentialLease<T>(
+    request: PostHogCanaryCredentialLeaseRequest,
+    withLease: (lease: PostHogCanaryCredentialLease) => Promise<T>,
+  ): Promise<T> {
     if (terminallyFailed) throw new Error("PostHog canary isolated credential source is terminally failed.");
     if (sourceUsed) {
       terminallyFailed = true;
