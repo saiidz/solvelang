@@ -1,3 +1,8 @@
+---
+name: solvelang-workflow-review
+description: Review n8n workflows, .solve files, and canonical Solve Graph documents with deterministic read-only SolveLang MCP tools.
+---
+
 # SolveLang Workflow And Graph Review
 
 Use the SolveLang MCP tools when the user asks to validate, review, preflight, score, document, or explain an n8n workflow or `.solve` file, or when they provide a canonical Solve Graph and ask about repository structure, dependencies, dependents, or change impact.
