@@ -99,16 +99,21 @@ That hosted endpoint is a separate security and production boundary. The local C
 
 ## Source checkout and package verification
 
-Contributors can verify the same artifact consumers install:
+Contributors can verify the same package and protocol boundary referenced by both plugin manifests:
 
 ```bash
 cd packages/mcp-server
 npm ci
 npm test
+npm run test:plugin-roundtrip
 npm run test:packed
 ```
 
-`test:packed` builds an npm tarball, checks its exact allowlist, installs it into a clean temporary consumer, and starts the installed `solvelang-mcp` executable with `npx --no-install`. It does not publish the tarball or execute a workflow.
+`test:plugin-roundtrip` first exact-checks the Codex and Claude manifests against the same pinned MCP package version, then packs and installs the current MCP package into a clean temporary consumer, performs a real MCP stdio initialization/list-tools roundtrip against that installed artifact, verifies representative tools remain read-only/non-destructive, and calls `solvelang_analyze_n8n` with an in-memory fixture. It does not publish a package, install through the external Codex or Claude marketplace clients, execute a workflow, access credentials, or mutate a repository.
+
+`test:packed` independently builds an npm tarball, checks its exact allowlist, installs it into a clean temporary consumer, and starts the installed `solvelang-mcp` executable with `npx --no-install`. It does not publish the tarball or execute a workflow.
+
+Passing repository CI therefore proves the shared plugin manifest/package/protocol contract. A real marketplace-client installation remains a separate release/distribution proof and must not be inferred from repository CI alone.
 
 ## Releases
 
