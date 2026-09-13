@@ -92,6 +92,11 @@ import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"])
 PY
 )"
+version="$(python3 - "$dist_dir/provenance.json" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["version"])
+PY
+)"
 smoke_dir="$(mktemp -d)"
 trap 'rm -rf "$smoke_dir"' EXIT
 tar -xzf "$dist_dir/$artifact" -C "$smoke_dir"
@@ -100,3 +105,13 @@ if [[ ! -x "$smoke_dir/solvec" ]]; then
   exit 1
 fi
 "$smoke_dir/solvec" help >/dev/null
+version_stderr="$smoke_dir/version.stderr"
+version_output="$("$smoke_dir/solvec" version 2>"$version_stderr")"
+if [[ -s "$version_stderr" ]]; then
+  echo "packaged solvec version wrote unexpected stderr" >&2
+  exit 1
+fi
+if [[ "$version_output" != "solvec $version" ]]; then
+  echo "packaged solvec version does not match provenance version" >&2
+  exit 1
+fi
