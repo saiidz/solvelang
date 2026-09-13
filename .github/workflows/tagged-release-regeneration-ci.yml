@@ -34,7 +34,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REF" = "refs/heads/main"
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
             echo "tag must be a v-prefixed semver-like version" >&2
             exit 1
           fi
@@ -42,7 +42,6 @@ jobs:
           git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
           test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = "tag"
           source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
-          test "$source_sha" != "$(git rev-parse HEAD)" || true
           git checkout --detach "$source_sha"
           test "$(git rev-parse HEAD)" = "$source_sha"
           printf 'SOURCE_SHA=%s\n' "$source_sha" >> "$GITHUB_ENV"
