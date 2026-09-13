@@ -13,6 +13,24 @@ function cookieHeader(event) {
   return cookies.length ? cookies.join("; ") : undefined;
 }
 
+function assertTenantSecretReference(value, accountId) {
+  if (typeof value !== "string" || typeof accountId !== "string" || !accountId) {
+    throw new ApiAccessError(400, "invalid_support_automation_secret_ref", "Provider credential references must be scoped to the authenticated account.");
+  }
+  const tenantPath = `:secret:solvelang/support-automation/${accountId}/`;
+  if (!value.includes(tenantPath)) {
+    throw new ApiAccessError(400, "invalid_support_automation_secret_ref", "Provider credential references must be scoped to the authenticated account.");
+  }
+}
+
+function assertTenantConfiguration(input, accountId) {
+  if (!input || typeof input !== "object") {
+    throw new ApiAccessError(400, "invalid_support_automation_request", "Support automation configuration is invalid.");
+  }
+  assertTenantSecretReference(input.gmailCredentialSecretArn, accountId);
+  assertTenantSecretReference(input.linearCredentialSecretArn, accountId);
+}
+
 export function createSupportAutomationApiHandler({ enabled = false, supportAutomation, customerAuth, siteOrigin, logger = console }) {
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
   if (enabled && (!supportAutomation || !customerAuth)) throw new Error("Support automation and customer auth are required when support automation is enabled.");
@@ -60,7 +78,9 @@ export function createSupportAutomationApiHandler({ enabled = false, supportAuto
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/config")) {
         const authenticated = await session(event, true);
-        return response(200, await supportAutomation.configure(authenticated, parseJson(event)));
+        const input = parseJson(event);
+        assertTenantConfiguration(input, authenticated.accountId);
+        return response(200, await supportAutomation.configure(authenticated, input));
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/pause")) {
         const authenticated = await session(event, true);
