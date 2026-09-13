@@ -37,7 +37,6 @@ export function createSupportAutomationApiHandler({ enabled = false, supportAuto
   }
 
   async function session(event, mutation = false) {
-    if (!enabled) throw new ApiAccessError(503, "support_automation_disabled", "Support automation is not enabled for this environment.");
     const authenticated = await customerAuth.authenticate(cookieHeader(event));
     if (mutation) customerAuth.assertCsrf(authenticated, header(event, "x-solvelang-csrf"));
     return authenticated;
@@ -48,25 +47,32 @@ export function createSupportAutomationApiHandler({ enabled = false, supportAuto
       const method = event?.requestContext?.http?.method ?? "GET";
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
       if (method === "OPTIONS") return response(204, {});
+      if (!enabled) throw new ApiAccessError(503, "support_automation_disabled", "Support automation is not enabled for this environment.");
       if (method === "GET" && path.endsWith("/customer/support-automation")) {
-        return response(200, await supportAutomation.status(await session(event)));
+        const authenticated = await session(event);
+        return response(200, await supportAutomation.status(authenticated));
       }
       if (method === "GET" && path.endsWith("/customer/support-automation/history")) {
+        const authenticated = await session(event);
         const rawLimit = event?.queryStringParameters?.limit;
         const limit = rawLimit === undefined ? 20 : Number(rawLimit);
-        return response(200, { events: await supportAutomation.history(await session(event), limit) });
+        return response(200, { events: await supportAutomation.history(authenticated, limit) });
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/config")) {
-        return response(200, await supportAutomation.configure(await session(event, true), parseJson(event)));
+        const authenticated = await session(event, true);
+        return response(200, await supportAutomation.configure(authenticated, parseJson(event)));
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/pause")) {
-        return response(200, await supportAutomation.pause(await session(event, true)));
+        const authenticated = await session(event, true);
+        return response(200, await supportAutomation.pause(authenticated));
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/resume")) {
-        return response(200, await supportAutomation.resume(await session(event, true)));
+        const authenticated = await session(event, true);
+        return response(200, await supportAutomation.resume(authenticated));
       }
       if (method === "POST" && path.endsWith("/customer/support-automation/revoke")) {
-        return response(200, await supportAutomation.revoke(await session(event, true)));
+        const authenticated = await session(event, true);
+        return response(200, await supportAutomation.revoke(authenticated));
       }
       return response(404, { error: "Not found." });
     } catch (error) {
