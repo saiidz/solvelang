@@ -1,0 +1,96 @@
+{
+  "schema": "solvelang.context.eval-suite.v0",
+  "description": "Synthetic, deterministic offline fixtures for measuring Solve Context selection quality and byte reduction. These are not provider-token or end-to-end agent-success benchmarks.",
+  "thresholds": {
+    "minPathRecall": 1,
+    "minEvidenceRecall": 1,
+    "minPathPrecision": 1,
+    "minMeanByteReductionPercent": 70,
+    "requireDeterminism": true,
+    "requireExactIntegrity": true,
+    "requireHandoffFreshness": true
+  },
+  "cases": [
+    {
+      "id": "bug-fix-invoice-retry",
+      "category": "bug-fix",
+      "task": "fix invoice retry timeout and invoice retry tests",
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "src/billing/invoice-retry.ts": ["retryInvoice", "timeoutMs"],
+        "test/billing/invoice-retry.test.ts": ["retryInvoice", "timeout"]
+      },
+      "forbiddenPaths": ["src/catalog/zebra.ts"],
+      "sources": [
+        {"path":"src/billing/invoice-retry.ts","text":"export async function retryInvoice(invoiceId: string, timeoutMs = 5000) {\n  const invoice = await loadInvoice(invoiceId);\n  if (invoice.retryCount >= 3) return invoice;\n  return scheduleInvoiceRetry(invoice, timeoutMs);\n}\n"},
+        {"path":"test/billing/invoice-retry.test.ts","text":"test('invoice retry timeout', async () => {\n  await retryInvoice('inv_123', 25);\n  expect(scheduleInvoiceRetry).toHaveBeenCalledWith(expect.anything(), 25);\n});\n"},
+        {"path":"src/catalog/zebra.ts","repeat":{"text":"zebra quokka marble violet cedar prism orbit\n","count":160}}
+      ]
+    },
+    {
+      "id": "ci-payment-webhook",
+      "category": "ci-log-diagnosis",
+      "task": "diagnose payment webhook timeout CI failure",
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "logs/payment-webhook-ci.log": ["payment webhook", "ETIMEDOUT"],
+        "src/payments/webhook-handler.ts": ["handlePaymentWebhook", "timeoutMs"]
+      },
+      "forbiddenPaths": ["docs/astronomy-notes.md"],
+      "sources": [
+        {"path":"logs/payment-webhook-ci.log","text":"job=payment-webhook-integration status=failed\nstep=payment webhook delivery\nerror=ETIMEDOUT after 30000ms\nassertion=expected webhook acknowledgement before timeout\n"},
+        {"path":"src/payments/webhook-handler.ts","text":"export async function handlePaymentWebhook(payload: PaymentEvent, timeoutMs = 30000) {\n  const verified = verifyPaymentSignature(payload);\n  return dispatchPaymentWebhook(verified, { timeoutMs });\n}\n"},
+        {"path":"docs/astronomy-notes.md","repeat":{"text":"nebula comet galaxy telescope meteor lunar solar orbit\n","count":150}}
+      ]
+    },
+    {
+      "id": "auth-validator-refactor",
+      "category": "multi-file-refactor",
+      "task": "refactor auth session token validator callers",
+      "budgetBytes": 8192,
+      "requiredEvidence": {
+        "src/auth/session-token-validator.ts": ["validateSessionToken", "SessionClaims"],
+        "src/http/auth-middleware.ts": ["validateSessionToken", "auth middleware"],
+        "test/auth/session-token-validator.test.ts": ["validateSessionToken", "expired session token"]
+      },
+      "forbiddenPaths": ["src/render/texture-cache.ts"],
+      "sources": [
+        {"path":"src/auth/session-token-validator.ts","text":"export type SessionClaims = { userId: string; expiresAt: number };\n\nexport function validateSessionToken(token: string): SessionClaims {\n  const claims = decodeSessionToken(token);\n  if (claims.expiresAt <= Date.now()) throw new Error('expired session token');\n  return claims;\n}\n"},
+        {"path":"src/http/auth-middleware.ts","text":"// auth middleware caller for the session token validator\nexport function requireAuth(request: Request) {\n  const token = request.headers.get('authorization') ?? '';\n  return validateSessionToken(token);\n}\n"},
+        {"path":"test/auth/session-token-validator.test.ts","text":"test('expired session token is rejected', () => {\n  expect(() => validateSessionToken(expiredToken())).toThrow('expired session token');\n});\n"},
+        {"path":"src/render/texture-cache.ts","repeat":{"text":"pixel canvas shader raster vector palette frame surface\n","count":180}}
+      ]
+    },
+    {
+      "id": "github-actions-json-failure",
+      "category": "json-heavy-tool-output",
+      "task": "inspect github actions failed job annotations",
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "fixtures/github-actions-failed-job.json": ["failed", "annotations", "TypeError"]
+      },
+      "forbiddenPaths": ["fixtures/weather-snapshot.json"],
+      "sources": [
+        {"path":"fixtures/github-actions-failed-job.json","text":"{\n  \"workflow\": \"MCP CI\",\n  \"job\": \"context-eval\",\n  \"status\": \"failed\",\n  \"conclusion\": \"failure\",\n  \"annotations\": [\n    {\"path\": \"src/context.ts\", \"line\": 44, \"message\": \"TypeError: expected context handle\"},\n    {\"path\": \"test/context.test.ts\", \"line\": 18, \"message\": \"assertion failed\"}\n  ]\n}\n"},
+        {"path":"fixtures/weather-snapshot.json","repeat":{"text":"{\"temperature\":72,\"humidity\":40,\"wind\":5,\"sky\":\"clear\"}\n","count":160}}
+      ]
+    },
+    {
+      "id": "claude-codex-handoff",
+      "category": "cross-agent-handoff",
+      "task": "prepare claude codex payment retry handoff",
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "src/payment/retry.ts": ["retryPayment", "retryDelayMs"],
+        "test/payment/retry.test.ts": ["retryPayment", "retry delay"]
+      },
+      "forbiddenPaths": ["src/maps/terrain.ts"],
+      "handoff": {"fromAgent":"claude","toAgent":"codex","changedPaths":["src/payment/retry.ts"]},
+      "sources": [
+        {"path":"src/payment/retry.ts","text":"export async function retryPayment(paymentId: string, retryDelayMs = 1000) {\n  const payment = await loadPayment(paymentId);\n  return schedulePaymentRetry(payment, retryDelayMs);\n}\n"},
+        {"path":"test/payment/retry.test.ts","text":"test('payment retry delay is preserved', async () => {\n  await retryPayment('pay_123', 50);\n  expect(schedulePaymentRetry).toHaveBeenCalledWith(expect.anything(), 50);\n});\n"},
+        {"path":"src/maps/terrain.ts","repeat":{"text":"mountain valley river plateau forest desert contour elevation\n","count":170}}
+      ]
+    }
+  ]
+}
