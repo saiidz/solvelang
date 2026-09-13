@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { createDynamoSupportAutomationStore } from "../src/support-automation-store.js";
 
 function clientWith(handler) {
@@ -49,4 +49,47 @@ test("revocation removes both credential references and worker index keys", asyn
   assert.match(input.UpdateExpression, /linearCredentialSecretArn/);
   assert.match(input.UpdateExpression, /workerPartition/);
   assert.match(input.UpdateExpression, /workerSort/);
+});
+
+test("expired processing event can be reclaimed only from the exact previous lease", async () => {
+  const conditional = Object.assign(new Error("exists"), { name: "ConditionalCheckFailedException" });
+  const existing = {
+    pk: "ACCOUNT#acct_a",
+    sk: "EVENT#gmail:m1",
+    state: "PROCESSING",
+    claimId: "old_claim",
+    processingUntil: "2026-09-13T21:59:00.000Z",
+  };
+  const client = clientWith((command, index) => {
+    if (index === 0) { assert.ok(command instanceof PutCommand); throw conditional; }
+    if (index === 1) { assert.ok(command instanceof GetCommand); return { Item: existing }; }
+    assert.ok(command instanceof UpdateCommand);
+    return { Attributes: { ...existing, claimId: "new_claim", processingUntil: "2026-09-13T22:05:00.000Z" } };
+  });
+  const store = createDynamoSupportAutomationStore(client, "support-table");
+  const result = await store.claimEvent({
+    accountId: "acct_a",
+    eventId: "gmail:m1",
+    providerMessageHash: "hash",
+    claimId: "new_claim",
+    processingUntil: "2026-09-13T22:05:00.000Z",
+    createdAt: "2026-09-13T21:58:00.000Z",
+    updatedAt: "2026-09-13T22:00:00.000Z",
+  });
+  assert.equal(result.created, true);
+  assert.equal(result.reclaimed, true);
+  const reclaim = client.calls[2].input;
+  assert.match(reclaim.ConditionExpression, /claimId = :previousClaimId/);
+  assert.match(reclaim.ConditionExpression, /processingUntil = :previousProcessingUntil/);
+  assert.equal(reclaim.ExpressionAttributeValues[":previousClaimId"], "old_claim");
+});
+
+test("action records use a separate key prefix so event history queries cannot be starved by actions", async () => {
+  const client = clientWith((command) => {
+    assert.ok(command instanceof PutCommand);
+    return {};
+  });
+  const store = createDynamoSupportAutomationStore(client, "support-table");
+  await store.claimAction({ accountId: "acct_a", eventId: "gmail:m1", actionId: "gmail_reply", createdAt: "2026-09-13T22:00:00Z", claimId: "action_claim" });
+  assert.equal(client.calls[0].input.Item.sk, "ACTION#gmail:m1#gmail_reply");
 });
