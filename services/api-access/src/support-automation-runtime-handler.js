@@ -10,6 +10,8 @@ import { createGmailSupportProvider, createLinearSupportProvider, createSecretsM
 import { createDynamoSupportAutomationStore } from "./support-automation-store.js";
 import { createSupportAutomationService } from "./support-automation.js";
 
+const RUNTIME_MODES = new Set(["api", "worker"]);
+
 function required(environment, name, minimum = 1) {
   const value = environment[name];
   if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`);
@@ -67,14 +69,17 @@ export function createAccountAccessGuardedSupportStore(store, accessReader, { no
 export function parseSupportAutomationRuntimeEnvironment(environment = process.env) {
   const enabled = environment.API_SUPPORT_AUTOMATION_ENABLED === "true";
   const activationEnabled = environment.API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED === "true";
+  const runtimeMode = environment.API_SUPPORT_AUTOMATION_RUNTIME_MODE ?? "api";
+  if (!RUNTIME_MODES.has(runtimeMode)) throw new Error("API_SUPPORT_AUTOMATION_RUNTIME_MODE must be api or worker.");
   if (activationEnabled && !enabled) throw new Error("Support automation activation requires support automation to be enabled.");
   return {
     enabled,
     activationEnabled,
+    runtimeMode,
     siteOrigin: required(environment, "SITE_ORIGIN"),
     supportAutomationTable: enabled ? required(environment, "API_SUPPORT_AUTOMATION_TABLE") : undefined,
     customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
-    customerAuthPepper: enabled ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
+    customerAuthPepper: enabled && runtimeMode === "api" ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
   };
 }
 
@@ -95,23 +100,10 @@ export function createSupportAutomationRuntime({
   }
 
   const dynamo = documentClient ?? DynamoDBDocumentClient.from(new DynamoDBClient({}));
-  const secrets = secretsManager ?? new SecretsManagerClient({});
-  const rawAuthStore = createDynamoCustomerAuthStore(dynamo, parsed.customerAuthTable);
   const accessReader = createDynamoAccountAccessReader(dynamo, { tableName: parsed.customerAuthTable });
-  const guardedAuthStore = createAccessGuardedCustomerAuthStore(rawAuthStore, accessReader);
-  const customerAuth = createCustomerAuthService({
-    store: guardedAuthStore,
-    emailGateway: {
-      async sendMagicLink() {
-        throw new Error("The support-automation runtime cannot send authentication emails.");
-      },
-    },
-    pepper: parsed.customerAuthPepper,
-    siteOrigin: parsed.siteOrigin,
-  });
-
   const supportStore = createDynamoSupportAutomationStore(dynamo, parsed.supportAutomationTable);
   const guardedSupportStore = createAccountAccessGuardedSupportStore(supportStore, accessReader, { logger });
+  const secrets = secretsManager ?? new SecretsManagerClient({});
   const credentialResolver = createSecretsManagerCredentialResolver(secrets);
   const supportAutomation = createSupportAutomationService({
     store: guardedSupportStore,
@@ -121,17 +113,35 @@ export function createSupportAutomationRuntime({
     logger,
   });
 
-  const application = createSupportAutomationApiHandler({
-    enabled: true,
-    supportAutomation,
-    customerAuth,
-    siteOrigin: parsed.siteOrigin,
-    logger,
-  });
+  let application = createSupportAutomationApiHandler({ enabled: false, siteOrigin: parsed.siteOrigin, logger });
+  if (parsed.runtimeMode === "api") {
+    const rawAuthStore = createDynamoCustomerAuthStore(dynamo, parsed.customerAuthTable);
+    const guardedAuthStore = createAccessGuardedCustomerAuthStore(rawAuthStore, accessReader);
+    const customerAuth = createCustomerAuthService({
+      store: guardedAuthStore,
+      emailGateway: {
+        async sendMagicLink() {
+          throw new Error("The support-automation runtime cannot send authentication emails.");
+        },
+      },
+      pepper: parsed.customerAuthPepper,
+      siteOrigin: parsed.siteOrigin,
+    });
+    application = createSupportAutomationApiHandler({
+      enabled: true,
+      supportAutomation,
+      customerAuth,
+      siteOrigin: parsed.siteOrigin,
+      logger,
+    });
+  }
 
   return {
     application,
-    async worker() { return supportAutomation.processTick(10); },
+    async worker() {
+      if (parsed.runtimeMode !== "worker") return { activationEnabled: false, accounts: [] };
+      return supportAutomation.processTick(10);
+    },
     environment: parsed,
   };
 }
