@@ -39,6 +39,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/test/*.test.js",
+    "eval:context": "npm run build && node scripts/run-context-evals.mjs",
     "test:packed": "node scripts/smoke-packed.mjs",
     "test:plugin-roundtrip": "node scripts/smoke-plugin-roundtrip.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
