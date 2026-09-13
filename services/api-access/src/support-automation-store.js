@@ -2,7 +2,7 @@ import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/li
 
 function pk(accountId) { return `ACCOUNT#${accountId}`; }
 function eventSk(eventId) { return `EVENT#${eventId}`; }
-function actionSk(eventId, actionId) { return `EVENT#${eventId}#ACTION#${actionId}`; }
+function actionSk(eventId, actionId) { return `ACTION#${eventId}#${actionId}`; }
 function conditional(error) { return error?.name === "ConditionalCheckFailedException"; }
 
 export function createDynamoSupportAutomationStore(client, tableName, { activeIndexName = "AutomationStateIndex" } = {}) {
@@ -93,19 +93,54 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
       return { created: true, record: item };
     } catch (error) {
       if (!conditional(error)) throw error;
-      const existing = await client.send(new GetCommand({ TableName: tableName, Key: { pk: item.pk, sk: item.sk }, ConsistentRead: true }));
-      return { created: false, record: existing.Item ?? { state: "UNKNOWN" } };
+      const existingResponse = await client.send(new GetCommand({ TableName: tableName, Key: { pk: item.pk, sk: item.sk }, ConsistentRead: true }));
+      const existing = existingResponse.Item;
+      if (!existing) return { created: false, record: { state: "UNKNOWN" } };
+      const leaseExpired = existing.state === "PROCESSING" && typeof existing.processingUntil === "string" && existing.processingUntil <= record.updatedAt;
+      if (!leaseExpired) return { created: false, record: existing };
+      try {
+        const reclaimed = await client.send(new UpdateCommand({
+          TableName: tableName,
+          Key: { pk: item.pk, sk: item.sk },
+          UpdateExpression: "SET claimId = :claimId, processingUntil = :processingUntil, updatedAt = :updatedAt",
+          ConditionExpression: "#state = :processing AND claimId = :previousClaimId AND processingUntil = :previousProcessingUntil",
+          ExpressionAttributeNames: { "#state": "state" },
+          ExpressionAttributeValues: {
+            ":processing": "PROCESSING",
+            ":claimId": record.claimId,
+            ":processingUntil": record.processingUntil,
+            ":updatedAt": record.updatedAt,
+            ":previousClaimId": existing.claimId,
+            ":previousProcessingUntil": existing.processingUntil,
+          },
+          ReturnValues: "ALL_NEW",
+        }));
+        return { created: true, reclaimed: true, record: reclaimed.Attributes };
+      } catch (reclaimError) {
+        if (!conditional(reclaimError)) throw reclaimError;
+        const latest = await client.send(new GetCommand({ TableName: tableName, Key: { pk: item.pk, sk: item.sk }, ConsistentRead: true }));
+        return { created: false, record: latest.Item ?? { state: "UNKNOWN" } };
+      }
     }
   }
 
-  async function finishEvent({ accountId, eventId, state, category, urgency, requiresReview, sensitiveReasons, actions, updatedAt }) {
+  async function finishEvent({ accountId, eventId, claimId, state, category, urgency, requiresReview, sensitiveReasons, actions, updatedAt }) {
     await client.send(new UpdateCommand({
       TableName: tableName,
       Key: { pk: pk(accountId), sk: eventSk(eventId) },
-      UpdateExpression: "SET #state = :state, category = :category, urgency = :urgency, requiresReview = :requiresReview, sensitiveReasons = :sensitiveReasons, actions = :actions, updatedAt = :updatedAt",
+      UpdateExpression: "SET #state = :state, category = :category, urgency = :urgency, requiresReview = :requiresReview, sensitiveReasons = :sensitiveReasons, actions = :actions, updatedAt = :updatedAt REMOVE processingUntil",
       ExpressionAttributeNames: { "#state": "state" },
-      ExpressionAttributeValues: { ":state": state, ":category": category, ":urgency": urgency, ":requiresReview": Boolean(requiresReview), ":sensitiveReasons": sensitiveReasons ?? [], ":actions": actions ?? [], ":updatedAt": updatedAt },
-      ConditionExpression: "attribute_exists(pk)",
+      ExpressionAttributeValues: {
+        ":state": state,
+        ":category": category,
+        ":urgency": urgency,
+        ":requiresReview": Boolean(requiresReview),
+        ":sensitiveReasons": sensitiveReasons ?? [],
+        ":actions": actions ?? [],
+        ":updatedAt": updatedAt,
+        ":claimId": claimId,
+      },
+      ConditionExpression: "attribute_exists(pk) AND claimId = :claimId",
     }));
   }
 
@@ -140,10 +175,9 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
     const response = await client.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: "pk = :pk AND begins_with(sk, :event)",
-      FilterExpression: "recordType = :recordType",
-      ExpressionAttributeValues: { ":pk": pk(accountId), ":event": "EVENT#", ":recordType": "EVENT" },
+      ExpressionAttributeValues: { ":pk": pk(accountId), ":event": "EVENT#" },
       ScanIndexForward: false,
-      Limit: Math.min(Math.max(limit * 3, limit), 150),
+      Limit: Math.min(Math.max(limit, 1), 50),
     }));
     return (response.Items ?? []).filter((item) => item.recordType === "EVENT").slice(0, limit);
   }
@@ -179,14 +213,32 @@ export function createMemorySupportAutomationStore() {
     async listActiveConfigs(limit) { return [...configs.values()].filter((value) => value.automationState === "ACTIVE").slice(0, limit).map((value) => structuredClone(value)); },
     async claimEvent(record) {
       const id = key(record.accountId, record.eventId);
-      if (events.has(id)) return { created: false, record: structuredClone(events.get(id)) };
-      const item = { ...record, recordType: "EVENT", state: "PROCESSING" }; events.set(id, item); return { created: true, record: structuredClone(item) };
+      const existing = events.get(id);
+      if (!existing) {
+        const item = { ...record, recordType: "EVENT", state: "PROCESSING" };
+        events.set(id, item);
+        return { created: true, record: structuredClone(item) };
+      }
+      if (existing.state === "PROCESSING" && existing.processingUntil <= record.updatedAt) {
+        const reclaimed = { ...existing, claimId: record.claimId, processingUntil: record.processingUntil, updatedAt: record.updatedAt };
+        events.set(id, reclaimed);
+        return { created: true, reclaimed: true, record: structuredClone(reclaimed) };
+      }
+      return { created: false, record: structuredClone(existing) };
     },
-    async finishEvent(input) { const id = key(input.accountId, input.eventId); events.set(id, { ...events.get(id), ...input, recordType: "EVENT" }); },
+    async finishEvent(input) {
+      const id = key(input.accountId, input.eventId);
+      const existing = events.get(id);
+      if (!existing || existing.claimId !== input.claimId) throw new Error("Support automation event lease changed concurrently.");
+      const { processingUntil: _processingUntil, ...rest } = existing;
+      events.set(id, { ...rest, ...input, recordType: "EVENT" });
+    },
     async claimAction({ accountId, eventId, actionId, createdAt, claimId }) {
       const id = key(accountId, `${eventId}:${actionId}`);
       if (actions.has(id)) return structuredClone(actions.get(id));
-      const item = { status: "claimed", eventId, actionId, claimId, createdAt, updatedAt: createdAt }; actions.set(id, item); return structuredClone(item);
+      const item = { status: "started", eventId, actionId, claimId, createdAt, updatedAt: createdAt };
+      actions.set(id, item);
+      return { status: "claimed", claimId };
     },
     async finishAction({ accountId, eventId, actionId, status, outcome, updatedAt }) {
       const id = key(accountId, `${eventId}:${actionId}`); actions.set(id, { ...actions.get(id), status, ...(outcome === undefined ? {} : { outcome }), updatedAt });
