@@ -1,75 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JsonLd } from "../../components/JsonLd";
+import { WorkflowAuditAgent } from "./WorkflowAuditAgent";
 
 export const metadata: Metadata = {
-  title: "Workflow X-Ray Audit",
+  title: "Workflow Audit Agent",
   description:
-    "Send one messy workflow and get next steps for turning it into a readable SolveLang workflow map, draft, and automation path.",
+    "Describe one messy workflow and let SolveLang map the trigger, decisions, automation path, safety gates, and readable workflow draft instantly in your browser.",
 };
-
-const workflowAuditGmailUrl =
-  "https://mail.google.com/mail/?view=cm&fs=1&to=hello@solve-lang.com&su=Workflow%20audit";
-
-const whatToSend = [
-  {
-    question: "What workflow do you want automated?",
-    example:
-      "When a customer emails support, classify the issue and create the right follow-up task.",
-  },
-  {
-    question: "What tools do you use today?",
-    example:
-      "Gmail, Slack, Notion, Airtable, Linear, HubSpot, Google Sheets, Trello, or similar tools.",
-  },
-  {
-    question: "What starts the workflow?",
-    example:
-      "A new email, form submission, Slack message, new lead, customer request, or daily report.",
-  },
-  {
-    question: "What decisions happen manually?",
-    example:
-      "Priority, category, owner, next step, escalation, or follow-up timing.",
-  },
-  {
-    question: "What should happen automatically?",
-    example:
-      "Create a task, draft a reply, notify a channel, update a sheet, tag a lead, or summarize status.",
-  },
-  {
-    question: "What output do you want?",
-    example:
-      "A readable workflow script, a task list, a routing map, or a simple implementation plan.",
-  },
-];
-
-const goodFits = [
-  "Support triage",
-  "Lead qualification",
-  "Intake-to-task routing",
-  "Founder inbox cleanup",
-  "Customer follow-up routing",
-  "Internal ops status reports",
-  "Manual spreadsheet-to-task workflows",
-  "Repetitive handoff workflows between tools",
-];
-
-const notGoodFits = [
-  "Large enterprise systems with complex approval chains",
-  "Regulated workflows that require legal or compliance review",
-  "Fully autonomous financial, medical, or legal decisions",
-  "Anything requiring production access before the workflow is mapped",
-];
-
-const deliverables = [
-  "A plain-English workflow map",
-  "A readable SolveLang-style workflow draft",
-  "A suggested automation path",
-  "A list of tools and integrations needed",
-  "A simple next-step recommendation",
-  "An optional custom setup quote if it makes sense",
-];
 
 const auditBreadcrumbJsonLd = {
   "@context": "https://schema.org",
@@ -84,235 +22,180 @@ const auditBreadcrumbJsonLd = {
     {
       "@type": "ListItem",
       position: 2,
-      name: "Workflow X-Ray Audit",
+      name: "Workflow Audit Agent",
       item: "https://www.solve-lang.com/audit/",
     },
   ],
 };
 
+const outcomes = [
+  ["Trigger map", "What starts the workflow and what context arrives with it."],
+  ["Decision map", "Which judgments are still manual: priority, routing, ownership, escalation, or follow-up."],
+  ["Automation plan", "Which steps can run automatically and which should stay approval-gated."],
+  ["Tool map", "The systems already involved so the workflow can be connected without inventing a new process."],
+  ["Readable draft", "A SolveLang-style workflow draft that operators can inspect before live integrations are connected."],
+  ["Safety boundary", "A clear split between automatic actions and sensitive actions that require review."],
+];
+
+const examples = [
+  {
+    title: "Support triage",
+    text: "Classify incoming requests, assign an owner, draft a reply, create the task, and escalate only risky cases.",
+  },
+  {
+    title: "Lead routing",
+    text: "Inspect a new lead, score fit, route it to the right owner, update the CRM, and prepare the next message.",
+  },
+  {
+    title: "Founder inbox",
+    text: "Separate noise from action, summarize the important thread, create follow-ups, and surface only decisions that need you.",
+  },
+  {
+    title: "Ops handoffs",
+    text: "Turn recurring spreadsheet, Slack, and task-tool handoffs into explicit rules with visible ownership and next steps.",
+  },
+];
+
+const guardrails = [
+  "No email is required to run the audit.",
+  "No production account is connected by the page.",
+  "No external message, task, or mutation is executed from the preview.",
+  "Sensitive financial, account, security, legal, and medical actions remain approval-gated.",
+];
+
 export default function AuditPage() {
   return (
     <main className="min-h-screen bg-white text-slate-900">
       <JsonLd id="audit-breadcrumb-json-ld" data={auditBreadcrumbJsonLd} />
-      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
-        <div className="absolute inset-0 opacity-40">
-          <div className="absolute left-1/2 top-0 h-96 w-96 -translate-x-1/2 rounded-full bg-slate-200 blur-3xl" />
-        </div>
 
+      <section className="relative overflow-hidden border-b border-slate-200 bg-slate-950 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(148,163,184,0.16),transparent_30%)]" />
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
-          <div className="max-w-4xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Workflow Audit Intake
-            </p>
-            <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-6xl">
-              Send us one messy workflow. We&apos;ll map the automation path.
+          <div className="max-w-5xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              Workflow Audit Agent
+            </div>
+            <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-tight sm:text-6xl lg:text-7xl">
+              Stop emailing us your workflow. Let the agent map it now.
             </h1>
-            <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">
-              Tell us what your team handles manually today - support tickets,
-              leads, intake, follow-ups, status updates, or internal routing -
-              and we&apos;ll help turn it into a readable SolveLang workflow.
+            <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-300 sm:text-xl">
+              Paste the messy process directly into SolveLang. The page identifies the trigger, decisions, tools, automation path, and safety gates immediately — without opening Gmail, copying an address, or waiting for a manual reply.
             </p>
-            <div className="mt-10 flex flex-col gap-4 sm:flex-row">
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <a
-                href={workflowAuditGmailUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-2xl bg-slate-900 px-6 py-3 text-center text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
+                href="#audit-agent"
+                className="rounded-2xl bg-white px-6 py-3 text-center text-sm font-semibold text-slate-950 shadow-xl transition hover:-translate-y-0.5"
               >
-                Open Gmail draft
+                Audit my workflow now
               </a>
               <Link
-                href="/run/"
-                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+                href="/demo/support-triage/"
+                className="rounded-2xl border border-white/20 bg-white/5 px-6 py-3 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10"
               >
-                Try Browser Preview
+                See automated support triage
               </Link>
               <Link
-                href="/demo/support-triage/"
-                className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-center text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
+                href="/run/"
+                className="rounded-2xl border border-white/20 bg-white/5 px-6 py-3 text-center text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10"
               >
-                See support triage demo
+                Open Browser Preview
               </Link>
-            </div>
-            <div className="mt-4 max-w-2xl text-sm leading-6 text-slate-500">
-              <p>
-                Or copy:{" "}
-                <span className="select-all font-medium text-slate-800">
-                  hello@solve-lang.com
-                </span>
-                .
-              </p>
-              <p>Mail links require a default email app. You can also copy the address.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              What to send
-            </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Give us the raw process, not a polished spec.
+      <section className="mx-auto max-w-7xl px-6 py-16 lg:px-8 lg:py-20">
+        <WorkflowAuditAgent />
+      </section>
+
+      <section className="border-y border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">What the agent gives you</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">
+              A useful automation map before anything touches production.
             </h2>
-            <p className="mt-6 text-lg leading-8 text-slate-600">
-              A useful audit starts with the real handoff: what arrives, who
-              looks at it, what decisions they make, and what should happen next.
+            <p className="mt-5 text-lg leading-8 text-slate-600">
+              The point of the audit is not to make you write a perfect specification. It is to convert the raw process you already understand into something explicit enough to automate safely.
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {whatToSend.map((item) => (
-              <div
-                key={item.question}
-                className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm"
-              >
-                <h3 className="text-lg font-semibold">{item.question}</h3>
-                <p className="mt-3 leading-7 text-slate-600">Example: {item.example}</p>
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {outcomes.map(([title, text], index) => (
+              <div key={title} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">0{index + 1}</p>
+                <h3 className="mt-4 text-xl font-semibold tracking-tight">{title}</h3>
+                <p className="mt-3 leading-7 text-slate-600">{text}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-slate-50">
-        <div className="mx-auto grid max-w-7xl gap-8 px-6 py-20 lg:grid-cols-2 lg:px-8">
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Good fit workflows
-            </p>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
-              Practical founder/operator workflows
-            </h2>
-            <ul className="mt-8 grid gap-3 text-slate-700 sm:grid-cols-2">
-              {goodFits.map((fit) => (
-                <li key={fit} className="flex gap-3">
-                  <span className="mt-2 h-2 w-2 rounded-full bg-slate-900" />
-                  <span>{fit}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Not a good fit yet
-            </p>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight">
-              Early beta boundaries
-            </h2>
-            <ul className="mt-8 space-y-3 text-slate-700">
-              {notGoodFits.map((fit) => (
-                <li key={fit} className="flex gap-3">
-                  <span className="mt-2 h-2 w-2 rounded-full bg-slate-400" />
-                  <span>{fit}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
       <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-[1fr_0.9fr] lg:items-start">
+        <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-              What you&apos;ll get back
-            </p>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Use cases</p>
             <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              A clear next step before any paid build work.
+              Start with work that already feels repetitive.
             </h2>
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              Most first workflow audits start as a small fixed-scope setup or
-              implementation plan. If the workflow is a fit, we&apos;ll suggest a
-              clear next step before any paid work.
-            </p>
-            <p className="mt-4 text-base leading-7 text-slate-600">
-              Early custom setup is typically scoped per workflow.
+              SolveLang is strongest when people already know the desired outcome but the process is trapped in inboxes, chats, spreadsheets, and repeated judgment calls.
             </p>
           </div>
-
-          <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-8 shadow-sm">
-            <ul className="space-y-4">
-              {deliverables.map((deliverable) => (
-                <li key={deliverable} className="flex gap-3 text-slate-700">
-                  <span className="mt-2 h-2 w-2 rounded-full bg-slate-900" />
-                  <span>{deliverable}</span>
-                </li>
-              ))}
-            </ul>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {examples.map((item) => (
+              <div key={item.title} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <p className="mt-3 leading-7 text-slate-600">{item.text}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       <section className="border-y border-slate-200 bg-slate-950 text-white">
-        <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">
-              Example email
-            </p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Start with a short, plain note.
-            </h2>
-            <p className="mt-6 text-lg leading-8 text-slate-300">
-              Copy this structure and replace the bracketed parts with your real
-              process. Rough notes are fine.
-            </p>
-          </div>
-
-          <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl">
-            <pre className="overflow-x-auto whitespace-pre-wrap p-6 text-sm leading-7 text-slate-100">
-{`Subject: Workflow audit
-
-Hi SolveLang,
-
-I want to automate this workflow:
-
-Every time [trigger happens], we currently [manual process].
-The hardest part is [decision/routing/follow-up].
-We use [tools].
-The output I want is [task/email/summary/update].
-Success would look like [result].
-
-Thanks.`}
-            </pre>
+        <div className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Automation, not recklessness</p>
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                The agent should remove manual work without hiding the safety boundary.
+              </h2>
+              <p className="mt-6 text-lg leading-8 text-slate-300">
+                Routine classification, drafting, routing, and task planning can be automated. Sensitive decisions stay visible and approval-gated until a production integration is intentionally configured.
+              </p>
+            </div>
+            <div className="grid gap-3">
+              {guardrails.map((item) => (
+                <div key={item} className="flex gap-4 rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-xs font-bold text-emerald-300">✓</span>
+                  <p className="leading-7 text-slate-200">{item}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-6 py-20 text-center lg:px-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-          Start with one workflow
-        </p>
-        <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
-          Send the workflow you want mapped.
+      <section className="mx-auto max-w-6xl px-6 py-20 text-center lg:px-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">No inbox required</p>
+        <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-5xl">
+          Put the workflow into the agent, not into an email draft.
         </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-600">
-          We&apos;ll reply with next steps for turning it into a readable
-          SolveLang workflow.
+        <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-600">
+          The audit is now the product experience itself: describe the process, inspect the map, refine the rules, and move to live integrations only when you are ready.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-          <a
-            href={workflowAuditGmailUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-medium text-white shadow-lg transition hover:-translate-y-0.5"
-          >
-            Open Gmail draft
+          <a href="#audit-agent" className="rounded-2xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:-translate-y-0.5">
+            Run the audit
           </a>
-          <Link
-            href="/"
-            className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-900 shadow-sm transition hover:-translate-y-0.5"
-          >
+          <Link href="/" className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:-translate-y-0.5">
             Back to homepage
           </Link>
         </div>
-        <p className="mt-5 text-sm leading-6 text-slate-500">
-          Or copy:{" "}
-          <span className="select-all font-medium text-slate-800">hello@solve-lang.com</span>
-        </p>
       </section>
     </main>
   );
