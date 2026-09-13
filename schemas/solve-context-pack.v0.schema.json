@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solve-lang.com/schemas/solve-context-pack.v0.schema.json",
+  "title": "Solve Context Pack v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "packId",
+    "taskSha256",
+    "budgetBytes",
+    "selectedBytes",
+    "truncated",
+    "omittedCandidates",
+    "entries"
+  ],
+  "properties": {
+    "schema": { "const": "solvelang.context.pack.v0" },
+    "packId": { "type": "string", "pattern": "^scp_[a-f0-9]{32}$" },
+    "taskSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "budgetBytes": { "type": "integer", "minimum": 1024, "maximum": 524288 },
+    "selectedBytes": { "type": "integer", "minimum": 0, "maximum": 524288 },
+    "truncated": { "type": "boolean" },
+    "omittedCandidates": { "type": "integer", "minimum": 0 },
+    "entries": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "path",
+        "startLine",
+        "endLine",
+        "sourceSha256",
+        "excerptSha256",
+        "bytes",
+        "score",
+        "reasons",
+        "content"
+      ],
+      "properties": {
+        "handle": { "type": "string", "pattern": "^ctx_[a-f0-9]{32}$" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"
+        },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "sourceSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "excerptSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "bytes": { "type": "integer", "minimum": 1, "maximum": 2097152 },
+        "score": { "type": "number", "minimum": 0 },
+        "reasons": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "uniqueItems": true
+        },
+        "content": { "type": "string" }
+      }
+    }
+  }
+}
