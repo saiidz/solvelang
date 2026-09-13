@@ -5,6 +5,7 @@ const ALLOWED_ACTIONS = new Set(["create_linear_issue", "send_reply"]);
 const SECRET_ARN = /^arn:[a-z0-9-]+:secretsmanager:[a-z0-9-]+:\d{12}:secret:solvelang\/support-automation\/[A-Za-z0-9/_+=.@-]+$/;
 const MAX_MESSAGE_BYTES = 20_000;
 const DEFAULT_POLICY_VERSION = "support-v1";
+const SUPPORTED_POLICY_VERSIONS = new Set([DEFAULT_POLICY_VERSION]);
 const EVENT_LEASE_MS = 5 * 60 * 1000;
 const TERMINAL_EVENT_STATES = new Set(["PROCESSED", "REVIEW_REQUIRED", "OUTCOME_UNKNOWN", "STOPPED"]);
 
@@ -30,6 +31,14 @@ function cleanSecretArn(value, label, accountId) {
     throw new ApiAccessError(400, "invalid_support_automation_secret_ref", `${label} must reference the authenticated account's scoped support-automation secret path.`);
   }
   return arn;
+}
+
+function cleanPolicyVersion(value) {
+  const version = cleanText(value ?? DEFAULT_POLICY_VERSION, "Policy version", 80);
+  if (!SUPPORTED_POLICY_VERSIONS.has(version)) {
+    throw new ApiAccessError(400, "unsupported_support_automation_policy_version", "The requested support automation policy version is not supported.");
+  }
+  return version;
 }
 
 function cleanAllowedActions(value) {
@@ -63,7 +72,7 @@ function normalizeConfiguration(accountId, input, timestamp, existing) {
     taskProvider: "linear",
     linearCredentialSecretArn: cleanSecretArn(input.linearCredentialSecretArn, "Linear credential secret reference", accountId),
     linearTeamId: cleanText(input.linearTeamId, "Linear team ID", 128),
-    policyVersion: cleanText(input.policyVersion ?? DEFAULT_POLICY_VERSION, "Policy version", 80),
+    policyVersion: cleanPolicyVersion(input.policyVersion),
     allowedActions: cleanAllowedActions(input.allowedActions ?? ["create_linear_issue", "send_reply"]),
     automationState: "PAUSED",
     revision: (existing?.revision ?? 0) + 1,
@@ -84,7 +93,10 @@ function redactMessageText(value) {
     .trim();
 }
 
-function classify(message) {
+function classify(message, policyVersion = DEFAULT_POLICY_VERSION) {
+  if (!SUPPORTED_POLICY_VERSIONS.has(policyVersion)) {
+    throw new ApiAccessError(409, "unsupported_support_automation_policy_version", "The configured support automation policy version is not supported.");
+  }
   const text = `${message.subject ?? ""}\n${message.text ?? ""}`;
   const sensitiveReasons = [];
   const tests = [
@@ -99,7 +111,7 @@ function classify(message) {
     : /\b(?:billing|invoice|payment|charge|refund)\b/i.test(text) ? "billing"
     : "general_support";
   const urgency = /\b(?:urgent|asap|blocked|outage|emergency)\b|\b(?:service|site|system|app)\s+(?:is\s+)?down\b/i.test(text) ? "urgent" : "normal";
-  return { category, urgency, sensitiveReasons, requiresReview: sensitiveReasons.length > 0 };
+  return { category, urgency, sensitiveReasons, requiresReview: sensitiveReasons.length > 0, policyVersion };
 }
 
 function replyFor(classification) {
@@ -169,6 +181,7 @@ export function createSupportAutomationService({
     const config = await store.getConfig(accountId);
     if (!config) throw new ApiAccessError(404, "support_automation_not_configured", "Support automation is not configured.");
     if (config.automationState === "REVOKED") throw new ApiAccessError(409, "support_automation_revoked", "Revoked support automation credentials must be configured again before activation.");
+    if (!SUPPORTED_POLICY_VERSIONS.has(config.policyVersion)) throw new ApiAccessError(409, "unsupported_support_automation_policy_version", "The configured support automation policy version is not supported.");
     const updated = await store.setState(accountId, config.revision, "ACTIVE", new Date(now()).toISOString());
     return { automationState: updated.automationState, revision: updated.revision, resumed: true };
   }
@@ -191,6 +204,8 @@ export function createSupportAutomationService({
       category: record.category,
       urgency: record.urgency,
       requiresReview: Boolean(record.requiresReview),
+      sensitiveReasons: record.sensitiveReasons ?? [],
+      policyVersion: record.policyVersion,
       actions: record.actions ?? [],
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -200,7 +215,7 @@ export function createSupportAutomationService({
 
   async function currentActiveConfig(accountId, expectedRevision) {
     const latest = await store.getConfig(accountId);
-    if (!latest || latest.automationState !== "ACTIVE" || latest.revision !== expectedRevision) return undefined;
+    if (!latest || latest.automationState !== "ACTIVE" || latest.revision !== expectedRevision || !SUPPORTED_POLICY_VERSIONS.has(latest.policyVersion)) return undefined;
     return latest;
   }
 
@@ -254,7 +269,7 @@ export function createSupportAutomationService({
     });
     if (!claimed.created) return { eventId, state: claimed.record.state, duplicate: true };
     const activeClaimId = claimed.record?.claimId ?? claimId;
-    const classification = classify({ ...message, text: sanitized });
+    const classification = classify({ ...message, text: sanitized }, config.policyVersion);
     if (classification.requiresReview) {
       await finishEvent(config, eventId, activeClaimId, classification, "REVIEW_REQUIRED", []);
       return { eventId, state: "REVIEW_REQUIRED", duplicate: false, reclaimed: Boolean(claimed.reclaimed) };
