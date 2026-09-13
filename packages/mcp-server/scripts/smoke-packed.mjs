@@ -11,6 +11,8 @@ const manifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"
 const expectedFiles = [
   "package/LICENSE",
   "package/README.md",
+  "package/dist/src/context-handoff.d.ts",
+  "package/dist/src/context-handoff.js",
   "package/dist/src/context-pack.d.ts",
   "package/dist/src/context-pack.js",
   "package/dist/src/context-tools.d.ts",
@@ -151,6 +153,8 @@ try {
   assert.match(installedContextTools, /solvelang_context_plan/, "packed consumer must include the context-plan MCP tool");
   assert.match(installedContextTools, /solvelang_context_pack/, "packed consumer must include the context-pack MCP tool");
   assert.match(installedContextTools, /solvelang_context_retrieve/, "packed consumer must include exact context retrieval");
+  assert.match(installedContextTools, /solvelang_context_handoff/, "packed consumer must include Claude/Codex handoff creation");
+  assert.match(installedContextTools, /solvelang_context_handoff_validate/, "packed consumer must include handoff freshness validation");
   assert.match(installedContextTools, /solvelang_context_capabilities/, "packed consumer must expose Solve Context boundaries");
 
   const installedContextWorkspace = await readFile(
@@ -159,6 +163,14 @@ try {
   );
   assert.match(installedContextWorkspace, /source changed after the handle was created/, "packed context retrieval must reject stale source identity");
   assert.match(installedContextWorkspace, /sensitive path/, "packed context runtime must keep the sensitive-path gate");
+
+  const installedContextHandoff = await readFile(
+    path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "context-handoff.js"),
+    "utf8",
+  );
+  assert.match(installedContextHandoff, /content-addressed/, "packed handoff runtime must retain the content-freshness contract");
+  assert.match(installedContextHandoff, /not an authentication signature/, "packed handoff runtime must retain the checksum trust caveat");
+  assert.match(installedContextHandoff, /sensitive path/, "packed handoff runtime must deny likely secret paths");
 
   const installedRemote = await readFile(
     path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "remote.js"),
