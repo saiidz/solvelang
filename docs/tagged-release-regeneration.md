@@ -28,14 +28,17 @@ For the currently implemented Linux x86_64 release target, the workflow:
 3. runs the repository release guard tests;
 4. regenerates the candidate artifact/checksum/provenance twice into fresh directories;
 5. requires both generations to be byte-identical;
-6. verifies the artifact provenance source commit and version against the annotated-tag evidence; and
-7. uploads only short-lived, **non-publishable** regeneration evidence.
+6. verifies the artifact provenance source commit and version against the annotated-tag evidence;
+7. extracts only the already-audited single-file archive and requires the packaged `solvec version` stdout to equal exactly `solvec <provenance version>` with no stderr; and
+8. uploads only short-lived, **non-publishable** regeneration evidence.
+
+The packaged-version check is part of the same verifier used by pre-tag candidate CI and tagged regeneration, so an artifact whose embedded CLI version drifts from its name/provenance fails before it can qualify as release evidence.
 
 The workflow has read-only repository permission and disables persisted checkout credentials. It has no release-write, tag-write, package-write, deployment, billing, provider, or production authority.
 
 ## What this closes
 
-This closes the repository-side gap where pre-tag reproducibility existed but there was no deterministic proof that an existing annotated release tag could be rebound to the exact Cargo version/source commit and regenerated without using publication authority.
+This closes the repository-side gap where pre-tag reproducibility existed but there was no deterministic proof that an existing annotated release tag could be rebound to the exact Cargo version/source commit and regenerated without using publication authority. It also closes the repository-side packaged-version identity gap for the currently supported Linux x86_64 artifact: tag version, Cargo version, provenance version, artifact name, and packaged `solvec version` output must agree.
 
 It does **not** close the full release milestone. Before a public release can be claimed, the release contract still requires current truth/spec/changelog/release-note review, fresh candidate security and exact-head validation, version selection, required exact-platform evidence, and an owner-authorized publication step that regenerates/validates the final assets without silently replacing historical bytes.
 
