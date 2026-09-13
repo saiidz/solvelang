@@ -59,7 +59,8 @@ try {
   const workspaceRoot = path.join(temporaryRoot, "workspace");
   await mkdir(consumerRoot);
   await mkdir(path.join(workspaceRoot, "src"), { recursive: true });
-  await writeFile(path.join(workspaceRoot, "src", "invoice.ts"), "export function retryInvoice() {\n  return schedulePaymentRetry();\n}\n", "utf8");
+  const invoicePath = path.join(workspaceRoot, "src", "invoice.ts");
+  await writeFile(invoicePath, "export function retryInvoice() {\n  return schedulePaymentRetry();\n}\n", "utf8");
   await writeFile(path.join(consumerRoot, "package.json"), '{"private":true,"type":"module"}\n');
 
   const tarballPath = path.join(temporaryRoot, packResult.filename);
@@ -111,6 +112,8 @@ try {
     "solvelang_context_plan",
     "solvelang_context_pack",
     "solvelang_context_retrieve",
+    "solvelang_context_handoff",
+    "solvelang_context_handoff_validate",
     "solvelang_context_capabilities",
   ]) {
     const tool = tools.get(requiredName);
@@ -162,21 +165,64 @@ try {
   assert.match(entry.handle, /^ctx_[a-f0-9]{32}$/);
   assert.match(entry.content, /retryInvoice/);
 
+  const contextReference = {
+    handle: entry.handle,
+    path: entry.path,
+    startLine: entry.startLine,
+    endLine: entry.endLine,
+    sourceSha256: entry.sourceSha256,
+    excerptSha256: entry.excerptSha256,
+  };
   const retrievalResult = await client.callTool({
     name: "solvelang_context_retrieve",
-    arguments: {
-      handle: entry.handle,
-      path: entry.path,
-      startLine: entry.startLine,
-      endLine: entry.endLine,
-      sourceSha256: entry.sourceSha256,
-      excerptSha256: entry.excerptSha256,
-    },
+    arguments: contextReference,
   });
   const retrieval = JSON.parse(toolText(retrievalResult, "Solve Context retrieval"));
   assert.equal(retrieval.schema, "solvelang.context.retrieval.v0");
   assert.equal(retrieval.content, entry.content, "retrieval must reproduce the exact packed excerpt");
   assert.equal(retrieval.handle, entry.handle);
+
+  const handoffResult = await client.callTool({
+    name: "solvelang_context_handoff",
+    arguments: {
+      fromAgent: "claude",
+      toAgent: "codex",
+      goal: "Finish the invoice payment retry fix.",
+      decisions: ["Keep retry state local to the invoice module."],
+      unresolvedQuestions: ["Does the timeout path need an integration test?"],
+      changedPaths: ["src/invoice.ts"],
+      tests: [{ label: "invoice unit tests", status: "passed", evidence: "smoke fixture" }],
+      context: [contextReference],
+    },
+  });
+  const handoff = JSON.parse(toolText(handoffResult, "Solve Context handoff"));
+  assert.equal(handoff.schema, "solvelang.context.handoff.v0");
+  assert.equal(handoff.fromAgent, "claude");
+  assert.equal(handoff.toAgent, "codex");
+  assert.match(handoff.handoffId, /^sch_[a-f0-9]{32}$/);
+  assert.equal(JSON.stringify(handoff).includes("schedulePaymentRetry"), false, "handoff must transfer provenance instead of source bodies");
+
+  const handoffValidationResult = await client.callTool({
+    name: "solvelang_context_handoff_validate",
+    arguments: { handoff },
+  });
+  const handoffValidation = JSON.parse(toolText(handoffValidationResult, "Solve Context handoff validation"));
+  assert.equal(handoffValidation.schema, "solvelang.context.handoff-validation.v0");
+  assert.equal(handoffValidation.valid, true);
+  assert.equal(handoffValidation.integrityValid, true);
+  assert.equal(handoffValidation.contentFresh, true);
+
+  await writeFile(invoicePath, "export function retryInvoice() {\n  return schedulePaymentRetryWithBackoff();\n}\n", "utf8");
+  const staleValidationResult = await client.callTool({
+    name: "solvelang_context_handoff_validate",
+    arguments: { handoff },
+  });
+  const staleValidation = JSON.parse(toolText(staleValidationResult, "stale Solve Context handoff validation"));
+  assert.equal(staleValidation.integrityValid, true, "source drift must not change the transferred handoff checksum");
+  assert.equal(staleValidation.contentFresh, false, "receiver must detect workspace drift after the handoff was created");
+  assert.equal(staleValidation.valid, false);
+  assert.ok(staleValidation.staleChangedSources.length >= 1);
+  assert.ok(staleValidation.staleContextReferences.length >= 1);
 
   console.log(`SolveLang Codex/Claude plugin MCP roundtrip PASS at ${packageManifest.name}@${packageManifest.version}`);
 } finally {
