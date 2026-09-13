@@ -1,9 +1,11 @@
+import { serializeJsonLd } from "./jsonLdSerializer.mjs";
+
 export function JsonLd({ data, id }: { data: unknown; id?: string }) {
   return (
     <script
       id={id}
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }}
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}
     />
   );
 }
