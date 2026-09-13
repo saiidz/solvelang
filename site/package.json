@@ -5,11 +5,14 @@
   "scripts": {
     "predev": "node qa/prepare-i18n-preview.mjs",
     "dev": "next dev",
-    "prebuild": "node qa/prepare-i18n-preview.mjs && node qa/verify-wasm-preview.mjs",
+    "prebuild": "node qa/prepare-i18n-preview.mjs && node qa/verify-wasm-preview.mjs && npm run test:public",
     "build": "next build",
+    "postbuild": "node --test qa/public-export.test.mjs",
     "verify:i18n-export": "node qa/verify-i18n-export.mjs",
     "start": "next start",
     "lint": "eslint",
+    "test:public": "tsc -p tsconfig.public-tests.json && node --test qa/public-site.test.mjs",
+    "test:browser": "node qa/public-browser-smoke.mjs",
     "test:seo": "node --test qa/seo-contract.test.mjs qa/jsonld-security.test.mjs qa/server-audit-collector-contract.test.mjs qa/production-operations-contract.test.mjs",
     "test:studio": "tsc -p tsconfig.studio-tests.json && node --test --test-reporter=dot .studio-test-dist/app/studio/core/*.test.js .studio-test-dist/app/check/core/*.test.js .studio-test-dist/app/repository-audit/core/*.test.js .studio-test-dist/app/server-audit/core/*.test.js .studio-test-dist/app/account/core/*.test.js .studio-test-dist/app/solve-graph/core/*.test.js .studio-test-dist/app/run/*.test.js"
   },
