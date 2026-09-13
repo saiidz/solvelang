@@ -160,7 +160,7 @@ export function createMemorySupportAutomationStore() {
       const updated = { ...rest, automationState: "REVOKED", updatedAt, revision: existing.revision + 1 };
       configs.set(accountId, updated); return structuredClone(updated);
     },
-    async listActiveConfigs(limit) { return [...configs.values()].filter((value) => value.automationState === "ACTIVE").slice(0, limit).map(structuredClone); },
+    async listActiveConfigs(limit) { return [...configs.values()].filter((value) => value.automationState === "ACTIVE").slice(0, limit).map((value) => structuredClone(value)); },
     async claimEvent(record) {
       const id = key(record.accountId, record.eventId);
       if (events.has(id)) return { created: false, record: structuredClone(events.get(id)) };
@@ -175,7 +175,7 @@ export function createMemorySupportAutomationStore() {
     async finishAction({ accountId, eventId, actionId, status, outcome, updatedAt }) {
       const id = key(accountId, `${eventId}:${actionId}`); actions.set(id, { ...actions.get(id), status, ...(outcome === undefined ? {} : { outcome }), updatedAt });
     },
-    async listEvents(accountId, limit) { return [...events.values()].filter((event) => event.accountId === accountId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit).map(structuredClone); },
+    async listEvents(accountId, limit) { return [...events.values()].filter((event) => event.accountId === accountId).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit).map((event) => structuredClone(event)); },
     _configs: configs, _events: events, _actions: actions,
   };
 }
