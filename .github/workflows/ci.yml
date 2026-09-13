@@ -123,6 +123,9 @@ jobs:
       - name: Run deterministic Studio and preflight tests
         run: npm run test:studio
 
+      - name: Run SEO and production-operations contract tests
+        run: npm run test:seo
+
       - name: Verify static browser runtime package
         run: node --test qa/wasm-preview-package.test.mjs
 
