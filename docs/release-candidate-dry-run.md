@@ -51,7 +51,7 @@ The archive contains the executable `solvec` binary. Tar ordering, owner/group, 
 
 It is explicitly marked `publishable: false` because pre-tag candidate bytes are dry-run evidence only.
 
-The verifier fails closed on malformed source identity, source/check-out mismatch when an expected SHA is supplied, invalid provenance schema/kind, platform drift, archive-name drift, unexpected files, checksum mismatch, or extra candidate files. It extracts the archive and smoke-tests the packaged binary with `solvec help`.
+The verifier fails closed on malformed source identity, source/check-out mismatch when an expected SHA is supplied, invalid provenance schema/kind, platform drift, archive-name drift, unexpected files, checksum mismatch, or extra candidate files. It extracts the audited single-file archive, smoke-tests `solvec help`, and requires packaged `solvec version` stdout to equal exactly `solvec <provenance version>` with no stderr. This binds the binary's CLI version identity to Cargo/provenance/artifact naming rather than trusting metadata alone.
 
 ## Hosted validation
 
@@ -77,8 +77,7 @@ This dry run does **not** implement final publication. It does not prove:
 - that an annotated release tag exists;
 - that final artifacts were regenerated from a clean checkout of that tag;
 - macOS ARM64 or Windows x64 compatibility;
-- a canonical `solvec version` CLI contract;
 - release-note/upgrade compatibility review; or
 - any production, customer, billing, provider, queue, Admin, or infrastructure state.
 
-A future tagged-release workflow must start from the exact annotated tag, regenerate final artifacts/checksums/provenance, verify the declared platform matrix, and only then publish versioned release assets. Adding signing or stronger supply-chain attestations requires a separate security/key-custody decision.
+The repository now has a separate read-only tagged-release regeneration gate documented in [`tagged-release-regeneration.md`](tagged-release-regeneration.md). That gate starts from an existing annotated tag, exact-checks the tag/Cargo/source binding, regenerates Linux x86_64 evidence twice, and reuses this verifier's packaged-version contract. It still does not publish anything. Public release publication, additional platform claims, and any signing/attestation key-custody decision remain separate owner-controlled release work.
