@@ -143,7 +143,7 @@ export function createGmailSupportProvider({ credentialResolver, fetchImpl = fet
       return { id };
     },
     async sendReply({ credentialSecretArn, mailbox, threadId, to, subject, text, inReplyTo }) {
-      const headers = [`To: ${cleanAddress(to)}`, `Subject: ${String(subject).replace(/[\r\n]/g, " ")}`, "Content-Type: text/plain; charset=utf-8"];
+      const headers = [`From: ${cleanAddress(mailbox)}`, `To: ${cleanAddress(to)}`, `Subject: ${String(subject).replace(/[\r\n]/g, " ")}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=utf-8"];
       if (inReplyTo) headers.push(`In-Reply-To: ${String(inReplyTo).replace(/[\r\n]/g, " ")}`, `References: ${String(inReplyTo).replace(/[\r\n]/g, " ")}`);
       const raw = base64UrlEncode(`${headers.join("\r\n")}\r\n\r\n${text}`);
       const body = await request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/messages/send`, { method: "POST", body: JSON.stringify({ raw, threadId }) });
