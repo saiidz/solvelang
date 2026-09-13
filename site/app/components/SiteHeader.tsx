@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const primaryLinks = [
   ["Audit", "/audit/"],
@@ -10,7 +13,21 @@ const primaryLinks = [
   ["Status", "/status/"],
 ] as const;
 
+const selfNavigatedRoutes = new Set([
+  "/",
+  "/about/",
+  "/api-pricing/",
+  "/check/",
+  "/repository-audit/",
+  "/run/",
+  "/studio/",
+]);
+
 export function SiteHeader() {
+  const pathname = usePathname();
+
+  if (selfNavigatedRoutes.has(pathname)) return null;
+
   return (
     <header className="sticky top-0 z-[100] border-b border-slate-200/90 bg-white/95 backdrop-blur-xl">
       <nav className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-5 py-3 sm:px-8" aria-label="Primary navigation">
