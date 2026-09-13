@@ -18,10 +18,7 @@ function shared(environment) {
 }
 
 function usage(environment) {
-  return {
-    usageTable: required(environment, "API_USAGE_TABLE"),
-    idempotencyTable: required(environment, "API_USAGE_IDEMPOTENCY_TABLE"),
-  };
+  return { usageTable: required(environment, "API_USAGE_TABLE"), idempotencyTable: required(environment, "API_USAGE_IDEMPOTENCY_TABLE") };
 }
 
 function billing(environment) {
@@ -41,10 +38,7 @@ function billing(environment) {
 
 function customerAccess(environment) {
   const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
-  return {
-    customerAccountsEnabled: enabled,
-    customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
-  };
+  return { customerAccountsEnabled: enabled, customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined };
 }
 
 function customerAccounts(environment) {
@@ -52,9 +46,7 @@ function customerAccounts(environment) {
   const totpEnabled = environment.API_CUSTOMER_TOTP_ENABLED === "true";
   if (totpEnabled && !access.customerAccountsEnabled) throw new Error("Authenticator 2FA requires customer accounts to be enabled.");
   const customerTotpKmsKeyArn = totpEnabled ? required(environment, "API_CUSTOMER_TOTP_KMS_KEY_ARN") : undefined;
-  if (customerTotpKmsKeyArn && !/^arn:[^:]+:kms:[^:]+:\d{12}:key\/.+/.test(customerTotpKmsKeyArn)) {
-    throw new Error("API_CUSTOMER_TOTP_KMS_KEY_ARN must contain a full KMS key ARN.");
-  }
+  if (customerTotpKmsKeyArn && !/^arn:[^:]+:kms:[^:]+:\d{12}:key\/.+/.test(customerTotpKmsKeyArn)) throw new Error("API_CUSTOMER_TOTP_KMS_KEY_ARN must contain a full KMS key ARN.");
   return {
     ...access,
     customerAuthPepper: access.customerAccountsEnabled ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
@@ -67,29 +59,30 @@ function customerAccounts(environment) {
 
 function adminCrm(environment) {
   const enabled = environment.API_ADMIN_CRM_ENABLED === "true";
+  return { adminCrmEnabled: enabled, adminCrmTable: enabled ? required(environment, "API_ADMIN_CRM_TABLE") : undefined, adminCrmProfileIndex: environment.API_ADMIN_CRM_PROFILE_INDEX ?? "RecordTypeUpdatedAtIndex" };
+}
+
+function supportAutomation(environment) {
+  const enabled = environment.API_SUPPORT_AUTOMATION_ENABLED === "true";
+  const activationEnabled = environment.API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED === "true";
+  if (activationEnabled && !enabled) throw new Error("Support automation activation requires support automation to be enabled.");
   return {
-    adminCrmEnabled: enabled,
-    adminCrmTable: enabled ? required(environment, "API_ADMIN_CRM_TABLE") : undefined,
-    adminCrmProfileIndex: environment.API_ADMIN_CRM_PROFILE_INDEX ?? "RecordTypeUpdatedAtIndex",
+    supportAutomationEnabled: enabled,
+    supportAutomationActivationEnabled: activationEnabled,
+    supportAutomationTable: enabled ? required(environment, "API_SUPPORT_AUTOMATION_TABLE") : undefined,
   };
 }
 
 export function parseApiAccessEnvironment(environment = process.env) {
+  const customer = customerAccounts(environment);
+  const automation = supportAutomation(environment);
+  if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   return {
-    ...shared(environment),
-    ...usage(environment),
-    ...billing(environment),
-    ...customerAccounts(environment),
-    ...adminCrm(environment),
-    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32),
-    siteOrigin: required(environment, "SITE_ORIGIN"),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation,
+    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin: required(environment, "SITE_ORIGIN"),
   };
 }
 
 export function parseApiKeyAuthorizerEnvironment(environment = process.env) {
-  return {
-    ...shared(environment),
-    ...usage(environment),
-    ...customerAccess(environment),
-  };
+  return { ...shared(environment), ...usage(environment), ...customerAccess(environment) };
 }
