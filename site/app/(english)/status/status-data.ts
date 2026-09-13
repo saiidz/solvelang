@@ -33,20 +33,20 @@ export type StatusIncident = {
 };
 
 export const statusPage = {
-  lastUpdated: "2026-08-06T22:43:00Z",
+  lastUpdated: "2026-09-13T20:49:00Z",
   reportingMode: "manual" as const,
   components: [
     {
       name: "Website",
-      description: "Public SolveLang website and documentation experience.",
-      state: "not_monitored",
-      note: "No independent uptime monitor is connected yet; status is reported manually.",
+      description: "Public SolveLang website and documentation experience on AWS Amplify.",
+      state: "operational",
+      note: "The latest verified Amplify deployment completed successfully on Sep 13, 2026. Independent uptime monitoring is not connected yet.",
     },
     {
       name: "Browser Preview",
       description: "Static browser-safe SolveLang subset available from the /run experience.",
       state: "not_monitored",
-      note: "The preview is intentionally limited and is not the canonical Rust runtime.",
+      note: "The preview is deployed with the public site, intentionally limited, and not the canonical Rust runtime.",
     },
     {
       name: "Workflow Intelligence Studio",
@@ -56,51 +56,22 @@ export const statusPage = {
     },
     {
       name: "API Access",
-      description: "API-key, usage, and account infrastructure currently operated in test mode.",
-      state: "not_monitored",
-      note: "Experimental/test-mode capability. This status page does not represent it as a production public API.",
+      description: "Production API-key, usage, customer-account, and entitlement infrastructure.",
+      state: "operational",
+      note: "API access and customer accounts are enabled in the production stack. Production billing remains disabled.",
     },
     {
       name: "Accounts and Billing",
-      description: "Customer account, subscription, payment-method, and usage interfaces.",
+      description: "Customer authentication, account management, subscription, and usage interfaces.",
       state: "not_monitored",
-      note: "Experimental/test-mode infrastructure; no production availability SLA is claimed.",
+      note: "Customer accounts and authenticator 2FA infrastructure are deployed. Subscription billing is intentionally disabled until production Stripe enablement is approved and configured.",
     },
     {
       name: "CI and Deployment",
-      description: "GitHub-hosted and self-hosted Actions used for validation and deployment workflows.",
-      state: "degraded",
-      note: "Upstream GitHub Actions incident is delaying or preventing workflow execution. SolveLang local validation remains separate from GitHub service health.",
+      description: "GitHub Actions validation plus AWS Amplify site deployment.",
+      state: "operational",
+      note: "Recent exact-head CI, Rust, and WASM security checks passed, and the latest public-site deployments completed successfully.",
     },
   ] satisfies ComponentStatus[],
-  incidents: [
-    {
-      id: "2026-08-06-github-actions",
-      title: "GitHub Actions upstream degradation",
-      state: "monitoring",
-      impact: "major",
-      startedAt: "2026-08-06T15:22:00Z",
-      external: {
-        provider: "GitHub",
-        statusUrl: "https://www.githubstatus.com/",
-      },
-      updates: [
-        {
-          timestamp: "2026-08-06T22:18:00Z",
-          message:
-            "GitHub reported significant improvement in workflow success rates while standard and larger runners drained queued work. Webhook triggers and some self-hosted runner behavior remained affected. SolveLang CI/deployment should therefore still be treated as degraded until the upstream incident is fully resolved.",
-        },
-        {
-          timestamp: "2026-08-06T20:34:00Z",
-          message:
-            "GitHub reported continued Actions disruption affecting both GitHub-hosted and self-hosted runners, with webhook processing throttled during recovery.",
-        },
-        {
-          timestamp: "2026-08-06T15:22:00Z",
-          message:
-            "GitHub began investigating degraded GitHub Actions performance. SolveLang validation jobs may fail to start, queue, or time out while the dependency is degraded.",
-        },
-      ],
-    },
-  ] satisfies StatusIncident[],
+  incidents: [] satisfies StatusIncident[],
 };
