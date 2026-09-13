@@ -91,11 +91,13 @@ test("support storage is durable, bounded-retention, indexed and protected", asy
   assert.match(template, /RetentionInDays: 30/);
 });
 
-test("support API cannot resolve provider secrets while the worker has a tagged namespace-only read grant", async () => {
+test("support API cannot resolve provider secrets while worker has account-status read and tagged namespace-only secret access", async () => {
   const template = await readFile(templateUrl, "utf8");
   const apiBlock = template.slice(template.indexOf("SupportAutomationApiFunction:"), template.indexOf("SupportAutomationWorkerFunction:"));
   const workerBlock = template.slice(template.indexOf("SupportAutomationWorkerFunction:"), template.indexOf("SupportAutomationIntegration:"));
   assert.doesNotMatch(apiBlock, /secretsmanager:GetSecretValue/);
+  assert.match(workerBlock, /dynamodb:GetItem/);
+  assert.match(workerBlock, /Resource: !Sub arn:\$\{AWS::Partition\}:dynamodb:\$\{AWS::Region\}:\$\{AWS::AccountId\}:table\/\$\{CustomerAuthTableName\}/);
   assert.match(workerBlock, /secretsmanager:GetSecretValue/);
   assert.match(workerBlock, /secret:solvelang\/support-automation\/acct_\*\/\*/);
   assert.match(workerBlock, /secretsmanager:ResourceTag\/Project: SolveLang/);
