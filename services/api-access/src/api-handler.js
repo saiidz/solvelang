@@ -241,9 +241,11 @@ export function createApiAccessHandler({
       requireAdmin(event);
       const body = parseJson(event);
       if (method === "POST" && path.endsWith("/internal/subscriptions/checkout")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         return response(201, await subscriptionCheckout.createCheckout(body));
       }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         return response(200, { account: await service.provisionSubscription(body) });
       }
       if (method === "POST" && path.endsWith("/internal/keys")) {
