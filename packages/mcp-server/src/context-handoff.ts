@@ -1,4 +1,3 @@
-import path from "node:path";
 import { normalizeContextPath, sha256Text } from "./context-pack.js";
 import { retrieveWorkspaceContext, type ContextRetrievalRequest } from "./context-workspace.js";
 import { readWorkspaceText } from "./workspace.js";
@@ -134,7 +133,14 @@ function validateReferenceShape(reference: ContextHandoffReference): ContextHand
   if (!Number.isInteger(reference.startLine) || !Number.isInteger(reference.endLine) || reference.startLine < 1 || reference.endLine < reference.startLine) {
     throw new Error("Context handoff reference line bounds are invalid.");
   }
-  return { ...reference, path: normalizedPath };
+  return {
+    handle: reference.handle,
+    path: normalizedPath,
+    startLine: reference.startLine,
+    endLine: reference.endLine,
+    sourceSha256: reference.sourceSha256,
+    excerptSha256: reference.excerptSha256,
+  };
 }
 
 function normalizeTests(tests: ContextHandoffTest[]): ContextHandoffTest[] {
