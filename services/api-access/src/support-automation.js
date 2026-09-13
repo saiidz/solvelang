@@ -5,6 +5,8 @@ const ALLOWED_ACTIONS = new Set(["create_linear_issue", "send_reply"]);
 const SECRET_ARN = /^arn:[a-z0-9-]+:secretsmanager:[a-z0-9-]+:\d{12}:secret:solvelang\/support-automation\/[A-Za-z0-9/_+=.@-]+$/;
 const MAX_MESSAGE_BYTES = 20_000;
 const DEFAULT_POLICY_VERSION = "support-v1";
+const EVENT_LEASE_MS = 5 * 60 * 1000;
+const TERMINAL_EVENT_STATES = new Set(["PROCESSED", "REVIEW_REQUIRED", "OUTCOME_UNKNOWN", "STOPPED"]);
 
 function cleanText(value, label, maximum = 160) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_support_automation_request", `${label} is invalid.`);
@@ -21,9 +23,12 @@ function cleanEmail(value, label = "Inbox email") {
   return email;
 }
 
-function cleanSecretArn(value, label) {
+function cleanSecretArn(value, label, accountId) {
   const arn = cleanText(value, label, 512);
-  if (!SECRET_ARN.test(arn)) throw new ApiAccessError(400, "invalid_support_automation_secret_ref", `${label} must reference the scoped support-automation secret path.`);
+  const tenantPath = `:secret:solvelang/support-automation/${accountId}/`;
+  if (!SECRET_ARN.test(arn) || !arn.includes(tenantPath)) {
+    throw new ApiAccessError(400, "invalid_support_automation_secret_ref", `${label} must reference the authenticated account's scoped support-automation secret path.`);
+  }
   return arn;
 }
 
@@ -54,9 +59,9 @@ function normalizeConfiguration(accountId, input, timestamp, existing) {
     recordType: "CONFIG",
     provider: "gmail",
     inboxEmail: cleanEmail(input.inboxEmail),
-    gmailCredentialSecretArn: cleanSecretArn(input.gmailCredentialSecretArn, "Gmail credential secret reference"),
+    gmailCredentialSecretArn: cleanSecretArn(input.gmailCredentialSecretArn, "Gmail credential secret reference", accountId),
     taskProvider: "linear",
-    linearCredentialSecretArn: cleanSecretArn(input.linearCredentialSecretArn, "Linear credential secret reference"),
+    linearCredentialSecretArn: cleanSecretArn(input.linearCredentialSecretArn, "Linear credential secret reference", accountId),
     linearTeamId: cleanText(input.linearTeamId, "Linear team ID", 128),
     policyVersion: cleanText(input.policyVersion ?? DEFAULT_POLICY_VERSION, "Policy version", 80),
     allowedActions: cleanAllowedActions(input.allowedActions ?? ["create_linear_issue", "send_reply"]),
@@ -219,17 +224,40 @@ export function createSupportAutomationService({
     }
   }
 
+  async function finishEvent(config, eventId, claimId, classification, state, actions) {
+    await store.finishEvent({
+      accountId: config.accountId,
+      eventId,
+      claimId,
+      state,
+      ...classification,
+      actions,
+      updatedAt: new Date(now()).toISOString(),
+    });
+  }
+
   async function processMessage(config, message) {
     const eventId = eventIdFor(message);
-    const timestamp = new Date(now()).toISOString();
+    const timestampMs = now();
+    const timestamp = new Date(timestampMs).toISOString();
+    const claimId = idFactory();
     const sanitized = redactMessageText(message.text);
     const providerMessageHash = createHash("sha256").update(`${message.id}\n${message.from}\n${message.subject}\n${sanitized}`).digest("hex");
-    const claimed = await store.claimEvent({ accountId: config.accountId, eventId, providerMessageHash, createdAt: timestamp, updatedAt: timestamp });
+    const claimed = await store.claimEvent({
+      accountId: config.accountId,
+      eventId,
+      providerMessageHash,
+      claimId,
+      processingUntil: new Date(timestampMs + EVENT_LEASE_MS).toISOString(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
     if (!claimed.created) return { eventId, state: claimed.record.state, duplicate: true };
+    const activeClaimId = claimed.record?.claimId ?? claimId;
     const classification = classify({ ...message, text: sanitized });
     if (classification.requiresReview) {
-      await store.finishEvent({ accountId: config.accountId, eventId, state: "REVIEW_REQUIRED", ...classification, actions: [], updatedAt: new Date(now()).toISOString() });
-      return { eventId, state: "REVIEW_REQUIRED", duplicate: false };
+      await finishEvent(config, eventId, activeClaimId, classification, "REVIEW_REQUIRED", []);
+      return { eventId, state: "REVIEW_REQUIRED", duplicate: false, reclaimed: Boolean(claimed.reclaimed) };
     }
 
     const actions = [];
@@ -248,8 +276,9 @@ export function createSupportAutomationService({
       });
       actions.push({ action: "create_linear_issue", status: task.status, reference: task.outcome?.url ?? task.outcome?.id });
       if (task.status !== "succeeded") {
-        await store.finishEvent({ accountId: config.accountId, eventId, state: task.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN", ...classification, actions, updatedAt: new Date(now()).toISOString() });
-        return { eventId, state: task.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN", duplicate: false };
+        const state = task.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN";
+        await finishEvent(config, eventId, activeClaimId, classification, state, actions);
+        return { eventId, state, duplicate: false, reclaimed: Boolean(claimed.reclaimed) };
       }
     }
 
@@ -271,13 +300,27 @@ export function createSupportAutomationService({
       });
       actions.push({ action: "send_reply", status: reply.status, reference: reply.outcome?.id });
       if (reply.status !== "succeeded") {
-        await store.finishEvent({ accountId: config.accountId, eventId, state: reply.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN", ...classification, actions, updatedAt: new Date(now()).toISOString() });
-        return { eventId, state: reply.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN", duplicate: false };
+        const state = reply.status === "stopped" ? "STOPPED" : "OUTCOME_UNKNOWN";
+        await finishEvent(config, eventId, activeClaimId, classification, state, actions);
+        return { eventId, state, duplicate: false, reclaimed: Boolean(claimed.reclaimed) };
       }
     }
 
-    await store.finishEvent({ accountId: config.accountId, eventId, state: "PROCESSED", ...classification, actions, updatedAt: new Date(now()).toISOString() });
-    return { eventId, state: "PROCESSED", duplicate: false };
+    await finishEvent(config, eventId, activeClaimId, classification, "PROCESSED", actions);
+    return { eventId, state: "PROCESSED", duplicate: false, reclaimed: Boolean(claimed.reclaimed) };
+  }
+
+  async function acknowledgeIfSafe(config, messageId, result) {
+    if (!TERMINAL_EVENT_STATES.has(result.state)) return { ...result, acknowledgement: "deferred" };
+    const current = await currentActiveConfig(config.accountId, config.revision);
+    if (!current) return { ...result, acknowledgement: "deferred" };
+    try {
+      await gmail.markRead({ credentialSecretArn: current.gmailCredentialSecretArn, mailbox: current.inboxEmail, id: messageId });
+      return { ...result, acknowledgement: "read" };
+    } catch (error) {
+      logger.error({ type: "support_automation_acknowledgement_failed", accountId: config.accountId, eventId: result.eventId });
+      return { ...result, acknowledgement: "failed" };
+    }
   }
 
   async function processAccount(config) {
@@ -295,7 +338,8 @@ export function createSupportAutomationService({
       const beforeRead = await currentActiveConfig(latest.accountId, latest.revision);
       if (!beforeRead) break;
       const message = await gmail.getMessage({ credentialSecretArn: beforeRead.gmailCredentialSecretArn, mailbox: beforeRead.inboxEmail, id: summary.id });
-      processed.push(await processMessage(beforeRead, message));
+      const result = await processMessage(beforeRead, message);
+      processed.push(await acknowledgeIfSafe(beforeRead, message.id, result));
     }
     return { accountId: latest.accountId, state: "ACTIVE", processed };
   }
