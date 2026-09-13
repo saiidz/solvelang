@@ -39,6 +39,8 @@ jobs:
           cache-dependency-path: packages/mcp-server/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: Run Solve Context offline evals
+        run: npm run eval:context
       - name: Validate Codex and Claude plugin packaging
         run: node scripts/validate-plugin-packaging.mjs
       - name: Prove Codex and Claude plugin MCP roundtrip
