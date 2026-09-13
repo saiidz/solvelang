@@ -1,12 +1,13 @@
-import { GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
 function pk(accountId) { return `ACCOUNT#${accountId}`; }
 function eventSk(eventId) { return `EVENT#${eventId}`; }
 function actionSk(eventId, actionId) { return `EVENT#${eventId}#ACTION#${actionId}`; }
 function conditional(error) { return error?.name === "ConditionalCheckFailedException"; }
 
-export function createDynamoSupportAutomationStore(client, tableName) {
+export function createDynamoSupportAutomationStore(client, tableName, { activeIndexName = "AutomationStateIndex" } = {}) {
   if (!client?.send || typeof tableName !== "string" || !tableName || tableName === "disabled") throw new Error("Support automation DynamoDB store requires a table.");
+  if (typeof activeIndexName !== "string" || !activeIndexName) throw new Error("Support automation active-config index is required.");
 
   async function getConfig(accountId) {
     const response = await client.send(new GetCommand({ TableName: tableName, Key: { pk: pk(accountId), sk: "CONFIG" }, ConsistentRead: true }));
@@ -15,6 +16,10 @@ export function createDynamoSupportAutomationStore(client, tableName) {
 
   async function putConfig(config, expectedRevision) {
     const item = { ...config, pk: pk(config.accountId), sk: "CONFIG" };
+    if (config.automationState === "ACTIVE") {
+      item.workerPartition = "ACTIVE";
+      item.workerSort = config.accountId;
+    }
     const expression = expectedRevision === undefined ? "attribute_not_exists(pk)" : "revision = :expected";
     const values = expectedRevision === undefined ? undefined : { ":expected": expectedRevision };
     try {
@@ -27,13 +32,22 @@ export function createDynamoSupportAutomationStore(client, tableName) {
   }
 
   async function setState(accountId, expectedRevision, automationState, updatedAt) {
+    const active = automationState === "ACTIVE";
     try {
       const response = await client.send(new UpdateCommand({
         TableName: tableName,
         Key: { pk: pk(accountId), sk: "CONFIG" },
-        UpdateExpression: "SET automationState = :state, updatedAt = :updatedAt, revision = revision + :one",
+        UpdateExpression: active
+          ? "SET automationState = :state, updatedAt = :updatedAt, revision = revision + :one, workerPartition = :active, workerSort = :accountId"
+          : "SET automationState = :state, updatedAt = :updatedAt, revision = revision + :one REMOVE workerPartition, workerSort",
         ConditionExpression: "revision = :expected",
-        ExpressionAttributeValues: { ":state": automationState, ":updatedAt": updatedAt, ":one": 1, ":expected": expectedRevision },
+        ExpressionAttributeValues: {
+          ":state": automationState,
+          ":updatedAt": updatedAt,
+          ":one": 1,
+          ":expected": expectedRevision,
+          ...(active ? { ":active": "ACTIVE", ":accountId": accountId } : {}),
+        },
         ReturnValues: "ALL_NEW",
       }));
       return response.Attributes;
@@ -48,7 +62,7 @@ export function createDynamoSupportAutomationStore(client, tableName) {
       const response = await client.send(new UpdateCommand({
         TableName: tableName,
         Key: { pk: pk(accountId), sk: "CONFIG" },
-        UpdateExpression: "SET automationState = :state, updatedAt = :updatedAt, revision = revision + :one REMOVE gmailCredentialSecretArn, linearCredentialSecretArn",
+        UpdateExpression: "SET automationState = :state, updatedAt = :updatedAt, revision = revision + :one REMOVE gmailCredentialSecretArn, linearCredentialSecretArn, workerPartition, workerSort",
         ConditionExpression: "revision = :expected",
         ExpressionAttributeValues: { ":state": "REVOKED", ":updatedAt": updatedAt, ":one": 1, ":expected": expectedRevision },
         ReturnValues: "ALL_NEW",
@@ -61,13 +75,15 @@ export function createDynamoSupportAutomationStore(client, tableName) {
   }
 
   async function listActiveConfigs(limit) {
-    const response = await client.send(new ScanCommand({
+    const response = await client.send(new QueryCommand({
       TableName: tableName,
-      FilterExpression: "recordType = :config AND automationState = :active",
-      ExpressionAttributeValues: { ":config": "CONFIG", ":active": "ACTIVE" },
+      IndexName: activeIndexName,
+      KeyConditionExpression: "workerPartition = :active",
+      ExpressionAttributeValues: { ":active": "ACTIVE" },
+      ScanIndexForward: true,
       Limit: Math.min(Math.max(limit, 1), 25),
     }));
-    return response.Items ?? [];
+    return (response.Items ?? []).filter((item) => item.recordType === "CONFIG" && item.automationState === "ACTIVE");
   }
 
   async function claimEvent(record) {
