@@ -59,8 +59,11 @@ try {
   const workspaceRoot = path.join(temporaryRoot, "workspace");
   await mkdir(consumerRoot);
   await mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+  await mkdir(path.join(workspaceRoot, "logs"), { recursive: true });
   const invoicePath = path.join(workspaceRoot, "src", "invoice.ts");
+  const workerLog = `${"INFO queue unchanged\n".repeat(100)}ERROR payment failed code=E_TIMEOUT\n${"INFO queue unchanged\n".repeat(20)}`;
   await writeFile(invoicePath, "export function retryInvoice() {\n  return schedulePaymentRetry();\n}\n", "utf8");
+  await writeFile(path.join(workspaceRoot, "logs", "worker.log"), workerLog, "utf8");
   await writeFile(path.join(consumerRoot, "package.json"), '{"private":true,"type":"module"}\n');
 
   const tarballPath = path.join(temporaryRoot, packResult.filename);
@@ -114,6 +117,9 @@ try {
     "solvelang_context_retrieve",
     "solvelang_context_handoff",
     "solvelang_context_handoff_validate",
+    "solvelang_context_compact_structured",
+    "solvelang_context_expand_rle",
+    "solvelang_context_compaction_capabilities",
     "solvelang_context_capabilities",
   ]) {
     const tool = tools.get(requiredName);
@@ -181,6 +187,46 @@ try {
   assert.equal(retrieval.schema, "solvelang.context.retrieval.v0");
   assert.equal(retrieval.content, entry.content, "retrieval must reproduce the exact packed excerpt");
   assert.equal(retrieval.handle, entry.handle);
+
+  const logCompactionResult = await client.callTool({
+    name: "solvelang_context_compact_structured",
+    arguments: { kind: "log", path: "logs/worker.log" },
+  });
+  const logCompaction = JSON.parse(toolText(logCompactionResult, "Solve Context log compaction"));
+  assert.equal(logCompaction.schema, "solvelang.context.compaction.v0");
+  assert.equal(logCompaction.codec, "line-rle-v0");
+  assert.equal(logCompaction.fidelity, "byte-exact");
+  assert.equal(logCompaction.reversibleToOriginal, true);
+  assert.equal(logCompaction.applied, true);
+  assert.deepEqual(logCompaction.source, { mode: "workspace", path: "logs/worker.log" });
+  assert.ok(logCompaction.reductionBytes > 0);
+  assert.ok(logCompaction.payload.records.some((record) => record.segment === "ERROR payment failed code=E_TIMEOUT\n"));
+
+  const expandedLogResult = await client.callTool({
+    name: "solvelang_context_expand_rle",
+    arguments: {
+      kind: "log",
+      sourceSha256: logCompaction.sourceSha256,
+      sourceBytes: logCompaction.sourceBytes,
+      candidateSha256: logCompaction.candidateSha256,
+      candidateBytes: logCompaction.candidateBytes,
+      records: logCompaction.payload.records,
+    },
+  });
+  const expandedLog = JSON.parse(toolText(expandedLogResult, "Solve Context log expansion"));
+  assert.equal(expandedLog.schema, "solvelang.context.expansion.v0");
+  assert.equal(expandedLog.content, workerLog, "line RLE expansion must reproduce the exact log bytes");
+
+  const jsonWithLargeNumber = `{\n  "large": 9007199254740993123456789,\n  "ratio": 1.2300e+09,\n  "message": "keep  spaces"\n}\n`;
+  const jsonCompactionResult = await client.callTool({
+    name: "solvelang_context_compact_structured",
+    arguments: { kind: "json", rawText: jsonWithLargeNumber },
+  });
+  const jsonCompaction = JSON.parse(toolText(jsonCompactionResult, "Solve Context JSON compaction"));
+  assert.equal(jsonCompaction.codec, "json-whitespace-v0");
+  assert.equal(jsonCompaction.fidelity, "json-token-exact");
+  assert.equal(jsonCompaction.applied, true);
+  assert.equal(jsonCompaction.payload.content, `{"large":9007199254740993123456789,"ratio":1.2300e+09,"message":"keep  spaces"}`);
 
   const handoffResult = await client.callTool({
     name: "solvelang_context_handoff",
