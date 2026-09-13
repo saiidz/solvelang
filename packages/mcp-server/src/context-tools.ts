@@ -1,6 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
+  CONTEXT_HANDOFF_SCHEMA,
+  MAX_HANDOFF_CHANGED_PATHS,
+  MAX_HANDOFF_CONTEXT_REFERENCES,
+  MAX_HANDOFF_DECISIONS,
+  MAX_HANDOFF_QUESTIONS,
+  MAX_HANDOFF_TESTS,
+  createContextHandoff,
+  validateContextHandoff,
+  type ContextHandoff,
+} from "./context-handoff.js";
+import {
   MAX_CONTEXT_BUDGET_BYTES,
   MIN_CONTEXT_BUDGET_BYTES,
 } from "./context-pack.js";
@@ -27,7 +38,7 @@ const contextBuildInputSchema = z.object({
     .describe("Maximum UTF-8 bytes of exact source excerpts in the pack"),
 });
 
-const contextRetrieveInputSchema = z.object({
+const contextReferenceSchema = z.object({
   handle: z.string().regex(/^ctx_[a-f0-9]{32}$/),
   path: z.string().min(1).max(4_096),
   startLine: z.number().int().min(1),
@@ -37,6 +48,48 @@ const contextRetrieveInputSchema = z.object({
 }).refine((value) => value.endLine >= value.startLine, {
   message: "endLine must be greater than or equal to startLine.",
   path: ["endLine"],
+});
+
+const contextRetrieveInputSchema = contextReferenceSchema;
+const handoffAgentSchema = z.enum(["claude", "codex", "other"]);
+const handoffTargetSchema = z.enum(["claude", "codex", "any", "other"]);
+const handoffTestSchema = z.object({
+  label: z.string().min(1).max(2_048),
+  status: z.enum(["passed", "failed", "not_run", "unknown"]),
+  evidence: z.string().min(1).max(4_096).optional(),
+});
+
+const contextHandoffCreateInputSchema = z.object({
+  fromAgent: handoffAgentSchema,
+  toAgent: handoffTargetSchema.optional(),
+  goal: z.string().min(1).max(16_384),
+  decisions: z.array(z.string().min(1).max(4_096)).max(MAX_HANDOFF_DECISIONS).optional(),
+  unresolvedQuestions: z.array(z.string().min(1).max(4_096)).max(MAX_HANDOFF_QUESTIONS).optional(),
+  changedPaths: z.array(z.string().min(1).max(4_096)).max(MAX_HANDOFF_CHANGED_PATHS).optional(),
+  tests: z.array(handoffTestSchema).max(MAX_HANDOFF_TESTS).optional(),
+  context: z.array(contextReferenceSchema).max(MAX_HANDOFF_CONTEXT_REFERENCES).optional(),
+});
+
+const contextHandoffDocumentSchema = z.object({
+  schema: z.literal(CONTEXT_HANDOFF_SCHEMA),
+  handoffId: z.string().regex(/^sch_[a-f0-9]{32}$/),
+  fromAgent: handoffAgentSchema,
+  toAgent: handoffTargetSchema,
+  goal: z.string().min(1).max(16_384),
+  decisions: z.array(z.string().min(1).max(4_096)).max(MAX_HANDOFF_DECISIONS),
+  unresolvedQuestions: z.array(z.string().min(1).max(4_096)).max(MAX_HANDOFF_QUESTIONS),
+  changedSources: z.array(z.object({
+    path: z.string().min(1).max(4_096),
+    sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    bytes: z.number().int().min(1).max(2 * 1024 * 1024),
+  })).max(MAX_HANDOFF_CHANGED_PATHS),
+  tests: z.array(handoffTestSchema).max(MAX_HANDOFF_TESTS),
+  context: z.array(contextReferenceSchema).max(MAX_HANDOFF_CONTEXT_REFERENCES),
+  freshness: z.object({
+    mode: z.literal("content-addressed"),
+    changedSourcesVerifiedAtCreation: z.literal(true),
+    contextReferencesVerifiedAtCreation: z.literal(true),
+  }),
 });
 
 export function registerContextTools(server: McpServer): void {
@@ -74,10 +127,32 @@ export function registerContextTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "solvelang_context_handoff",
+    {
+      title: "Create Claude/Codex context handoff",
+      description: "Create a deterministic, source-body-free task handoff for Claude Code, Codex, or another agent. Changed files and context references are verified against the current workspace before the handoff is emitted. No files are written.",
+      inputSchema: contextHandoffCreateInputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async (input) => textResult(await createContextHandoff(input)),
+  );
+
+  server.registerTool(
+    "solvelang_context_handoff_validate",
+    {
+      title: "Validate Claude/Codex context handoff",
+      description: "Validate handoff checksum integrity and re-check changed-file/context identities against the receiving workspace. The checksum detects handoff drift but is not an authentication signature.",
+      inputSchema: z.object({ handoff: contextHandoffDocumentSchema }),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ handoff }) => textResult(await validateContextHandoff(handoff as ContextHandoff)),
+  );
+
+  server.registerTool(
     "solvelang_context_capabilities",
     {
       title: "Describe Solve Context capabilities",
-      description: "Describe Solve Context v0 discovery, budgeting, privacy, and correctness boundaries.",
+      description: "Describe Solve Context v0 discovery, budgeting, handoff, privacy, and correctness boundaries.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -89,6 +164,8 @@ export function registerContextTools(server: McpServer): void {
         "solvelang_context_plan",
         "solvelang_context_pack",
         "solvelang_context_retrieve",
+        "solvelang_context_handoff",
+        "solvelang_context_handoff_validate",
         "solvelang_context_capabilities",
       ],
       limits: {
@@ -98,6 +175,11 @@ export function registerContextTools(server: McpServer): void {
         discoveryCandidates: MAX_CONTEXT_DISCOVERY_CANDIDATES,
         discoveryBytes: MAX_CONTEXT_DISCOVERY_BYTES,
         discoveryDepth: MAX_CONTEXT_DISCOVERY_DEPTH,
+        handoffChangedPaths: MAX_HANDOFF_CHANGED_PATHS,
+        handoffContextReferences: MAX_HANDOFF_CONTEXT_REFERENCES,
+        handoffDecisions: MAX_HANDOFF_DECISIONS,
+        handoffQuestions: MAX_HANDOFF_QUESTIONS,
+        handoffTests: MAX_HANDOFF_TESTS,
       },
       invariants: [
         "Local deterministic ranking only; no LLM call",
@@ -106,6 +188,8 @@ export function registerContextTools(server: McpServer): void {
         "Exact source excerpts only; no hidden summarization",
         "Content-addressed SHA-256 provenance",
         "Retrieval rejects stale source identities",
+        "Claude/Codex handoffs carry provenance instead of source bodies and can be revalidated in the receiving workspace",
+        "Handoff IDs are deterministic integrity checksums, not authentication signatures",
         "Discovery and pack truncation are reported explicitly",
       ],
     }),
