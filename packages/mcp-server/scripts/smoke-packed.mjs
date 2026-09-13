@@ -11,6 +11,10 @@ const manifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"
 const expectedFiles = [
   "package/LICENSE",
   "package/README.md",
+  "package/dist/src/context-compaction-tools.d.ts",
+  "package/dist/src/context-compaction-tools.js",
+  "package/dist/src/context-compaction.d.ts",
+  "package/dist/src/context-compaction.js",
   "package/dist/src/context-handoff.d.ts",
   "package/dist/src/context-handoff.js",
   "package/dist/src/context-pack.d.ts",
@@ -106,36 +110,12 @@ try {
     "utf8",
   );
   assert.match(installedEntrypoint, /registerContextTools/, "packed consumer must register Solve Context in the shared MCP server");
-  assert.match(
-    installedEntrypoint,
-    /solvelang_graph_explain_shortest_path/,
-    "packed consumer must include the shortest-path explanation MCP tool registration",
-  );
-  assert.match(
-    installedEntrypoint,
-    /explainSolveGraphShortestPath/,
-    "packed consumer must compose the registered shortest-path tool through the reviewed explanation contract",
-  );
-  assert.match(
-    installedEntrypoint,
-    /solvelang_graph_explain_alternative_paths/,
-    "packed consumer must include the alternative-path explanation MCP tool registration",
-  );
-  assert.match(
-    installedEntrypoint,
-    /explainSolveGraphAlternativePaths/,
-    "packed consumer must compose the registered alternative-path tool through the reviewed explanation contract",
-  );
-  assert.match(
-    installedEntrypoint,
-    /solvelang_graph_explain_impact/,
-    "packed consumer must include the impact explanation MCP tool registration",
-  );
-  assert.match(
-    installedEntrypoint,
-    /explainSolveGraphImpact/,
-    "packed consumer must compose the registered impact tool through the reviewed explanation contract",
-  );
+  assert.match(installedEntrypoint, /solvelang_graph_explain_shortest_path/, "packed consumer must include the shortest-path explanation MCP tool registration");
+  assert.match(installedEntrypoint, /explainSolveGraphShortestPath/, "packed consumer must compose the registered shortest-path tool through the reviewed explanation contract");
+  assert.match(installedEntrypoint, /solvelang_graph_explain_alternative_paths/, "packed consumer must include the alternative-path explanation MCP tool registration");
+  assert.match(installedEntrypoint, /explainSolveGraphAlternativePaths/, "packed consumer must compose the registered alternative-path tool through the reviewed explanation contract");
+  assert.match(installedEntrypoint, /solvelang_graph_explain_impact/, "packed consumer must include the impact explanation MCP tool registration");
+  assert.match(installedEntrypoint, /explainSolveGraphImpact/, "packed consumer must compose the registered impact tool through the reviewed explanation contract");
   assert.match(installedEntrypoint, /solvelang_graph_cycles/, "packed consumer must include the cycle MCP tool registration");
   assert.match(installedEntrypoint, /findSolveGraphCycles/, "packed consumer must compose the registered cycle tool through the reviewed cycle contract");
   assert.match(installedEntrypoint, /solvelang_graph_hotspots/, "packed consumer must include the hotspot MCP tool registration");
@@ -155,6 +135,8 @@ try {
   assert.match(installedContextTools, /solvelang_context_retrieve/, "packed consumer must include exact context retrieval");
   assert.match(installedContextTools, /solvelang_context_handoff/, "packed consumer must include Claude/Codex handoff creation");
   assert.match(installedContextTools, /solvelang_context_handoff_validate/, "packed consumer must include handoff freshness validation");
+  assert.match(installedContextTools, /solvelang_context_compact_structured/, "packed consumer must advertise structured context compaction");
+  assert.match(installedContextTools, /solvelang_context_expand_rle/, "packed consumer must advertise byte-exact RLE expansion");
   assert.match(installedContextTools, /solvelang_context_capabilities/, "packed consumer must expose Solve Context boundaries");
 
   const installedContextWorkspace = await readFile(
@@ -171,6 +153,23 @@ try {
   assert.match(installedContextHandoff, /content-addressed/, "packed handoff runtime must retain the content-freshness contract");
   assert.match(installedContextHandoff, /not an authentication signature/, "packed handoff runtime must retain the checksum trust caveat");
   assert.match(installedContextHandoff, /sensitive path/, "packed handoff runtime must deny likely secret paths");
+
+  const installedCompactionTools = await readFile(
+    path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "context-compaction-tools.js"),
+    "utf8",
+  );
+  assert.match(installedCompactionTools, /solvelang_context_compact_structured/, "packed consumer must include structured compaction registration");
+  assert.match(installedCompactionTools, /solvelang_context_expand_rle/, "packed consumer must include exact RLE expansion registration");
+  assert.match(installedCompactionTools, /numeric token spelling is not changed/, "packed consumer must retain numeric-lexeme fidelity guidance");
+
+  const installedCompaction = await readFile(
+    path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "context-compaction.js"),
+    "utf8",
+  );
+  assert.match(installedCompaction, /json-whitespace-v0/, "packed compactor must include the token-preserving JSON codec");
+  assert.match(installedCompaction, /line-rle-v0/, "packed compactor must include the byte-exact line RLE codec");
+  assert.match(installedCompaction, /no-byte-reduction/, "packed compactor must refuse false savings claims");
+  assert.doesNotMatch(installedCompaction, /JSON\.stringify\(JSON\.parse/, "packed JSON compactor must not parse-and-reserialize emitted JSON");
 
   const installedRemote = await readFile(
     path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "remote.js"),

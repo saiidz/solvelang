@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { registerContextCompactionTools } from "./context-compaction-tools.js";
 import {
   CONTEXT_HANDOFF_SCHEMA,
   MAX_HANDOFF_CHANGED_PATHS,
@@ -93,6 +94,8 @@ const contextHandoffDocumentSchema = z.object({
 });
 
 export function registerContextTools(server: McpServer): void {
+  registerContextCompactionTools(server);
+
   server.registerTool(
     "solvelang_context_plan",
     {
@@ -152,7 +155,7 @@ export function registerContextTools(server: McpServer): void {
     "solvelang_context_capabilities",
     {
       title: "Describe Solve Context capabilities",
-      description: "Describe Solve Context v0 discovery, budgeting, handoff, privacy, and correctness boundaries.",
+      description: "Describe Solve Context v0 discovery, budgeting, handoff, compaction, privacy, and correctness boundaries.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -166,6 +169,9 @@ export function registerContextTools(server: McpServer): void {
         "solvelang_context_retrieve",
         "solvelang_context_handoff",
         "solvelang_context_handoff_validate",
+        "solvelang_context_compact_structured",
+        "solvelang_context_expand_rle",
+        "solvelang_context_compaction_capabilities",
         "solvelang_context_capabilities",
       ],
       limits: {
@@ -182,7 +188,7 @@ export function registerContextTools(server: McpServer): void {
         handoffTests: MAX_HANDOFF_TESTS,
       },
       invariants: [
-        "Local deterministic ranking only; no LLM call",
+        "Local deterministic ranking/compaction only; no LLM call",
         "Read-only workspace access; no repository mutation",
         "Automatic discovery skips vendor/build trees and likely secret paths",
         "Exact source excerpts only; no hidden summarization",
@@ -190,6 +196,9 @@ export function registerContextTools(server: McpServer): void {
         "Retrieval rejects stale source identities",
         "Claude/Codex handoffs carry provenance instead of source bodies and can be revalidated in the receiving workspace",
         "Handoff IDs are deterministic integrity checksums, not authentication signatures",
+        "Structured JSON compaction removes only insignificant whitespace without reserializing emitted JSON tokens",
+        "Log/diff RLE is byte-exact and expansion verifies both compacted and original identities",
+        "Compaction refuses to emit a payload when it would not reduce payload bytes",
         "Discovery and pack truncation are reported explicitly",
       ],
     }),
