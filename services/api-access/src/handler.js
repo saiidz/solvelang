@@ -1,5 +1,6 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
+import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
@@ -30,49 +31,34 @@ import { createSubscriptionManagementService } from "./subscription-management.j
 import { createSubscriptionPortalService } from "./subscription-portal.js";
 import { createDynamoSubscriptionEventStore } from "./subscription-event-store.js";
 import { createSubscriptionLifecycleService } from "./subscriptions.js";
+import { createSupportAutomationApiHandler } from "./support-automation-api-handler.js";
+import { createGmailSupportProvider, createLinearSupportProvider, createSecretsManagerCredentialResolver } from "./support-automation-providers.js";
+import { createDynamoSupportAutomationStore } from "./support-automation-store.js";
+import { createSupportAutomationService } from "./support-automation.js";
 import { createTotpSecretProtector } from "./totp-kms.js";
 
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const store = createDynamoApiAccessStore(documentClient, environment);
 const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
-const service = createApiAccessService({
-  store,
-  pepper: environment.pepper,
-  mode: environment.mode,
-});
+const service = createApiAccessService({ store, pepper: environment.pepper, mode: environment.mode });
 
 let accountAccess;
 let accountIdentityResolver;
 let customerAuth;
 let customerAuthStoreForAdmin;
 if (environment.customerAccountsEnabled) {
-  const accountAccessStore = createDynamoAccountAccessStore(documentClient, {
-    tableName: environment.customerAuthTable,
-  });
-  const accountAccessReader = createDynamoAccountAccessReader(documentClient, {
-    tableName: environment.customerAuthTable,
-  });
+  const accountAccessStore = createDynamoAccountAccessStore(documentClient, { tableName: environment.customerAuthTable });
+  const accountAccessReader = createDynamoAccountAccessReader(documentClient, { tableName: environment.customerAuthTable });
   accountAccess = createAccountAccessService({ store: accountAccessStore });
-  const totpProtector = environment.customerTotpEnabled
-    ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn)
-    : undefined;
+  const totpProtector = environment.customerTotpEnabled ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn) : undefined;
   const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   customerAuthStoreForAdmin = customerAuthStore;
-  accountIdentityResolver = createAccountIdentityResolver({
-    store: customerAuthStore,
-    pepper: environment.customerAuthPepper,
-  });
-  const guardedAuthStore = createAccessGuardedCustomerAuthStore(
-    customerAuthStore,
-    accountAccessReader,
-  );
+  accountIdentityResolver = createAccountIdentityResolver({ store: customerAuthStore, pepper: environment.customerAuthPepper });
+  const guardedAuthStore = createAccessGuardedCustomerAuthStore(customerAuthStore, accountAccessReader);
   customerAuth = createAccessGuardedCustomerAuthService(createCustomerAuthService({
     store: guardedAuthStore,
-    emailGateway: createCustomerEmailGateway(new SESv2Client({}), {
-      sender: environment.customerAuthEmailSender,
-      replyTo: environment.customerAuthEmailReplyTo,
-    }),
+    emailGateway: createCustomerEmailGateway(new SESv2Client({}), { sender: environment.customerAuthEmailSender, replyTo: environment.customerAuthEmailReplyTo }),
     pepper: environment.customerAuthPepper,
     siteOrigin: environment.siteOrigin,
     totpFeatureEnabled: environment.customerTotpEnabled,
@@ -80,22 +66,9 @@ if (environment.customerAccountsEnabled) {
   }));
 }
 
-const guardedService = accountAccess
-  ? createAccessGuardedApiAccessService(service, accountAccess)
-  : service;
-const customerAccount = createCustomerAccountService({
-  store,
-  apiAccessService: guardedService,
-  usageReader,
-});
-const accountAccessAdminApplication = accountAccess
-  ? createAccountAccessAdminHandler({
-      accountAccess,
-      identityResolver: accountIdentityResolver,
-      adminSecret: environment.adminSecret,
-      siteOrigin: environment.siteOrigin,
-    })
-  : undefined;
+const guardedService = accountAccess ? createAccessGuardedApiAccessService(service, accountAccess) : service;
+const customerAccount = createCustomerAccountService({ store, apiAccessService: guardedService, usageReader });
+const accountAccessAdminApplication = accountAccess ? createAccountAccessAdminHandler({ accountAccess, identityResolver: accountIdentityResolver, adminSecret: environment.adminSecret, siteOrigin: environment.siteOrigin }) : undefined;
 const adminCustomerApplication = environment.adminCrmEnabled && accountAccess && accountIdentityResolver && customerAuthStoreForAdmin
   ? createAdminCustomerHandler({
       customers: createAdminCustomerService({
@@ -104,15 +77,29 @@ const adminCustomerApplication = environment.adminCrmEnabled && accountAccess &&
         apiStore: store,
         authStore: customerAuthStoreForAdmin,
         usageReader,
-        crmStore: createDynamoAdminCrmStore(documentClient, {
-          tableName: environment.adminCrmTable,
-          profileIndex: environment.adminCrmProfileIndex,
-        }),
+        crmStore: createDynamoAdminCrmStore(documentClient, { tableName: environment.adminCrmTable, profileIndex: environment.adminCrmProfileIndex }),
       }),
       adminSecret: environment.adminSecret,
       siteOrigin: environment.siteOrigin,
     })
   : undefined;
+
+let supportAutomation;
+if (environment.supportAutomationEnabled) {
+  const credentialResolver = createSecretsManagerCredentialResolver(new SecretsManagerClient({}));
+  supportAutomation = createSupportAutomationService({
+    store: createDynamoSupportAutomationStore(documentClient, environment.supportAutomationTable),
+    gmail: createGmailSupportProvider({ credentialResolver }),
+    linear: createLinearSupportProvider({ credentialResolver }),
+    activationEnabled: environment.supportAutomationActivationEnabled,
+  });
+}
+const supportAutomationApplication = createSupportAutomationApiHandler({
+  enabled: environment.supportAutomationEnabled,
+  supportAutomation,
+  customerAuth,
+  siteOrigin: environment.siteOrigin,
+});
 
 let stripeGateway;
 let subscriptionCheckout;
@@ -122,32 +109,12 @@ let subscriptionManagementApplication;
 if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
-  subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({
-    gateway: stripeGateway,
-    apiAccessService: guardedService,
-    priceIds: environment.priceIds,
-    siteOrigin: environment.siteOrigin,
-    enabled: true,
-  });
-  subscriptionPortal = createSubscriptionPortalService({
-    apiAccessService: guardedService,
-    siteOrigin: environment.siteOrigin,
-    enabled: true,
-  });
-  subscriptionLifecycle = createSubscriptionLifecycleService({
-    apiAccessService: service,
-    eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable),
-    gateway: stripeGateway,
-    priceIds: environment.priceIds,
-  });
+  subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, siteOrigin: environment.siteOrigin, enabled: true });
+  subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
+  subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
   subscriptionManagementApplication = createSubscriptionManagementHandler({
     customerAuth,
-    management: createSubscriptionManagementService({
-      gateway: stripeGateway,
-      apiAccessService: guardedService,
-      priceIds: environment.priceIds,
-      enabled: true,
-    }),
+    management: createSubscriptionManagementService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true }),
     siteOrigin: environment.siteOrigin,
     enabled: true,
   });
@@ -171,14 +138,14 @@ const application = createApiAccessHandler({
 
 export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
-  if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) {
-    return accountAccessAdminApplication(event);
-  }
-  if (path.includes("/internal/admin/customers") && adminCustomerApplication) {
-    return adminCustomerApplication(event);
-  }
-  if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) {
-    return subscriptionManagementApplication(event);
-  }
+  if (path.includes("/customer/support-automation")) return supportAutomationApplication(event);
+  if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) return accountAccessAdminApplication(event);
+  if (path.includes("/internal/admin/customers") && adminCustomerApplication) return adminCustomerApplication(event);
+  if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) return subscriptionManagementApplication(event);
   return application(event);
+}
+
+export async function supportAutomationWorker() {
+  if (!supportAutomation) return { activationEnabled: false, accounts: [] };
+  return supportAutomation.processTick(10);
 }
