@@ -8,6 +8,10 @@ on:
       - ".github/workflows/release-candidate-ci.yml"
       - "docs/release-contract.md"
       - "docs/release-candidate-dry-run.md"
+      - "docs/project-completion-plan.md"
+      - "docs/active-buildout-handoff.md"
+      - "README.md"
+      - "ROADMAP.md"
       - "CHANGELOG.md"
       - "SPEC.md"
   workflow_dispatch:

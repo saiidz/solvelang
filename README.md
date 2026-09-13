@@ -38,10 +38,10 @@ Public claims should use these labels:
 - deterministic local execution
 - hardened execution modes that deny network, file, environment, and agent capabilities
 - a local-first Workflow Intelligence Studio with deterministic analysis
-- a smaller browser-safe `/run` preview
+- a bounded browser-safe `/run` preview backed by the pinned audited WASM handoff; native `solvec` remains canonical and this is not managed execution
 - bounded read-only Repository Audit / Solve Graph and Server Audit product surfaces
 - a pure Rust evaluator core and deny-all WASM wrapper with shared conformance and deterministic limits; `/run/` uses a pinned audited artifact in the static build, with no server fallback (deployment remains separately verified)
-- observe-only Self-Driving contracts and fixture/offline Observe Run/Inbox composition through #799; no live provider connection, credential resolution, PR writes, or applied suggestions
+- repository-safe Self-Driving Observe/Suggest, patch/preflight, single-use claim/execution-plan/finalization, and PostHog canary safety contracts; live provider activation, credential use, and PR writes remain separately gated and are not implied by repository merges
 - production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
@@ -70,7 +70,7 @@ Repository validation retains both Trusted Mac and supplemental Oracle ARM64 lan
 - runtime adapters for established orchestration platforms
 - full hosted Rust runtime
 - managed workflow execution
-- production packaging and versioned releases
+- owner-authorized public version selection/publication and additional release-platform artifacts beyond the current Linux x86_64 repository evidence
 - enterprise governance, durability, and observability
 
 Planned capabilities are direction, not working product features.
@@ -185,7 +185,7 @@ solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
 
-A canonical `solvec version` command and versioned release artifact workflow are still release-engineering work; do not infer a published binary-release contract merely from `Cargo.toml` metadata.
+The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No public version/tag/release is selected or published by those gates, and current repository artifact evidence is Linux x86_64 only; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
 
 ## Runtime safety
 
@@ -268,9 +268,9 @@ Studio analysis is deterministic, not AI analysis. Studio’s broader workflow m
 
 ### 3. Website and browser previews
 
-`site/` contains the public website, documentation experiences, demos, account screens, and a limited browser-safe workflow preview.
+`site/` contains the public website, documentation experiences, demos, account screens, and a bounded browser-safe workflow preview.
 
-The browser preview supports a smaller subset than the Rust runtime and should not be presented as equivalent to full hosted execution.
+The browser `/run` preview uses the reviewed pinned, same-origin, hash-verified WASM handoff with visible fail-closed behavior. It is not equivalent to the native Rust CLI and does not establish managed/server execution.
 
 ### 4. Account/API/Admin foundation
 
@@ -484,8 +484,8 @@ The strategic roadmap is maintained in [`docs/strategy.md`](docs/strategy.md). T
 Near-term priorities are:
 
 1. keep implementation-backed language/spec/conformance truth aligned,
-2. implement the version/release artifact contract without conflating it with production activation,
-3. add and validate the deny-all WASM wrapper over the extracted pure Rust core,
+2. finish public version selection, required exact-platform release evidence, and owner-authorized publication without conflating repository release work with production activation,
+3. maintain browser/WASM conformance, pinned artifact qualification, and fail-closed loading rather than treating the browser preview as managed execution,
 4. strengthen developer onboarding and documentation,
 5. continue bounded read-only audit intelligence and operational hardening,
 6. validate product demand before expanding managed execution.
