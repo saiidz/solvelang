@@ -3,9 +3,10 @@ import test from "node:test";
 import { createSupportAutomationService } from "../src/support-automation.js";
 import { createMemorySupportAutomationStore } from "../src/support-automation-store.js";
 
-const gmailSecret = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/gmail-test-AbCd";
-const linearSecret = "arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/linear-test-EfGh";
-const session = { accountId: "acct_test", email: "owner@example.com" };
+const ACCOUNT_ID = `acct_${"a".repeat(32)}`;
+const gmailSecret = `arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/${ACCOUNT_ID}/gmail-test-AbCd`;
+const linearSecret = `arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/${ACCOUNT_ID}/linear-test-EfGh`;
+const session = { accountId: ACCOUNT_ID, email: "owner@example.com" };
 const configInput = {
   provider: "gmail",
   inboxEmail: "support@example.com",
@@ -19,7 +20,7 @@ const configInput = {
 
 function fixtures(overrides = {}) {
   const store = createMemorySupportAutomationStore();
-  const calls = { profile: 0, list: 0, get: 0, issue: 0, reply: 0 };
+  const calls = { profile: 0, list: 0, get: 0, ack: 0, issue: 0, reply: 0 };
   const message = {
     id: "msg_1", threadId: "thread_1", rfcMessageId: "<msg_1@example.com>",
     from: "customer@example.com", to: "support@example.com", subject: "App error", text: "The app crashes when I open settings.",
@@ -28,6 +29,7 @@ function fixtures(overrides = {}) {
     async getProfile() { calls.profile += 1; return { emailAddress: "support@example.com" }; },
     async listUnread() { calls.list += 1; return [{ id: message.id }]; },
     async getMessage() { calls.get += 1; return structuredClone(message); },
+    async markRead() { calls.ack += 1; return { id: message.id }; },
     async sendReply() { calls.reply += 1; return { id: `reply_${calls.reply}`, threadId: message.threadId }; },
     ...overrides.gmail,
   };
@@ -50,7 +52,7 @@ async function configureAndResume(service) {
   return service.resume(session);
 }
 
-test("configuration stores secret references only, remains paused, and activation is independently gated", async () => {
+test("configuration stores tenant-scoped secret references only, remains paused, and activation is independently gated", async () => {
   const blocked = fixtures({ activationEnabled: false });
   const result = await blocked.service.configure(session, configInput);
   assert.equal(result.automationState, "PAUSED");
@@ -63,22 +65,29 @@ test("configuration stores secret references only, remains paused, and activatio
   assert.ok(!JSON.stringify(config).includes("apiKey"));
 });
 
-test("configuration rejects raw credential-shaped values and unscoped secret ARNs", async () => {
+test("configuration rejects raw, unscoped, and cross-account secret references", async () => {
   const { service } = fixtures();
-  for (const value of ["ya29.raw-token-value-that-should-not-be-stored", "arn:aws:secretsmanager:us-east-1:123456789012:secret:other/path-secret"]) {
+  const other = `acct_${"b".repeat(32)}`;
+  for (const value of [
+    "ya29.raw-token-value-that-should-not-be-stored",
+    "arn:aws:secretsmanager:us-east-1:123456789012:secret:other/path-secret",
+    `arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/${other}/gmail-test-AbCd`,
+  ]) {
     await assert.rejects(() => service.configure(session, { ...configInput, gmailCredentialSecretArn: value }), (error) => error.code === "invalid_support_automation_secret_ref");
   }
 });
 
-test("routine message creates one task and one reply with durable event deduplication", async () => {
+test("routine message creates one task and one reply with durable event deduplication and acknowledgement", async () => {
   const { service, calls } = fixtures();
   await configureAndResume(service);
   const first = await service.processTick();
   assert.equal(first.accounts[0].processed[0].state, "PROCESSED");
-  assert.equal(calls.issue, 1); assert.equal(calls.reply, 1);
+  assert.equal(first.accounts[0].processed[0].acknowledgement, "read");
+  assert.equal(calls.issue, 1); assert.equal(calls.reply, 1); assert.equal(calls.ack, 1);
   const second = await service.processTick();
   assert.equal(second.accounts[0].processed[0].duplicate, true);
-  assert.equal(calls.issue, 1); assert.equal(calls.reply, 1);
+  assert.equal(second.accounts[0].processed[0].acknowledgement, "read");
+  assert.equal(calls.issue, 1); assert.equal(calls.reply, 1); assert.equal(calls.ack, 2);
   const history = await service.history(session);
   assert.equal(history.length, 1);
   assert.equal(history[0].state, "PROCESSED");
@@ -93,7 +102,8 @@ test("sensitive content is treated as untrusted data and cannot authorize extern
   await configureAndResume(service);
   const result = await service.processTick();
   assert.equal(result.accounts[0].processed[0].state, "REVIEW_REQUIRED");
-  assert.equal(calls.issue, 0); assert.equal(calls.reply, 0);
+  assert.equal(result.accounts[0].processed[0].acknowledgement, "read");
+  assert.equal(calls.issue, 0); assert.equal(calls.reply, 0); assert.equal(calls.ack, 1);
   const history = await service.history(session);
   assert.equal(history[0].requiresReview, true);
 });
@@ -104,23 +114,24 @@ test("provider mailbox identity mismatch pauses the connection before reading me
   await configureAndResume(service);
   const result = await service.processTick();
   assert.equal(result.accounts[0].state, "SOURCE_IDENTITY_MISMATCH");
-  assert.equal(calls.list, 0); assert.equal(calls.issue, 0); assert.equal(calls.reply, 0);
+  assert.equal(calls.list, 0); assert.equal(calls.issue, 0); assert.equal(calls.reply, 0); assert.equal(calls.ack, 0);
   assert.equal((await store.getConfig(session.accountId)).automationState, "PAUSED");
 });
 
-test("ambiguous external outcome is recorded unknown and never blindly retried", async () => {
+test("ambiguous external outcome is recorded unknown, acknowledged, and never blindly retried", async () => {
   const { service, calls, linear } = fixtures();
   linear.createIssue = async () => { calls.issue += 1; throw new Error("connection reset after request body was sent"); };
   await configureAndResume(service);
   const first = await service.processTick();
   assert.equal(first.accounts[0].processed[0].state, "OUTCOME_UNKNOWN");
-  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0);
+  assert.equal(first.accounts[0].processed[0].acknowledgement, "read");
+  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0); assert.equal(calls.ack, 1);
   const second = await service.processTick();
   assert.equal(second.accounts[0].processed[0].duplicate, true);
-  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0);
+  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0); assert.equal(calls.ack, 2);
 });
 
-test("pause or revoke wins the race before the next external action", async () => {
+test("pause or revoke wins the race before the next external action and defers acknowledgement", async () => {
   const { service, calls, linear, store } = fixtures();
   await configureAndResume(service);
   linear.createIssue = async () => {
@@ -131,7 +142,44 @@ test("pause or revoke wins the race before the next external action", async () =
   };
   const result = await service.processTick();
   assert.equal(result.accounts[0].processed[0].state, "STOPPED");
-  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0);
+  assert.equal(result.accounts[0].processed[0].acknowledgement, "deferred");
+  assert.equal(calls.issue, 1); assert.equal(calls.reply, 0); assert.equal(calls.ack, 0);
+});
+
+test("unexpired event lease prevents concurrent processing and stale lease is safely reclaimed", async () => {
+  const active = fixtures();
+  await configureAndResume(active.service);
+  const config = await active.store.getConfig(session.accountId);
+  await active.store.claimEvent({
+    accountId: session.accountId,
+    eventId: "gmail:msg_1",
+    providerMessageHash: "hash",
+    claimId: "other_worker",
+    processingUntil: "2026-09-13T23:00:00.000Z",
+    createdAt: "2026-09-13T22:00:00.000Z",
+    updatedAt: "2026-09-13T22:00:00.000Z",
+  });
+  const held = await active.service.processMessage(config, active.message);
+  assert.equal(held.state, "PROCESSING");
+  assert.equal(held.duplicate, true);
+  assert.equal(active.calls.issue, 0); assert.equal(active.calls.reply, 0);
+
+  const recovered = fixtures();
+  await configureAndResume(recovered.service);
+  const recoveredConfig = await recovered.store.getConfig(session.accountId);
+  await recovered.store.claimEvent({
+    accountId: session.accountId,
+    eventId: "gmail:msg_1",
+    providerMessageHash: "hash",
+    claimId: "crashed_worker",
+    processingUntil: "2026-09-13T21:59:00.000Z",
+    createdAt: "2026-09-13T21:58:00.000Z",
+    updatedAt: "2026-09-13T21:58:00.000Z",
+  });
+  const result = await recovered.service.processMessage(recoveredConfig, recovered.message);
+  assert.equal(result.state, "PROCESSED");
+  assert.equal(result.reclaimed, true);
+  assert.equal(recovered.calls.issue, 1); assert.equal(recovered.calls.reply, 1);
 });
 
 test("revocation removes credential references and prevents resume without reconfiguration", async () => {
@@ -150,5 +198,5 @@ test("history is account-scoped", async () => {
   await configureAndResume(service);
   await service.processTick();
   assert.equal((await service.history(session)).length, 1);
-  assert.equal((await service.history({ accountId: "acct_other" })).length, 0);
+  assert.equal((await service.history({ accountId: `acct_${"b".repeat(32)}` })).length, 0);
 });
