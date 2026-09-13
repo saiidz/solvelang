@@ -107,14 +107,17 @@ jobs:
           grep -q 'SupportAutomationActivationEnabled=false' ../../.github/workflows/deploy-support-automation-production-foundation.yml
           ! grep -Eqi 'stripe|ses:Send|kms:Decrypt' support-automation-production-stack.yaml
 
-      - name: Verify supplemental deploy policy is scoped to support EventBridge rules
+      - name: Verify supplemental deploy policy remains narrowly scoped
         run: |
           node - <<'NODE'
           const fs = require('fs');
           const policy = JSON.parse(fs.readFileSync('../../ops/aws/production-support-automation-deploy-supplemental-policy.json', 'utf8'));
-          if (policy.Statement?.length !== 1) throw new Error('support automation deploy supplement must contain one bounded statement');
-          const resource = policy.Statement[0]?.Resource;
-          if (resource !== 'arn:aws:events:*:*:rule/solvelang-api-access-production-support-automation-*') throw new Error('support automation EventBridge resource scope widened');
+          if (policy.Statement?.length !== 2) throw new Error('support automation deploy supplement must contain exactly two bounded statements');
+          const cloudFormation = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationCloudFormationStack');
+          const events = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationEventBridgeRules');
+          if (!cloudFormation || cloudFormation.Resource !== 'arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-support-automation/*') throw new Error('support automation CloudFormation scope widened');
+          if (!Array.isArray(cloudFormation.Action) || !cloudFormation.Action.includes('cloudformation:UpdateTerminationProtection')) throw new Error('support automation CloudFormation lifecycle contract is incomplete');
+          if (!events || events.Resource !== 'arn:aws:events:*:*:rule/solvelang-api-access-production-support-automation-*') throw new Error('support automation EventBridge resource scope widened');
           NODE
 
       - name: Assume production deploy role
