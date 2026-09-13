@@ -124,11 +124,11 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
     }
   }
 
-  async function finishEvent({ accountId, eventId, claimId, state, category, urgency, requiresReview, sensitiveReasons, actions, updatedAt }) {
+  async function finishEvent({ accountId, eventId, claimId, state, category, urgency, requiresReview, sensitiveReasons, policyVersion, actions, updatedAt }) {
     await client.send(new UpdateCommand({
       TableName: tableName,
       Key: { pk: pk(accountId), sk: eventSk(eventId) },
-      UpdateExpression: "SET #state = :state, category = :category, urgency = :urgency, requiresReview = :requiresReview, sensitiveReasons = :sensitiveReasons, actions = :actions, updatedAt = :updatedAt REMOVE processingUntil",
+      UpdateExpression: "SET #state = :state, category = :category, urgency = :urgency, requiresReview = :requiresReview, sensitiveReasons = :sensitiveReasons, policyVersion = :policyVersion, actions = :actions, updatedAt = :updatedAt REMOVE processingUntil",
       ExpressionAttributeNames: { "#state": "state" },
       ExpressionAttributeValues: {
         ":state": state,
@@ -136,6 +136,7 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
         ":urgency": urgency,
         ":requiresReview": Boolean(requiresReview),
         ":sensitiveReasons": sensitiveReasons ?? [],
+        ":policyVersion": policyVersion,
         ":actions": actions ?? [],
         ":updatedAt": updatedAt,
         ":claimId": claimId,
