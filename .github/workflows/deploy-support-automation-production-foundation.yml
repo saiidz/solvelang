@@ -36,12 +36,13 @@ jobs:
       API_STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
       SUPPORT_STACK_NAME: solvelang-api-access-production-support-automation
       SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
-      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Enforce default-off support automation boundary
+        env:
+          CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
         shell: bash
         run: |
           set -euo pipefail
@@ -143,6 +144,7 @@ jobs:
 
       - name: Deploy foundation with activation OFF
         env:
+          CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact.outputs.bucket }}
           EXISTING_API_ID: ${{ steps.baseline.outputs.api_id }}
           CUSTOMER_AUTH_TABLE: ${{ steps.baseline.outputs.customer_auth_table }}
