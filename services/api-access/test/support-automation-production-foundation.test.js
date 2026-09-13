@@ -19,10 +19,34 @@ test("support runtime defaults off and rejects activation without the foundation
   const disabled = parseSupportAutomationRuntimeEnvironment({ SITE_ORIGIN: "https://www.solve-lang.com" });
   assert.equal(disabled.enabled, false);
   assert.equal(disabled.activationEnabled, false);
+  assert.equal(disabled.runtimeMode, "api");
   assert.throws(() => parseSupportAutomationRuntimeEnvironment({
     SITE_ORIGIN: "https://www.solve-lang.com",
     API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: "true",
   }), /requires support automation to be enabled/);
+});
+
+test("worker runtime does not require or receive the customer-auth pepper", () => {
+  const worker = parseSupportAutomationRuntimeEnvironment({
+    SITE_ORIGIN: "https://www.solve-lang.com",
+    API_SUPPORT_AUTOMATION_ENABLED: "true",
+    API_SUPPORT_AUTOMATION_RUNTIME_MODE: "worker",
+    API_SUPPORT_AUTOMATION_TABLE: "support-table",
+    API_CUSTOMER_AUTH_TABLE: "customer-auth-table",
+  });
+  assert.equal(worker.runtimeMode, "worker");
+  assert.equal(worker.customerAuthPepper, undefined);
+  assert.throws(() => parseSupportAutomationRuntimeEnvironment({
+    SITE_ORIGIN: "https://www.solve-lang.com",
+    API_SUPPORT_AUTOMATION_ENABLED: "true",
+    API_SUPPORT_AUTOMATION_RUNTIME_MODE: "api",
+    API_SUPPORT_AUTOMATION_TABLE: "support-table",
+    API_CUSTOMER_AUTH_TABLE: "customer-auth-table",
+  }), /API_CUSTOMER_AUTH_PEPPER is required/);
+  assert.throws(() => parseSupportAutomationRuntimeEnvironment({
+    SITE_ORIGIN: "https://www.solve-lang.com",
+    API_SUPPORT_AUTOMATION_RUNTIME_MODE: "unexpected",
+  }), /must be api or worker/);
 });
 
 test("restricted customer accounts are removed from worker discovery and paused", async () => {
@@ -95,7 +119,11 @@ test("support API cannot resolve provider secrets while worker has account-statu
   const template = await readFile(templateUrl, "utf8");
   const apiBlock = template.slice(template.indexOf("SupportAutomationApiFunction:"), template.indexOf("SupportAutomationWorkerFunction:"));
   const workerBlock = template.slice(template.indexOf("SupportAutomationWorkerFunction:"), template.indexOf("SupportAutomationIntegration:"));
+  assert.match(apiBlock, /API_SUPPORT_AUTOMATION_RUNTIME_MODE: api/);
+  assert.match(apiBlock, /API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper/);
   assert.doesNotMatch(apiBlock, /secretsmanager:GetSecretValue/);
+  assert.match(workerBlock, /API_SUPPORT_AUTOMATION_RUNTIME_MODE: worker/);
+  assert.doesNotMatch(workerBlock, /API_CUSTOMER_AUTH_PEPPER/);
   assert.match(workerBlock, /dynamodb:GetItem/);
   assert.match(workerBlock, /Resource: !Sub arn:\$\{AWS::Partition\}:dynamodb:\$\{AWS::Region\}:\$\{AWS::AccountId\}:table\/\$\{CustomerAuthTableName\}/);
   assert.match(workerBlock, /secretsmanager:GetSecretValue/);
