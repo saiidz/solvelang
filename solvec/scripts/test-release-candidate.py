@@ -1,4 +1,4 @@
-"""Repository-only release guard tests; no provider or candidate binary runs."""
+"""Repository-only release guard tests; no provider or production binary runs."""
 import hashlib
 import io
 import json
@@ -108,6 +108,46 @@ class CandidateGuards(unittest.TestCase):
                     b"archive must contain exactly one regular executable solvec",
                     result.stderr,
                 )
+
+    def test_packaged_version_must_match_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = root / "solvelang-0.1.0-linux-x86_64.tar.gz"
+            payload = b"#!/bin/sh\nif [ \"$1\" = version ]; then echo 'solvec 9.9.9'; exit 0; fi\nif [ \"$1\" = help ]; then exit 0; fi\nexit 2\n"
+            with tarfile.open(artifact, "w:gz") as archive:
+                member = tarfile.TarInfo("solvec")
+                member.mode = 0o755
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            (root / "SHA256SUMS").write_text(f"{digest}  {artifact.name}\n")
+            (root / "provenance.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1.0.0",
+                        "kind": "solvelang_release_candidate",
+                        "publishable": False,
+                        "source_commit": "a" * 40,
+                        "source_date_epoch": 1,
+                        "target": "x86_64-unknown-linux-gnu",
+                        "os": "linux",
+                        "arch": "x86_64",
+                        "version": "0.1.0",
+                        "artifact": artifact.name,
+                        "sha256": digest,
+                        "workflow": {},
+                    }
+                )
+            )
+            result = subprocess.run(
+                ["bash", str(SCRIPTS / "verify-release-candidate.sh"), str(root)],
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                b"packaged solvec version does not match provenance version",
+                result.stderr,
+            )
 
 
 class TaggedReleaseSourceGuards(unittest.TestCase):
