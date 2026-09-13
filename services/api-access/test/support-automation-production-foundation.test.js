@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { parseSupportAutomationRuntimeEnvironment } from "../src/support-automation-runtime-handler.js";
+import {
+  createAccountAccessGuardedSupportProvider,
+  createAccountAccessGuardedSupportStore,
+  parseSupportAutomationRuntimeEnvironment,
+} from "../src/support-automation-runtime-handler.js";
 
 const root = new URL("../../../", import.meta.url);
 const templateUrl = new URL("services/api-access/support-automation-production-stack.yaml", root);
 const workflowUrl = new URL(".github/workflows/deploy-support-automation-production-foundation.yml", root);
 const policyUrl = new URL("ops/aws/production-support-automation-deploy-supplemental-policy.json", root);
 const apiCiUrl = new URL(".github/workflows/api-access-ci.yml", root);
+const accountId = `acct_${"a".repeat(32)}`;
+const credentialSecretArn = `arn:aws:secretsmanager:us-east-1:123456789012:secret:solvelang/support-automation/${accountId}/gmail-AbCd`;
 
 test("support runtime defaults off and rejects activation without the foundation", () => {
   const disabled = parseSupportAutomationRuntimeEnvironment({ SITE_ORIGIN: "https://www.solve-lang.com" });
@@ -17,6 +23,43 @@ test("support runtime defaults off and rejects activation without the foundation
     SITE_ORIGIN: "https://www.solve-lang.com",
     API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: "true",
   }), /requires support automation to be enabled/);
+});
+
+test("restricted customer accounts are removed from worker discovery and paused", async () => {
+  const calls = [];
+  const store = {
+    async listActiveConfigs() { return [{ accountId, revision: 7, automationState: "ACTIVE" }]; },
+    async setState(...args) { calls.push(args); return { automationState: "PAUSED", revision: 8 }; },
+  };
+  const guarded = createAccountAccessGuardedSupportStore(store, { async isActive(value) { assert.equal(value, accountId); return false; } }, {
+    now: () => Date.parse("2026-09-13T23:40:00Z"),
+    logger: { error() { throw new Error("pause should not fail"); } },
+  });
+  assert.deepEqual(await guarded.listActiveConfigs(10), []);
+  assert.deepEqual(calls, [[accountId, 7, "PAUSED", "2026-09-13T23:40:00.000Z"]]);
+});
+
+test("provider calls recheck account access so suspension during a tick fails before external I/O", async () => {
+  let providerCalls = 0;
+  let active = true;
+  const provider = createAccountAccessGuardedSupportProvider({
+    async sendReply(input) { providerCalls += 1; return { id: input.messageId ?? "reply" }; },
+  }, {
+    async isActive(value) { assert.equal(value, accountId); return active; },
+  });
+  await provider.sendReply({ credentialSecretArn, messageId: "first" });
+  assert.equal(providerCalls, 1);
+  active = false;
+  await assert.rejects(
+    () => provider.sendReply({ credentialSecretArn, messageId: "second" }),
+    /account access is restricted/,
+  );
+  assert.equal(providerCalls, 1);
+  await assert.rejects(
+    () => provider.sendReply({ credentialSecretArn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:wrong/path" }),
+    /not tenant scoped/,
+  );
+  assert.equal(providerCalls, 1);
 });
 
 test("support production stack attaches only bounded customer routes and defaults all processing off", async () => {
