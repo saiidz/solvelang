@@ -4,10 +4,10 @@ export const CONTEXT_PACK_SCHEMA = "solvelang.context.pack.v0" as const;
 export const MIN_CONTEXT_BUDGET_BYTES = 1_024;
 export const MAX_CONTEXT_BUDGET_BYTES = 512 * 1_024;
 export const DEFAULT_CONTEXT_BUDGET_BYTES = 64 * 1_024;
+export const MAX_CONTEXT_SOURCES = 512;
+export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 
 const MAX_TASK_BYTES = 16 * 1_024;
-const MAX_SOURCES = 512;
-const MAX_SOURCE_BYTES = 2 * 1_024 * 1_024;
 const MAX_REASON_TOKENS = 8;
 const WINDOW_RADIUS = 4;
 
@@ -51,7 +51,7 @@ interface Candidate {
   bytes: number;
 }
 
-function sha256(value: string): string {
+export function sha256Text(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
@@ -61,7 +61,7 @@ function assertBoundedText(label: string, value: string, maxBytes: number): void
   if (bytes > maxBytes) throw new Error(`${label} exceeds the ${maxBytes} byte safety limit.`);
 }
 
-function normalizePath(input: string): string {
+export function normalizeContextPath(input: string): string {
   const normalized = input.replaceAll("\\", "/").replace(/^\.\//, "");
   const segments = normalized.split("/");
   if (
@@ -75,7 +75,7 @@ function normalizePath(input: string): string {
   return normalized;
 }
 
-function taskTokens(task: string): string[] {
+export function contextTaskTokens(task: string): string[] {
   const matches = task.toLowerCase().match(/[a-z0-9_./:@-]{2,}/g) ?? [];
   const deduped = new Set<string>();
   for (const token of matches) {
@@ -84,6 +84,28 @@ function taskTokens(task: string): string[] {
     if (deduped.size >= 128) break;
   }
   return [...deduped].sort();
+}
+
+export function contextEntryHandle(
+  path: string,
+  sourceSha256: string,
+  startLine: number,
+  endLine: number,
+  excerptSha256: string,
+): string {
+  const normalizedPath = normalizeContextPath(path);
+  if (!/^[a-f0-9]{64}$/.test(sourceSha256) || !/^[a-f0-9]{64}$/.test(excerptSha256)) {
+    throw new Error("Context entry hashes must be lowercase SHA-256 values.");
+  }
+  if (!Number.isInteger(startLine) || !Number.isInteger(endLine) || startLine < 1 || endLine < startLine) {
+    throw new Error("Context entry line bounds are invalid.");
+  }
+  const digest = sha256Text(`${normalizedPath}\0${sourceSha256}\0${startLine}\0${endLine}\0${excerptSha256}`);
+  return `ctx_${digest.slice(0, 32)}`;
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function countOccurrences(haystack: string, needle: string): number {
@@ -113,13 +135,13 @@ function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Arr
 }
 
 function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
-  const normalizedPath = normalizePath(source.path);
-  assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_SOURCE_BYTES);
+  const normalizedPath = normalizeContextPath(source.path);
+  assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_CONTEXT_SOURCE_BYTES);
 
   const lines = source.text.replace(/\r\n/g, "\n").split("\n");
   const lowerLines = lines.map((line) => line.toLowerCase());
   const lowerPath = normalizedPath.toLowerCase();
-  const sourceSha256 = sha256(source.text);
+  const sourceSha256 = sha256Text(source.text);
   const pathReasons = tokens.filter((token) => lowerPath.includes(token));
   const pathScore = pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0);
 
@@ -158,7 +180,7 @@ function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
 }
 
 function candidateSort(left: Candidate, right: Candidate): number {
-  return right.score - left.score || left.path.localeCompare(right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
+  return right.score - left.score || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
 }
 
 function canonicalPackIdentity(taskSha256: string, budgetBytes: number, entries: ContextPackEntry[]): string {
@@ -187,10 +209,10 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
     throw new Error(`Context budget must be an integer between ${MIN_CONTEXT_BUDGET_BYTES} and ${MAX_CONTEXT_BUDGET_BYTES} bytes.`);
   }
   if (sources.length === 0) throw new Error("At least one context source is required.");
-  if (sources.length > MAX_SOURCES) throw new Error(`Context sources exceed the ${MAX_SOURCES} source safety limit.`);
+  if (sources.length > MAX_CONTEXT_SOURCES) throw new Error(`Context sources exceed the ${MAX_CONTEXT_SOURCES} source safety limit.`);
 
-  const tokens = taskTokens(task);
-  const orderedSources = [...sources].sort((left, right) => normalizePath(left.path).localeCompare(normalizePath(right.path)));
+  const tokens = contextTaskTokens(task);
+  const orderedSources = [...sources].sort((left, right) => compareText(normalizeContextPath(left.path), normalizeContextPath(right.path)));
   const candidates = orderedSources.flatMap((source) => buildCandidates(source, tokens)).sort(candidateSort);
 
   let selectedBytes = 0;
@@ -202,10 +224,9 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
       omittedCandidates += 1;
       continue;
     }
-    const excerptSha256 = sha256(candidate.content);
-    const handleDigest = sha256(`${candidate.path}\0${candidate.sourceSha256}\0${candidate.startLine}\0${candidate.endLine}\0${excerptSha256}`);
+    const excerptSha256 = sha256Text(candidate.content);
     entries.push({
-      handle: `ctx_${handleDigest.slice(0, 32)}`,
+      handle: contextEntryHandle(candidate.path, candidate.sourceSha256, candidate.startLine, candidate.endLine, excerptSha256),
       path: candidate.path,
       startLine: candidate.startLine,
       endLine: candidate.endLine,
@@ -219,9 +240,9 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
     selectedBytes += candidate.bytes;
   }
 
-  entries.sort((left, right) => left.path.localeCompare(right.path) || left.startLine - right.startLine || left.endLine - right.endLine);
-  const taskSha256 = sha256(task);
-  const packDigest = sha256(canonicalPackIdentity(taskSha256, budgetBytes, entries));
+  entries.sort((left, right) => compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine);
+  const taskSha256 = sha256Text(task);
+  const packDigest = sha256Text(canonicalPackIdentity(taskSha256, budgetBytes, entries));
 
   return {
     schema: CONTEXT_PACK_SCHEMA,
