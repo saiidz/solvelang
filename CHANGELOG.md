@@ -21,6 +21,7 @@ This changelog does not imply that separately gated production services are enab
 - Added loop-control and pure collection helpers while preserving hardened-mode denial of host-capability calls.
 - Hardened workflow/runtime reuse so prior module/entry state cannot leak into a later execution epoch.
 - Preserved source-located diagnostics and graph/preflight validation before user-visible evaluation.
+- Replaced the historical TypeScript `/run` execution fallback with the reviewed browser WASM handoff: a pinned, same-origin, hash-verified qualification package loaded through the shared bounded adapter with visible fail-closed behavior. Native `solvec` remains canonical, and this browser path does not enable managed execution.
 
 ### Editor tooling
 
@@ -41,6 +42,6 @@ This changelog does not imply that separately gated production services are enab
 ### Known limitations
 
 - SolveLang remains early beta and has no 1.0 stability guarantee.
-- Browser `/run` remains a deliberately smaller TypeScript preview; canonical browser/WASM parity is deferred until the pure Rust core and deny-all WASM boundary are implemented and validated.
+- Browser `/run` is a bounded audited WASM preview, not a managed/server execution surface; native `solvec` remains canonical, and cross-host byte reproducibility is not claimed.
 - Remote packages, registries, dependency installation, and general managed execution are not part of the current local language contract.
-- Trusted Mac restoration PR #723 remains blocked and is not release evidence until a current-main successor receives the required self-hosted Mac validation.
+- Current CLI release evidence covers Linux x86_64 only. macOS ARM64 and Windows x64 release support are not established by the repository release gates.
