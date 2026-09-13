@@ -32,9 +32,14 @@ export type StatusIncident = {
   updates: StatusIncidentUpdate[];
 };
 
-export const statusPage = {
+export const statusPage: {
+  lastUpdated: string;
+  reportingMode: "manual";
+  components: ComponentStatus[];
+  incidents: StatusIncident[];
+} = {
   lastUpdated: "2026-09-13T20:49:00Z",
-  reportingMode: "manual" as const,
+  reportingMode: "manual",
   components: [
     {
       name: "Website",
@@ -72,6 +77,6 @@ export const statusPage = {
       state: "operational",
       note: "Recent exact-head CI, Rust, and WASM security checks passed, and the latest public-site deployments completed successfully.",
     },
-  ] satisfies ComponentStatus[],
-  incidents: [] satisfies StatusIncident[],
+  ],
+  incidents: [],
 };
