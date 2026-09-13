@@ -15,6 +15,13 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+function toolText(result, label) {
+  assert.notEqual(result.isError, true, `${label} must complete without a protocol/tool error`);
+  const text = result.content?.find((item) => item.type === "text")?.text;
+  assert.equal(typeof text, "string", `${label} must return text content`);
+  return text;
+}
+
 const packageManifest = await readJson(path.join(packageRoot, "package.json"));
 const codexManifest = await readJson(path.join(repositoryRoot, "plugins", "solvelang", ".codex-plugin", "plugin.json"));
 const claudeManifest = await readJson(path.join(repositoryRoot, "plugins", "solvelang", ".claude-plugin", "plugin.json"));
@@ -51,7 +58,8 @@ try {
   const consumerRoot = path.join(temporaryRoot, "consumer");
   const workspaceRoot = path.join(temporaryRoot, "workspace");
   await mkdir(consumerRoot);
-  await mkdir(workspaceRoot);
+  await mkdir(path.join(workspaceRoot, "src"), { recursive: true });
+  await writeFile(path.join(workspaceRoot, "src", "invoice.ts"), "export function retryInvoice() {\n  return schedulePaymentRetry();\n}\n", "utf8");
   await writeFile(path.join(consumerRoot, "package.json"), '{"private":true,"type":"module"}\n');
 
   const tarballPath = path.join(temporaryRoot, packResult.filename);
@@ -85,6 +93,7 @@ try {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [installedEntrypoint],
+    cwd: workspaceRoot,
   });
   client = new Client(
     { name: "solvelang-plugin-roundtrip-smoke", version: "0.0.0" },
@@ -99,6 +108,10 @@ try {
     "solvelang_generate_n8n_report",
     "solvelang_graph_find_nodes",
     "solvelang_graph_explain_impact",
+    "solvelang_context_plan",
+    "solvelang_context_pack",
+    "solvelang_context_retrieve",
+    "solvelang_context_capabilities",
   ]) {
     const tool = tools.get(requiredName);
     assert.ok(tool, `plugin MCP roundtrip is missing required tool ${requiredName}`);
@@ -124,11 +137,46 @@ try {
     name: "solvelang_analyze_n8n",
     arguments: { rawJson: fixture },
   });
-  assert.notEqual(result.isError, true, "plugin MCP tool call must complete without a protocol/tool error");
-  const text = result.content?.find((item) => item.type === "text")?.text;
-  assert.equal(typeof text, "string", "plugin MCP tool call must return bounded text content");
+  const text = toolText(result, "plugin MCP n8n call");
   assert.match(text, /plugin-roundtrip/, "plugin MCP roundtrip must analyze the supplied in-memory workflow");
   assert.doesNotMatch(text, /PRIVATE KEY|github_pat_|gh[pousr]_/i, "plugin MCP roundtrip must not emit credential-like material");
+
+  const planResult = await client.callTool({
+    name: "solvelang_context_plan",
+    arguments: { task: "fix invoice payment retry", paths: ["src/invoice.ts"], budgetBytes: 4_096 },
+  });
+  const plan = JSON.parse(toolText(planResult, "Solve Context plan"));
+  assert.equal(plan.schema, "solvelang.context.plan.v0");
+  assert.equal(plan.workspace.mode, "explicit");
+  assert.equal(plan.pack.entries.length, 1);
+  assert.equal("content" in plan.pack.entries[0], false, "context plan must not return source content");
+
+  const contextPackResult = await client.callTool({
+    name: "solvelang_context_pack",
+    arguments: { task: "fix invoice payment retry", paths: ["src/invoice.ts"], budgetBytes: 4_096 },
+  });
+  const contextPack = JSON.parse(toolText(contextPackResult, "Solve Context pack"));
+  assert.equal(contextPack.schema, "solvelang.context.workspace-pack.v0");
+  assert.equal(contextPack.pack.entries.length, 1);
+  const [entry] = contextPack.pack.entries;
+  assert.match(entry.handle, /^ctx_[a-f0-9]{32}$/);
+  assert.match(entry.content, /retryInvoice/);
+
+  const retrievalResult = await client.callTool({
+    name: "solvelang_context_retrieve",
+    arguments: {
+      handle: entry.handle,
+      path: entry.path,
+      startLine: entry.startLine,
+      endLine: entry.endLine,
+      sourceSha256: entry.sourceSha256,
+      excerptSha256: entry.excerptSha256,
+    },
+  });
+  const retrieval = JSON.parse(toolText(retrievalResult, "Solve Context retrieval"));
+  assert.equal(retrieval.schema, "solvelang.context.retrieval.v0");
+  assert.equal(retrieval.content, entry.content, "retrieval must reproduce the exact packed excerpt");
+  assert.equal(retrieval.handle, entry.handle);
 
   console.log(`SolveLang Codex/Claude plugin MCP roundtrip PASS at ${packageManifest.name}@${packageManifest.version}`);
 } finally {

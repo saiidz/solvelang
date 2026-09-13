@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
+import { registerContextTools } from "./context-tools.js";
 import { explainSolveGraphAlternativePaths, findSolveGraphAlternativePaths } from "./solve-graph-alternative-paths.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { findSolveGraphAffectedValidations } from "./solve-graph-affected-validations.js";
@@ -195,6 +196,8 @@ const server = new McpServer(
     instructions: "Use SolveLang tools for deterministic workflow and Solve Graph analysis. Tools are read-only, bounded to 2 MB inputs and 5,000 n8n nodes, never execute workflows, never mutate repositories, and process raw JSON only in memory.",
   },
 );
+
+registerContextTools(server);
 
 server.registerTool(
   "solvelang_analyze_n8n",
