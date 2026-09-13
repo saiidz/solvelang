@@ -73,17 +73,8 @@ export function createGmailSupportProvider({ credentialResolver, fetchImpl = fet
     if (![secret.refreshToken, secret.clientId, secret.clientSecret].every((value) => typeof value === "string" && value.length >= 10)) {
       throw new Error("Gmail credential secret is invalid.");
     }
-    const form = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: secret.refreshToken,
-      client_id: secret.clientId,
-      client_secret: secret.clientSecret,
-    });
-    const body = await fetchJson(fetchImpl, "https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-    }, "Gmail OAuth");
+    const form = new URLSearchParams({ grant_type: "refresh_token", refresh_token: secret.refreshToken, client_id: secret.clientId, client_secret: secret.clientSecret });
+    const body = await fetchJson(fetchImpl, "https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() }, "Gmail OAuth");
     if (typeof body.access_token !== "string" || body.access_token.length < 20) throw new Error("Gmail OAuth did not return an access token.");
     const expiresIn = Number.isFinite(Number(body.expires_in)) ? Math.max(Number(body.expires_in), 60) : 3600;
     tokenCache.set(secretArn, { accessToken: body.access_token, expiresAt: now() + Math.max(expiresIn - 60, 30) * 1000 });
@@ -95,50 +86,28 @@ export function createGmailSupportProvider({ credentialResolver, fetchImpl = fet
     if (cached && cached.expiresAt > now()) return cached.accessToken;
     const secret = await credentialResolver(secretArn);
     const expiresAt = typeof secret.expiresAt === "string" ? Date.parse(secret.expiresAt) : Number(secret.expiresAt);
-    if (typeof secret.accessToken === "string" && secret.accessToken.length >= 20 && (!Number.isFinite(expiresAt) || expiresAt > now() + 60_000)) {
-      return secret.accessToken;
-    }
+    if (typeof secret.accessToken === "string" && secret.accessToken.length >= 20 && (!Number.isFinite(expiresAt) || expiresAt > now() + 60_000)) return secret.accessToken;
     return refreshToken(secretArn, secret);
   }
 
   async function request(secretArn, path, options = {}) {
     const accessToken = await token(secretArn);
-    return fetchJson(fetchImpl, `https://gmail.googleapis.com/gmail/v1${path}`, {
-      ...options,
-      headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", ...(options.headers ?? {}) },
-    }, "Gmail");
+    return fetchJson(fetchImpl, `https://gmail.googleapis.com/gmail/v1${path}`, { ...options, headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json", ...(options.headers ?? {}) } }, "Gmail");
   }
 
   return {
-    async getProfile({ credentialSecretArn, mailbox }) {
-      return request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/profile`, { method: "GET" });
-    },
+    async getProfile({ credentialSecretArn, mailbox }) { return request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/profile`, { method: "GET" }); },
     async listUnread({ credentialSecretArn, mailbox, limit = 5 }) {
-      const query = new URLSearchParams({
-        q: `is:unread -from:me to:${cleanAddress(mailbox)}`,
-        maxResults: String(Math.min(Math.max(limit, 1), 20)),
-      });
+      const query = new URLSearchParams({ q: `is:unread newer_than:30d -from:me to:${cleanAddress(mailbox)}`, maxResults: String(Math.min(Math.max(limit, 1), 20)) });
       const body = await request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/messages?${query}`, { method: "GET" });
       return Array.isArray(body.messages) ? body.messages.filter((entry) => typeof entry?.id === "string").slice(0, limit) : [];
     },
     async getMessage({ credentialSecretArn, mailbox, id }) {
       const body = await request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(id)}?format=full`, { method: "GET" });
-      return {
-        id: body.id,
-        threadId: body.threadId,
-        rfcMessageId: header(body.payload, "Message-ID"),
-        from: cleanAddress(header(body.payload, "From")),
-        to: cleanAddress(header(body.payload, "To") || mailbox),
-        subject: header(body.payload, "Subject") || "Support request",
-        text: plainText(body.payload),
-        receivedAt: body.internalDate ? new Date(Number(body.internalDate)).toISOString() : undefined,
-      };
+      return { id: body.id, threadId: body.threadId, rfcMessageId: header(body.payload, "Message-ID"), from: cleanAddress(header(body.payload, "From")), to: cleanAddress(header(body.payload, "To") || mailbox), subject: header(body.payload, "Subject") || "Support request", text: plainText(body.payload), receivedAt: body.internalDate ? new Date(Number(body.internalDate)).toISOString() : undefined };
     },
     async markRead({ credentialSecretArn, mailbox, id }) {
-      const body = await request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(id)}/modify`, {
-        method: "POST",
-        body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
-      });
+      const body = await request(credentialSecretArn, `/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(id)}/modify`, { method: "POST", body: JSON.stringify({ removeLabelIds: ["UNREAD"] }) });
       if (body.id !== id) throw new Error("Gmail acknowledgement did not return the expected message ID.");
       return { id };
     },
@@ -162,10 +131,7 @@ export function createLinearSupportProvider({ credentialResolver, fetchImpl = fe
       const body = await fetchJson(fetchImpl, "https://api.linear.app/graphql", {
         method: "POST",
         headers: { authorization: secret.apiKey, "content-type": "application/json" },
-        body: JSON.stringify({
-          query: "mutation SupportIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id url identifier } } }",
-          variables: { input: { teamId, title: String(title).slice(0, 240), description: String(description).slice(0, 8_000) } },
-        }),
+        body: JSON.stringify({ query: "mutation SupportIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id url identifier } } }", variables: { input: { teamId, title: String(title).slice(0, 240), description: String(description).slice(0, 8_000) } } }),
       }, "Linear");
       if (body.errors?.length || !body.data?.issueCreate?.success || !body.data?.issueCreate?.issue?.id) throw new Error("Linear issue creation was not acknowledged.");
       const issue = body.data.issueCreate.issue;

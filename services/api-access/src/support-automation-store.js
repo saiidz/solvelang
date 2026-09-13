@@ -1,9 +1,15 @@
 import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 
+const RETENTION_SECONDS = 45 * 24 * 60 * 60;
 function pk(accountId) { return `ACCOUNT#${accountId}`; }
 function eventSk(eventId) { return `EVENT#${eventId}`; }
 function actionSk(eventId, actionId) { return `ACTION#${eventId}#${actionId}`; }
 function conditional(error) { return error?.name === "ConditionalCheckFailedException"; }
+function expiresAt(isoTimestamp) {
+  const seconds = Math.floor(Date.parse(isoTimestamp) / 1000);
+  if (!Number.isSafeInteger(seconds)) throw new Error("Support automation retention timestamp is invalid.");
+  return seconds + RETENTION_SECONDS;
+}
 
 export function createDynamoSupportAutomationStore(client, tableName, { activeIndexName = "AutomationStateIndex" } = {}) {
   if (!client?.send || typeof tableName !== "string" || !tableName || tableName === "disabled") throw new Error("Support automation DynamoDB store requires a table.");
@@ -87,7 +93,7 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
   }
 
   async function claimEvent(record) {
-    const item = { ...record, pk: pk(record.accountId), sk: eventSk(record.eventId), recordType: "EVENT", state: "PROCESSING" };
+    const item = { ...record, expiresAt: expiresAt(record.createdAt), pk: pk(record.accountId), sk: eventSk(record.eventId), recordType: "EVENT", state: "PROCESSING" };
     try {
       await client.send(new PutCommand({ TableName: tableName, Item: item, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" }));
       return { created: true, record: item };
@@ -147,7 +153,7 @@ export function createDynamoSupportAutomationStore(client, tableName, { activeIn
 
   async function claimAction({ accountId, eventId, actionId, createdAt, claimId }) {
     const key = { pk: pk(accountId), sk: actionSk(eventId, actionId) };
-    const item = { ...key, recordType: "ACTION", eventId, actionId, status: "started", claimId, createdAt, updatedAt: createdAt };
+    const item = { ...key, recordType: "ACTION", eventId, actionId, status: "started", claimId, createdAt, updatedAt: createdAt, expiresAt: expiresAt(createdAt) };
     try {
       await client.send(new PutCommand({ TableName: tableName, Item: item, ConditionExpression: "attribute_not_exists(pk) AND attribute_not_exists(sk)" }));
       return { status: "claimed", claimId };
@@ -216,7 +222,7 @@ export function createMemorySupportAutomationStore() {
       const id = key(record.accountId, record.eventId);
       const existing = events.get(id);
       if (!existing) {
-        const item = { ...record, recordType: "EVENT", state: "PROCESSING" };
+        const item = { ...record, expiresAt: expiresAt(record.createdAt), recordType: "EVENT", state: "PROCESSING" };
         events.set(id, item);
         return { created: true, record: structuredClone(item) };
       }
@@ -237,7 +243,7 @@ export function createMemorySupportAutomationStore() {
     async claimAction({ accountId, eventId, actionId, createdAt, claimId }) {
       const id = key(accountId, `${eventId}:${actionId}`);
       if (actions.has(id)) return structuredClone(actions.get(id));
-      const item = { status: "started", eventId, actionId, claimId, createdAt, updatedAt: createdAt };
+      const item = { status: "started", eventId, actionId, claimId, createdAt, updatedAt: createdAt, expiresAt: expiresAt(createdAt) };
       actions.set(id, item);
       return { status: "claimed", claimId };
     },
@@ -248,3 +254,5 @@ export function createMemorySupportAutomationStore() {
     _configs: configs, _events: events, _actions: actions,
   };
 }
+
+export const supportAutomationStoreInternals = { RETENTION_SECONDS };

@@ -11,6 +11,7 @@ on:
       - 'ops/aws/production-foundation-deploy-policy.json'
       - 'ops/aws/production-totp-preflight-supplemental-policy.json'
       - 'ops/aws/production-totp-deploy-supplemental-policy.json'
+      - 'ops/aws/production-support-automation-deploy-supplemental-policy.json'
       - 'ops/aws/verify-production-totp-role-supplements.sh'
       - '.github/workflows/api-access-ci.yml'
       - '.github/workflows/account-access-production-admin.yml'
@@ -18,6 +19,7 @@ on:
       - '.github/workflows/deploy-api-access-production-customer-accounts.yml'
       - '.github/workflows/deploy-api-access-production-totp-kms.yml'
       - '.github/workflows/deploy-api-access-production-totp.yml'
+      - '.github/workflows/deploy-support-automation-production-foundation.yml'
       - '.github/workflows/preflight-api-access-production-totp.yml'
   push:
     branches:
@@ -29,6 +31,7 @@ on:
       - 'ops/aws/production-foundation-deploy-policy.json'
       - 'ops/aws/production-totp-preflight-supplemental-policy.json'
       - 'ops/aws/production-totp-deploy-supplemental-policy.json'
+      - 'ops/aws/production-support-automation-deploy-supplemental-policy.json'
       - 'ops/aws/verify-production-totp-role-supplements.sh'
       - '.github/workflows/api-access-ci.yml'
       - '.github/workflows/account-access-production-admin.yml'
@@ -36,6 +39,7 @@ on:
       - '.github/workflows/deploy-api-access-production-customer-accounts.yml'
       - '.github/workflows/deploy-api-access-production-totp-kms.yml'
       - '.github/workflows/deploy-api-access-production-totp.yml'
+      - '.github/workflows/deploy-support-automation-production-foundation.yml'
       - '.github/workflows/preflight-api-access-production-totp.yml'
 
 jobs:
@@ -62,6 +66,10 @@ jobs:
         run: sam validate --lint --template priority-template.yaml
       - name: Build priority queue stack
         run: sam build --template priority-template.yaml --build-dir .aws-sam/priority-queue
+      - name: Validate support automation production foundation
+        run: sam validate --lint --template support-automation-production-stack.yaml
+      - name: Build support automation production foundation
+        run: sam build --template support-automation-production-stack.yaml --build-dir .aws-sam/support-automation
       - name: Install pinned CloudFormation linter
         shell: bash
         run: |
@@ -82,6 +90,7 @@ jobs:
             '../../ops/aws/production-foundation-deploy-policy.json',
             '../../ops/aws/production-totp-preflight-supplemental-policy.json',
             '../../ops/aws/production-totp-deploy-supplemental-policy.json',
+            '../../ops/aws/production-support-automation-deploy-supplemental-policy.json',
           ]) JSON.parse(fs.readFileSync(path, 'utf8'));
           NODE
       - name: Syntax-check read-only TOTP IAM verifier

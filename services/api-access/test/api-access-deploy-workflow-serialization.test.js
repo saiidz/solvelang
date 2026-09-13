@@ -17,6 +17,7 @@ const productionWorkflowNames = [
   "deploy-api-access-production-totp-kms.yml",
   "deploy-api-access-production-totp.yml",
   "deploy-customer-priority-production-foundation.yml",
+  "deploy-support-automation-production-foundation.yml",
 ];
 
 async function workflow(name) {

@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SolveLang support automation production foundation attached to the existing customer API host; activation defaults OFF.
+
+Parameters:
+  SupportAutomationEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  SupportAutomationActivationEnabled:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "false"
+  ExistingApiId:
+    Type: String
+    AllowedPattern: '^[a-z0-9]{8,32}$'
+  SiteOrigin:
+    Type: String
+    Default: https://www.solve-lang.com
+    AllowedPattern: '^https://[^ ]+$'
+  CustomerAuthTableName:
+    Type: String
+    Default: disabled
+  CustomerAuthPepper:
+    Type: String
+    NoEcho: true
+    Default: "00000000000000000000000000000000"
+    MinLength: 32
+
+Rules:
+  SupportAutomationRequirements:
+    RuleCondition: !Equals [!Ref SupportAutomationEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CustomerAuthTableName, disabled]]
+        AssertDescription: Support automation requires the existing production customer authentication table.
+      - Assert: !Not [!Equals [!Ref CustomerAuthPepper, "00000000000000000000000000000000"]]
+        AssertDescription: Support automation requires the existing production customer authentication pepper.
+  SupportAutomationActivationRequiresFoundation:
+    RuleCondition: !Equals [!Ref SupportAutomationActivationEnabled, "true"]
+    Assertions:
+      - Assert: !Equals [!Ref SupportAutomationEnabled, "true"]
+        AssertDescription: Support automation activation requires the foundation to be enabled.
+
+Conditions:
+  SupportAutomationFeatureEnabled: !Equals [!Ref SupportAutomationEnabled, "true"]
+  SupportAutomationActivationFeatureEnabled: !Equals [!Ref SupportAutomationActivationEnabled, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    Tracing: Active
+
+Resources:
+  SupportAutomationTable:
+    Type: AWS::DynamoDB::Table
+    Condition: SupportAutomationFeatureEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      DeletionProtectionEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: workerPartition
+          AttributeType: S
+        - AttributeName: workerSort
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: AutomationStateIndex
+          KeySchema:
+            - AttributeName: workerPartition
+              KeyType: HASH
+            - AttributeName: workerSort
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      Tags:
+        - Key: Project
+          Value: SolveLang
+        - Key: Purpose
+          Value: support-automation
+        - Key: Environment
+          Value: production
+
+  SupportAutomationApiFunction:
+    Type: AWS::Serverless::Function
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      Handler: src/support-automation-runtime-handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Environment:
+        Variables:
+          API_SUPPORT_AUTOMATION_ENABLED: !Ref SupportAutomationEnabled
+          API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: !Ref SupportAutomationActivationEnabled
+          API_SUPPORT_AUTOMATION_RUNTIME_MODE: api
+          API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          SITE_ORIGIN: !Ref SiteOrigin
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SupportAutomationTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+
+  SupportAutomationWorkerFunction:
+    Type: AWS::Serverless::Function
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      Handler: src/support-automation-runtime-handler.worker
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 60
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          API_SUPPORT_AUTOMATION_ENABLED: !Ref SupportAutomationEnabled
+          API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: !Ref SupportAutomationActivationEnabled
+          API_SUPPORT_AUTOMATION_RUNTIME_MODE: worker
+          API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
+          API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
+          SITE_ORIGIN: !Ref SiteOrigin
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SupportAutomationTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+        - Statement:
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:solvelang/support-automation/acct_*/*
+            Condition:
+              StringEquals:
+                secretsmanager:ResourceTag/Project: SolveLang
+                secretsmanager:ResourceTag/Purpose: support-automation
+                secretsmanager:ResourceTag/Environment: production
+
+  SupportAutomationIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt SupportAutomationApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  SupportAutomationStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: GET /customer/support-automation
+      Target: !Sub integrations/${SupportAutomationIntegration}
+  SupportAutomationHistoryRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: GET /customer/support-automation/history
+      Target: !Sub integrations/${SupportAutomationIntegration}
+  SupportAutomationConfigRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/support-automation/config
+      Target: !Sub integrations/${SupportAutomationIntegration}
+  SupportAutomationPauseRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/support-automation/pause
+      Target: !Sub integrations/${SupportAutomationIntegration}
+  SupportAutomationResumeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/support-automation/resume
+      Target: !Sub integrations/${SupportAutomationIntegration}
+  SupportAutomationRevokeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: POST /customer/support-automation/revoke
+      Target: !Sub integrations/${SupportAutomationIntegration}
+
+  SupportAutomationInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SupportAutomationApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/customer/support-automation*
+
+  SupportAutomationSchedule:
+    Type: AWS::Events::Rule
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      Description: Bounded support-automation poll tick; remains DISABLED until separately authorized activation.
+      ScheduleExpression: rate(5 minutes)
+      State: !If [SupportAutomationActivationFeatureEnabled, ENABLED, DISABLED]
+      Targets:
+        - Arn: !GetAtt SupportAutomationWorkerFunction.Arn
+          Id: SupportAutomationWorker
+          RetryPolicy:
+            MaximumEventAgeInSeconds: 60
+            MaximumRetryAttempts: 0
+
+  SupportAutomationSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SupportAutomationWorkerFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SupportAutomationSchedule.Arn
+
+  SupportAutomationApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: SupportAutomationFeatureEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SupportAutomationApiFunction}
+      RetentionInDays: 30
+
+  SupportAutomationWorkerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: SupportAutomationFeatureEnabled
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SupportAutomationWorkerFunction}
+      RetentionInDays: 30
+
+Outputs:
+  SupportAutomationEnabledState:
+    Value: !Ref SupportAutomationEnabled
+  SupportAutomationActivationEnabledState:
+    Value: !Ref SupportAutomationActivationEnabled
+  SupportAutomationTableName:
+    Condition: SupportAutomationFeatureEnabled
+    Value: !Ref SupportAutomationTable
+  ExistingApiIdState:
+    Value: !Ref ExistingApiId
