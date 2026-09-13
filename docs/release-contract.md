@@ -52,9 +52,11 @@ Current policy:
 | Linux x86_64 | Primary hosted-CI validation target when the release workflow proves it |
 | macOS ARM64 | `solvec`/Rust CLI support requires a terminal successful Rust build/test on ARM64 for the exact release commit; a Trusted Mac site/Studio-only result is not sufficient |
 | Windows x64 | Supported only when the release commit receives the repository-required Windows validation for the affected contract |
-| Browser/WASM | Not a release runtime until the accepted pure-core/WASM ADR is implemented and browser-targeted conformance/security gates pass |
+| Browser/WASM | The bounded `/run` preview has separate pure-core/WASM conformance, artifact-security, pinned-integrity, and real-browser qualification; it is not a native `solvec` release target and does not establish managed/server execution |
 
 A release page must list only platforms actually validated for that exact release commit. One platform never substitutes for a required result on another. Surface-specific checks also do not substitute for the runtime they claim: a site/Studio validation may support a web-surface claim, but it cannot by itself qualify a Rust CLI target.
+
+Current repository release-artifact evidence is Linux x86_64 only. The separately qualified browser/WASM preview must not be used to imply macOS ARM64, Windows x64, native CLI, or managed-execution support.
 
 ## Release-candidate gate
 
@@ -66,7 +68,7 @@ A commit may be called a SolveLang release candidate only when all applicable it
 4. There are no unresolved P0/P1 engineering findings or unresolved blocking review threads.
 5. A fresh security review of the candidate has no unresolved validated high-impact finding.
 6. Version metadata and release notes are finalized before the tag is created.
-7. Reproducible artifact names, checksums, and provenance metadata are generated from the tagged commit.
+7. Pre-tag candidate artifact names, checksums, and provenance are reproducibly generated from the exact candidate commit; final publishable evidence is regenerated from the annotated tag after tag creation.
 8. Upgrade/migration notes call out every intentional compatibility change since the prior release.
 9. No release text implies that a separately gated production feature is live without independent production evidence.
 
@@ -125,4 +127,4 @@ A repository release rollback does not itself roll back production infrastructur
 
 ## Completion evidence
 
-The repository release milestone is complete when this contract is linked from the project completion plan, the CLI/version/artifact implementation satisfies it, a changelog exists, the versioned specification reflects current module/runtime semantics, and an exact-commit release-candidate dry run produces validated artifacts/checksums/provenance without performing a production mutation.
+The repository release milestone is complete when this contract is linked from the project completion plan, the CLI/version/artifact implementation satisfies it, a changelog exists, the versioned specification reflects current module/runtime semantics, an exact-commit release-candidate dry run produces validated non-publishable artifacts/checksums/provenance, and the annotated-tag regeneration path is qualified without performing publication or a production mutation. Selecting/creating the public release tag and publishing final assets remain separate owner-authorized release actions.
