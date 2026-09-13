@@ -12,7 +12,7 @@ const linearSecret = "secret:linear";
 function header(name, value) { return { name, value }; }
 function encode(text) { return Buffer.from(text).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, ""); }
 
-test("Gmail adapter uses bounded unread/profile/full-message APIs and parses source identity", async () => {
+test("Gmail adapter uses bounded mailbox-scoped unread/profile/full-message APIs and parses source identity", async () => {
   const calls = [];
   const provider = createGmailSupportProvider({
     credentialResolver: async (ref) => { assert.equal(ref, gmailSecret); return { accessToken: "gmail-access-token-1234567890" }; },
@@ -32,8 +32,52 @@ test("Gmail adapter uses bounded unread/profile/full-message APIs and parses sou
   assert.deepEqual(await provider.listUnread({ credentialSecretArn: gmailSecret, mailbox: "support@example.com", limit: 5 }), [{ id: "m1", threadId: "t1" }]);
   const message = await provider.getMessage({ credentialSecretArn: gmailSecret, mailbox: "support@example.com", id: "m1" });
   assert.equal(message.from, "customer@example.com"); assert.equal(message.to, "support@example.com"); assert.equal(message.text, "Please help with setup");
-  assert.ok(calls.some((call) => call.url.includes("q=is%3Aunread") && call.url.includes("maxResults=5")));
+  const listCall = calls.find((call) => call.url.includes("messages?"));
+  assert.ok(listCall.url.includes("maxResults=5"));
+  assert.equal(new URL(listCall.url).searchParams.get("q"), "is:unread -from:me to:support@example.com");
   assert.ok(calls.some((call) => call.url.endsWith("messages/m1?format=full")));
+});
+
+test("Gmail adapter can refresh OAuth credentials without persisting the refreshed access token", async () => {
+  const calls = [];
+  let now = Date.parse("2026-09-13T22:00:00Z");
+  const provider = createGmailSupportProvider({
+    credentialResolver: async () => ({
+      refreshToken: "refresh_token_1234567890",
+      clientId: "client_id_1234567890",
+      clientSecret: "client_secret_1234567890",
+    }),
+    now: () => now,
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (String(url) === "https://oauth2.googleapis.com/token") {
+        assert.equal(options.headers["content-type"], "application/x-www-form-urlencoded");
+        const form = new URLSearchParams(options.body);
+        assert.equal(form.get("grant_type"), "refresh_token");
+        assert.equal(form.get("refresh_token"), "refresh_token_1234567890");
+        return jsonResponse({ access_token: "refreshed-access-token-1234567890", expires_in: 3600 });
+      }
+      assert.equal(options.headers.authorization, "Bearer refreshed-access-token-1234567890");
+      return jsonResponse({ emailAddress: "support@example.com" });
+    },
+  });
+  await provider.getProfile({ credentialSecretArn: gmailSecret, mailbox: "support@example.com" });
+  await provider.getProfile({ credentialSecretArn: gmailSecret, mailbox: "support@example.com" });
+  assert.equal(calls.filter((call) => call.url === "https://oauth2.googleapis.com/token").length, 1, "refreshed access token should be reused in-memory");
+  now += 3_600_000;
+  await provider.getProfile({ credentialSecretArn: gmailSecret, mailbox: "support@example.com" });
+  assert.equal(calls.filter((call) => call.url === "https://oauth2.googleapis.com/token").length, 2, "expired cached token must be refreshed");
+});
+
+test("Gmail acknowledgement removes UNREAD only through the configured mailbox", async () => {
+  let request;
+  const provider = createGmailSupportProvider({
+    credentialResolver: async () => ({ accessToken: "gmail-access-token-1234567890" }),
+    fetchImpl: async (url, options) => { request = { url: String(url), options }; return jsonResponse({ id: "m1", labelIds: ["INBOX"] }); },
+  });
+  assert.deepEqual(await provider.markRead({ credentialSecretArn: gmailSecret, mailbox: "support@example.com", id: "m1" }), { id: "m1" });
+  assert.equal(request.url, "https://gmail.googleapis.com/gmail/v1/users/support%40example.com/messages/m1/modify");
+  assert.deepEqual(JSON.parse(request.options.body), { removeLabelIds: ["UNREAD"] });
 });
 
 test("Gmail send adapter emits an RFC822 reply through the configured mailbox without redirects", async () => {
