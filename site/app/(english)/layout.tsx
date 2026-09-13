@@ -5,6 +5,7 @@ import { JsonLd } from "../components/JsonLd";
 import { LanguageSuggestion } from "../components/LanguageSuggestion";
 import "../globals.css";
 import { LegalFooter } from "../components/LegalFooter";
+import { SiteHeader } from "../components/SiteHeader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -100,7 +101,7 @@ const siteJsonLd = {
       programmingLanguage: ["Rust", "TypeScript", "JavaScript"],
       runtimePlatform: "Rust CLI and web tooling",
       description:
-        "Open-source source code for the early-beta SolveLang language runtime, CLI, browser tooling, documentation, and experimental test-mode API infrastructure.",
+        "Open-source source code for the early-beta SolveLang language runtime, CLI, browser tooling, documentation, production API/account infrastructure, and experimental provider integrations.",
       license: "https://github.com/saiidz/solvelang/blob/main/LICENSE",
       targetProduct: { "@id": softwareId },
       publisher: { "@id": organizationId },
@@ -121,6 +122,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
+        <SiteHeader />
         {children}
         <LegalFooter />
         <LanguageSuggestion countryHintEndpoint="" />
