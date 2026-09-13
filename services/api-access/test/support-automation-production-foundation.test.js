@@ -120,6 +120,14 @@ test("protected foundation workflow refuses activation and provider execution an
   assert.match(workflow, /SubscriptionBillingEnabled/);
   assert.match(workflow, /== false/);
   assert.doesNotMatch(workflow, /GetSecretValue|gmail\.googleapis|api\.linear\.app|oauth2\.googleapis/);
+  const jobEnvironment = workflow.slice(workflow.indexOf("    env:"), workflow.indexOf("    steps:"));
+  assert.doesNotMatch(jobEnvironment, /CUSTOMER_AUTH_PEPPER/);
+  const enforceStep = workflow.slice(workflow.indexOf("      - name: Enforce default-off support automation boundary"), workflow.indexOf("      - uses: actions\/setup-node@v4"));
+  const repositoryTestStep = workflow.slice(workflow.indexOf("      - name: Run repository support automation tests"), workflow.indexOf("      - name: Validate and build default-off foundation"));
+  const deployStep = workflow.slice(workflow.indexOf("      - name: Deploy foundation with activation OFF"), workflow.indexOf("      - name: Verify durable foundation exists"));
+  assert.match(enforceStep, /CUSTOMER_AUTH_PEPPER: \$\{\{ secrets\.CUSTOMER_AUTH_PEPPER \}\}/);
+  assert.doesNotMatch(repositoryTestStep, /CUSTOMER_AUTH_PEPPER/);
+  assert.match(deployStep, /CUSTOMER_AUTH_PEPPER: \$\{\{ secrets\.CUSTOMER_AUTH_PEPPER \}\}/);
   const supplemental = JSON.parse(policy);
   assert.equal(supplemental.Statement.length, 2);
   const cloudFormation = supplemental.Statement.find((statement) => statement.Sid === "SupportAutomationCloudFormationStack");
