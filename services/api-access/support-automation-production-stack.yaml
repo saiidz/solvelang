@@ -146,6 +146,11 @@ Resources:
         - Statement:
             Effect: Allow
             Action:
+              - dynamodb:GetItem
+            Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CustomerAuthTableName}
+        - Statement:
+            Effect: Allow
+            Action:
               - secretsmanager:GetSecretValue
             Resource: !Sub arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:solvelang/support-automation/acct_*/*
             Condition:
