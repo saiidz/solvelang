@@ -4,7 +4,7 @@ This checkpoint records repository evidence only. It does **not** authorize prod
 
 ## Exact repository checkpoint
 
-- `main` after the current-main rendering security fix: `e22a39a10f955945cad7497f3afa82cee3f9c5a4` (merge of #877).
+- `main` after the internal billing kill-switch hardening: `67f2f38a1fb1f3b228953f9bce05b5fbc09a0a18` (merge of #879).
 - Open production/completion issues remain #113, #820, and #833.
 - Subscription billing and paid priority remain off unless separately owner-approved and verified live.
 - #833 remains the explicit owner/credential gate for the first live PostHog canary.
@@ -26,6 +26,7 @@ These merges are prerequisites only. They do not establish a live PostHog projec
 - #872: signed webhook replay converges on one entitlement/outbox commit; repeated durable queue deliveries retain a stable confirmation idempotency key; the delivery ledger suppresses a second confirmation after success is recorded.
 - #873: checkout ownership is bound to authenticated server-side account/session state; caller-supplied account/email/customer identifiers cannot replace authoritative ownership.
 - #874: a newer recovered active subscription state clears prior past-due grace state, and an older delayed failure event cannot overwrite the newer recovery.
+- #879: admin/internal subscription checkout and provisioning now independently enforce `subscriptionBillingEnabled`; when billing is disabled, both mutation paths fail closed before checkout/provisioning side effects can run.
 
 These are repository-only proofs. Remaining billing launch work still includes live Stripe configuration/webhook identity validation, the rest of the subscription lifecycle matrix (upgrade/downgrade/cancel/resume/payment-method/refund behavior as applicable), customer-facing invoice/receipt/business identity review, approved Terms/Privacy/refund/cancellation disclosures, support readiness, and explicit owner approval before any live billing mutation or charge.
 
@@ -37,22 +38,22 @@ These are repository-only proofs. Remaining billing launch work still includes l
 
 A real production restore or table replacement remains owner/protected approved. Repository verification does not prove that a restore drill has been executed successfully in production.
 
-### Launch reconciliation and current-main security review
+### Launch reconciliation, security, and disable-path review
 
 - #876 reconciles the repository-safe launch checkpoint after the Self-Driving, Codex/Claude, billing, and recovery proofs while keeping live production/provider/billing/publication authority explicitly gated.
 - #877 records and fixes one validated current-main rendering-boundary issue: inline JSON-LD now uses a dedicated serializer that escapes HTML/script-significant characters, preserves JSON semantics, and is covered by a hostile `</script>` regression in the enforced SEO CI lane.
-- `docs/security-review-2026-09-13.md` is sanitized repository evidence for that reviewed finding. It is not a whole-product security certification or proof of deployed production controls.
+- #879 closes a validated disable-path gap on the internal billing mutation surface by making the billing-off state fail closed for admin checkout and provisioning.
+- `docs/security-review-2026-09-13.md` is sanitized repository evidence for the reviewed rendering finding. It is not a whole-product security certification or proof of deployed production controls.
 
 ## Remaining repository-safe completion lane
 
 The next repository-safe work should focus on the items that do not require live credentials or production mutation:
 
-1. monitoring, incident-response, and disable-path truth with deterministic tests or read-only verification where repository evidence can support it;
-2. reconciliation of README, ROADMAP, active handoff, project-completion plan, public maturity/status copy, and Issue #113 against the current repository authority ladder;
-3. final release regeneration/publication controls and supported-platform evidence, while keeping actual publication owner-gated;
-4. customer/legal decision checklists only—do not invent legal commitments;
-5. additional current-main trust-boundary review where concrete findings can be validated and fixed independently;
-6. final project-completion report only after every repository-safe item is either complete or explicitly blocked by an owner/external decision.
+1. current-state contributor/onboarding and status reconciliation against the repository authority ladder, including README, ROADMAP, active handoff, project-completion plan, public maturity/status copy, and Issue #113;
+2. final release regeneration/publication controls and supported-platform evidence, while keeping actual publication owner-gated;
+3. customer/legal decision checklists only—do not invent legal commitments;
+4. additional monitoring/incident/disable-path and current-main trust-boundary review where concrete repository-verifiable gaps remain;
+5. final project-completion report only after every repository-safe item is either complete or explicitly blocked by an owner/external decision.
 
 ## Owner/external gates that remain intentionally open
 
