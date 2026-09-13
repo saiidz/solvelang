@@ -108,6 +108,52 @@ try {
     writeFileSync(join(output, `status-${width}.png`), Buffer.from(screenshot.data, "base64"));
     console.log(`PASS public navigation at ${width}px (${routes.length} routes, direct loads and client navigation)`);
   }
+  // Exercise the actual preview components and the pinned canonical WASM runtime.
+  async function fill(selector, value) {
+    await evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(element, ${JSON.stringify(value)});
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+  }
+  for (const width of [1366, 375, 320]) {
+    await command("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: false });
+    await navigate("/audit/");
+    await fill("#workflow-description", "");
+    await waitFor(() => evaluate(`document.querySelector('[data-preview-status]')?.dataset.previewStatus === 'needs-details'`), "Empty workflow must not be analyzed as safe");
+    assert.equal(await evaluate(`document.querySelector('[data-generated-script]')`), null);
+    await fill("#workflow-description", "Automatically approve wire transfers.");
+    await waitFor(() => evaluate(`document.querySelector('[data-planning-preview]').innerText.includes('Financial or payment action')`), "Financial review missing");
+    assert.ok(await evaluate(`!document.querySelector('[data-planning-preview]').innerText.includes('Safe to automate')`));
+    await fill("#workflow-description", "When a form submission arrives, create a task in Jira and draft an email reply using Outlook.");
+    await waitFor(() => evaluate(`document.querySelector('[data-preview-field="Trigger"] dd')?.textContent === 'New form submission'`), "Form trigger must not become output email");
+    assert.ok(await evaluate(`!document.querySelector('[data-planning-preview]').innerText.includes('Gmail')`));
+    const generatedScript = await evaluate(`document.querySelector('[data-generated-script]').textContent`);
+    const auditScreenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    writeFileSync(join(output, `audit-${width}.png`), Buffer.from(auditScreenshot.data, "base64"));
+
+    await navigate("/demo/support-triage/");
+    await fill("#support-description", "How do I download the guide?");
+    await waitFor(() => evaluate(`document.querySelector('[data-preview-field="Urgency signal"] dd')?.textContent === 'Not determined'`), "Download must not become urgent");
+    await fill("#support-description", "I forgot my password and get an error signing in.");
+    await waitFor(() => evaluate(`document.querySelector('[data-preview-field="Suggested category"] dd')?.textContent === 'Account or security'`), "Compound account-sensitive request lost its review boundary");
+    const supportScreenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+    writeFileSync(join(output, `support-${width}.png`), Buffer.from(supportScreenshot.data, "base64"));
+    await fill("#support-description", "  ");
+    await waitFor(() => evaluate(`document.querySelector('[data-preview-status]')?.dataset.previewStatus === 'needs-details'`), "Empty support message must clear result");
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('[data-planning-preview] button')).filter(b => b.textContent.includes('Copy planning') || b.textContent.includes('Export plan')).every(b => b.disabled)`));
+
+    await navigate("/run/");
+    await fill("#solve-preview-source", generatedScript);
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Run preview').click()`);
+    await waitFor(() => evaluate(`document.querySelector('[aria-labelledby="output-heading"] pre')?.textContent !== 'Run the preview to see output here.'`), "Generated planning script did not produce a runtime result");
+    const result = await evaluate(`document.querySelector('[aria-labelledby="output-heading"] pre').textContent`);
+    assert.ok(!result.startsWith("Error:"), `Canonical runtime rejected generated planning script: ${result}`);
+    assert.ok(result.includes("Review this proposed workflow before connecting production"), "Canonical runtime did not execute the actual generated script");
+    console.log(`PASS preview input regressions and generated script in pinned canonical WASM at ${width}px`);
+  }
   assert.deepEqual(exceptions, [], "No uncaught browser exceptions");
   console.log("PASS browser smoke; all external requests blocked; no production mutation");
   for (const entry of pending.values()) clearTimeout(entry.timer);

@@ -1,0 +1,4 @@
+{
+  "compilerOptions": { "target": "ES2022", "module": "CommonJS", "moduleResolution": "Node", "rootDir": "app", "outDir": ".studio-test-dist/workflow-preview", "strict": true, "types": [], "skipLibCheck": true },
+  "include": ["app/components/workflow-preview.ts"]
+}
