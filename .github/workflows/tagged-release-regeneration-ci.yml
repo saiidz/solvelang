@@ -1,0 +1,162 @@
+name: Tagged Release Regeneration Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing annotated SolveLang version tag to verify and regenerate from"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tagged-release-regeneration-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  linux-x86_64:
+    name: Linux x86_64 tagged regeneration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout trusted workflow source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require dispatch from main and resolve annotated tag
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "tag must be a v-prefixed semver-like version" >&2
+            exit 1
+          fi
+          git check-ref-format "refs/tags/$RELEASE_TAG"
+          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
+          test "$(git cat-file -t "refs/tags/$RELEASE_TAG")" = "tag"
+          source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          test "$source_sha" != "$(git rev-parse HEAD)" || true
+          git checkout --detach "$source_sha"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          printf 'SOURCE_SHA=%s\n' "$source_sha" >> "$GITHUB_ENV"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+          targets: ${{ env.TARGET }}
+
+      - name: Verify exact annotated tag source
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          bash solvec/scripts/verify-release-tag-source.sh "$RELEASE_TAG" "$SOURCE_SHA" \
+            > "$RUNNER_TEMP/tag-source.json"
+          python3 - "$RUNNER_TEMP/tag-source.json" "$RELEASE_TAG" "$SOURCE_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          evidence = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          assert evidence["schema_version"] == "1.0.0"
+          assert evidence["kind"] == "solvelang_tagged_release_source"
+          assert evidence["publishable"] is False
+          assert evidence["tag"] == sys.argv[2]
+          assert evidence["source_commit"] == sys.argv[3]
+          PY
+
+      - name: Check solvec-core formatting
+        working-directory: solvec-core
+        run: cargo fmt --check
+
+      - name: Run solvec-core clippy
+        working-directory: solvec-core
+        run: cargo clippy --target "$TARGET" -- -D warnings
+
+      - name: Run solvec-core tests
+        working-directory: solvec-core
+        run: cargo test --target "$TARGET"
+
+      - name: Check formatting
+        working-directory: solvec
+        run: cargo fmt --check
+
+      - name: Run clippy
+        working-directory: solvec
+        run: cargo clippy --locked --target "$TARGET" -- -D warnings
+
+      - name: Run tests
+        working-directory: solvec
+        run: cargo test --locked --target "$TARGET"
+
+      - name: Regenerate and verify tagged bytes twice
+        env:
+          SOLVELANG_SOURCE_COMMIT: ${{ env.SOURCE_SHA }}
+          SOLVELANG_RELEASE_TARGET: ${{ env.TARGET }}
+        run: |
+          set -Eeuo pipefail
+          first="$RUNNER_TEMP/tagged-release-first"
+          second="$RUNNER_TEMP/tagged-release-second"
+
+          python3 solvec/scripts/test-release-candidate.py
+
+          SOLVELANG_RELEASE_DIST="$first" bash solvec/scripts/build-release-candidate.sh
+          bash solvec/scripts/verify-release-candidate.sh "$first" "$SOURCE_SHA"
+
+          SOLVELANG_RELEASE_DIST="$second" bash solvec/scripts/build-release-candidate.sh
+          bash solvec/scripts/verify-release-candidate.sh "$second" "$SOURCE_SHA"
+
+          diff -qr "$first" "$second"
+          artifact="$(python3 - "$first/provenance.json" <<'PY'
+          import json, sys
+          print(json.load(open(sys.argv[1], encoding="utf-8"))["artifact"])
+          PY
+          )"
+          cmp "$first/$artifact" "$second/$artifact"
+          cmp "$first/SHA256SUMS" "$second/SHA256SUMS"
+          cmp "$first/provenance.json" "$second/provenance.json"
+
+          python3 - \
+            "$RUNNER_TEMP/tag-source.json" \
+            "$first/provenance.json" \
+            "$RELEASE_TAG" \
+            "$SOURCE_SHA" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          tag_source = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          provenance = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+          expected_tag = sys.argv[3]
+          expected_sha = sys.argv[4]
+
+          assert tag_source["tag"] == expected_tag
+          assert tag_source["source_commit"] == expected_sha
+          assert provenance["publishable"] is False
+          assert provenance["source_commit"] == expected_sha
+          assert provenance["version"] == tag_source["version"]
+          assert provenance["target"] == "x86_64-unknown-linux-gnu"
+          assert provenance["workflow"]["repository"] == "saiidz/solvelang"
+          assert provenance["workflow"]["name"] == "Tagged Release Regeneration Gate"
+          assert provenance["workflow"]["run_id"]
+          assert provenance["workflow"]["run_attempt"]
+          PY
+
+      - name: Upload non-publishable tagged regeneration evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: solvelang-tagged-regeneration-${{ inputs.tag }}-${{ env.SOURCE_SHA }}
+          path: |
+            ${{ runner.temp }}/tagged-release-first/
+            ${{ runner.temp }}/tag-source.json
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
