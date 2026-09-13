@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "CommonJS", "moduleResolution": "Node",
+    "rootDir": "app", "outDir": ".studio-test-dist/public-site", "strict": true,
+    "types": [], "skipLibCheck": true
+  },
+  "include": ["app/components/site-navigation.ts", "app/product-capabilities.ts", "app/(english)/status/status-data.ts", "app/(english)/status/status-health.ts"]
+}

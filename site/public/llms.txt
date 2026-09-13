@@ -2,9 +2,9 @@
 
 SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.
 
-SolveLang is an early-beta open-source language and tooling project. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis, and the browser preview supports a smaller browser-only subset.
+SolveLang is an early-beta open-source language and tooling project. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis. The browser preview uses a pinned WebAssembly safe-core build with host side effects denied, not the full hosted runtime.
 
-SolveLang is not another Zapier-style connector marketplace, a no-code automation builder, a production durable workflow engine, a language-learning service, or a general-purpose autonomous AI workforce platform.
+SolveLang is not a production durable workflow engine or a general-purpose autonomous AI workforce platform.
 
 ## Canonical resources
 
@@ -13,6 +13,7 @@ SolveLang is not another Zapier-style connector marketplace, a no-code automatio
 - Resources: https://www.solve-lang.com/resources/
 - Browser preview: https://www.solve-lang.com/run/
 - Workflow status: https://www.solve-lang.com/status/
+- Workflow audit preview: https://www.solve-lang.com/audit/
 - Support-triage demo: https://www.solve-lang.com/demo/support-triage/
 - n8n workflow preflight: https://www.solve-lang.com/check/
 - Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
@@ -22,39 +23,41 @@ SolveLang is not another Zapier-style connector marketplace, a no-code automatio
 
 ## Working today
 
-- Rust lexer, parser, AST runtime, interpreter, and CLI
-- `run`, `validate`, `tokens`, `ast`, and help commands
-- readable workflow scripts with documented language features
-- source-located diagnostics
-- hardened execution modes for local evaluation
-- local-first deterministic Workflow Intelligence Studio analysis
-- a smaller browser-safe preview
-- deterministic n8n workflow preflight tools
-- public examples and documentation
+- Rust lexer, parser, AST runtime, interpreter, CLI, diagnostics, and hardened local execution modes
+- Local-first deterministic Workflow Intelligence Studio analysis
+- A pinned browser-safe core preview
+- Deterministic n8n workflow preflight tools
+- Public examples and documentation
+- Rule-based workflow audit and support-triage planning previews; no remote tasks or messages are executed
+
+## Deployed with gates — evidence dated September 13, 2026
+
+- Public site hosted on AWS Amplify
+- Production API access and customer-account infrastructure verified enabled in owner-provided AWS output
+- API subscription billing is disabled; displayed API plans are not available for purchase
+- Separate checkout services and live billing require their own verification and approval
+
+Deployment evidence is not a live health feed or a general-availability claim. Current health is not independently verified by the public status page.
 
 ## Experimental or test-mode
 
-- HTTP, file, and environment helpers
-- AI-agent/provider syntax and optional provider-backed responses
-- Studio-to-`.solve` draft generation
-- API keys, customer accounts, quotas, subscriptions, and billing infrastructure used for test-mode engineering validation
-
-Experimental or test-mode capabilities must not be described as production-ready merely because code or billing screens exist.
+- Provider-backed AI and side-effecting HTTP, file, and environment helpers
+- Provider integrations requiring scoped credentials, qualification, and explicit authorization
+- Draft generation that still requires canonical validation before execution
 
 ## Planned
 
-- stable language specification
-- broader provider support
-- production integrations and runtime adapters
-- full managed workflow execution
-- enterprise durability, governance, and observability
+- Connected inbox-to-action support automation
+- General managed workflow execution and broader qualified production integrations
+- Final release publication and additional platform evidence
+- Independent uptime monitoring and operational exercises
 
 ## Important boundaries
 
-- The browser preview does not run the full Rust CLI runtime.
 - Workflow Intelligence Studio analysis is deterministic rather than AI analysis.
-- AI-generated or model-dependent output is not automatically correct and should not silently become consequential business action.
+- Public audit and triage previews are rule-based, not connected autonomous agents.
+- A proposed workflow or draft is not authorization for an external action.
 - No production uptime, SLA, adoption, revenue, or performance benchmark is claimed.
-- Private account, checkout, API-secret, payment, and uploaded-workflow information is not part of the public search surface.
+- Private account, checkout, credentials, payment, and uploaded-workflow information is not part of the public search surface.
 
 Contact: hello@solve-lang.com

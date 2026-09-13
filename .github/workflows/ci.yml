@@ -100,6 +100,7 @@ jobs:
   site:
     name: Static site
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: site
@@ -137,6 +138,18 @@ jobs:
 
       - name: Verify exported document languages
         run: npm run verify:i18n-export
+
+      - name: Verify desktop and mobile public navigation in Chromium
+        run: npm run test:browser
+
+      - name: Upload public browser smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-browser-smoke
+          path: site/.studio-test-dist/browser-smoke/
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Check static export output
         run: |
