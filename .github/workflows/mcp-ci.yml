@@ -41,5 +41,7 @@ jobs:
       - run: npm test
       - name: Validate Codex and Claude plugin packaging
         run: node scripts/validate-plugin-packaging.mjs
+      - name: Prove Codex and Claude plugin MCP roundtrip
+        run: npm run test:plugin-roundtrip
       - name: Verify packed consumer install and npx entrypoint
         run: npm run test:packed
