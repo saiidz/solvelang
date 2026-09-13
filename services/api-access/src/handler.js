@@ -55,7 +55,10 @@ if (environment.customerAccountsEnabled) {
   const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   customerAuthStoreForAdmin = customerAuthStore;
   accountIdentityResolver = createAccountIdentityResolver({ store: customerAuthStore, pepper: environment.customerAuthPepper });
-  const guardedAuthStore = createAccessGuardedCustomerAuthStore(customerAuthStore, accountAccessReader);
+  const guardedAuthStore = createAccessGuardedCustomerAuthStore(
+    customerAuthStore,
+    accountAccessReader,
+  );
   customerAuth = createAccessGuardedCustomerAuthService(createCustomerAuthService({
     store: guardedAuthStore,
     emailGateway: createCustomerEmailGateway(new SESv2Client({}), { sender: environment.customerAuthEmailSender, replyTo: environment.customerAuthEmailReplyTo }),
