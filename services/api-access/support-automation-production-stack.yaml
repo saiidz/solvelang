@@ -110,6 +110,7 @@ Resources:
         Variables:
           API_SUPPORT_AUTOMATION_ENABLED: !Ref SupportAutomationEnabled
           API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: !Ref SupportAutomationActivationEnabled
+          API_SUPPORT_AUTOMATION_RUNTIME_MODE: api
           API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
@@ -136,9 +137,9 @@ Resources:
         Variables:
           API_SUPPORT_AUTOMATION_ENABLED: !Ref SupportAutomationEnabled
           API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED: !Ref SupportAutomationActivationEnabled
+          API_SUPPORT_AUTOMATION_RUNTIME_MODE: worker
           API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
-          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
           SITE_ORIGIN: !Ref SiteOrigin
       Policies:
         - DynamoDBCrudPolicy:
