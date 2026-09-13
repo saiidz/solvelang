@@ -93,6 +93,7 @@ try {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [installedEntrypoint],
+    cwd: workspaceRoot,
   });
   client = new Client(
     { name: "solvelang-plugin-roundtrip-smoke", version: "0.0.0" },
