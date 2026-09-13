@@ -1,0 +1,193 @@
+name: Deploy Support Automation Production Foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_support_foundation:
+        description: Confirm deploying only the default-off support automation production foundation
+        required: true
+        default: false
+        type: boolean
+      confirm_activation_remains_disabled:
+        description: Confirm support automation activation, polling and external actions must remain disabled
+        required: true
+        default: false
+        type: boolean
+      confirm_no_provider_calls:
+        description: Confirm this deployment must not read an inbox, resolve provider credentials, create a task or send a reply
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      API_STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SUPPORT_STACK_NAME: solvelang-api-access-production-support-automation
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce default-off support automation boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Support automation production foundation must run from main." >&2; exit 1; }
+          [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
+          [[ "${{ inputs.confirm_support_foundation }}" == true ]]
+          [[ "${{ inputs.confirm_activation_remains_disabled }}" == true ]]
+          [[ "${{ inputs.confirm_no_provider_calls }}" == true ]]
+          [[ "$SUPPORT_STACK_NAME" == "solvelang-api-access-production-support-automation" ]]
+          [[ "$API_STACK_NAME" == *prod* || "$API_STACK_NAME" == *production* ]]
+          [[ "$API_STACK_NAME" != *test* ]]
+          [[ "$SITE_ORIGIN" == https://* ]]
+          test -n "$AWS_REGION"
+          (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Verify live customer baseline and capture same-host attachment targets
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")" == false ]]
+          api_id="$(aws cloudformation describe-stack-resource --stack-name "$API_STACK_NAME" --logical-resource-id ApiAccessHttpApi --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          customer_auth_table="$(aws cloudformation describe-stack-resource --stack-name "$API_STACK_NAME" --logical-resource-id ApiCustomerAuthTable --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          [[ "$api_id" =~ ^[a-z0-9]{8,32}$ ]]
+          test -n "$customer_auth_table"; [[ "$customer_auth_table" != None ]]
+          {
+            echo "api_id=$api_id"
+            echo "customer_auth_table=$customer_auth_table"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run repository support automation tests
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+
+      - name: Validate and build default-off foundation
+        run: |
+          sam validate --lint --template support-automation-production-stack.yaml
+          sam build --template support-automation-production-stack.yaml
+          grep -q 'Default: "false"' support-automation-production-stack.yaml
+          grep -q 'SupportAutomationActivationEnabled=false' ../../.github/workflows/deploy-support-automation-production-foundation.yml
+          ! grep -Eqi 'stripe|ses:Send|kms:Decrypt' support-automation-production-stack.yaml
+
+      - name: Verify supplemental deploy policy is scoped to support EventBridge rules
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const policy = JSON.parse(fs.readFileSync('../../ops/aws/production-support-automation-deploy-supplemental-policy.json', 'utf8'));
+          if (policy.Statement?.length !== 1) throw new Error('support automation deploy supplement must contain one bounded statement');
+          const resource = policy.Statement[0]?.Resource;
+          if (resource !== 'arn:aws:events:*:*:rule/solvelang-api-access-production-support-automation-*') throw new Error('support automation EventBridge resource scope widened');
+          NODE
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare production SAM artifact bucket
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy foundation with activation OFF
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact.outputs.bucket }}
+          EXISTING_API_ID: ${{ steps.baseline.outputs.api_id }}
+          CUSTOMER_AUTH_TABLE: ${{ steps.baseline.outputs.customer_auth_table }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam deploy \
+            --stack-name "$SUPPORT_STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$SUPPORT_STACK_NAME" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+              SupportAutomationEnabled=true \
+              SupportAutomationActivationEnabled=false \
+              ExistingApiId="$EXISTING_API_ID" \
+              SiteOrigin="$SITE_ORIGIN" \
+              CustomerAuthTableName="$CUSTOMER_AUTH_TABLE" \
+              CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER"
+          aws cloudformation update-termination-protection --stack-name "$SUPPORT_STACK_NAME" --enable-termination-protection
+
+      - name: Verify durable foundation exists and cannot process provider work
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$SUPPORT_STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SupportAutomationEnabled") | .ParameterValue] | first // empty' <<<"$stack")" == true ]]
+          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SupportAutomationActivationEnabled") | .ParameterValue] | first // empty' <<<"$stack")" == false ]]
+          table="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "SupportAutomationTableName") | .OutputValue] | first // empty' <<<"$stack")"
+          test -n "$table"
+          aws dynamodb describe-continuous-backups --table-name "$table" --query 'ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus' --output text | grep -qx ENABLED
+          aws dynamodb describe-time-to-live --table-name "$table" --query 'TimeToLiveDescription.TimeToLiveStatus' --output text | grep -qx ENABLED
+          aws dynamodb describe-table --table-name "$table" --query 'Table.DeletionProtectionEnabled' --output text | grep -qx True
+          rule="$(aws cloudformation list-stack-resources --stack-name "$SUPPORT_STACK_NAME" --query 'StackResourceSummaries[?LogicalResourceId==`SupportAutomationSchedule`].PhysicalResourceId | [0]' --output text)"
+          test -n "$rule"; [[ "$rule" != None ]]
+          aws events describe-rule --name "$rule" --query State --output text | grep -qx DISABLED
+          protection="$(aws cloudformation describe-stacks --stack-name "$SUPPORT_STACK_NAME" --query 'Stacks[0].EnableTerminationProtection' --output text)"
+          [[ "$protection" == True ]]
+          echo "table=$table" >> "$GITHUB_OUTPUT"
+
+      - name: Write default-off deployment summary
+        if: ${{ success() }}
+        env:
+          SUPPORT_TABLE: ${{ steps.verify.outputs.table }}
+        shell: bash
+        run: |
+          printf '## SolveLang support automation production foundation\n\n- Commit: `%s`\n- Stack: `%s`\n- Support table: `%s`\n- Same customer API host: **yes**\n- Foundation enabled: **true**\n- Automation activation enabled: **false**\n- Poll schedule state: **DISABLED**\n- Provider credentials created/read: **no**\n- Inbox read: **no**\n- Linear task created: **no**\n- Email sent: **no**\n- Billing/Stripe used: **no**\n- Customer records mutated: **no**\n- Termination protection: **enabled**\n' "$GITHUB_SHA" "$SUPPORT_STACK_NAME" "$SUPPORT_TABLE" >> "$GITHUB_STEP_SUMMARY"
