@@ -12,6 +12,8 @@ import { createDynamoSupportAutomationStore } from "./support-automation-store.j
 import { createSupportAutomationService } from "./support-automation.js";
 
 const RUNTIME_MODES = new Set(["api", "worker"]);
+const WORKER_FAILURE_STATES = new Set(["FAILED", "SOURCE_INITIALIZATION_FAILED", "SOURCE_IDENTITY_MISMATCH"]);
+const DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS = 15 * 60;
 function required(environment, name, minimum = 1) { const value = environment[name]; if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`); return value; }
 function approvedMailHosts(value) {
   if (value === undefined || value === "") return [];
@@ -27,6 +29,12 @@ function approvedReplyRecipients(value) {
   if (recipients.length > 8 || recipients.some((recipient) => !/^[A-Za-z0-9.!#$%&'*+\/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$/.test(recipient))) throw new Error("API_SUPPORT_AUTOMATION_REPLY_RECIPIENTS is invalid.");
   return recipients;
 }
+function messageAgeThreshold(value) {
+  if (value === undefined || value === "") return DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS;
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds < 300 || seconds > 86_400) throw new Error("API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS is invalid.");
+  return seconds;
+}
 function accountIdFromSupportSecret(secretArn) { const match = String(secretArn ?? "").match(/:secret:solvelang\/support-automation\/(acct_[a-f0-9]{32})\//); if (!match) throw new Error("Support automation provider credential reference is not tenant scoped."); return match[1]; }
 
 export function createAccountAccessGuardedSupportProvider(provider, accessReader) {
@@ -36,6 +44,23 @@ export function createAccountAccessGuardedSupportProvider(provider, accessReader
 export function createAccountAccessGuardedSupportStore(store, accessReader, { now = Date.now, logger = console } = {}) {
   if (!store || typeof store.listActiveConfigs !== "function" || !accessReader || typeof accessReader.isActive !== "function") throw new Error("Support automation account-access guard requires a store and account reader.");
   return new Proxy(store, { get(target, property, receiver) { if (property !== "listActiveConfigs") return Reflect.get(target, property, receiver); return async (limit) => { const configs = await target.listActiveConfigs(limit), allowed = []; for (const config of configs) { if (await accessReader.isActive(config.accountId)) { allowed.push(config); continue; } try { await target.setState(config.accountId, config.revision, "PAUSED", new Date(now()).toISOString()); } catch { logger.error({ type: "support_automation_account_restriction_pause_failed", accountId: config.accountId }); } } return allowed; }; } });
+}
+export function createMessageAgeMonitoredSupportProvider(provider, { now = Date.now, logger = console, thresholdSeconds = DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS } = {}) {
+  if (!provider || typeof now !== "function" || !Number.isSafeInteger(thresholdSeconds) || thresholdSeconds < 300 || thresholdSeconds > 86_400) throw new Error("Support automation message-age monitor dependencies are invalid.");
+  function observe(message) {
+    const receivedAt = Date.parse(message?.receivedAt);
+    if (!Number.isFinite(receivedAt)) return message;
+    const ageSeconds = Math.floor((now() - receivedAt) / 1000);
+    if (ageSeconds >= thresholdSeconds && ageSeconds >= 0) logger.warn?.("support_automation_message_age_exceeded");
+    return message;
+  }
+  return new Proxy(provider, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function" || (property !== "getMessage" && property !== "readMessage")) return value;
+      return async (...args) => observe(await value.call(target, ...args));
+    },
+  });
 }
 export function createRuntimeImapSupportProvider({ credentialResolver, allowedHosts, allowSend = false, allowedReplyRecipients = [], initializationStartResolver = async () => undefined, providerFactory = createImapSmtpSupportProvider }) {
   if (typeof providerFactory !== "function" || typeof initializationStartResolver !== "function" || !Array.isArray(allowedReplyRecipients)) throw new Error("IMAP support provider dependencies are required.");
@@ -80,20 +105,22 @@ export function parseSupportAutomationRuntimeEnvironment(environment = process.e
     approvedMailHosts: enabled ? approvedMailHosts(environment.API_SUPPORT_AUTOMATION_MAIL_HOSTS) : [],
     approvedReplyRecipients: enabled ? approvedReplyRecipients(environment.API_SUPPORT_AUTOMATION_REPLY_RECIPIENTS) : [],
     mailSendEnabled: enabled && environment.API_SUPPORT_AUTOMATION_MAIL_SEND_ENABLED === "true",
+    messageAgeThresholdSeconds: enabled ? messageAgeThreshold(environment.API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS) : DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS,
   };
 }
-export function createSupportAutomationRuntime({ environment = process.env, documentClient, secretsManager, logger = console } = {}) {
+export function createSupportAutomationRuntime({ environment = process.env, documentClient, secretsManager, logger = console, now = Date.now } = {}) {
   const parsed = parseSupportAutomationRuntimeEnvironment(environment);
   if (!parsed.enabled) { const application = createSupportAutomationApiHandler({ enabled: false, siteOrigin: parsed.siteOrigin, logger }); return { application, async worker() { return { activationEnabled: false, accounts: [] }; }, environment: parsed }; }
   const dynamo = documentClient ?? DynamoDBDocumentClient.from(new DynamoDBClient({}));
   const accessReader = createDynamoAccountAccessReader(dynamo, { tableName: parsed.customerAuthTable });
   const supportStore = createDynamoSupportAutomationStore(dynamo, parsed.supportAutomationTable);
-  const guardedSupportStore = createAccountAccessGuardedSupportStore(supportStore, accessReader, { logger });
+  const guardedSupportStore = createAccountAccessGuardedSupportStore(supportStore, accessReader, { logger, now });
   const secrets = secretsManager ?? new SecretsManagerClient({}); const credentialResolver = createSecretsManagerCredentialResolver(secrets);
+  const monitor = (provider) => createMessageAgeMonitoredSupportProvider(provider, { logger, now, thresholdSeconds: parsed.messageAgeThresholdSeconds });
   const supportAutomation = createSupportAutomationService({
     store: guardedSupportStore,
-    gmail: createAccountAccessGuardedSupportProvider(createGmailSupportProvider({ credentialResolver }), accessReader),
-    mail: createAccountAccessGuardedSupportProvider(createRuntimeImapSupportProvider({
+    gmail: createAccountAccessGuardedSupportProvider(monitor(createGmailSupportProvider({ credentialResolver })), accessReader),
+    mail: createAccountAccessGuardedSupportProvider(monitor(createRuntimeImapSupportProvider({
       credentialResolver,
       allowedHosts: parsed.approvedMailHosts,
       allowSend: parsed.mailSendEnabled,
@@ -103,11 +130,12 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
         if (!config || config.provider !== "imap_smtp" || config.automationState !== "INITIALIZING" || typeof config.updatedAt !== "string") throw new Error("Support automation source initialization is not active.");
         return config.updatedAt;
       },
-    }), accessReader),
+    })), accessReader),
     linear: createAccountAccessGuardedSupportProvider(createLinearSupportProvider({ credentialResolver }), accessReader),
     allowedMailHosts: parsed.approvedMailHosts,
     activationEnabled: parsed.activationEnabled,
     logger,
+    now,
   });
   let application = createSupportAutomationApiHandler({ enabled: false, siteOrigin: parsed.siteOrigin, logger });
   if (parsed.runtimeMode === "api") {
@@ -115,7 +143,16 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
     const customerAuth = createCustomerAuthService({ store: guardedAuthStore, emailGateway: { async sendMagicLink() { throw new Error("The support-automation runtime cannot send authentication emails."); } }, pepper: parsed.customerAuthPepper, siteOrigin: parsed.siteOrigin });
     application = createSupportAutomationApiHandler({ enabled: true, supportAutomation, customerAuth, siteOrigin: parsed.siteOrigin, logger });
   }
-  return { application, async worker() { if (parsed.runtimeMode !== "worker") return { activationEnabled: false, accounts: [] }; return supportAutomation.processTick(10); }, environment: parsed };
+  return {
+    application,
+    async worker() {
+      if (parsed.runtimeMode !== "worker") return { activationEnabled: false, accounts: [] };
+      const result = await supportAutomation.processTick(10);
+      if (result.accounts?.some((account) => WORKER_FAILURE_STATES.has(account?.state))) logger.error?.("support_automation_worker_failure");
+      return result;
+    },
+    environment: parsed,
+  };
 }
 let runtime;
 function currentRuntime() { runtime ??= createSupportAutomationRuntime(); return runtime; }
