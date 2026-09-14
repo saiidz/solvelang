@@ -40,6 +40,24 @@
         "events:UntagResource"
       ],
       "Resource": "arn:aws:events:*:*:rule/solvelang-api-access-production-support-automation-*"
+    },
+    {
+      "Sid": "SupportAutomationCloudWatchAlarms",
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:PutMetricAlarm"
+      ],
+      "Resource": "arn:aws:cloudwatch:*:*:alarm:solvelang-api-access-production-support-automation-*"
+    },
+    {
+      "Sid": "SupportAutomationLogMetricFilters",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DeleteMetricFilter",
+        "logs:PutMetricFilter"
+      ],
+      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-production-support-automation-*"
     }
   ]
 }
