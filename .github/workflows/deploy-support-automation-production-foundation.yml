@@ -113,12 +113,19 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const policy = JSON.parse(fs.readFileSync('../../ops/aws/production-support-automation-deploy-supplemental-policy.json', 'utf8'));
-          if (policy.Statement?.length !== 2) throw new Error('support automation deploy supplement must contain exactly two bounded statements');
+          if (policy.Statement?.length !== 4) throw new Error('support automation deploy supplement must contain exactly four bounded statements');
           const cloudFormation = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationCloudFormationStack');
           const events = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationEventBridgeRules');
+          const alarms = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationCloudWatchAlarms');
+          const metricFilters = policy.Statement.find((statement) => statement.Sid === 'SupportAutomationLogMetricFilters');
           if (!cloudFormation || cloudFormation.Resource !== 'arn:aws:cloudformation:*:*:stack/solvelang-api-access-production-support-automation/*') throw new Error('support automation CloudFormation scope widened');
           if (!Array.isArray(cloudFormation.Action) || !cloudFormation.Action.includes('cloudformation:UpdateTerminationProtection')) throw new Error('support automation CloudFormation lifecycle contract is incomplete');
           if (!events || events.Resource !== 'arn:aws:events:*:*:rule/solvelang-api-access-production-support-automation-*') throw new Error('support automation EventBridge resource scope widened');
+          if (!alarms || alarms.Resource !== 'arn:aws:cloudwatch:*:*:alarm:solvelang-api-access-production-support-automation-*') throw new Error('support automation CloudWatch alarm scope widened');
+          if (!Array.isArray(alarms.Action) || alarms.Action.length !== 2 || !alarms.Action.includes('cloudwatch:PutMetricAlarm') || !alarms.Action.includes('cloudwatch:DeleteAlarms')) throw new Error('support automation CloudWatch alarm actions widened');
+          if (!metricFilters || metricFilters.Resource !== 'arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-production-support-automation-*') throw new Error('support automation log metric filter scope widened');
+          if (!Array.isArray(metricFilters.Action) || metricFilters.Action.length !== 2 || !metricFilters.Action.includes('logs:PutMetricFilter') || !metricFilters.Action.includes('logs:DeleteMetricFilter')) throw new Error('support automation log metric filter actions widened');
+          if (policy.Statement.some((statement) => statement.Resource === '*')) throw new Error('support automation deploy supplement must not use wildcard resources');
           NODE
 
       - name: Assume production deploy role
