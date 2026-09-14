@@ -25,6 +25,24 @@ on:
       - '.github/workflows/mcp-ci.yml'
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Audit exact locked dependencies
+        run: npm audit --package-lock-only --ignore-scripts --audit-level=high
+
   test:
     runs-on: ubuntu-latest
     defaults:
