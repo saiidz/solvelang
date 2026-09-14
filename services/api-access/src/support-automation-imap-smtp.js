@@ -40,6 +40,14 @@ function messageUid(binding, baseline, id) {
 function identity(binding, validity, value) { return `imap:${binding.sourceId}:${uid(validity)}:${uid(value)}`; }
 function ensureEpoch(client, baseline) { if (!client.mailbox || uid(client.mailbox.uidValidity) !== baseline.uidValidity) throw fail("imap_uidvalidity_changed"); }
 function singleHeader(parsed, name) { const value = parsed.headers?.get(name); if (Array.isArray(value)) throw fail("mail_header_ambiguous"); return typeof value === "string" ? value : ""; }
+function explicitAuthenticatedIdentity(client, mailbox) {
+  // ImapFlow 2.x deliberately overwrites `authenticated` with boolean true after
+  // successful password auth. Require evidence that LOGIN/AUTHENTICATE actually ran
+  // before accepting that boolean so a PREAUTH greeting cannot satisfy this check.
+  if (typeof client.authenticated === "string") return address(client.authenticated) === mailbox;
+  if (client.authenticated !== true || !(client.authCapabilities instanceof Map)) return false;
+  return ["LOGIN", "AUTH=PLAIN", "AUTH=LOGIN"].some((method) => client.authCapabilities.get(method) === true);
+}
 async function defaultImap(options) { const { ImapFlow } = await import("imapflow"); return new ImapFlow(options); }
 async function defaultSmtp(options) { const { default: nodemailer } = await import("nodemailer"); return nodemailer.createTransport(options); }
 async function defaultParse(source, options) { const { simpleParser } = await import("mailparser"); return simpleParser(source, options); }
@@ -69,7 +77,7 @@ export function createImapSmtpSupportProvider({ credentialResolver, allowedHosts
           tls: { servername: binding.host, rejectUnauthorized: true, minVersion: "TLSv1.2" }, logger: false, emitLogs: false, logRaw: false,
           disableCompression: true, disableAutoIdle: true, connectionTimeout: 5000, greetingTimeout: 5000, socketTimeout: 5000 });
         guard.onClose(() => client.close()); client.on?.("error", () => {}); guard.check(); await client.connect(); guard.check();
-        if (!client.secureConnection || typeof client.authenticated !== "string" || address(client.authenticated) !== binding.mailbox) throw fail("imap_authenticated_identity_mismatch");
+        if (!client.secureConnection || !explicitAuthenticatedIdentity(client, binding.mailbox)) throw fail("imap_authenticated_identity_mismatch");
         const lock = await client.getMailboxLock(binding.folder, { readOnly }); guard.check();
         try { return await operation(client, binding, guard); } finally { lock.release(); }
       });
