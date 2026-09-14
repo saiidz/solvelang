@@ -37,20 +37,7 @@ function isSubscriptionWebhook(event) {
 }
 
 function logSubscriptionWebhookFailure(logger, code) {
-  logger.error(JSON.stringify({
-    _aws: {
-      Timestamp: Date.now(),
-      CloudWatchMetrics: [{
-        Namespace: "SolveLang/ApiAccess",
-        Dimensions: [["Service"]],
-        Metrics: [{ Name: "SubscriptionWebhookFailures", Unit: "Count" }],
-      }],
-    },
-    Service: "api-access",
-    SubscriptionWebhookFailures: 1,
-    type: "subscription_webhook_error",
-    code,
-  }));
+  logger.error({ type: "subscription_webhook_error", code });
 }
 
 export function createApiAccessHandler({
