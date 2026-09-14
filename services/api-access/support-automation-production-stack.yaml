@@ -299,6 +299,18 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${SupportAutomationWorkerFunction}
       RetentionInDays: 30
 
+  SupportAutomationWorkerFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      LogGroupName: !Ref SupportAutomationWorkerLogGroup
+      FilterPattern: '"support_automation_worker_failure"'
+      MetricTransformations:
+        - MetricNamespace: SolveLang/SupportAutomation
+          MetricName: WorkerFailures
+          MetricValue: "1"
+          DefaultValue: 0
+
   SupportAutomationUnknownOutcomeMetricFilter:
     Type: AWS::Logs::MetricFilter
     Condition: SupportAutomationFeatureEnabled
@@ -353,6 +365,22 @@ Resources:
       Dimensions:
         - Name: RuleName
           Value: !Ref SupportAutomationSchedule
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  SupportAutomationHandledWorkerFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-worker-failures
+      AlarmDescription: Support automation caught a failed account-processing outcome that would not surface as a Lambda invocation error.
+      Namespace: SolveLang/SupportAutomation
+      MetricName: WorkerFailures
       Statistic: Sum
       Period: 300
       EvaluationPeriods: 1
