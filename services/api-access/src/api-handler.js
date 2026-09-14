@@ -30,6 +30,29 @@ function cookieHeader(event) {
   return cookies.length > 0 ? cookies.join("; ") : undefined;
 }
 
+function isSubscriptionWebhook(event) {
+  const method = event?.requestContext?.http?.method ?? "GET";
+  const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
+  return method === "POST" && path.endsWith("/stripe/subscriptions/webhook");
+}
+
+function logSubscriptionWebhookFailure(logger, code) {
+  logger.error(JSON.stringify({
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [{
+        Namespace: "SolveLang/ApiAccess",
+        Dimensions: [["Service"]],
+        Metrics: [{ Name: "SubscriptionWebhookFailures", Unit: "Count" }],
+      }],
+    },
+    Service: "api-access",
+    SubscriptionWebhookFailures: 1,
+    type: "subscription_webhook_error",
+    code,
+  }));
+}
+
 export function createApiAccessHandler({
   service,
   enabled = false,
@@ -259,15 +282,19 @@ export function createApiAccessHandler({
       }
       return response(404, { error: "Not found." });
     } catch (error) {
+      const webhookFailure = subscriptionBillingEnabled && isSubscriptionWebhook(event);
       if (error instanceof ApiAccessError) {
         logger.error({ type: "api_access_error", code: error.code });
+        if (webhookFailure) logSubscriptionWebhookFailure(logger, error.code);
         return response(error.statusCode, { error: error.publicMessage, code: error.code });
       }
       if (error instanceof SyntaxError) {
         logger.error({ type: "api_access_error", code: "invalid_json" });
+        if (webhookFailure) logSubscriptionWebhookFailure(logger, "invalid_json");
         return response(400, { error: "Invalid request.", code: "invalid_request" });
       }
       logger.error({ type: "api_access_error", code: "request_failed" });
+      if (webhookFailure) logSubscriptionWebhookFailure(logger, "request_failed");
       return response(500, { error: "Request failed.", code: "request_failed" });
     }
   };
