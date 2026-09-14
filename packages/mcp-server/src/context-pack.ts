@@ -11,7 +11,13 @@ const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
 const WINDOW_RADIUS = 4;
 
+export interface ContextSourceSelection {
+  score: number;
+  reasons: string[];
+}
+
 export interface ContextSource {
+  selection?: ContextSourceSelection;
   path: string;
   text: string;
 }
@@ -138,6 +144,17 @@ function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
   const normalizedPath = normalizeContextPath(source.path);
   assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_CONTEXT_SOURCE_BYTES);
 
+  const selection = source.selection;
+  if (selection !== undefined) {
+    if (!selection || !Number.isSafeInteger(selection.score) || selection.score < 1 || selection.score > 128
+      || !Array.isArray(selection.reasons) || selection.reasons.length === 0 || selection.reasons.length > 4
+      || selection.reasons.some((reason) => typeof reason !== "string" || reason.length === 0 || reason.length > 256 || /[\u0000-\u001f\u007f]/.test(reason))) {
+      throw new Error("Context source selection evidence is invalid.");
+    }
+  }
+  const selectionScore = selection?.score ?? 0;
+  const selectionReasons = selection?.reasons ?? [];
+
   const lines = source.text.replace(/\r\n/g, "\n").split("\n");
   const lowerLines = lines.map((line) => line.toLowerCase());
   const lowerPath = normalizedPath.toLowerCase();
@@ -154,7 +171,7 @@ function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
     matchLines.push({ line: index + 1, reasons, score });
   }
 
-  if (matchLines.length === 0 && pathScore === 0) return [];
+  if (matchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
 
   const ranges = matchLines.length > 0
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
@@ -164,14 +181,15 @@ function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
     const content = lines.slice(startLine - 1, endLine).join("\n");
     const lowerContent = content.toLowerCase();
     const contentReasons = tokens.filter((token) => lowerContent.includes(token));
-    const reasons = [...new Set([...pathReasons, ...contentReasons])].sort().slice(0, MAX_REASON_TOKENS);
+    const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
+    const reasons = [...new Set([...selectionReasons, ...lexicalReasons])].slice(0, MAX_REASON_TOKENS);
     const contentScore = contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0);
     return {
       path: normalizedPath,
       startLine,
       endLine,
       sourceSha256,
-      score: pathScore + contentScore,
+      score: pathScore + contentScore + selectionScore,
       reasons,
       content,
       bytes: Buffer.byteLength(content, "utf8"),
