@@ -17,7 +17,7 @@ The following facts have current evidence recorded in Issue #113:
 - Production API/authorizer alarms and priority-DLQ alarms are enabled and route to a confirmed SNS subscription; the checked alarms were `OK` when verified.
 - Production API Lambda log retention is 90 days, authorizer log retention is 90 days, and the production Admin gateway log retention is 30 days.
 - PITR is enabled for the verified API accounts, API keys, customer-auth, and subscription-events DynamoDB tables. A real restore drill has not been performed and remains separately approval-gated.
-- The connected support-automation repository core and default-off deployment foundation are merged through #897 and #903. They are repository preparation only: the support stack has not been deployed or activated, provider credentials have not been provisioned, and no live inbox/provider action has been canaried.
+- The connected support-automation repository core, default-off deployment foundation, and native Mailcow-compatible IMAP/SMTP path are merged through #897, #903, and #906. #906 retains Gmail as an optional provider and repository-qualifies tenant/mailbox/secret-bound verified-TLS IMAP/SMTP, safe pre-activation cutover/cursor recovery, durable action outcomes, and account setup/status/history controls with synthetic protocol/integration/concurrency/security tests. This is repository qualification only: the support stack has not been deployed or activated, production provider credentials have not been provisioned or accessed, and no live inbox/task/reply canary has been performed.
 - The active `Protect main` repository ruleset currently protects against branch deletion and non-fast-forward updates only. It does **not** enforce required status checks or required reviews. Green exact-head CI/review discipline is therefore a manual process until repository rules are strengthened.
 
 None of the facts above authorize billing, paid priority, provider execution, a support inbox canary, a PostHog canary, a production restore drill, or another production mutation.
@@ -50,7 +50,7 @@ API access and customer accounts are already enabled in production. Subscription
 
 The customer-account deployment workflow remains manual, main-only, protected by `api-access-production`, and explicitly preserves billing-off behavior. Re-running it is not a routine maintenance step; any new production mutation still requires fresh scope-specific approval.
 
-Support automation is also separate from the live customer-account stack. #903 prepares a default-off production foundation, but applying the IAM supplement, deploying that stack, provisioning provider credentials, enabling polling/actions, or running a real provider canary are separate owner-authorized gates under #896.
+Support automation is also separate from the live customer-account stack. #903 prepares a default-off production foundation, and #906 adds the qualified selectable Gmail/native-Mailcow transport, safe cutover/recovery path, and customer controls needed by the owner's existing `hello@solve-lang.com` mailbox without changing mailbox/DNS/relay configuration. Applying the IAM supplement, deploying the support stack, provisioning exact-scope mailbox/Linear credentials, enabling polling/actions, or running a real provider canary remain separate owner-authorized gates under #896. The shared mail host is not authorization to operate on other projects, server settings, or mailboxes.
 
 The first live PostHog request remains separately gated by #833 and must not be inferred from repository integrations or ChatGPT connectors.
 
@@ -87,6 +87,7 @@ Repository tests for billing replay and lifecycle behavior are evidence for code
 
 - Add/verify billing-specific webhook failure alarms before billing is enabled.
 - Verify queue worker/backlog/age monitoring before paid priority/provider processing is enabled.
+- Before support-provider activation, define and verify support-worker failure/age/unknown-outcome monitoring plus a bounded disable/recovery procedure; any live stop/recovery exercise remains separately owner-approved.
 - Perform any restore or rollback exercise only under its separate owner-approved operational scope; current PITR evidence is not a restore-drill result.
 - Re-review log content and retention so credentials, tokens, payment secrets, customer source, and raw support-message bodies cannot leak into logs or exported evidence.
 - Keep feature-disable switches and incident contacts current.
@@ -104,6 +105,7 @@ Immediately before each broader production launch step:
 - verify CSRF protections on browser mutations;
 - verify API-key scope and quota enforcement;
 - verify webhook signature verification and duplicate-event handling before billing is enabled;
+- verify support-worker secret access remains tagged, tenant-scoped, and limited to the approved SolveLang support namespace/endpoints before support activation;
 - verify no plaintext API keys, session tokens, recovery/sign-in tokens, peppers, Stripe secrets, provider credentials, or full payment credentials are logged;
 - document rotation for every production secret or credential reference used by the activated feature.
 
