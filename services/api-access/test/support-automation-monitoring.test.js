@@ -9,6 +9,7 @@ import {
 const root = new URL("../../../", import.meta.url);
 const templateUrl = new URL("services/api-access/support-automation-production-stack.yaml", root);
 const policyUrl = new URL("ops/aws/production-support-automation-deploy-supplemental-policy.json", root);
+const runtimeUrl = new URL("services/api-access/src/support-automation-runtime-handler.js", root);
 
 function enabledEnv(extra = {}) {
   return {
@@ -78,24 +79,29 @@ test("runtime message-age threshold is bounded and defaults to fifteen minutes",
   }
 });
 
-test("support foundation defines failure, schedule, unknown-outcome and message-age alarms without activating processing", async () => {
-  const template = await readFile(templateUrl, "utf8");
+test("support foundation defines catastrophic and handled worker failure, schedule, unknown-outcome and message-age alarms without activating processing", async () => {
+  const [template, runtime] = await Promise.all([readFile(templateUrl, "utf8"), readFile(runtimeUrl, "utf8")]);
   assert.match(template, /OperationsAlarmTopicArn:/);
   assert.match(template, /SupportAutomationMaxMessageAgeSeconds:/);
   assert.match(template, /API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS: !Ref SupportAutomationMaxMessageAgeSeconds/);
   assert.match(template, /Support automation activation requires an explicit operations alarm destination/);
+  assert.match(runtime, /WORKER_FAILURE_STATES = new Set\(\["FAILED", "SOURCE_INITIALIZATION_FAILED", "SOURCE_IDENTITY_MISMATCH"\]\)/);
+  assert.match(runtime, /support_automation_worker_failure/);
+  assert.match(template, /SupportAutomationWorkerFailureMetricFilter:[\s\S]*support_automation_worker_failure/);
   assert.match(template, /SupportAutomationUnknownOutcomeMetricFilter:[\s\S]*support_automation_action_unknown/);
   assert.match(template, /SupportAutomationMessageAgeMetricFilter:[\s\S]*support_automation_message_age_exceeded/);
+  assert.match(template, /MetricName: WorkerFailures/);
   assert.match(template, /MetricName: UnknownOutcomes/);
   assert.match(template, /MetricName: MessageAgeBreaches/);
-  assert.equal((template.match(/Type: AWS::CloudWatch::Alarm/g) ?? []).length, 4);
+  assert.equal((template.match(/Type: AWS::CloudWatch::Alarm/g) ?? []).length, 5);
   for (const logicalId of [
     "SupportAutomationWorkerErrorsAlarm",
     "SupportAutomationScheduleFailuresAlarm",
+    "SupportAutomationHandledWorkerFailureAlarm",
     "SupportAutomationUnknownOutcomeAlarm",
     "SupportAutomationMessageAgeAlarm",
   ]) assert.ok(template.includes(`${logicalId}:`), logicalId);
-  assert.ok((template.match(/AlarmActions: !If \[AlertsConfigured/g) ?? []).length >= 4);
+  assert.ok((template.match(/AlarmActions: !If \[AlertsConfigured/g) ?? []).length >= 5);
   assert.match(template, /State: !If \[SupportAutomationActivationFeatureEnabled, ENABLED, DISABLED\]/);
   assert.match(template, /SupportAutomationActivationEnabled:[\s\S]*Default: "false"/);
   assert.match(template, /SupportAutomationMailSendEnabled:[\s\S]*Default: "false"/);
