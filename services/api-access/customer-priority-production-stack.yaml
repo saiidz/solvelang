@@ -414,6 +414,96 @@ Resources:
             ScalingConfig:
               MaximumConcurrency: 10
 
+  PriorityDispatcherErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: QueueEnabled
+    Properties:
+      AlarmDescription: SolveLang production priority dispatcher Lambda reported an error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PriorityDispatcherFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  StandardWorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: QueueEnabled
+    Properties:
+      AlarmDescription: SolveLang production standard priority worker Lambda reported an error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref StandardWorkerFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  ExpressWorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: QueueEnabled
+    Properties:
+      AlarmDescription: SolveLang production express priority worker Lambda reported an error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ExpressWorkerFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  PriorityWorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: QueueEnabled
+    Properties:
+      AlarmDescription: SolveLang production priority worker Lambda reported an error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PriorityWorkerFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  CriticalWorkerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: QueueEnabled
+    Properties:
+      AlarmDescription: SolveLang production critical priority worker Lambda reported an error.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CriticalWorkerFunction
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
   DispatchFailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:

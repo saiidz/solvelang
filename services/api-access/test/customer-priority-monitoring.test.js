@@ -48,6 +48,28 @@ test("every priority lane has bounded backlog and oldest-message-age alarms", as
   assert.match(template, /PriorityQueueAgeThresholdSeconds:[\s\S]*?Default: 300[\s\S]*?MinValue: 60[\s\S]*?MaxValue: 86400/);
 });
 
+test("dispatcher and each priority worker expose Lambda error alarms only when queue processing exists", async () => {
+  const template = await source();
+  const alarms = [
+    ["PriorityDispatcherErrorAlarm", "PriorityDispatcherFunction", "StandardWorkerErrorAlarm"],
+    ["StandardWorkerErrorAlarm", "StandardWorkerFunction", "ExpressWorkerErrorAlarm"],
+    ["ExpressWorkerErrorAlarm", "ExpressWorkerFunction", "PriorityWorkerErrorAlarm"],
+    ["PriorityWorkerErrorAlarm", "PriorityWorkerFunction", "CriticalWorkerErrorAlarm"],
+    ["CriticalWorkerErrorAlarm", "CriticalWorkerFunction", "DispatchFailureAlarm"],
+  ];
+  for (const [logicalId, functionId, nextId] of alarms) {
+    const alarm = resourceBlock(template, logicalId, nextId);
+    assert.match(alarm, /Condition: QueueEnabled/);
+    assert.match(alarm, /Namespace: AWS\/Lambda/);
+    assert.match(alarm, /MetricName: Errors/);
+    assert.match(alarm, new RegExp(`Value: !Ref ${functionId}`));
+    assert.match(alarm, /Statistic: Sum/);
+    assert.match(alarm, /Threshold: 0/);
+    assert.match(alarm, /EvaluationPeriods: 1/);
+    assert.match(alarm, /AlarmActions: !If \[AlertsConfigured, \[!Ref OperationsAlarmTopicArn\]/);
+  }
+});
+
 test("dispatcher failure queue is monitored independently of lane DLQs", async () => {
   const template = await source();
   const alarm = resourceBlock(template, "DispatchFailureAlarm", "StandardBacklogAlarm");
