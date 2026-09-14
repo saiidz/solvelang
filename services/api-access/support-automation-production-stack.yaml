@@ -19,6 +19,10 @@ Parameters:
     Type: String
     AllowedValues: ["true", "false"]
     Default: "false"
+  SupportAutomationReplyRecipients:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^[A-Za-z0-9.!#$%&''*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}(,[A-Za-z0-9.!#$%&''*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63})*$'
   ExistingApiId:
     Type: String
     AllowedPattern: '^[a-z0-9]{8,32}$'
@@ -53,6 +57,8 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref SupportAutomationActivationEnabled, "true"]
         AssertDescription: Support email sending requires separately authorized support automation activation.
+      - Assert: !Not [!Equals [!Ref SupportAutomationReplyRecipients, ""]]
+        AssertDescription: Support email sending requires an explicit deployment-owned recipient allowlist.
 
 Conditions:
   SupportAutomationFeatureEnabled: !Equals [!Ref SupportAutomationEnabled, "true"]
@@ -155,6 +161,7 @@ Resources:
           API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
           API_SUPPORT_AUTOMATION_MAIL_HOSTS: !Ref SupportAutomationMailHosts
           API_SUPPORT_AUTOMATION_MAIL_SEND_ENABLED: !Ref SupportAutomationMailSendEnabled
+          API_SUPPORT_AUTOMATION_REPLY_RECIPIENTS: !Ref SupportAutomationReplyRecipients
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           SITE_ORIGIN: !Ref SiteOrigin
       Policies:
@@ -285,6 +292,8 @@ Outputs:
     Value: !Ref SupportAutomationActivationEnabled
   SupportAutomationMailSendEnabledState:
     Value: !Ref SupportAutomationMailSendEnabled
+  SupportAutomationReplyRecipientsState:
+    Value: !If [SupportAutomationActivationFeatureEnabled, !Ref SupportAutomationReplyRecipients, "disabled"]
   SupportAutomationTableName:
     Condition: SupportAutomationFeatureEnabled
     Value: !Ref SupportAutomationTable
