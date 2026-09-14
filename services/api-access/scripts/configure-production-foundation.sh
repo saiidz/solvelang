@@ -58,6 +58,7 @@ ensure_log_retention() {
 
 API_FUNCTION="$(physical_id ApiAccessFunction)"
 AUTHORIZER_FUNCTION="$(physical_id ApiKeyAuthorizerFunction)"
+API_LOG_GROUP="/aws/lambda/${API_FUNCTION}"
 ensure_log_retention "$API_FUNCTION"
 ensure_log_retention "$AUTHORIZER_FUNCTION"
 
@@ -86,13 +87,45 @@ put_lambda_alarm authorizer-errors Errors "$AUTHORIZER_FUNCTION" 1 Sum
 put_lambda_alarm authorizer-throttles Throttles "$AUTHORIZER_FUNCTION" 1 Sum
 put_lambda_alarm authorizer-duration Duration "$AUTHORIZER_FUNCTION" 4000 Maximum
 
+# The billing-enabled webhook handler emits only this sanitized marker on failure. The metric filter
+# converts the marker into an isolated custom metric without retaining request bodies or signatures.
+BILLING_WEBHOOK_FILTER="${STACK_NAME}-subscription-webhook-failures"
+aws logs put-metric-filter \
+  --log-group-name "$API_LOG_GROUP" \
+  --filter-name "$BILLING_WEBHOOK_FILTER" \
+  --filter-pattern '"subscription_webhook_error"' \
+  --metric-transformations metricName=SubscriptionWebhookFailures,metricNamespace=SolveLang/ApiAccess,metricValue=1,unit=Count
+
+filter_name="$(aws logs describe-metric-filters \
+  --log-group-name "$API_LOG_GROUP" \
+  --filter-name-prefix "$BILLING_WEBHOOK_FILTER" \
+  --query 'metricFilters[0].filterName' \
+  --output text)"
+[[ "$filter_name" == "$BILLING_WEBHOOK_FILTER" ]]
+
+# Three failures within one five-minute period represent a repeated webhook failure requiring operator review.
+aws cloudwatch put-metric-alarm \
+  --alarm-name "${STACK_NAME}-subscription-webhook-failures" \
+  --alarm-description "SolveLang production repeated subscription webhook failures" \
+  --namespace SolveLang/ApiAccess \
+  --metric-name SubscriptionWebhookFailures \
+  --period 300 \
+  --evaluation-periods 1 \
+  --datapoints-to-alarm 1 \
+  --threshold 3 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --statistic Sum \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$ALARM_TOPIC_ARN"
+
 for alarm in \
   api-errors \
   api-throttles \
   api-duration \
   authorizer-errors \
   authorizer-throttles \
-  authorizer-duration
+  authorizer-duration \
+  subscription-webhook-failures
 do
   actions="$(aws cloudwatch describe-alarms \
     --alarm-names "${STACK_NAME}-${alarm}" \
