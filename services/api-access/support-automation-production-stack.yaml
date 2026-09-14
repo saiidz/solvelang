@@ -23,6 +23,15 @@ Parameters:
     Type: String
     Default: ""
     AllowedPattern: '^$|^[A-Za-z0-9.!#$%&''*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}(,[A-Za-z0-9.!#$%&''*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63})*$'
+  SupportAutomationMaxMessageAgeSeconds:
+    Type: Number
+    Default: 900
+    MinValue: 300
+    MaxValue: 86400
+  OperationsAlarmTopicArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|arn:[a-z0-9-]+:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_.-]+$'
   ExistingApiId:
     Type: String
     AllowedPattern: '^[a-z0-9]{8,32}$'
@@ -52,6 +61,8 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref SupportAutomationEnabled, "true"]
         AssertDescription: Support automation activation requires the foundation to be enabled.
+      - Assert: !Not [!Equals [!Ref OperationsAlarmTopicArn, ""]]
+        AssertDescription: Support automation activation requires an explicit operations alarm destination.
   SupportAutomationMailSendRequiresActivation:
     RuleCondition: !Equals [!Ref SupportAutomationMailSendEnabled, "true"]
     Assertions:
@@ -63,6 +74,7 @@ Rules:
 Conditions:
   SupportAutomationFeatureEnabled: !Equals [!Ref SupportAutomationEnabled, "true"]
   SupportAutomationActivationFeatureEnabled: !Equals [!Ref SupportAutomationActivationEnabled, "true"]
+  AlertsConfigured: !Not [!Equals [!Ref OperationsAlarmTopicArn, ""]]
 
 Globals:
   Function:
@@ -132,6 +144,7 @@ Resources:
           API_SUPPORT_AUTOMATION_RUNTIME_MODE: api
           API_SUPPORT_AUTOMATION_TABLE: !Ref SupportAutomationTable
           API_SUPPORT_AUTOMATION_MAIL_HOSTS: !Ref SupportAutomationMailHosts
+          API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS: !Ref SupportAutomationMaxMessageAgeSeconds
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
           SITE_ORIGIN: !Ref SiteOrigin
@@ -162,6 +175,7 @@ Resources:
           API_SUPPORT_AUTOMATION_MAIL_HOSTS: !Ref SupportAutomationMailHosts
           API_SUPPORT_AUTOMATION_MAIL_SEND_ENABLED: !Ref SupportAutomationMailSendEnabled
           API_SUPPORT_AUTOMATION_REPLY_RECIPIENTS: !Ref SupportAutomationReplyRecipients
+          API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS: !Ref SupportAutomationMaxMessageAgeSeconds
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           SITE_ORIGIN: !Ref SiteOrigin
       Policies:
@@ -285,6 +299,100 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${SupportAutomationWorkerFunction}
       RetentionInDays: 30
 
+  SupportAutomationUnknownOutcomeMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      LogGroupName: !Ref SupportAutomationWorkerLogGroup
+      FilterPattern: '"support_automation_action_unknown"'
+      MetricTransformations:
+        - MetricNamespace: SolveLang/SupportAutomation
+          MetricName: UnknownOutcomes
+          MetricValue: "1"
+          DefaultValue: 0
+
+  SupportAutomationMessageAgeMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      LogGroupName: !Ref SupportAutomationWorkerLogGroup
+      FilterPattern: '"support_automation_message_age_exceeded"'
+      MetricTransformations:
+        - MetricNamespace: SolveLang/SupportAutomation
+          MetricName: MessageAgeBreaches
+          MetricValue: "1"
+          DefaultValue: 0
+
+  SupportAutomationWorkerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-worker-errors
+      AlarmDescription: Support automation worker Lambda errors require investigation before or during activation.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SupportAutomationWorkerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  SupportAutomationScheduleFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-schedule-failures
+      AlarmDescription: EventBridge failed invocations mean the support poller is not being delivered reliably.
+      Namespace: AWS/Events
+      MetricName: FailedInvocations
+      Dimensions:
+        - Name: RuleName
+          Value: !Ref SupportAutomationSchedule
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  SupportAutomationUnknownOutcomeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-unknown-outcomes
+      AlarmDescription: An external support action has an ambiguous outcome and must never be retried blindly.
+      Namespace: SolveLang/SupportAutomation
+      MetricName: UnknownOutcomes
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  SupportAutomationMessageAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: SupportAutomationFeatureEnabled
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-message-age
+      AlarmDescription: A provider message exceeded the configured maximum observation age before processing.
+      Namespace: SolveLang/SupportAutomation
+      MetricName: MessageAgeBreaches
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
 Outputs:
   SupportAutomationEnabledState:
     Value: !Ref SupportAutomationEnabled
@@ -294,6 +402,10 @@ Outputs:
     Value: !Ref SupportAutomationMailSendEnabled
   SupportAutomationReplyRecipientsState:
     Value: !If [SupportAutomationActivationFeatureEnabled, !Ref SupportAutomationReplyRecipients, "disabled"]
+  SupportAutomationMonitoringDestinationState:
+    Value: !If [AlertsConfigured, configured, disabled]
+  SupportAutomationMaxMessageAgeSecondsState:
+    Value: !Ref SupportAutomationMaxMessageAgeSeconds
   SupportAutomationTableName:
     Condition: SupportAutomationFeatureEnabled
     Value: !Ref SupportAutomationTable
