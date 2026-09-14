@@ -135,7 +135,8 @@ export function createSupportAutomationService({ store, gmail, mail, linear, all
   async function runExternalAction({ accountId, eventId, actionId, configRevision, execute }) {
     const claimed = await store.claimAction({ accountId, eventId, actionId, createdAt: new Date(now()).toISOString(), claimId: idFactory() });
     if (claimed.status === "succeeded") return { status: "succeeded", duplicate: true, outcome: claimed.outcome };
-    if (claimed.status === "started" || claimed.status === "unknown") return { status: "unknown", duplicate: true };
+    if (claimed.status === "stopped") return { status: "stopped", duplicate: true };
+    if (claimed.status !== "claimed") return { status: "unknown", duplicate: true };
     const current = await currentActiveConfig(accountId, configRevision); if (!current) { await store.finishAction({ accountId, eventId, actionId, status: "stopped", updatedAt: new Date(now()).toISOString() }); return { status: "stopped" }; }
     try { const outcome = await execute(current); await store.finishAction({ accountId, eventId, actionId, status: "succeeded", outcome, updatedAt: new Date(now()).toISOString() }); return { status: "succeeded", outcome }; }
     catch { await store.finishAction({ accountId, eventId, actionId, status: "unknown", updatedAt: new Date(now()).toISOString() }); logger.error({ type: "support_automation_action_unknown", actionId, eventId, accountId }); return { status: "unknown" }; }
@@ -189,7 +190,7 @@ export function createSupportAutomationService({ store, gmail, mail, linear, all
   async function initializeImapAccount(config) {
     if (!mail?.captureCutover) return { accountId: config.accountId, state: "FAILED", processed: [] };
     const before = await store.getConfig(config.accountId); if (!before || before.revision !== config.revision || before.automationState !== "INITIALIZING" || before.provider !== "imap_smtp") return { accountId: config.accountId, state: "STOPPED", processed: [] };
-    try { const cutover = await mail.captureCutover(mailInput(before)); const current = await store.getConfig(config.accountId); if (!current || current.revision !== before.revision || current.automationState !== "INITIALIZING") return { accountId: config.accountId, state: "STOPPED", processed: [] };
+    try { const cutover = await mail.captureCutover(mailInput(before), before.updatedAt); const current = await store.getConfig(config.accountId); if (!current || current.revision !== before.revision || current.automationState !== "INITIALIZING") return { accountId: config.accountId, state: "STOPPED", processed: [] };
       const initialized = await store.initializeSource(config.accountId, config.revision, { sourceId: cutover.sourceId, uidValidity: cutover.uidValidity, nextUid: cutover.nextUid, cursor: cutover.nextUid }, new Date(now()).toISOString()); return processImapAccount(initialized);
     } catch { const current = await store.getConfig(config.accountId); if (current?.revision === config.revision && current.automationState === "INITIALIZING") { try { await store.setState(config.accountId, config.revision, "PAUSED", new Date(now()).toISOString()); } catch {} } logger.error({ type: "support_automation_source_initialization_failed", accountId: config.accountId }); return { accountId: config.accountId, state: "SOURCE_INITIALIZATION_FAILED", processed: [] }; }
   }
