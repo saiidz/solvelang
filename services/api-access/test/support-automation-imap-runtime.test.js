@@ -26,6 +26,22 @@ test("runtime accepts only bounded approved mail hosts and keeps SMTP sending of
   }
 });
 
+test("runtime mail wrapper anchors cutover to the durable initialization timestamp", async () => {
+  const captures = [];
+  const providerFactory = () => ({
+    async captureCutover(input, startedAt) { captures.push({ input, startedAt }); return { sourceId: "f".repeat(64), uidValidity: 1, nextUid: 2 }; },
+    async scanNew() { return { messages: [], nextCursor: 2 }; },
+    async readMessage() { return {}; },
+    async sendReply() { return {}; },
+  });
+  const startedAt = "2026-09-14T01:00:00.000Z";
+  const input = { accountId: `acct_${"a".repeat(32)}` };
+  const provider = createRuntimeImapSupportProvider({ credentialResolver() {}, allowedHosts: ["mx.solve.test"], initializationStartResolver: async (value) => { assert.equal(value, input); return startedAt; }, providerFactory });
+  await provider.captureCutover(input);
+  await provider.captureCutover(input);
+  assert.deepEqual(captures, [{ input, startedAt }, { input, startedAt }]);
+});
+
 test("runtime mail wrapper cannot send while disabled and creates a one-recipient transport when enabled", async () => {
   const calls = [];
   const providerFactory = (options) => {
