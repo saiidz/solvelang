@@ -86,13 +86,31 @@ put_lambda_alarm authorizer-errors Errors "$AUTHORIZER_FUNCTION" 1 Sum
 put_lambda_alarm authorizer-throttles Throttles "$AUTHORIZER_FUNCTION" 1 Sum
 put_lambda_alarm authorizer-duration Duration "$AUTHORIZER_FUNCTION" 4000 Maximum
 
+# The API emits this bounded EMF metric only for the signed subscription webhook while billing is enabled.
+# Three failures within one five-minute period represent a repeated webhook failure requiring operator review.
+aws cloudwatch put-metric-alarm \
+  --alarm-name "${STACK_NAME}-subscription-webhook-failures" \
+  --alarm-description "SolveLang production repeated subscription webhook failures" \
+  --namespace SolveLang/ApiAccess \
+  --metric-name SubscriptionWebhookFailures \
+  --dimensions Name=Service,Value=api-access \
+  --period 300 \
+  --evaluation-periods 1 \
+  --datapoints-to-alarm 1 \
+  --threshold 3 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --statistic Sum \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$ALARM_TOPIC_ARN"
+
 for alarm in \
   api-errors \
   api-throttles \
   api-duration \
   authorizer-errors \
   authorizer-throttles \
-  authorizer-duration
+  authorizer-duration \
+  subscription-webhook-failures
 do
   actions="$(aws cloudwatch describe-alarms \
     --alarm-names "${STACK_NAME}-${alarm}" \
