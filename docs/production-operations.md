@@ -39,16 +39,17 @@ Paid priority must remain disabled until those alarms and queue workers are depl
 
 ### Connected support automation
 
-The repository support stack defines four bounded signals while activation and sending remain independently OFF by default:
+The repository support stack defines five bounded signals while activation and sending remain independently OFF by default:
 
-- support-worker Lambda errors;
+- support-worker Lambda invocation errors;
+- handled account-processing failures (`FAILED`, source-initialization failure, or source-identity mismatch) surfaced as the sanitized `support_automation_worker_failure` marker, because these paths can return a successful Lambda invocation while the account did not process safely;
 - EventBridge poll-schedule failed invocations;
 - `support_automation_action_unknown`, meaning an external action has an ambiguous outcome and must not be retried blindly;
 - `support_automation_message_age_exceeded`, emitted without message identity/body when a provider message is older than the configured processing-age threshold at read time.
 
 The default message-age threshold is 15 minutes and is bounded by configuration to 5 minutes through 24 hours. The alarm destination is an explicit SNS topic ARN parameter. Repository configuration refuses activation when that destination is empty; this is configuration evidence only, not proof that a future topic/subscription is live or delivering alerts.
 
-Before any separately authorized activation, verify the intended alarm destination and the four alarm resources from the deployed stack. Do not use a customer mailbox address, raw support content, provider credentials, or customer identifiers as alarm payload dimensions.
+Before any separately authorized activation, verify the intended alarm destination and the five alarm resources from the deployed stack. Do not use a customer mailbox address, raw support content, provider credentials, or customer identifiers as alarm payload dimensions.
 
 #### Support disable procedure
 
