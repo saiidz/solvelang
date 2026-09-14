@@ -30,6 +30,28 @@ export function createAccountAccessGuardedSupportStore(store, accessReader, { no
   if (!store || typeof store.listActiveConfigs !== "function" || !accessReader || typeof accessReader.isActive !== "function") throw new Error("Support automation account-access guard requires a store and account reader.");
   return new Proxy(store, { get(target, property, receiver) { if (property !== "listActiveConfigs") return Reflect.get(target, property, receiver); return async (limit) => { const configs = await target.listActiveConfigs(limit), allowed = []; for (const config of configs) { if (await accessReader.isActive(config.accountId)) { allowed.push(config); continue; } try { await target.setState(config.accountId, config.revision, "PAUSED", new Date(now()).toISOString()); } catch { logger.error({ type: "support_automation_account_restriction_pause_failed", accountId: config.accountId }); } } return allowed; }; } });
 }
+export function createRuntimeImapSupportProvider({ credentialResolver, allowedHosts, allowSend = false, providerFactory = createImapSmtpSupportProvider }) {
+  if (typeof providerFactory !== "function") throw new Error("IMAP support provider factory is required.");
+  const reader = providerFactory({ credentialResolver, allowedHosts, allowSend: false });
+  return {
+    captureCutover: (...args) => reader.captureCutover(...args),
+    scanNew: (...args) => reader.scanNew(...args),
+    readMessage: (...args) => reader.readMessage(...args),
+    async sendReply(input, message) {
+      if (!allowSend) {
+        const error = new Error("smtp_reply_not_authorized"); error.code = "smtp_reply_not_authorized"; throw error;
+      }
+      if (!message || typeof message.to !== "string") {
+        const error = new Error("smtp_message_invalid"); error.code = "smtp_message_invalid"; throw error;
+      }
+      // The service derives this recipient from the verified, parsed message sender.
+      // Instantiate a one-recipient transport so the lower-level adapter still
+      // enforces an exact destination rather than becoming an open SMTP client.
+      const sender = providerFactory({ credentialResolver, allowedHosts, allowSend: true, allowedReplyRecipients: [message.to] });
+      return sender.sendReply(input, message);
+    },
+  };
+}
 export function parseSupportAutomationRuntimeEnvironment(environment = process.env) {
   const enabled = environment.API_SUPPORT_AUTOMATION_ENABLED === "true", activationEnabled = environment.API_SUPPORT_AUTOMATION_ACTIVATION_ENABLED === "true", runtimeMode = environment.API_SUPPORT_AUTOMATION_RUNTIME_MODE ?? "api";
   if (!RUNTIME_MODES.has(runtimeMode)) throw new Error("API_SUPPORT_AUTOMATION_RUNTIME_MODE must be api or worker.");
@@ -47,7 +69,7 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
   const supportAutomation = createSupportAutomationService({
     store: guardedSupportStore,
     gmail: createAccountAccessGuardedSupportProvider(createGmailSupportProvider({ credentialResolver }), accessReader),
-    mail: createAccountAccessGuardedSupportProvider(createImapSmtpSupportProvider({ credentialResolver, allowedHosts: parsed.approvedMailHosts, allowSend: parsed.mailSendEnabled }), accessReader),
+    mail: createAccountAccessGuardedSupportProvider(createRuntimeImapSupportProvider({ credentialResolver, allowedHosts: parsed.approvedMailHosts, allowSend: parsed.mailSendEnabled }), accessReader),
     linear: createAccountAccessGuardedSupportProvider(createLinearSupportProvider({ credentialResolver }), accessReader),
     allowedMailHosts: parsed.approvedMailHosts,
     activationEnabled: parsed.activationEnabled,
