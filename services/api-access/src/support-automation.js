@@ -75,10 +75,13 @@ function normalizeConfiguration(accountId, input, timestamp, existing, { allowed
   if (!approved.has(mailHost)) throw new ApiAccessError(400, "support_mail_host_not_approved", "Mail host is not approved for this environment.");
   return { ...common, mailCredentialSecretArn: cleanSecretArn(input.mailCredentialSecretArn, "Mail credential secret reference", accountId), mailHost, mailFolder: cleanFolder(input.mailFolder) };
 }
-function redactMessageText(value) {
+function boundedMessageText(value) {
   const input = typeof value === "string" ? value : "";
-  const clipped = Buffer.byteLength(input, "utf8") > MAX_MESSAGE_BYTES ? Buffer.from(input, "utf8").subarray(0, MAX_MESSAGE_BYTES).toString("utf8") : input;
-  return clipped.replace(/\b(?:Bearer\s+)?[A-Za-z0-9_-]{24,}\.[A-Za-z0-9._-]{12,}\b/g, "[redacted-token]").replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{12,}\b/g, "[redacted-secret]").replace(/\b(?:password|passcode|otp|secret|api[_ -]?key)\s*[:=]\s*\S+/gi, "$1=[redacted]").trim();
+  return Buffer.byteLength(input, "utf8") > MAX_MESSAGE_BYTES ? Buffer.from(input, "utf8").subarray(0, MAX_MESSAGE_BYTES).toString("utf8") : input;
+}
+function redactMessageText(value) {
+  const clipped = boundedMessageText(value);
+  return clipped.replace(/\b(?:Bearer\s+)?[A-Za-z0-9_-]{24,}\.[A-Za-z0-9._-]{12,}\b/g, "[redacted-token]").replace(/\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{12,}\b/g, "[redacted-secret]").replace(/\b(password|passcode|otp|secret|api[_ -]?key)\s*[:=]\s*\S+/gi, "$1=[redacted]").trim();
 }
 function classify(message, policyVersion = DEFAULT_POLICY_VERSION) {
   if (!SUPPORTED_POLICY_VERSIONS.has(policyVersion)) throw new ApiAccessError(409, "unsupported_support_automation_policy_version", "The configured support automation policy version is not supported.");
@@ -139,11 +142,11 @@ export function createSupportAutomationService({ store, gmail, mail, linear, all
   }
   async function finishEvent(config, eventId, claimId, classification, state, actions) { await store.finishEvent({ accountId: config.accountId, eventId, claimId, state, ...classification, actions, updatedAt: new Date(now()).toISOString() }); }
   async function processMessage(config, message) {
-    const eventId = eventIdFor(config, message), timestampMs = now(), timestamp = new Date(timestampMs).toISOString(), claimId = idFactory(), sanitized = redactMessageText(message.text);
+    const eventId = eventIdFor(config, message), timestampMs = now(), timestamp = new Date(timestampMs).toISOString(), claimId = idFactory(), boundedText = boundedMessageText(message.text), sanitized = redactMessageText(boundedText);
     const providerMessageHash = createHash("sha256").update(`${message.id}\n${message.from}\n${message.subject}\n${sanitized}`).digest("hex");
     const claimed = await store.claimEvent({ accountId: config.accountId, eventId, providerMessageHash, claimId, processingUntil: new Date(timestampMs + EVENT_LEASE_MS).toISOString(), createdAt: timestamp, updatedAt: timestamp });
     if (!claimed.created) return { eventId, state: claimed.record.state, duplicate: true };
-    const activeClaimId = claimed.record?.claimId ?? claimId, classification = classify({ ...message, text: sanitized }, config.policyVersion);
+    const activeClaimId = claimed.record?.claimId ?? claimId, classification = classify({ ...message, text: boundedText }, config.policyVersion);
     if (classification.requiresReview) { await finishEvent(config, eventId, activeClaimId, classification, "REVIEW_REQUIRED", []); return { eventId, state: "REVIEW_REQUIRED", duplicate: false, reclaimed: Boolean(claimed.reclaimed) }; }
     const actions = [];
     if (config.allowedActions.includes("create_linear_issue")) {
