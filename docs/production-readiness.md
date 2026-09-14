@@ -4,7 +4,7 @@ Status: **customer-facing API/account infrastructure is live; subscription billi
 
 This document is the current launch-control summary. Historical preparation and rollout runbooks remain useful procedures, but their original `prepared`, `not deployed`, or `disabled` status text is not authoritative evidence of current production state. Use Issue #113 and the dated production-status records for the evidence trail, and require fresh proof before any protected live action.
 
-## Verified current production boundary — 2026-09-13
+## Verified current production boundary — 2026-09-14
 
 The following facts have current evidence recorded in Issue #113:
 
@@ -18,6 +18,8 @@ The following facts have current evidence recorded in Issue #113:
 - Production API Lambda log retention is 90 days, authorizer log retention is 90 days, and the production Admin gateway log retention is 30 days.
 - PITR is enabled for the verified API accounts, API keys, customer-auth, and subscription-events DynamoDB tables. A real restore drill has not been performed and remains separately approval-gated.
 - The connected support-automation repository core, default-off deployment foundation, native Mailcow-compatible IMAP/SMTP path, and default-off support monitoring/recovery controls are merged through #897, #903, #906, and #908. #906 retains Gmail as an optional provider and repository-qualifies tenant/mailbox/secret-bound verified-TLS IMAP/SMTP, safe pre-activation cutover/cursor recovery, durable action outcomes, and account setup/status/history controls with synthetic protocol/integration/concurrency/security tests. #908 repository-qualifies worker/schedule failure alarms, unknown-outcome and bounded message-age metrics/alarms, an activation-time alarm-destination requirement, and a state-preserving disable/recovery procedure. These are repository qualifications only: the support stack/monitoring have not been deployed or activated, production provider credentials have not been provisioned or accessed, and no live inbox/task/reply or stop/recovery canary has been performed.
+- The dormant paid-priority path now has repository-qualified worker/dispatcher error alarms, dispatcher-failure-queue monitoring, per-lane visible-backlog and oldest-message-age alarms, and an activation-time alarm-destination interlock from #910. Paid priority/provider execution remains OFF; these alarms are not claimed deployed or live.
+- The disabled subscription-billing path now has repository-qualified sanitized webhook-failure logging plus a scoped CloudWatch Logs metric filter and repeated-failure alarm contract from #911. Billing remains OFF; the metric filter/alarm are not claimed deployed or verified in production.
 - The active `Protect main` repository ruleset currently protects against branch deletion and non-fast-forward updates only. It does **not** enforce required status checks or required reviews. Green exact-head CI/review discipline is therefore a manual process until repository rules are strengthened.
 
 None of the facts above authorize billing, paid priority, provider execution, a support inbox canary, a PostHog canary, a production restore drill, or another production mutation.
@@ -83,11 +85,13 @@ Repository tests for billing replay and lifecycle behavior are evidence for code
 - Production API, authorizer, and Admin gateway log-retention settings were verified as described above.
 - Site/API deployment paths contain rollback and disable controls documented in the repository.
 - #908 adds repository-qualified support-worker Lambda/schedule failure alarms, unknown-outcome and bounded message-age metric alarms, an activation prerequisite for an operations alarm destination, and a bounded state-preserving disable/recovery procedure. These controls remain default-off/unproven in production until the support foundation is separately authorized and deployed.
+- #910 adds repository-qualified paid-priority worker/dispatcher failure, dispatcher-failure-queue, visible-backlog, and oldest-message-age alarms plus an activation-time operations-destination interlock. Queue/customer/provider gates remain default-OFF, and deployment/live alarm state is not established by the merge.
+- #911 adds repository-qualified sanitized subscription-webhook failure monitoring: a bounded failure marker, scoped CloudWatch Logs metric filter, and repeated-failure alarm contract routed to the configured operations destination. Billing remains disabled, and deployment/live alarm state is not established by the merge.
 
 ### Still required before broader launch
 
-- Add/verify billing-specific webhook failure alarms before billing is enabled.
-- Verify queue worker/backlog/age monitoring before paid priority/provider processing is enabled.
+- Before billing is enabled, separately authorize the billing rollout and verify the deployed #911 metric filter, alarm destination, alarm actions/state, and webhook identity against the live stack.
+- Before paid priority/provider processing is enabled, separately authorize the priority rollout and verify the deployed #910 worker/dispatcher/failure-queue/backlog/age alarms and alarm destination against the live stack.
 - Before support-provider activation, separately authorize deployment of the already-qualified #908 support monitoring controls and verify the configured alarm destination/alarms against the deployed support stack. Any live provider or stop/recovery exercise remains separately owner-approved.
 - Perform any restore or rollback exercise only under its separate owner-approved operational scope; current PITR evidence is not a restore-drill result.
 - Re-review log content and retention so credentials, tokens, payment secrets, customer source, and raw support-message bodies cannot leak into logs or exported evidence.
