@@ -23,6 +23,16 @@ Parameters:
     Type: String
     Default: ""
     AllowedPattern: '^$|arn:[a-z0-9-]+:sns:[a-z0-9-]+:[0-9]{12}:[A-Za-z0-9_.-]+$'
+  PriorityQueueBacklogThreshold:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    MaxValue: 10000
+  PriorityQueueAgeThresholdSeconds:
+    Type: Number
+    Default: 300
+    MinValue: 60
+    MaxValue: 86400
 
 Rules:
   CustomerPriorityRequiresQueue:
@@ -35,6 +45,11 @@ Rules:
     Assertions:
       - Assert: !Equals [!Ref CustomerPriorityEnabled, "true"]
         AssertDescription: Provider execution requires customer priority exposure.
+  PriorityQueueRequiresAlerts:
+    RuleCondition: !Equals [!Ref PriorityQueueEnabled, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref OperationsAlarmTopicArn, ""]]
+        AssertDescription: Priority queue processing requires a configured operations alarm destination.
 
 Conditions:
   QueueEnabled: !Equals [!Ref PriorityQueueEnabled, "true"]
@@ -398,6 +413,157 @@ Resources:
             FunctionResponseTypes: [ReportBatchItemFailures]
             ScalingConfig:
               MaximumConcurrency: 10
+
+  DispatchFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production priority dispatcher failure queue is non-empty.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DispatchFailureQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  StandardBacklogAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production standard queue backlog is sustained above the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt StandardQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: !Ref PriorityQueueBacklogThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  ExpressBacklogAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production express queue backlog is sustained above the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ExpressQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: !Ref PriorityQueueBacklogThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  PriorityBacklogAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production priority queue backlog is sustained above the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PriorityQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: !Ref PriorityQueueBacklogThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  CriticalBacklogAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production critical queue backlog is sustained above the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt CriticalQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 3
+      Threshold: !Ref PriorityQueueBacklogThreshold
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+
+  StandardMessageAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production standard queue oldest message age exceeds the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt StandardQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref PriorityQueueAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  ExpressMessageAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production express queue oldest message age exceeds the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ExpressQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref PriorityQueueAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  PriorityMessageAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production priority queue oldest message age exceeds the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt PriorityQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref PriorityQueueAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
+  CriticalMessageAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: SolveLang production critical queue oldest message age exceeds the reviewed threshold.
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt CriticalQueue.QueueName
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: !Ref PriorityQueueAgeThresholdSeconds
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [AlertsConfigured, [!Ref OperationsAlarmTopicArn], !Ref AWS::NoValue]
 
   StandardDlqAlarm:
     Type: AWS::CloudWatch::Alarm
