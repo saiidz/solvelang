@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -19,6 +20,8 @@ const expectedFiles = [
   "package/dist/src/context-handoff.js",
   "package/dist/src/context-pack.d.ts",
   "package/dist/src/context-pack.js",
+  "package/dist/src/context-selection.d.ts",
+  "package/dist/src/context-selection.js",
   "package/dist/src/context-tools.d.ts",
   "package/dist/src/context-tools.js",
   "package/dist/src/context-workspace.d.ts",
@@ -104,6 +107,16 @@ try {
     "solvelang-mcp": "dist/src/index.js",
     "solvelang-mcp-remote": "dist/src/remote-cli.js",
   });
+
+  const installedRuntimeRoot = path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src");
+  const { buildContextSelection } = await import(pathToFileURL(path.join(installedRuntimeRoot, "context-selection.js")).href);
+  const { buildContextPack } = await import(pathToFileURL(path.join(installedRuntimeRoot, "context-pack.js")).href);
+  const selection = buildContextSelection(["src/entry.ts"]);
+  const selectedPack = buildContextPack("rare_task_marker", [{
+    path: "src/entry.ts", text: "export const value = 17;\n", selection: selection.hints.get("src/entry.ts"),
+  }]);
+  assert.deepEqual(selectedPack.entries.map((entry) => entry.path), ["src/entry.ts"], "installed runtime must select explicit changed paths without a lexical match");
+  assert.deepEqual(selectedPack.entries[0].reasons, ["explicit-changed-path"]);
 
   const installedEntrypoint = await readFile(
     path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src", "index.js"),

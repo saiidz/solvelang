@@ -13,6 +13,13 @@ import {
   type ContextPackEntry,
   type ContextSource,
 } from "./context-pack.js";
+import {
+  buildContextSelection,
+  normalizeContextSelectionPath,
+  type ContextSelection,
+  type ContextSelectionMetadata,
+} from "./context-selection.js";
+import { parseSolveGraphText } from "./solve-graph.js";
 import { readWorkspaceText, workspaceRoot } from "./workspace.js";
 
 export const CONTEXT_PLAN_SCHEMA = "solvelang.context.plan.v0" as const;
@@ -89,6 +96,7 @@ export interface ContextWorkspaceMetadata {
   skippedUnsupported: number;
   skippedOversize: number;
   discoveryTruncated: boolean;
+  selection?: ContextSelectionMetadata;
 }
 
 export interface ContextPlanEntry extends Omit<ContextPackEntry, "content"> {}
@@ -282,8 +290,13 @@ async function discoverCandidates(task: string): Promise<{ candidates: Discovery
   };
 }
 
-async function loadDiscoveredSources(task: string): Promise<{ sources: ContextSource[]; workspace: ContextWorkspaceMetadata }> {
+async function loadDiscoveredSources(task: string, selection?: ContextSelection): Promise<{ sources: ContextSource[]; workspace: ContextWorkspaceMetadata }> {
   const { candidates, metadata } = await discoverCandidates(task);
+  if (selection) {
+    candidates.sort((left, right) =>
+      (selection.hints.get(right.path)?.score ?? 0) - (selection.hints.get(left.path)?.score ?? 0)
+      || right.pathScore - left.pathScore || (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+  }
   const sources: ContextSource[] = [];
   let selectedSourceBytes = 0;
   let discoveryTruncated = metadata.discoveryTruncated;
@@ -329,11 +342,45 @@ async function loadDiscoveredSources(task: string): Promise<{ sources: ContextSo
   };
 }
 
+export interface ContextWorkspaceOptions {
+  paths?: string[];
+  budgetBytes?: number;
+  changedPaths?: string[];
+  graphPath?: string;
+}
+
+async function loadContextSelection(options: ContextWorkspaceOptions): Promise<ContextSelection | undefined> {
+  if (options.changedPaths === undefined) {
+    if (options.graphPath !== undefined) throw new Error("Context graphPath requires explicit changedPaths.");
+    return undefined;
+  }
+  const allowedPath = (inputPath: string) => !isSensitivePath(inputPath);
+  // Validate the complete caller-controlled change list before opening the optional graph.
+  const changed = buildContextSelection(options.changedPaths, undefined, allowedPath);
+  if (options.graphPath === undefined) return changed;
+  const graphPath = normalizeContextSelectionPath(options.graphPath);
+  if (!allowedPath(graphPath)) throw new Error("Context graph access to sensitive paths is denied.");
+  const { text } = await readWorkspaceText(graphPath);
+  return buildContextSelection(options.changedPaths, {
+    path: graphPath,
+    sourceSha256: sha256Text(text),
+    document: parseSolveGraphText(text),
+  }, allowedPath);
+}
+
 export async function buildWorkspaceContextPack(
   task: string,
-  options: { paths?: string[]; budgetBytes?: number } = {},
+  options: ContextWorkspaceOptions = {},
 ): Promise<ContextWorkspacePack> {
-  const loaded = options.paths ? await loadExplicitSources(options.paths) : await loadDiscoveredSources(task);
+  const selection = await loadContextSelection(options);
+  const loaded = options.paths ? await loadExplicitSources(options.paths) : await loadDiscoveredSources(task, selection);
+  if (selection) {
+    loaded.workspace.selection = selection.metadata;
+    loaded.sources = loaded.sources.map((source) => {
+      const hint = selection.hints.get(source.path);
+      return hint ? { ...source, selection: hint } : source;
+    });
+  }
   return {
     schema: CONTEXT_WORKSPACE_PACK_SCHEMA,
     workspace: loaded.workspace,
@@ -343,7 +390,7 @@ export async function buildWorkspaceContextPack(
 
 export async function planWorkspaceContext(
   task: string,
-  options: { paths?: string[]; budgetBytes?: number } = {},
+  options: ContextWorkspaceOptions = {},
 ): Promise<ContextPlan> {
   const result = await buildWorkspaceContextPack(task, options);
   return {

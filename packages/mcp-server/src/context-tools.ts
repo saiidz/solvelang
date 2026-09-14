@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { MAX_CONTEXT_CHANGED_PATHS, MAX_CONTEXT_GRAPH_ROOTS } from "./context-selection.js";
 import { registerContextCompactionTools } from "./context-compaction-tools.js";
 import {
   CONTEXT_HANDOFF_SCHEMA,
@@ -32,6 +33,10 @@ function textResult(value: unknown) {
 }
 
 const contextBuildInputSchema = z.object({
+  changedPaths: z.array(z.string().min(1).max(4_096)).min(1).max(MAX_CONTEXT_CHANGED_PATHS).optional()
+    .describe("Caller-supplied changed workspace paths to prioritize. Does not run git or expand an explicit paths allowlist."),
+  graphPath: z.string().min(1).max(4_096).optional()
+    .describe("Optional local integrity-validated Solve Graph snapshot for one-hop dependencies/dependents/tests. Requires changedPaths; graph workspace freshness is not verified."),
   task: z.string().min(1).max(16_384).describe("Coding task or question used only for deterministic local relevance ranking"),
   paths: z.array(z.string().min(1).max(4_096)).min(1).max(MAX_CONTEXT_EXPLICIT_PATHS).optional()
     .describe("Optional explicit workspace-relative text files. When omitted, bounded local discovery is used."),
@@ -104,7 +109,7 @@ export function registerContextTools(server: McpServer): void {
       inputSchema: contextBuildInputSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ task, paths, budgetBytes }) => textResult(await planWorkspaceContext(task, { paths, budgetBytes })),
+    async ({ task, paths, budgetBytes, changedPaths, graphPath }) => textResult(await planWorkspaceContext(task, { paths, budgetBytes, changedPaths, graphPath })),
   );
 
   server.registerTool(
@@ -115,7 +120,7 @@ export function registerContextTools(server: McpServer): void {
       inputSchema: contextBuildInputSchema,
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    async ({ task, paths, budgetBytes }) => textResult(await buildWorkspaceContextPack(task, { paths, budgetBytes })),
+    async ({ task, paths, budgetBytes, changedPaths, graphPath }) => textResult(await buildWorkspaceContextPack(task, { paths, budgetBytes, changedPaths, graphPath })),
   );
 
   server.registerTool(
@@ -177,6 +182,9 @@ export function registerContextTools(server: McpServer): void {
       limits: {
         budgetBytes: { min: MIN_CONTEXT_BUDGET_BYTES, max: MAX_CONTEXT_BUDGET_BYTES },
         explicitPaths: MAX_CONTEXT_EXPLICIT_PATHS,
+        changedPaths: MAX_CONTEXT_CHANGED_PATHS,
+        graphRoots: MAX_CONTEXT_GRAPH_ROOTS,
+        graphDepth: 1,
         discoveryEntries: MAX_CONTEXT_DISCOVERY_ENTRIES,
         discoveryCandidates: MAX_CONTEXT_DISCOVERY_CANDIDATES,
         discoveryBytes: MAX_CONTEXT_DISCOVERY_BYTES,
@@ -192,6 +200,8 @@ export function registerContextTools(server: McpServer): void {
         "Read-only workspace access; no repository mutation",
         "Automatic discovery skips vendor/build trees and likely secret paths",
         "Exact source excerpts only; no hidden summarization",
+        "Changed paths and one-hop graph relationships are optional ranking evidence, never file-access authority",
+        "Graph integrity is checked, but graph freshness against the current workspace is not verified",
         "Content-addressed SHA-256 provenance",
         "Retrieval rejects stale source identities",
         "Claude/Codex handoffs carry provenance instead of source bodies and can be revalidated in the receiving workspace",
