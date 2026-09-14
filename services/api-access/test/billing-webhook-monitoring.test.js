@@ -5,6 +5,7 @@ import { createApiAccessHandler } from "../src/api-handler.js";
 
 const adminSecret = "a".repeat(64);
 const opsScriptUrl = new URL("../scripts/configure-production-foundation.sh", import.meta.url);
+const deployPolicyUrl = new URL("../../../ops/aws/production-foundation-deploy-policy.json", import.meta.url);
 const service = {};
 
 function webhookEvent(signature = "synthetic-signature", body = "synthetic-webhook-body") {
@@ -17,10 +18,7 @@ function webhookEvent(signature = "synthetic-signature", body = "synthetic-webho
 }
 
 function metricRecords(logs) {
-  return logs
-    .filter((record) => typeof record === "string")
-    .map((record) => JSON.parse(record))
-    .filter((record) => record.type === "subscription_webhook_error");
+  return logs.filter((record) => record?.type === "subscription_webhook_error");
 }
 
 function billingHandler(logs, { failSignature = false, failLifecycle = false } = {}) {
@@ -47,7 +45,7 @@ function billingHandler(logs, { failSignature = false, failLifecycle = false } =
   });
 }
 
-test("subscription webhook failures emit one bounded EMF metric without raw webhook or signature data", async () => {
+test("subscription webhook failures emit one bounded marker without raw webhook or signature data", async () => {
   const logs = [];
   const handler = billingHandler(logs, { failSignature: true });
   const response = await handler(webhookEvent("synthetic-bad-signature", "synthetic-private-webhook-body"));
@@ -55,27 +53,18 @@ test("subscription webhook failures emit one bounded EMF metric without raw webh
   assert.equal(response.statusCode, 400);
   assert.equal(JSON.parse(response.body).code, "invalid_webhook_signature");
   const metrics = metricRecords(logs);
-  assert.equal(metrics.length, 1);
-  assert.equal(metrics[0].Service, "api-access");
-  assert.equal(metrics[0].SubscriptionWebhookFailures, 1);
-  assert.equal(metrics[0].code, "invalid_webhook_signature");
-  assert.deepEqual(metrics[0]._aws.CloudWatchMetrics, [{
-    Namespace: "SolveLang/ApiAccess",
-    Dimensions: [["Service"]],
-    Metrics: [{ Name: "SubscriptionWebhookFailures", Unit: "Count" }],
-  }]);
-  assert.equal(Number.isSafeInteger(metrics[0]._aws.Timestamp), true);
+  assert.deepEqual(metrics, [{ type: "subscription_webhook_error", code: "invalid_webhook_signature" }]);
   assert.equal(JSON.stringify(logs).includes("synthetic-private-webhook-body"), false);
   assert.equal(JSON.stringify(logs).includes("synthetic-bad-signature"), false);
   assert.equal(JSON.stringify(logs).includes("synthetic provider detail"), false);
 });
 
-test("subscription lifecycle failures emit the same metric while successful and disabled webhook requests do not", async () => {
+test("subscription lifecycle failures emit the same marker while successful and disabled webhook requests do not", async () => {
   const failedLogs = [];
   const failed = await billingHandler(failedLogs, { failLifecycle: true })(webhookEvent());
   assert.equal(failed.statusCode, 500);
   assert.equal(JSON.parse(failed.body).code, "request_failed");
-  assert.deepEqual(metricRecords(failedLogs).map(({ code }) => code), ["request_failed"]);
+  assert.deepEqual(metricRecords(failedLogs), [{ type: "subscription_webhook_error", code: "request_failed" }]);
   assert.equal(JSON.stringify(failedLogs).includes("synthetic lifecycle detail"), false);
 
   const successLogs = [];
@@ -97,16 +86,32 @@ test("subscription lifecycle failures emit the same metric while successful and 
   assert.equal(metricRecords(disabledLogs).length, 0);
 });
 
-test("production operations baseline alarms on repeated billing webhook failures and routes it to the configured topic", async () => {
+test("production operations baseline converts the sanitized marker into a repeated-failure alarm", async () => {
   const source = await readFile(opsScriptUrl, "utf8");
-  assert.match(source, /subscription-webhook-failures/);
+  assert.match(source, /logs put-metric-filter/);
+  assert.match(source, /--log-group-name "\$API_LOG_GROUP"/);
+  assert.match(source, /--filter-name "\$BILLING_WEBHOOK_FILTER"/);
+  assert.match(source, /--filter-pattern '\"subscription_webhook_error\"'/);
+  assert.match(source, /metricName=SubscriptionWebhookFailures,metricNamespace=SolveLang\/ApiAccess,metricValue=1,unit=Count/);
+  assert.match(source, /logs describe-metric-filters/);
   assert.match(source, /--namespace SolveLang\/ApiAccess/);
   assert.match(source, /--metric-name SubscriptionWebhookFailures/);
-  assert.match(source, /--dimensions Name=Service,Value=api-access/);
   assert.match(source, /--period 300/);
   assert.match(source, /--threshold 3/);
   assert.match(source, /--statistic Sum/);
   assert.match(source, /--treat-missing-data notBreaching/);
   assert.match(source, /--alarm-actions "\$ALARM_TOPIC_ARN"/);
   assert.match(source, /authorizer-duration \\\n  subscription-webhook-failures/);
+});
+
+test("production deploy policy scopes billing metric-filter writes to SolveLang API log groups", async () => {
+  const policy = JSON.parse(await readFile(deployPolicyUrl, "utf8"));
+  const statement = policy.Statement.find(({ Sid }) => Sid === "SolveLangProductionApiMetricFilters");
+  assert.ok(statement);
+  assert.deepEqual(statement.Action.sort(), ["logs:DeleteMetricFilter", "logs:PutMetricFilter"].sort());
+  assert.deepEqual(statement.Resource, [
+    "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-production-*",
+    "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-prod-*",
+  ]);
+  assert.equal(statement.Resource.includes("*"), false);
 });
