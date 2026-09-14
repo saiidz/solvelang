@@ -12,6 +12,7 @@ import { createDynamoSupportAutomationStore } from "./support-automation-store.j
 import { createSupportAutomationService } from "./support-automation.js";
 
 const RUNTIME_MODES = new Set(["api", "worker"]);
+const WORKER_FAILURE_STATES = new Set(["FAILED", "SOURCE_INITIALIZATION_FAILED", "SOURCE_IDENTITY_MISMATCH"]);
 const DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS = 15 * 60;
 function required(environment, name, minimum = 1) { const value = environment[name]; if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`); return value; }
 function approvedMailHosts(value) {
@@ -142,7 +143,16 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
     const customerAuth = createCustomerAuthService({ store: guardedAuthStore, emailGateway: { async sendMagicLink() { throw new Error("The support-automation runtime cannot send authentication emails."); } }, pepper: parsed.customerAuthPepper, siteOrigin: parsed.siteOrigin });
     application = createSupportAutomationApiHandler({ enabled: true, supportAutomation, customerAuth, siteOrigin: parsed.siteOrigin, logger });
   }
-  return { application, async worker() { if (parsed.runtimeMode !== "worker") return { activationEnabled: false, accounts: [] }; return supportAutomation.processTick(10); }, environment: parsed };
+  return {
+    application,
+    async worker() {
+      if (parsed.runtimeMode !== "worker") return { activationEnabled: false, accounts: [] };
+      const result = await supportAutomation.processTick(10);
+      if (result.accounts?.some((account) => WORKER_FAILURE_STATES.has(account?.state))) logger.error?.("support_automation_worker_failure");
+      return result;
+    },
+    environment: parsed,
+  };
 }
 let runtime;
 function currentRuntime() { runtime ??= createSupportAutomationRuntime(); return runtime; }
