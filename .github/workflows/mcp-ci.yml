@@ -41,30 +41,7 @@ jobs:
         with:
           node-version: 22
       - name: Audit exact locked dependencies
-        id: audit
         run: npm audit --package-lock-only --ignore-scripts --audit-level=high
-      - name: Capture isolated remediation proposal without modifying source
-        if: ${{ failure() && steps.audit.outcome == 'failure' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          proposal="$(mktemp -d)"
-          trap 'rm -rf "$proposal"' EXIT
-          cp package.json package-lock.json "$proposal/"
-          (
-            cd "$proposal"
-            npm audit fix --package-lock-only --ignore-scripts --no-fund --registry=https://registry.npmjs.org
-            npm audit --package-lock-only --ignore-scripts --audit-level=high
-          )
-          cmp package.json "$proposal/package.json"
-          echo '::group::Proposed lockfile diff (not applied)'
-          diff -u package-lock.json "$proposal/package-lock.json" || test "$?" -eq 1
-          echo '::endgroup::'
-          echo '::group::Proposed lockfile transport (gzip+base64, not applied)'
-          sha256sum "$proposal/package-lock.json"
-          gzip -n -c "$proposal/package-lock.json" | base64 -w 0
-          echo
-          echo '::endgroup::'
 
   test:
     runs-on: ubuntu-latest
