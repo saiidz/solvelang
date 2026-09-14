@@ -229,6 +229,18 @@
       "Resource": "*"
     },
     {
+      "Sid": "SolveLangProductionApiMetricFilters",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DeleteMetricFilter",
+        "logs:PutMetricFilter"
+      ],
+      "Resource": [
+        "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-production-*",
+        "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-prod-*"
+      ]
+    },
+    {
       "Sid": "SolveLangProductionCloudWatchAlarms",
       "Effect": "Allow",
       "Action": [
