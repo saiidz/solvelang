@@ -30,11 +30,11 @@ export function createAccountAccessGuardedSupportStore(store, accessReader, { no
   if (!store || typeof store.listActiveConfigs !== "function" || !accessReader || typeof accessReader.isActive !== "function") throw new Error("Support automation account-access guard requires a store and account reader.");
   return new Proxy(store, { get(target, property, receiver) { if (property !== "listActiveConfigs") return Reflect.get(target, property, receiver); return async (limit) => { const configs = await target.listActiveConfigs(limit), allowed = []; for (const config of configs) { if (await accessReader.isActive(config.accountId)) { allowed.push(config); continue; } try { await target.setState(config.accountId, config.revision, "PAUSED", new Date(now()).toISOString()); } catch { logger.error({ type: "support_automation_account_restriction_pause_failed", accountId: config.accountId }); } } return allowed; }; } });
 }
-export function createRuntimeImapSupportProvider({ credentialResolver, allowedHosts, allowSend = false, providerFactory = createImapSmtpSupportProvider }) {
-  if (typeof providerFactory !== "function") throw new Error("IMAP support provider factory is required.");
+export function createRuntimeImapSupportProvider({ credentialResolver, allowedHosts, allowSend = false, initializationStartResolver = async () => undefined, providerFactory = createImapSmtpSupportProvider }) {
+  if (typeof providerFactory !== "function" || typeof initializationStartResolver !== "function") throw new Error("IMAP support provider dependencies are required.");
   const reader = providerFactory({ credentialResolver, allowedHosts, allowSend: false });
   return {
-    captureCutover: (...args) => reader.captureCutover(...args),
+    async captureCutover(input) { return reader.captureCutover(input, await initializationStartResolver(input)); },
     scanNew: (...args) => reader.scanNew(...args),
     readMessage: (...args) => reader.readMessage(...args),
     async sendReply(input, message) {
@@ -69,7 +69,16 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
   const supportAutomation = createSupportAutomationService({
     store: guardedSupportStore,
     gmail: createAccountAccessGuardedSupportProvider(createGmailSupportProvider({ credentialResolver }), accessReader),
-    mail: createAccountAccessGuardedSupportProvider(createRuntimeImapSupportProvider({ credentialResolver, allowedHosts: parsed.approvedMailHosts, allowSend: parsed.mailSendEnabled }), accessReader),
+    mail: createAccountAccessGuardedSupportProvider(createRuntimeImapSupportProvider({
+      credentialResolver,
+      allowedHosts: parsed.approvedMailHosts,
+      allowSend: parsed.mailSendEnabled,
+      initializationStartResolver: async (input) => {
+        const config = await supportStore.getConfig(input?.accountId);
+        if (!config || config.provider !== "imap_smtp" || config.automationState !== "INITIALIZING" || typeof config.updatedAt !== "string") throw new Error("Support automation source initialization is not active.");
+        return config.updatedAt;
+      },
+    }), accessReader),
     linear: createAccountAccessGuardedSupportProvider(createLinearSupportProvider({ credentialResolver }), accessReader),
     allowedMailHosts: parsed.approvedMailHosts,
     activationEnabled: parsed.activationEnabled,
