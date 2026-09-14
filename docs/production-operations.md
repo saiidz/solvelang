@@ -37,6 +37,46 @@ Any future priority queue enabled in production must alarm on:
 
 Paid priority must remain disabled until those alarms and queue workers are deployed and verified.
 
+### Connected support automation
+
+The repository support stack defines four bounded signals while activation and sending remain independently OFF by default:
+
+- support-worker Lambda errors;
+- EventBridge poll-schedule failed invocations;
+- `support_automation_action_unknown`, meaning an external action has an ambiguous outcome and must not be retried blindly;
+- `support_automation_message_age_exceeded`, emitted without message identity/body when a provider message is older than the configured processing-age threshold at read time.
+
+The default message-age threshold is 15 minutes and is bounded by configuration to 5 minutes through 24 hours. The alarm destination is an explicit SNS topic ARN parameter. Repository configuration refuses activation when that destination is empty; this is configuration evidence only, not proof that a future topic/subscription is live or delivering alerts.
+
+Before any separately authorized activation, verify the intended alarm destination and the four alarm resources from the deployed stack. Do not use a customer mailbox address, raw support content, provider credentials, or customer identifiers as alarm payload dimensions.
+
+#### Support disable procedure
+
+A live stop is a production mutation and requires separate exact-scope owner authorization. When that authorization exists, the bounded order is:
+
+1. turn the global support-automation activation gate OFF so the poll schedule becomes disabled;
+2. keep the mail-send gate OFF, or turn it OFF at the same protected change if it had been separately enabled;
+3. pause the affected tenant configuration through the authenticated support control when a tenant-specific stop is required;
+4. preserve the support table, source cutover/cursor, event history and action outcome rows; do not delete them as a shutdown shortcut;
+5. do not rotate/revoke credentials merely to stop processing unless credential compromise is the incident being handled;
+6. verify the deployed activation flag and schedule state independently, then record only sanitized alarm/error evidence.
+
+An `OUTCOME_UNKNOWN` action stays unknown after disable. A stopped, started, unknown, or otherwise non-newly-claimed action is not authority for a retry. Reconciliation must be an explicit future operation; recovery must never convert an ambiguous provider outcome into an automatic resend.
+
+#### Support recovery procedure
+
+Recovery is also a protected production operation. Before any resume:
+
+1. inspect only the account-scoped redacted processing history and sanitized alarms/log markers; never copy raw support bodies or secrets into the incident record;
+2. identify whether the stop was caused by worker/schedule failure, message-age breach, source identity/TLS/UIDVALIDITY failure, account restriction, policy review, credential failure, or ambiguous provider outcome;
+3. leave any ambiguous action terminal and unretried; resolve its provider state outside the automation before considering a separately designed reconciliation path;
+4. preserve the existing IMAP source identity/cutover/cursor unless an explicitly reviewed reconfiguration is required. Do not reset the cursor to sweep historical unread mail;
+5. if credentials are suspected, keep processing paused and use the approved secret-rotation path; do not place credential material in issues, PRs, chat, logs, screenshots, or test fixtures;
+6. re-verify account access, current policy, approved mail host, alarm destination, activation gate, and send/recipient gates before a separately authorized resume;
+7. use only a controlled new-message boundary for any later live validation and independently verify stop/recovery behavior before calling the integration live.
+
+An alert returning to `OK` is not itself recovery proof. Recovery evidence must include the intended feature/schedule state and sanitized processing outcome, and must not claim mailbox delivery/task creation unless the provider outcome was actually verified under its own authorization.
+
 ## Log policy
 
 - Use structured logs with no plaintext API keys, magic-link tokens, session tokens, peppers, Stripe secret keys, webhook secrets, or full payment credentials.
