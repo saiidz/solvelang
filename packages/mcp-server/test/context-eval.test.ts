@@ -19,7 +19,18 @@ test("offline Solve Context eval suite preserves evidence and reports measured b
   assert.equal(report.schema, "solvelang.context.eval-report.v0");
   assert.equal(report.aggregate.pass, true);
   assert.equal(report.aggregate.allCasesPass, true);
-  assert.equal(report.aggregate.caseCount, 5);
+  assert.equal(report.aggregate.caseCount, 6);
+  assert.deepEqual(
+    report.cases.map((result: { category: string }) => result.category).sort(),
+    [
+      "bug-fix",
+      "ci-log-diagnosis",
+      "cross-agent-handoff",
+      "github-issue-triage",
+      "json-heavy-tool-output",
+      "multi-file-refactor",
+    ],
+  );
   assert.equal(report.aggregate.minPathRecall, 1);
   assert.equal(report.aggregate.minPathPrecision, 1);
   assert.equal(report.aggregate.minEvidenceRecall, 1);
