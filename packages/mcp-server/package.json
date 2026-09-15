@@ -42,6 +42,8 @@
     "eval:context": "npm run build && node scripts/run-context-evals.mjs",
     "eval:context:repository": "npm run build && node --test scripts/context-repository-eval.test.mjs && node scripts/run-context-repository-evals.mjs",
     "eval:context:independent": "npm run build && node --test scripts/context-independent-eval.test.mjs && node scripts/run-context-independent-evals.mjs",
+    "eval:context:agent-records": "npm run build && node scripts/summarize-context-agent-evals.mjs",
+    "test:context-agent-eval-cli": "npm run build && node --test scripts/context-agent-eval-cli.test.mjs",
     "test:packed": "node scripts/smoke-packed.mjs",
     "test:plugin-roundtrip": "node scripts/smoke-plugin-roundtrip.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
