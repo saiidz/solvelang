@@ -146,22 +146,24 @@ test("graph-selected lexical windows ignore high-frequency bridge terms when spe
   assertExactPack(pack, [source]);
 });
 
-test("rare graph evidence outranks common graph evidence within the same structural tier", () => {
-  const lines: string[] = [];
-  for (let index = 0; index < 8; index += 1) {
-    lines.push(`common ${"x".repeat(70)}`);
-    lines.push(...Array(9).fill(`// spacer ${"y".repeat(70)}`));
-  }
-  lines.push(...Array(4).fill(`// tail ${"z".repeat(70)}`));
-  lines.push("rare critical_graph_marker");
-  lines.push(...Array(4).fill(`// end ${"q".repeat(70)}`));
-
+test("high-frequency graph terms in declaration docs retain the documented export", () => {
   const source: ContextSource = {
-    path: "src/graph-source.ts",
+    path: "src/component.ts",
     selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
-    text: lines.join("\n"),
+    text: [
+      ...Array(20).fill("rerenderQueue.push(component);"),
+      "/**",
+      " * Enqueue a rerender of a component.",
+      " * @param {object} component The component to rerender",
+      " */",
+      "export function enqueueRender(component) {",
+      "  rerenderQueue.push(component);",
+      "}",
+    ].join("\n"),
   };
-  const pack = buildContextPack("common rare", [source], 1_024);
-  assert.ok(pack.entries.some((entry) => entry.content.includes("critical_graph_marker")));
+
+  const pack = buildContextPack("subscriber rerenders", [source], 1_024);
+  assert.ok(pack.entries.some((entry) => entry.content.includes("export function enqueueRender(component)")));
+  assert.ok(pack.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
   assertExactPack(pack, [source]);
 });
