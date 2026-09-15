@@ -28,6 +28,22 @@
       ]
     },
     {
+      "id": "github-issue-session-refresh",
+      "category": "github-issue-triage",
+      "task": "triage github issue session refresh expires immediately after refreshSession",
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "fixtures/github-issue-431.md": ["Issue #431", "session expires immediately"],
+        "src/auth/session-refresh.ts": ["refreshSession", "expiresAt"]
+      },
+      "forbiddenPaths": ["docs/recipe-index.md"],
+      "sources": [
+        {"path":"fixtures/github-issue-431.md","text":"# Issue #431: session expires immediately after refresh\n\nUsers report that a successful refreshSession call returns a session that is already expired. The regression appears after the refresh expiry calculation changed.\n"},
+        {"path":"src/auth/session-refresh.ts","text":"export function refreshSession(session: Session, nowMs: number, ttlMs: number) {\n  const expiresAt = nowMs + ttlMs;\n  return { ...session, expiresAt };\n}\n"},
+        {"path":"docs/recipe-index.md","repeat":{"text":"bread soup pasta salad citrus herbs skillet oven pantry\n","count":170}}
+      ]
+    },
+    {
       "id": "ci-payment-webhook",
       "category": "ci-log-diagnosis",
       "task": "diagnose payment webhook timeout CI failure",
