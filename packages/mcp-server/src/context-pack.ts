@@ -96,13 +96,20 @@ function singularTaskToken(token: string): string | undefined {
   return token.slice(0, -1);
 }
 
+function derivationalTaskToken(token: string): string | undefined {
+  if (token.length < 9 || !token.endsWith("tion")) return undefined;
+  const stem = token.slice(0, -3);
+  return stem.length >= 5 ? stem : undefined;
+}
+
 export function contextTaskTokens(task: string): string[] {
   const matches = task.toLowerCase().match(/[a-z0-9_./:@-]{2,}/g) ?? [];
   const deduped = new Set<string>();
   for (const token of matches) {
     const trimmed = token.replace(/^[./:@-]+|[./:@-]+$/g, "");
     const singular = singularTaskToken(trimmed);
-    for (const candidate of [trimmed, singular]) {
+    const derivational = derivationalTaskToken(trimmed);
+    for (const candidate of [trimmed, singular, derivational]) {
       if (candidate && candidate.length >= 2 && deduped.size < 128) deduped.add(candidate);
     }
     if (deduped.size >= 128) break;
@@ -362,7 +369,12 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 }
 
 function candidateSort(left: Candidate, right: Candidate): number {
-  return right.score - left.score || right.lexicalTokenCount - left.lexicalTokenCount || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
+  return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
+    || right.score - left.score
+    || right.lexicalTokenCount - left.lexicalTokenCount
+    || compareText(left.path, right.path)
+    || left.startLine - right.startLine
+    || left.endLine - right.endLine;
 }
 
 /** Global priority must be reconsidered after splitting: a fragment does not
