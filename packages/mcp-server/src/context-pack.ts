@@ -51,8 +51,6 @@ export interface ContextPack {
 
 interface Candidate {
   lexicalTokenCount: number;
-  graphSpecificity: number;
-  graphTokenLineCounts?: ReadonlyMap<string, number>;
   declarationTextWindow?: boolean;
   selection?: ContextSourceSelection;
   path: string;
@@ -153,21 +151,6 @@ function countOccurrences(haystack: string, needle: string): number {
   }
 }
 
-function graphSpecificityScore(
-  content: string,
-  tokens: string[],
-  tokenLineCounts?: ReadonlyMap<string, number>,
-): number {
-  if (!tokenLineCounts) return 0;
-  const lowerContent = content.toLowerCase();
-  return tokens.reduce((total, token) => {
-    if (!lowerContent.includes(token)) return total;
-    const lineCount = tokenLineCounts.get(token) ?? MAX_GRAPH_MATCH_LINES_PER_TOKEN + 1;
-    if (lineCount > MAX_GRAPH_MATCH_LINES_PER_TOKEN) return total;
-    return total + MAX_GRAPH_MATCH_LINES_PER_TOKEN + 1 - lineCount;
-  }, 0);
-}
-
 function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Array<{ startLine: number; endLine: number }> {
   const sorted = [...ranges].sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
   const merged: Array<{ startLine: number; endLine: number }> = [];
@@ -182,10 +165,6 @@ function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Arr
   return merged;
 }
 
-/** Partition merged match windows at whole-line boundaries before ranking them.
- * A single over-budget line remains its own candidate so omission stays explicit;
- * never clip UTF-8 content or let that line hide smaller neighboring evidence.
- */
 function budgetRanges(
   lines: string[],
   ranges: Array<{ startLine: number; endLine: number }>,
@@ -238,7 +217,6 @@ function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes:
       endLine: candidate.startLine + range.endLine - 1,
       content,
       bytes: Buffer.byteLength(content, "utf8"),
-      graphSpecificity: graphSpecificityScore(content, tokens, candidate.graphTokenLineCounts),
       ...scoreExcerpt(candidate.path, content, tokens, candidate.selection, candidate.declarationTextWindow),
     };
   }).sort(candidateSort);
@@ -311,26 +289,25 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     ? new Map(tokens.map((token) => [token, lowerLines.reduce((count, line) => count + (line.includes(token) ? 1 : 0), 0)]))
     : undefined;
 
-  const matchLines: Array<{ line: number; reasons: string[]; score: number }> = [];
+  const rawMatchLines: Array<{ line: number; reasons: string[]; score: number }> = [];
   for (let index = 0; index < lowerLines.length; index += 1) {
     const line = lowerLines[index];
     const reasons = tokens.filter((token) => line.includes(token));
     if (reasons.length === 0) continue;
-    if (graphTokenLineCounts && !reasons.some((token) => (graphTokenLineCounts.get(token) ?? 0) <= MAX_GRAPH_MATCH_LINES_PER_TOKEN)) continue;
     const score = reasons.reduce((total, token) => total + 2 * countOccurrences(line, token), 0) + pathScore;
-    matchLines.push({ line: index + 1, reasons, score });
+    rawMatchLines.push({ line: index + 1, reasons, score });
   }
+  const matchLines = graphTokenLineCounts
+    ? rawMatchLines.filter(({ reasons }) => reasons.some((token) => (graphTokenLineCounts.get(token) ?? 0) <= MAX_GRAPH_MATCH_LINES_PER_TOKEN))
+    : rawMatchLines;
 
-  if (matchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
+  if (rawMatchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
 
   const lexicalRanges = matchLines.length > 0
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
     : [];
 
-  // Preserve the original no-match declaration fallback exactly. The newer
-  // lexical-to-declaration expansion is intentionally narrower: it applies only
-  // to one-hop graph neighbors, not explicit changed roots or arbitrary hints.
-  const legacyDeclarationLines = matchLines.length === 0 && selectionScore > 0
+  const legacyDeclarationLines = rawMatchLines.length === 0 && selectionScore > 0
     ? lines.flatMap((line, index) => isLegacyExportedDeclaration(line) ? [index + 1] : [])
     : [];
   const legacyDeclarationRanges = legacyDeclarationLines.map((startLine, index) => ({
@@ -343,7 +320,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
   }));
   const declarationFallback = legacyDeclarationRanges.length > 0;
 
-  const graphDeclarationLines = matchLines.length > 0 && graphSelected
+  const graphDeclarationLines = rawMatchLines.length > 0 && graphSelected
     ? lines.flatMap((line, index) => isExtendedExportedDeclaration(line) ? [index + 1] : [])
     : [];
   const graphDeclarationRanges = graphDeclarationLines.map((declarationLine, index) => {
@@ -358,7 +335,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     };
   });
   const declarationExpansions = graphDeclarationRanges.filter((range) =>
-    matchLines.some(({ line }) => rangeContainsLine(range, line))
+    rawMatchLines.some(({ line }) => rangeContainsLine(range, line))
     && !lexicalRanges.some((lexicalRange) => rangeContainsRange(lexicalRange, range))
   );
   const declarationTextRanges = declarationFallback ? legacyDeclarationRanges : declarationExpansions;
@@ -367,7 +344,11 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     ? mergeRanges([...lexicalRanges, ...declarationExpansions])
     : declarationFallback
       ? legacyDeclarationRanges
-      : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
+      : declarationExpansions.length > 0
+        ? mergeRanges(declarationExpansions)
+        : selectionScore > 0
+          ? [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }]
+          : [];
 
   return budgetRanges(lines, ranges, budgetBytes).map(({ startLine, endLine }) => {
     const content = lines.slice(startLine - 1, endLine).join("\n");
@@ -378,8 +359,6 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
       endLine,
       sourceSha256,
       selection,
-      graphTokenLineCounts,
-      graphSpecificity: graphSpecificityScore(content, tokens, graphTokenLineCounts),
       declarationTextWindow,
       ...scoreExcerpt(normalizedPath, content, tokens, selection, declarationTextWindow),
       content,
@@ -390,7 +369,6 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
 function candidateSort(left: Candidate, right: Candidate): number {
   return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
-    || right.graphSpecificity - left.graphSpecificity
     || right.score - left.score
     || right.lexicalTokenCount - left.lexicalTokenCount
     || compareText(left.path, right.path)
@@ -398,10 +376,6 @@ function candidateSort(left: Candidate, right: Candidate): number {
     || left.endLine - right.endLine;
 }
 
-/** Global priority must be reconsidered after splitting: a fragment does not
- * inherit its parent's lexical score. A heap avoids repeatedly sorting or
- * shifting the full candidate array while retaining deterministic tie breaks.
- */
 class CandidateQueue {
   private readonly heap: Candidate[] = [];
 
@@ -483,8 +457,6 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
       continue;
     }
     if (candidate.bytes > remainingBytes) {
-      // Requeue fitting fragments at their own score before selecting any one
-      // of them. An indivisible over-budget line cannot fit any later budget.
       for (const fragment of partitionCandidate(candidate, tokens, remainingBytes)) {
         if (fragment.bytes === 0 || fragment.bytes > remainingBytes) omittedCandidates += 1;
         else candidates.push(fragment);
