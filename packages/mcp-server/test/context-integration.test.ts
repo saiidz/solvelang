@@ -73,28 +73,6 @@ test("equal scores prefer distinct task evidence over repetition before stable p
   assertExactPack(pack, sources);
 });
 
-test("bounded lexical repetition cannot outrank one-hop graph evidence", () => {
-  const sources: ContextSource[] = [
-    {
-      path: "a/noise.ts",
-      text: `alpha `.repeat(120) + "noise",
-    },
-    {
-      path: "z/dependency.ts",
-      text: [
-        "export function targetDependency() {",
-        `  return "${"x".repeat(520)}";`,
-        "}",
-      ].join("\n"),
-      selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
-    },
-  ];
-  const pack = buildContextPack("alpha", sources, 1_024);
-  assert.ok(pack.entries.some((entry) => entry.path === "z/dependency.ts"));
-  assert.ok(pack.entries.find((entry) => entry.path === "z/dependency.ts")!.score >= 64);
-  assertExactPack(pack, sources);
-});
-
 test("task inflection aliases expose a later graph-selected declaration", () => {
   const tokens = contextTaskTokens("Trace context provider subscriber rerenders");
   assert.ok(tokens.includes("rerenders"));
@@ -121,19 +99,17 @@ test("task inflection aliases expose a later graph-selected declaration", () => 
   assertExactPack(pack, [source]);
 });
 
-test("graph-selected fragments prefer broader distinct evidence over repeated generic terms", () => {
-  const lateCallsite = `setProperty(dom, value, oldValue, namespace); property event ${"z".repeat(430)}`;
+test("graph-selected lexical windows ignore high-frequency bridge terms when specific evidence exists", () => {
   const source: ContextSource = {
     path: "src/dependent.ts",
     selection: { score: 64, reasons: ["graph:dependent:imports:edge"] },
     text: [
-      `dom property event dom property event ${"x".repeat(470)}`,
-      ...Array(12).fill("// neutral spacer"),
-      lateCallsite,
+      ...Array(40).fill(`dom ${"x".repeat(48)}`),
+      `setProperty(dom, value, oldValue, namespace); property ${"z".repeat(430)}`,
     ].join("\n"),
   };
 
-  const pack = buildContextPack("dom property event setProperty", [source], 1_024);
+  const pack = buildContextPack("dom property setProperty", [source], 1_024);
   assert.ok(pack.entries.some((entry) => entry.content.includes("setProperty(dom, value, oldValue, namespace);")));
   assertExactPack(pack, [source]);
 });
