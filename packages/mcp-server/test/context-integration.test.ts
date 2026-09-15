@@ -120,3 +120,20 @@ test("task inflection aliases expose a later graph-selected declaration", () => 
   assert.ok(pack.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
   assertExactPack(pack, [source]);
 });
+
+test("graph-selected fragments prefer broader distinct evidence over repeated generic terms", () => {
+  const lateCallsite = `setProperty(dom, value, oldValue, namespace); property event ${"z".repeat(430)}`;
+  const source: ContextSource = {
+    path: "src/dependent.ts",
+    selection: { score: 64, reasons: ["graph:dependent:imports:edge"] },
+    text: [
+      `dom property event dom property event ${"x".repeat(470)}`,
+      ...Array(12).fill("// neutral spacer"),
+      lateCallsite,
+    ].join("\n"),
+  };
+
+  const pack = buildContextPack("dom property event setProperty", [source], 1_024);
+  assert.ok(pack.entries.some((entry) => entry.content.includes("setProperty(dom, value, oldValue, namespace);")));
+  assertExactPack(pack, [source]);
+});
