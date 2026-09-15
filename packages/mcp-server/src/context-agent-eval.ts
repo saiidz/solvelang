@@ -10,8 +10,10 @@ export const CONTEXT_AGENT_EVAL_CATEGORIES = [
   "json-heavy-tool-output",
   "cross-agent-handoff",
 ] as const;
+export const CONTEXT_AGENT_HANDOFF_DIRECTIONS = ["claude-to-codex", "codex-to-claude"] as const;
 
 export type ContextAgentEvalCategory = typeof CONTEXT_AGENT_EVAL_CATEGORIES[number];
+export type ContextAgentHandoffDirection = typeof CONTEXT_AGENT_HANDOFF_DIRECTIONS[number];
 export type ContextAgentEvalAgent = "claude" | "codex";
 export type ContextAgentEvalVariant = "baseline" | "solve_context";
 export type ContextAgentEvalRecordClass = "measured-run" | "synthetic-test";
@@ -27,13 +29,11 @@ export interface ContextAgentEvalRecord {
     id: string;
     category: ContextAgentEvalCategory;
     revisionSha256: string;
+    handoffDirection: ContextAgentHandoffDirection | null;
   };
   agent: ContextAgentEvalAgent;
   variant: ContextAgentEvalVariant;
-  provider: {
-    name: string;
-    model: string;
-  };
+  provider: { name: string; model: string };
   recordClass: ContextAgentEvalRecordClass;
   outcome: {
     taskSuccess: boolean;
@@ -49,15 +49,15 @@ export interface ContextAgentEvalRecord {
     basis: ContextAgentTokenBasis;
     tokenizer: string | null;
   };
-  latency: {
-    wallMs: number | null;
-    basis: ContextAgentMeasurementBasis;
-  };
+  latency: { wallMs: number | null; basis: ContextAgentMeasurementBasis };
   context: {
     packId: string | null;
     selectedBytes: number | null;
     cacheHotBytesChanged: number | null;
     cacheHotBytesChangedBasis: ContextAgentMeasurementBasis;
+    selectionPrecision: number | null;
+    selectionRecall: number | null;
+    selectionMetricsBasis: ContextAgentMeasurementBasis;
   };
 }
 
@@ -123,6 +123,10 @@ export interface ContextAgentEvalPairReport {
   context: {
     packId: string | null;
     selectedBytes: number | null;
+    selectionPrecision: number | null;
+    selectionRecall: number | null;
+    selectionMetricsBasis: ContextAgentMeasurementBasis;
+    measuredSelectionMetrics: boolean;
   };
 }
 
@@ -143,6 +147,8 @@ export interface ContextAgentEvalReport {
     missingCategories: ContextAgentEvalCategory[];
     acceptanceCategoryCoverageComplete: boolean;
     agents: Array<{ agent: ContextAgentEvalAgent; measuredPairs: number }>;
+    handoffDirections: Array<{ direction: ContextAgentHandoffDirection; measuredPairs: number }>;
+    bidirectionalHandoffCoverageComplete: boolean;
   };
   aggregate: {
     pairCount: number;
@@ -159,6 +165,7 @@ export interface ContextAgentEvalReport {
     meanBaselineWallMs: number | null;
     meanContextWallMs: number | null;
     meanWallDeltaMs: number | null;
+    measuredSelectionMetricPairCount: number;
     measuredZeroCacheHotMutationPairCount: number;
     benchmarkEvidenceComplete: boolean;
   };
@@ -198,6 +205,12 @@ function nullableMetric(value: unknown, label: string): number | null {
   return value as number;
 }
 
+function nullableRatio(value: unknown, label: string): number | null {
+  if (value === null) return null;
+  assert(typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1, `${label} must be between 0 and 1.`);
+  return value;
+}
+
 function enumValue<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
   assert(typeof value === "string" && (allowed as readonly string[]).includes(value), `${label} is invalid.`);
   return value as T;
@@ -222,11 +235,21 @@ function normalizeRecord(value: unknown): ContextAgentEvalRecord {
   assert(value.schema === CONTEXT_AGENT_EVAL_RECORD_SCHEMA, "Agent eval record schema is invalid.");
 
   assert(isRecord(value.fixture), "fixture must be an object.");
-  assertExactKeys(value.fixture, ["id", "category", "revisionSha256"], "fixture");
+  assertExactKeys(value.fixture, ["id", "category", "revisionSha256", "handoffDirection"], "fixture");
+  const fixtureCategory = enumValue(value.fixture.category, CONTEXT_AGENT_EVAL_CATEGORIES, "fixture.category");
+  const handoffDirection = value.fixture.handoffDirection === null
+    ? null
+    : enumValue(value.fixture.handoffDirection, CONTEXT_AGENT_HANDOFF_DIRECTIONS, "fixture.handoffDirection");
+  if (fixtureCategory === "cross-agent-handoff") {
+    assert(handoffDirection !== null, "Cross-agent handoff fixtures require an explicit handoffDirection.");
+  } else {
+    assert(handoffDirection === null, "Only cross-agent handoff fixtures may set handoffDirection.");
+  }
   const fixture = {
     id: boundedString(value.fixture.id, "fixture.id", SAFE_ID),
-    category: enumValue(value.fixture.category, CONTEXT_AGENT_EVAL_CATEGORIES, "fixture.category"),
+    category: fixtureCategory,
     revisionSha256: boundedString(value.fixture.revisionSha256, "fixture.revisionSha256", SHA256),
+    handoffDirection,
   };
 
   assert(isRecord(value.provider), "provider must be an object.");
@@ -271,27 +294,47 @@ function normalizeRecord(value: unknown): ContextAgentEvalRecord {
   else assert(wallMs !== null, `${latencyBasis} latency requires wallMs.`);
 
   assert(isRecord(value.context), "context must be an object.");
-  assertExactKeys(value.context, ["packId", "selectedBytes", "cacheHotBytesChanged", "cacheHotBytesChangedBasis"], "context");
+  assertExactKeys(value.context, [
+    "packId", "selectedBytes", "cacheHotBytesChanged", "cacheHotBytesChangedBasis",
+    "selectionPrecision", "selectionRecall", "selectionMetricsBasis",
+  ], "context");
   const packId = value.context.packId === null ? null : boundedString(value.context.packId, "context.packId", PACK_ID);
   const selectedBytes = nullableMetric(value.context.selectedBytes, "context.selectedBytes");
   const cacheHotBytesChanged = nullableMetric(value.context.cacheHotBytesChanged, "context.cacheHotBytesChanged");
   const cacheHotBytesChangedBasis = enumValue(value.context.cacheHotBytesChangedBasis, ["measured", "estimated", "unavailable", "synthetic"] as const, "context.cacheHotBytesChangedBasis");
   if (cacheHotBytesChangedBasis === "unavailable") assert(cacheHotBytesChanged === null, "Unavailable cache-hot byte evidence must be null.");
   else assert(cacheHotBytesChanged !== null, `${cacheHotBytesChangedBasis} cache-hot byte evidence requires a value.`);
+  const selectionPrecision = nullableRatio(value.context.selectionPrecision, "context.selectionPrecision");
+  const selectionRecall = nullableRatio(value.context.selectionRecall, "context.selectionRecall");
+  const selectionMetricsBasis = enumValue(value.context.selectionMetricsBasis, ["measured", "estimated", "unavailable", "synthetic"] as const, "context.selectionMetricsBasis");
+  if (selectionMetricsBasis === "unavailable") {
+    assert(selectionPrecision === null && selectionRecall === null, "Unavailable selection metrics must be null.");
+  } else {
+    assert(selectionPrecision !== null && selectionRecall !== null, `${selectionMetricsBasis} selection metrics require precision and recall.`);
+  }
 
   const recordClass = enumValue(value.recordClass, ["measured-run", "synthetic-test"] as const, "recordClass");
   if (recordClass === "measured-run") {
-    assert(outcomeBasis !== "synthetic" && usageBasis !== "synthetic" && latencyBasis !== "synthetic" && cacheHotBytesChangedBasis !== "synthetic", "Measured runs cannot contain synthetic evidence bases.");
+    assert(
+      outcomeBasis !== "synthetic"
+      && usageBasis !== "synthetic"
+      && latencyBasis !== "synthetic"
+      && cacheHotBytesChangedBasis !== "synthetic"
+      && selectionMetricsBasis !== "synthetic",
+      "Measured runs cannot contain synthetic evidence bases.",
+    );
   } else {
     assert(outcomeBasis === "synthetic", "Synthetic test records must label outcome evidence synthetic.");
     assert(usageBasis === "synthetic" || usageBasis === "unavailable", "Synthetic test token usage must be synthetic or unavailable.");
     assert(latencyBasis === "synthetic" || latencyBasis === "unavailable", "Synthetic test latency must be synthetic or unavailable.");
     assert(cacheHotBytesChangedBasis === "synthetic" || cacheHotBytesChangedBasis === "unavailable", "Synthetic test cache-hot evidence must be synthetic or unavailable.");
+    assert(selectionMetricsBasis === "synthetic" || selectionMetricsBasis === "unavailable", "Synthetic test selection metrics must be synthetic or unavailable.");
   }
 
   const variant = enumValue(value.variant, ["baseline", "solve_context"] as const, "variant");
   if (variant === "baseline") {
     assert(packId === null && selectedBytes === null, "Baseline records cannot claim a Solve Context pack or selected bytes.");
+    assert(selectionMetricsBasis === "unavailable" && selectionPrecision === null && selectionRecall === null, "Baseline records cannot claim Solve Context selection metrics.");
   } else {
     assert(packId !== null && selectedBytes !== null, "Solve Context records require a packId and selectedBytes.");
   }
@@ -305,22 +348,18 @@ function normalizeRecord(value: unknown): ContextAgentEvalRecord {
     variant,
     provider,
     recordClass,
-    outcome: {
-      taskSuccess: value.outcome.taskSuccess,
-      basis: outcomeBasis,
-      evidenceRequired,
-      evidenceRetained,
-    },
-    usage: {
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-      basis: usageBasis,
-      tokenizer,
-    },
+    outcome: { taskSuccess: value.outcome.taskSuccess, basis: outcomeBasis, evidenceRequired, evidenceRetained },
+    usage: { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, basis: usageBasis, tokenizer },
     latency: { wallMs, basis: latencyBasis },
-    context: { packId, selectedBytes, cacheHotBytesChanged, cacheHotBytesChangedBasis },
+    context: {
+      packId,
+      selectedBytes,
+      cacheHotBytesChanged,
+      cacheHotBytesChangedBasis,
+      selectionPrecision,
+      selectionRecall,
+      selectionMetricsBasis,
+    },
   };
 }
 
@@ -394,14 +433,8 @@ function pairReport(baseline: ContextAgentEvalRecordIdentity, context: ContextAg
       baselineCacheReadTokens: providerTokensComparable ? baseline.usage.cacheReadTokens : null,
       contextCacheReadTokens: providerTokensComparable ? context.usage.cacheReadTokens : null,
     },
-    localTokenizer: {
-      ...localView,
-      tokenizer: localTokenizerComparable ? baseline.usage.tokenizer : null,
-    },
-    estimatedTokens: {
-      ...estimatedView,
-      estimator: estimatedTokensComparable ? baseline.usage.tokenizer : null,
-    },
+    localTokenizer: { ...localView, tokenizer: localTokenizerComparable ? baseline.usage.tokenizer : null },
+    estimatedTokens: { ...estimatedView, estimator: estimatedTokensComparable ? baseline.usage.tokenizer : null },
     latency: {
       comparable: measuredLatencyComparable,
       baselineWallMs: measuredLatencyComparable ? baseline.latency.wallMs : null,
@@ -418,6 +451,10 @@ function pairReport(baseline: ContextAgentEvalRecordIdentity, context: ContextAg
     context: {
       packId: context.context.packId,
       selectedBytes: context.context.selectedBytes,
+      selectionPrecision: context.context.selectionPrecision,
+      selectionRecall: context.context.selectionRecall,
+      selectionMetricsBasis: context.context.selectionMetricsBasis,
+      measuredSelectionMetrics: context.recordClass === "measured-run" && context.context.selectionMetricsBasis === "measured",
     },
   };
 }
@@ -452,6 +489,7 @@ export function buildContextAgentEvalReport(values: unknown[]): ContextAgentEval
   const qualityRegressionPairs = measuredPairs.filter((pair) => !pair.quality.nonRegression).map((pair) => `${pair.suiteId}:${pair.pairId}`);
   const providerTokenPairs = measuredPairs.filter((pair) => pair.providerTokens.comparable);
   const latencyPairs = measuredPairs.filter((pair) => pair.latency.comparable);
+  const measuredSelectionMetricPairCount = measuredPairs.filter((pair) => pair.context.measuredSelectionMetrics).length;
   const measuredZeroCacheHotMutationPairCount = measuredPairs.filter((pair) => pair.fidelity.measuredZeroCacheHotMutation === true).length;
 
   const sumMetric = (items: ContextAgentEvalPairReport[], select: (pair: ContextAgentEvalPairReport) => number | null): number | null => {
@@ -470,13 +508,21 @@ export function buildContextAgentEvalReport(values: unknown[]): ContextAgentEval
   const missingCategories = categories.filter(({ measuredPairs: count }) => count === 0).map(({ category }) => category);
   const agents: ContextAgentEvalAgent[] = ["claude", "codex"];
   const agentCoverage = agents.map((agent) => ({ agent, measuredPairs: measuredPairs.filter((pair) => pair.agent === agent).length }));
+  const handoffDirections = CONTEXT_AGENT_HANDOFF_DIRECTIONS.map((direction) => ({
+    direction,
+    measuredPairs: measuredPairs.filter((pair) => pair.fixture.category === "cross-agent-handoff" && pair.fixture.handoffDirection === direction).length,
+  }));
+  const bidirectionalHandoffCoverageComplete = handoffDirections.every(({ measuredPairs: count }) => count > 0);
   const qualityGatePassed = measuredPairs.length === 0 ? null : qualityRegressionPairs.length === 0;
   const benchmarkEvidenceComplete = measuredPairs.length > 0
     && missingCategories.length === 0
     && agentCoverage.every(({ measuredPairs: count }) => count > 0)
+    && bidirectionalHandoffCoverageComplete
     && qualityGatePassed === true
     && providerTokenPairs.length === measuredPairs.length
-    && latencyPairs.length === measuredPairs.length;
+    && latencyPairs.length === measuredPairs.length
+    && measuredSelectionMetricPairCount === measuredPairs.length
+    && measuredZeroCacheHotMutationPairCount === measuredPairs.length;
 
   const canonicalIdentity = pairs.map((pair) => ({
     suiteId: pair.suiteId,
@@ -502,6 +548,8 @@ export function buildContextAgentEvalReport(values: unknown[]): ContextAgentEval
       missingCategories,
       acceptanceCategoryCoverageComplete: missingCategories.length === 0,
       agents: agentCoverage,
+      handoffDirections,
+      bidirectionalHandoffCoverageComplete,
     },
     aggregate: {
       pairCount: pairs.length,
@@ -520,6 +568,7 @@ export function buildContextAgentEvalReport(values: unknown[]): ContextAgentEval
       meanBaselineWallMs,
       meanContextWallMs,
       meanWallDeltaMs: meanBaselineWallMs !== null && meanContextWallMs !== null ? meanContextWallMs - meanBaselineWallMs : null,
+      measuredSelectionMetricPairCount,
       measuredZeroCacheHotMutationPairCount,
       benchmarkEvidenceComplete,
     },
