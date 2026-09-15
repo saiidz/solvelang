@@ -1,0 +1,52 @@
+{
+  "schema": "solvelang.context.repository-corpus.v1",
+  "capture": "external-pinned-source-subset-v1",
+  "repository": "chalk/chalk",
+  "commit": "661317e6f91fe7c90306c2c48ea9354562ee9146",
+  "license": "MIT",
+  "licenseNoticeFile": "LICENSE-chalk.txt",
+  "scope": "two complete source files from an independent external repository; not a whole-repository, blinded, token, or agent-task benchmark",
+  "sources": [
+    {
+      "path": "source/index.js",
+      "gitBlobSha1": "229ea1ea4da6a87635ef3f1ca8987b7a8e938554"
+    },
+    {
+      "path": "source/utilities.js",
+      "gitBlobSha1": "f205b267091dd9ebf978785cf5219500ed8ddf30"
+    }
+  ],
+  "cases": [
+    {
+      "id": "chalk-multiline-style-helper",
+      "task": "Trace Chalk multiline styling through stringEncaseCRLFWithFirstIndex.",
+      "changedPaths": ["source/index.js"],
+      "budgetBytes": 12288,
+      "requiredEvidence": {
+        "source/index.js": [
+          "string = stringEncaseCRLFWithFirstIndex(string, closeAll, openAll, lfIndex);"
+        ],
+        "source/utilities.js": [
+          "export function stringEncaseCRLFWithFirstIndex(string, prefix, postfix, index) {"
+        ]
+      },
+      "minPathPrecision": 1
+    },
+    {
+      "id": "chalk-reopen-closed-style",
+      "task": "Review Chalk closed-style reopening through stringReplaceAll.",
+      "changedPaths": ["source/index.js"],
+      "budgetBytes": 12288,
+      "requiredEvidence": {
+        "source/index.js": [
+          "string = stringReplaceAll(string, styler.close, styler.open);"
+        ],
+        "source/utilities.js": [
+          "export function stringReplaceAll(string, substring, postfix) {",
+          "index = string.indexOf(substring, endIndex);"
+        ]
+      },
+      "minPathPrecision": 1
+    }
+  ]
+}

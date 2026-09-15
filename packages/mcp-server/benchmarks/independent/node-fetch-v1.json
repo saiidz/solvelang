@@ -1,0 +1,60 @@
+{
+  "schema": "solvelang.context.repository-corpus.v1",
+  "capture": "external-pinned-source-subset-v1",
+  "repository": "node-fetch/node-fetch",
+  "commit": "8b3320d2a7c07bce4afc6b2bf6c3bbddda85b01f",
+  "license": "MIT",
+  "licenseNoticeFile": "LICENSE-node-fetch.txt",
+  "scope": "three complete core source files from an independent external repository; not a whole-repository, blinded, token, or agent-task benchmark",
+  "sources": [
+    {
+      "path": "src/response.js",
+      "gitBlobSha1": "9806c0cbabfb75817112360fbd4b5d67d570e417"
+    },
+    {
+      "path": "src/body.js",
+      "gitBlobSha1": "714e27ec4aa74103a246480cf2bbcd9ae2103823"
+    },
+    {
+      "path": "src/headers.js",
+      "gitBlobSha1": "cd694558048ef1682b4beb9f1bcdc32de26a8b01"
+    }
+  ],
+  "cases": [
+    {
+      "id": "node-fetch-response-clone-body",
+      "task": "Trace Response cloning through the shared Body clone helper and highWaterMark.",
+      "changedPaths": ["src/response.js"],
+      "budgetBytes": 16384,
+      "requiredEvidence": {
+        "src/response.js": [
+          "return new Response(clone(this, this.highWaterMark), {"
+        ],
+        "src/body.js": [
+          "export const clone = (instance, highWaterMark) => {",
+          "throw new Error('cannot clone body after it is used');"
+        ]
+      },
+      "minPathPrecision": 0.5
+    },
+    {
+      "id": "node-fetch-response-content-type",
+      "task": "Review Response Content-Type extraction and header validation.",
+      "changedPaths": ["src/response.js"],
+      "budgetBytes": 24576,
+      "requiredEvidence": {
+        "src/response.js": [
+          "const contentType = extractContentType(body, this);",
+          "const headers = new Headers(options.headers);"
+        ],
+        "src/body.js": [
+          "export const extractContentType = (body, request) => {"
+        ],
+        "src/headers.js": [
+          "validateHeaderValue(name, String(value));"
+        ]
+      },
+      "minPathPrecision": 1
+    }
+  ]
+}

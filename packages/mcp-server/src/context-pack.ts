@@ -11,6 +11,7 @@ const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
 const WINDOW_RADIUS = 4;
 const DECLARATION_WINDOW_LINES = 24;
+const DECLARATION_LEADING_COMMENT_LINES = 16;
 
 export interface ContextSourceSelection {
   score: number;
@@ -205,6 +206,48 @@ function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes:
   }).sort(candidateSort);
 }
 
+function isLegacyExportedDeclaration(line: string): boolean {
+  return /^export\s+(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*/.test(line);
+}
+
+function isExtendedExportedDeclaration(line: string): boolean {
+  return /^export\s+(?:(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*|(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=)/.test(line);
+}
+
+function hasGraphSelection(selection?: ContextSourceSelection): boolean {
+  return selection?.reasons.some((reason) => reason.startsWith("graph:dependency:") || reason.startsWith("graph:dependent:")) ?? false;
+}
+
+function declarationWindowStart(lines: string[], declarationLine: number, previousDeclarationLine: number): number {
+  const lowerBound = Math.max(previousDeclarationLine + 1, declarationLine - DECLARATION_LEADING_COMMENT_LINES);
+  for (let line = declarationLine - 1; line >= lowerBound; line -= 1) {
+    const trimmed = lines[line - 1].trim();
+    if (trimmed === "") continue;
+    if (trimmed.startsWith("/**")) return line;
+    if (trimmed.startsWith("*") || trimmed.startsWith("//")) continue;
+    break;
+  }
+  return declarationLine;
+}
+
+function rangeContainsLine(range: { startLine: number; endLine: number }, line: number): boolean {
+  return line >= range.startLine && line <= range.endLine;
+}
+
+function rangeContainsRange(
+  outer: { startLine: number; endLine: number },
+  inner: { startLine: number; endLine: number },
+): boolean {
+  return outer.startLine <= inner.startLine && outer.endLine >= inner.endLine;
+}
+
+function rangesOverlap(
+  left: { startLine: number; endLine: number },
+  right: { startLine: number; endLine: number },
+): boolean {
+  return left.startLine <= right.endLine && right.startLine <= left.endLine;
+}
+
 function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: number): Candidate[] {
   const normalizedPath = normalizeContextPath(source.path);
   assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_CONTEXT_SOURCE_BYTES);
@@ -237,33 +280,63 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
   if (matchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
 
-  // A graph-selected dependency can have no task-word matches. Returning only
-  // its imports/header hides the implementation the caller needs. Use bounded
-  // exported declaration text windows instead; these are not semantic parsing
-  // or a claim that the entire declaration/body has been captured.
-  const declarationLines = matchLines.length === 0 && selectionScore > 0
-    ? lines.flatMap((line, index) => /^export\s+(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*/.test(line) ? [index + 1] : [])
-    : [];
-  const declarationFallback = declarationLines.length > 0;
-  const ranges = matchLines.length > 0
+  const lexicalRanges = matchLines.length > 0
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
+    : [];
+
+  // Preserve the original no-match declaration fallback exactly. The newer
+  // lexical-to-declaration expansion is intentionally narrower: it applies only
+  // to one-hop graph neighbors, not explicit changed roots or arbitrary hints.
+  const legacyDeclarationLines = matchLines.length === 0 && selectionScore > 0
+    ? lines.flatMap((line, index) => isLegacyExportedDeclaration(line) ? [index + 1] : [])
+    : [];
+  const legacyDeclarationRanges = legacyDeclarationLines.map((startLine, index) => ({
+    startLine,
+    endLine: Math.min(
+      lines.length,
+      startLine + DECLARATION_WINDOW_LINES - 1,
+      (legacyDeclarationLines[index + 1] ?? lines.length + 1) - 1,
+    ),
+  }));
+  const declarationFallback = legacyDeclarationRanges.length > 0;
+
+  const graphDeclarationLines = matchLines.length > 0 && hasGraphSelection(selection)
+    ? lines.flatMap((line, index) => isExtendedExportedDeclaration(line) ? [index + 1] : [])
+    : [];
+  const graphDeclarationRanges = graphDeclarationLines.map((declarationLine, index) => {
+    const startLine = declarationWindowStart(lines, declarationLine, graphDeclarationLines[index - 1] ?? 0);
+    return {
+      startLine,
+      endLine: Math.min(
+        lines.length,
+        startLine + DECLARATION_WINDOW_LINES - 1,
+        (graphDeclarationLines[index + 1] ?? lines.length + 1) - 1,
+      ),
+    };
+  });
+  const declarationExpansions = graphDeclarationRanges.filter((range) =>
+    matchLines.some(({ line }) => rangeContainsLine(range, line))
+    && !lexicalRanges.some((lexicalRange) => rangeContainsRange(lexicalRange, range))
+  );
+  const declarationTextRanges = declarationFallback ? legacyDeclarationRanges : declarationExpansions;
+
+  const ranges = matchLines.length > 0
+    ? mergeRanges([...lexicalRanges, ...declarationExpansions])
     : declarationFallback
-      ? declarationLines.map((startLine, index) => ({
-        startLine,
-        endLine: Math.min(lines.length, startLine + DECLARATION_WINDOW_LINES - 1, (declarationLines[index + 1] ?? lines.length + 1) - 1),
-      }))
+      ? legacyDeclarationRanges
       : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
 
   return budgetRanges(lines, ranges, budgetBytes).map(({ startLine, endLine }) => {
     const content = lines.slice(startLine - 1, endLine).join("\n");
+    const declarationTextWindow = declarationTextRanges.some((range) => rangesOverlap(range, { startLine, endLine }));
     return {
       path: normalizedPath,
       startLine,
       endLine,
       sourceSha256,
       selection,
-      declarationTextWindow: declarationFallback,
-      ...scoreExcerpt(normalizedPath, content, tokens, selection, declarationFallback),
+      declarationTextWindow,
+      ...scoreExcerpt(normalizedPath, content, tokens, selection, declarationTextWindow),
       content,
       bytes: Buffer.byteLength(content, "utf8"),
     };
