@@ -346,7 +346,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
       ? legacyDeclarationRanges
       : declarationExpansions.length > 0
         ? mergeRanges(declarationExpansions)
-        : selectionScore > 0
+        : pathScore > 0 || selectionScore > 0
           ? [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }]
           : [];
 
