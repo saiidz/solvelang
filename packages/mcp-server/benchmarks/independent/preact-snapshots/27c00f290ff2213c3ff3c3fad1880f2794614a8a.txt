@@ -90,10 +90,10 @@ export function setProperty(dom, name, value, oldValue, namespace) {
 			}
 		} else {
 			dom.removeEventListener(
-					name,
-					useCapture ? eventProxyCapture : eventProxy,
-					useCapture
-				);
+				name,
+				useCapture ? eventProxyCapture : eventProxy,
+				useCapture
+			);
 		}
 	} else {
 		if (namespace == SVG_NAMESPACE) {
