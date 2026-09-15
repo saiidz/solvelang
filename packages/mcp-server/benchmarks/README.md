@@ -4,6 +4,10 @@
 
 `npm run eval:context` retains the existing synthetic selection and handoff suite.
 It measures excerpt bytes and evidence proxies, not provider tokens or agent success.
+The deterministic fixtures now include bug-fix, GitHub issue-triage, CI/log diagnosis,
+multi-file refactor, JSON-heavy tool output and cross-agent handoff categories. The
+handoff fixture remains synthetic and one-directional; it is not evidence that both
+Claude -> Codex and Codex -> Claude long-session tasks succeed end to end.
 
 ## Pinned real-source regression suite
 
@@ -79,17 +83,65 @@ declaration. Explicit changed paths retain their previous lexical/header behavio
 provenance. The benchmark budgets and required evidence were not loosened to make
 these cases pass.
 
+## Agent-run measurement records
+
+`context-agent-eval.ts` defines a strict, content-addressed record/report contract for
+future baseline-versus-Solve-Context Claude and Codex runs. It does **not** launch an
+agent or contact a provider. The caller supplies records collected by a separately
+authorized run, and the local harness validates and summarizes them.
+
+A pair must use the same suite/pair fixture identity, pinned fixture revision, agent,
+provider and model. The baseline cannot claim a Solve Context pack; the context arm
+must identify its pack and selected bytes. Task success and exact-evidence counts are
+kept beside usage, latency and cache-hot mutation evidence so a smaller context cannot
+hide a quality regression.
+
+Measurement bases are intentionally distinct:
+
+- `provider-reported` is the only token basis included in provider-token aggregates.
+- `local-tokenizer` requires an explicit tokenizer label and is reported separately.
+- `estimated` requires an estimator label and is never promoted to provider usage.
+- `unavailable` requires null metrics rather than guessed values.
+- `synthetic` is allowed only in `synthetic-test` records; those pairs are excluded
+  from measured aggregates and cannot make benchmark evidence complete.
+
+Likewise, measured wall-clock latency and measured cache-hot byte evidence are kept
+separate from estimated, unavailable or synthetic values. A measured context arm can
+record `cacheHotBytesChanged: 0`; the report does not infer zero from missing data.
+The quality gate fails when a context arm loses baseline task success or exact-evidence
+recall even if provider-reported input tokens fall sharply.
+
+To summarize previously collected records, pass a JSON array on stdin:
+
+```sh
+cat approved-agent-run-records.json | npm run eval:context:agent-records
+```
+
+The command accepts no file/URL argument, reads at most 4 MiB from stdin, performs no
+provider/network call and uses no credentials. `npm run test:context-agent-eval-cli`
+uses synthetic-only records to verify the CLI and claim boundaries in MCP CI. Do not
+commit real provider credentials, prompts containing secrets, or private customer
+content as benchmark records.
+
+The report tracks the six #898 acceptance categories and both Claude/Codex agents,
+but `benchmarkEvidenceComplete` remains false until measured pairs cover every
+category and both agents, pass the quality gate, and every measured pair has
+provider-reported token usage plus measured latency. Even then the report truth keeps
+`publicationAuthorized: false` and `publicPercentageClaimAllowed: false`; repository
+evidence is not business/publication approval.
+
 ## Limits and remaining proof
 
 The first-party regression corpus plus the two external subsets improve coverage but
 do not constitute a whole-repository benchmark, a blinded held-out evaluation, or a
-completed Claude/Codex coding task. Provider input/output tokens, cache reuse,
-task-success rates, and competitor results remain unmeasured and are reported as
-null/false, never estimated from byte reduction. The serialized pack can be larger
-than the source excerpts; do not advertise excerpt reductions as wire-size or token
-savings. Timing varies and is not end-to-end agent latency.
+completed Claude/Codex coding task. The new record/report contract makes future real
+measurements comparable; it does not create those measurements. Provider input/output
+tokens, cache reuse, real task-success rates and competitor results remain unmeasured
+until separately authorized runs supply truthful records. Excerpt-byte reduction is
+not token savings, and local timing is not end-to-end agent latency.
 
 Issue #898 still needs broader/larger independently pinned or blinded evaluation,
-real agent-task quality and token/cache measurements, and distribution proof before
-public savings or comparative-performance claims. These suites grant no provider
-credential, network, billing, deployment, publication, or Solve Runner authority.
+actual Claude/Codex task runs including bidirectional long-session handoff, measured
+quality/token/cache/latency evidence, and distribution proof before public savings or
+comparative-performance claims. These suites grant no provider credential, network,
+billing, deployment, publication, or Solve Runner authority.
