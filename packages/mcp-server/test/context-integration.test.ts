@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildContextPack, contextEntryHandle, sha256Text, type ContextPack, type ContextSource } from "../src/context-pack.js";
+import { buildContextPack, contextEntryHandle, contextTaskTokens, sha256Text, type ContextPack, type ContextSource } from "../src/context-pack.js";
 
 function assertExactPack(pack: ContextPack, sources: ContextSource[]): void {
   const byPath = new Map(sources.map((source) => [source.path, source.text]));
@@ -39,14 +39,13 @@ test("graph declaration fallback retains its reason through remaining-budget fra
   const dependency = pack.entries.filter((entry) => entry.path === "b/dependency.ts");
   assert.ok(dependency.length > 0);
   for (const entry of dependency) {
-    assert.ok(entry.startLine >= 2 && entry.endLine <= 25);
+    assert.ok(dependency[0].startLine >= 2 && entry.endLine <= 25);
     assert.deepEqual(entry.reasons, ["graph:dependency", "selection:declaration-text-window"]);
     assert.equal(entry.score, 64);
   }
   assert.equal(pack.truncated, true);
   assertExactPack(pack, sources);
 });
-
 
 test("rescored fragments yield to a higher-ranked candidate from another source", () => {
   const sources: ContextSource[] = [
@@ -72,4 +71,52 @@ test("equal scores prefer distinct task evidence over repetition before stable p
   assert.equal(pack.entries[0].score, 8);
   assert.equal(pack.omittedCandidates, 1);
   assertExactPack(pack, sources);
+});
+
+test("bounded lexical repetition cannot outrank one-hop graph evidence", () => {
+  const sources: ContextSource[] = [
+    {
+      path: "a/noise.ts",
+      text: `alpha `.repeat(120) + "noise",
+    },
+    {
+      path: "z/dependency.ts",
+      text: [
+        "export function targetDependency() {",
+        `  return "${"x".repeat(520)}";`,
+        "}",
+      ].join("\n"),
+      selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
+    },
+  ];
+  const pack = buildContextPack("alpha", sources, 1_024);
+  assert.ok(pack.entries.some((entry) => entry.path === "z/dependency.ts"));
+  assert.ok(pack.entries.find((entry) => entry.path === "z/dependency.ts")!.score >= 64);
+  assertExactPack(pack, sources);
+});
+
+test("task inflection aliases expose a later graph-selected declaration", () => {
+  const tokens = contextTaskTokens("Trace context provider subscriber rerenders");
+  assert.ok(tokens.includes("rerenders"));
+  assert.ok(tokens.includes("rerender"));
+
+  const source: ContextSource = {
+    path: "src/component.ts",
+    selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
+    text: [
+      "export function BaseComponent() {",
+      "  const context = 'provider subscriber';",
+      "  return context;",
+      "}",
+      ...Array(20).fill("// spacing"),
+      "/** Enqueue a rerender of a component. */",
+      "export function enqueueRender(component) {",
+      "  return component;",
+      "}",
+    ].join("\n"),
+  };
+  const pack = buildContextPack("Trace context provider subscriber rerenders", [source], 2_048);
+  assert.ok(pack.entries.some((entry) => entry.content.includes("export function enqueueRender(component)")));
+  assert.ok(pack.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
+  assertExactPack(pack, [source]);
 });
