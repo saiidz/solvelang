@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildContextPack } from "../dist/src/context-pack.js";
 import { validateCorpus } from "./run-context-repository-evals.mjs";
 import {
   evaluateIndependentCorpora,
   loadIndependentCorpora,
 } from "./run-context-independent-evals.mjs";
+
+const selected = (path, text) => ({
+  path,
+  text,
+  selection: { score: 24, reasons: ["selection:graph:imports"] },
+});
 
 test("loads distinct pinned external MIT corpora with exact snapshot identities", async () => {
   const loaded = await loadIndependentCorpora();
@@ -25,6 +32,57 @@ test("loads distinct pinned external MIT corpora with exact snapshot identities"
       assert.ok(source.text.length > 0);
     }
   }
+});
+
+test("selected lexical function hits retain bounded later implementation evidence", () => {
+  const text = [
+    "export function stringReplaceAll(string, substring, postfix) {",
+    "  let index = string.indexOf(substring);",
+    "  if (index === -1) return string;",
+    "  const substringLength = substring.length;",
+    "  let endIndex = 0;",
+    "  let returnValue = '';",
+    "  do {",
+    "    returnValue += string.slice(endIndex, index) + substring + postfix;",
+    "    endIndex = index + substringLength;",
+    "    index = string.indexOf(substring, endIndex);",
+    "  } while (index !== -1);",
+    "  returnValue += string.slice(endIndex);",
+    "  return returnValue;",
+    "}",
+  ].join("\n");
+  const plain = buildContextPack("Review stringReplaceAll reopening", [{ path: "source/utilities.js", text }], 1024);
+  const hinted = buildContextPack("Review stringReplaceAll reopening", [selected("source/utilities.js", text)], 1024);
+
+  assert.ok(!plain.entries.some((entry) => entry.content.includes("index = string.indexOf(substring, endIndex);")));
+  assert.ok(hinted.entries.some((entry) => entry.content.includes("index = string.indexOf(substring, endIndex);")));
+  assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
+});
+
+test("selected JSDoc hits reach the exported const declaration they describe", () => {
+  const text = [
+    "/**",
+    " * Performs the operation extract a Content-Type value from object.",
+    " * specified in the specification:",
+    " * https://example.invalid/spec",
+    " *",
+    " * This function assumes body is present.",
+    " *",
+    " * @param {any} body Any body input",
+    " * @returns {string | null}",
+    " */",
+    "export const extractContentType = (body, request) => {",
+    "  if (body === null) return null;",
+    "  return 'text/plain;charset=UTF-8';",
+    "};",
+  ].join("\n");
+  const task = "Review response Content-Type extraction and header validation";
+  const plain = buildContextPack(task, [{ path: "src/body.js", text }], 1024);
+  const hinted = buildContextPack(task, [selected("src/body.js", text)], 1024);
+
+  assert.ok(!plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
+  assert.ok(hinted.entries.some((entry) => entry.content.includes("export const extractContentType")));
+  assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
 
 test("independent corpus report remains offline and claim-bounded", async () => {
