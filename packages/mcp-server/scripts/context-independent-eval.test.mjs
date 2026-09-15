@@ -10,7 +10,7 @@ import {
 const selected = (path, text) => ({
   path,
   text,
-  selection: { score: 24, reasons: ["selection:graph:imports"] },
+  selection: { score: 64, reasons: ["graph:dependency:imports:fixture-edge"] },
 });
 
 test("loads distinct pinned external MIT corpora with exact snapshot identities", async () => {
