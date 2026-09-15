@@ -99,6 +99,38 @@ test("task inflection aliases expose a later graph-selected declaration", () => 
   assertExactPack(pack, [source]);
 });
 
+test("task derivation aliases expose validation and extraction callsites", () => {
+  const tokens = contextTaskTokens("Review header validation and content extraction");
+  assert.ok(tokens.includes("validation"));
+  assert.ok(tokens.includes("validat"));
+  assert.ok(tokens.includes("extraction"));
+  assert.ok(tokens.includes("extract"));
+});
+
+test("structural graph evidence outranks unrelated lexical repetition under a tight budget", () => {
+  const marker = "critical_graph_evidence_marker";
+  const sources: ContextSource[] = [
+    {
+      path: "a/noise.ts",
+      text: `alpha `.repeat(130) + "noise",
+    },
+    {
+      path: "z/dependency.ts",
+      selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
+      text: [
+        "export function dependency() {",
+        ...Array(5).fill(`  const filler = "${"x".repeat(70)}";`),
+        `  return "${marker}";`,
+        "}",
+      ].join("\n"),
+    },
+  ];
+
+  const pack = buildContextPack("alpha", sources, 1_024);
+  assert.ok(pack.entries.some((entry) => entry.path === "z/dependency.ts" && entry.content.includes(marker)));
+  assertExactPack(pack, sources);
+});
+
 test("graph-selected lexical windows ignore high-frequency bridge terms when specific evidence exists", () => {
   const source: ContextSource = {
     path: "src/dependent.ts",
