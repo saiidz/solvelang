@@ -367,8 +367,8 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
 function candidateSort(left: Candidate, right: Candidate): number {
   return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
-    || right.rankingScore - left.rankingScore
     || right.lexicalTokenCount - left.lexicalTokenCount
+    || right.rankingScore - left.rankingScore
     || compareText(left.path, right.path)
     || left.startLine - right.startLine
     || left.endLine - right.endLine;
