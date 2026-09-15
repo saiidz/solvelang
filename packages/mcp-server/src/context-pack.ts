@@ -9,6 +9,7 @@ export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 
 const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
+const MAX_TOKEN_OCCURRENCES_PER_EXCERPT = 2;
 const WINDOW_RADIUS = 4;
 const DECLARATION_WINDOW_LINES = 24;
 const DECLARATION_LEADING_COMMENT_LINES = 16;
@@ -86,12 +87,24 @@ export function normalizeContextPath(input: string): string {
   return normalized;
 }
 
+function singularTaskToken(token: string): string | undefined {
+  if (token.length < 5 || !token.endsWith("s") || token.endsWith("ss") || token.endsWith("us") || token.endsWith("is")) {
+    return undefined;
+  }
+  if (token.endsWith("ies")) return `${token.slice(0, -3)}y`;
+  if (/(?:ches|shes|xes|zes|sses)$/.test(token)) return token.slice(0, -2);
+  return token.slice(0, -1);
+}
+
 export function contextTaskTokens(task: string): string[] {
   const matches = task.toLowerCase().match(/[a-z0-9_./:@-]{2,}/g) ?? [];
   const deduped = new Set<string>();
   for (const token of matches) {
     const trimmed = token.replace(/^[./:@-]+|[./:@-]+$/g, "");
-    if (trimmed.length >= 2) deduped.add(trimmed);
+    const singular = singularTaskToken(trimmed);
+    for (const candidate of [trimmed, singular]) {
+      if (candidate && candidate.length >= 2 && deduped.size < 128) deduped.add(candidate);
+    }
     if (deduped.size >= 128) break;
   }
   return [...deduped].sort();
@@ -129,6 +142,10 @@ function countOccurrences(haystack: string, needle: string): number {
     count += 1;
     offset = next + needle.length;
   }
+}
+
+function boundedOccurrences(haystack: string, needle: string): number {
+  return Math.min(MAX_TOKEN_OCCURRENCES_PER_EXCERPT, countOccurrences(haystack, needle));
 }
 
 function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Array<{ startLine: number; endLine: number }> {
@@ -180,8 +197,8 @@ function scoreExcerpt(path: string, content: string, tokens: string[], selection
   const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
   return {
     lexicalTokenCount: lexicalReasons.length,
-    score: pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0)
-      + contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0)
+    score: pathReasons.reduce((total, token) => total + 6 * boundedOccurrences(lowerPath, token), 0)
+      + contentReasons.reduce((total, token) => total + 2 * boundedOccurrences(lowerContent, token), 0)
       + (selection?.score ?? 0),
     reasons: [...new Set([
       ...(selection?.reasons ?? []),
@@ -267,14 +284,14 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
   const lowerPath = normalizedPath.toLowerCase();
   const sourceSha256 = sha256Text(source.text);
   const pathReasons = tokens.filter((token) => lowerPath.includes(token));
-  const pathScore = pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0);
+  const pathScore = pathReasons.reduce((total, token) => total + 6 * boundedOccurrences(lowerPath, token), 0);
 
   const matchLines: Array<{ line: number; reasons: string[]; score: number }> = [];
   for (let index = 0; index < lowerLines.length; index += 1) {
     const line = lowerLines[index];
     const reasons = tokens.filter((token) => line.includes(token));
     if (reasons.length === 0) continue;
-    const score = reasons.reduce((total, token) => total + 2 * countOccurrences(line, token), 0) + pathScore;
+    const score = reasons.reduce((total, token) => total + 2 * boundedOccurrences(line, token), 0) + pathScore;
     matchLines.push({ line: index + 1, reasons, score });
   }
 
@@ -344,7 +361,12 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 }
 
 function candidateSort(left: Candidate, right: Candidate): number {
-  return right.score - left.score || right.lexicalTokenCount - left.lexicalTokenCount || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
+  return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
+    || right.score - left.score
+    || right.lexicalTokenCount - left.lexicalTokenCount
+    || compareText(left.path, right.path)
+    || left.startLine - right.startLine
+    || left.endLine - right.endLine;
 }
 
 /** Global priority must be reconsidered after splitting: a fragment does not
