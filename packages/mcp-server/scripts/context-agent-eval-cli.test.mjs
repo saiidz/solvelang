@@ -18,6 +18,7 @@ function syntheticRecord(variant) {
       id: "cli-contract-fixture",
       category: "github-issue-triage",
       revisionSha256,
+      handoffDirection: null,
     },
     agent: "codex",
     variant,
@@ -46,6 +47,9 @@ function syntheticRecord(variant) {
       selectedBytes: variant === "solve_context" ? 512 : null,
       cacheHotBytesChanged: null,
       cacheHotBytesChangedBasis: "unavailable",
+      selectionPrecision: variant === "solve_context" ? 1 : null,
+      selectionRecall: variant === "solve_context" ? 1 : null,
+      selectionMetricsBasis: variant === "solve_context" ? "synthetic" : "unavailable",
     },
   };
 }
@@ -70,9 +74,11 @@ test("summarizes a bounded synthetic pair without promoting it to measured evide
   assert.equal(report.aggregate.measuredPairCount, 0);
   assert.equal(report.aggregate.syntheticPairCount, 1);
   assert.equal(report.aggregate.providerTokenPairCount, 0);
+  assert.equal(report.aggregate.measuredSelectionMetricPairCount, 0);
   assert.equal(report.aggregate.measuredInputTokenDelta, null);
   assert.equal(report.aggregate.qualityGatePassed, null);
   assert.equal(report.aggregate.benchmarkEvidenceComplete, false);
+  assert.equal(report.coverage.bidirectionalHandoffCoverageComplete, false);
   assert.equal(report.truth.providerRequestsPerformedByHarness, 0);
   assert.equal(report.truth.credentialsUsedByHarness, false);
   assert.equal(report.truth.publicPercentageClaimAllowed, false);
