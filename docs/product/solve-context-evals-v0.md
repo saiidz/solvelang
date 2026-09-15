@@ -2,7 +2,7 @@
 
 Status: **synthetic + pinned real-source regression suites with a strict offline contract for future real-agent measurements; complete real Claude/Codex provider evidence not yet collected**  
 Tracking epic: #898  
-Reconciled through #920 on 2026-09-15.
+Reconciled through #922 on 2026-09-15.
 
 ## Purpose
 
@@ -48,9 +48,19 @@ It exposed real selector defects that were fixed without weakening fixture budge
 
 ### 3. Independent pinned external-source suite
 
-`npm run eval:context:independent` uses separately pinned MIT source subsets from Chalk and node-fetch. The source snapshots are data only, never executed, and are verified by upstream Git blob identity plus local integrity checks.
+`npm run eval:context:independent` now uses separately pinned MIT source subsets from:
 
-These cases exposed additional graph-neighbor/JSDoc/exported-declaration selection gaps. They are independent from SolveLang source but still visible checked-in annotations, so they are **not** a blinded holdout or whole-repository benchmark.
+- `axios/axios` — four complete core source files and three cross-file tasks;
+- `chalk/chalk` — two complete source files and two tasks;
+- `node-fetch/node-fetch` — three complete source files and two tasks.
+
+The committed aggregate is therefore **3 external repositories, 9 complete source files and 7 fixed tasks**. Snapshots are data only, never executed, and are verified by exact upstream Git blob identity plus local SHA-256/integrity checks.
+
+#922 added the Axios cases without changing selector/runtime code or weakening the existing Chalk/node-fetch fixtures. Exact-head MCP CI reported all seven external tasks passing. In the three Axios cases, all arms preserved **100% required path recall and 100% required evidence recall** under the fixed budgets. Selected-path precision was `0.5` because the deliberately small four-file Axios subset caused all four files to be selected for tasks requiring two; this is useful precision headroom, not a demonstrated correctness defect.
+
+The annotations remain checked into the repository and visible to implementation authors, so the suite is **not** a blinded holdout or whole-repository benchmark. The grading annotations are not passed into the selector, and the report states both facts explicitly.
+
+Earlier Chalk/node-fetch cases exposed graph-neighbor/JSDoc/exported-declaration selection gaps. Those defects were fixed without relaxing their evidence/budget requirements. The Axios increment did not expose a new selector defect, so #922 intentionally adds no algorithm change.
 
 ### 4. Real-agent measurement record/report contract
 
@@ -129,9 +139,9 @@ The repository does not yet provide complete evidence for:
 
 These are priorities, not promised dates:
 
-### Next — broader independent/blinded selection evidence
+### Next — broader or genuinely blinded selection evidence
 
-Add larger or blinded fixed repository tasks with reviewed immutable evidence sets. Fix only demonstrated selector gaps; do not relax evidence budgets to make a score pass.
+The external suite is broader after #922, but it still consists of small checked-in source subsets with visible grading annotations. Add a larger repository-scale task or a genuinely blinded/held-out evidence source. Fix only demonstrated selector gaps; do not relax evidence budgets to make a score pass.
 
 ### Next — provider token + latency accounting
 
