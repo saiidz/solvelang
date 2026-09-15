@@ -1,0 +1,52 @@
+name: Context independent diagnostic
+
+on:
+  pull_request:
+    paths:
+      - 'packages/mcp-server/**'
+      - '.github/workflows/context-independent-diagnostic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/mcp-server/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Print only failing independent cases
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { evaluateIndependentCorpora, loadIndependentCorpora } from './scripts/run-context-independent-evals.mjs';
+          const report = evaluateIndependentCorpora(await loadIndependentCorpora());
+          const failures = report.corpora.flatMap((item) => item.report.cases
+            .filter((caseReport) => !caseReport.pass)
+            .map((caseReport) => ({
+              repository: item.repository,
+              id: caseReport.id,
+              qualityNonRegression: caseReport.qualityNonRegression,
+              graphAssisted: {
+                selectedPaths: caseReport.arms.graphAssisted.selectedPaths,
+                missingEvidence: caseReport.arms.graphAssisted.missingEvidence,
+                pathRecall: caseReport.arms.graphAssisted.pathRecall,
+                pathPrecision: caseReport.arms.graphAssisted.pathPrecision,
+                evidenceRecall: caseReport.arms.graphAssisted.evidenceRecall,
+                excerptBytes: caseReport.arms.graphAssisted.excerptBytes,
+                omittedCandidates: caseReport.arms.graphAssisted.omittedCandidates,
+              },
+            })));
+          console.log(JSON.stringify({ aggregate: report.aggregate, failures }, null, 2));
+          if (failures.length) process.exitCode = 1;
+          NODE
