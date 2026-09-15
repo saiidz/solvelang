@@ -10,7 +10,6 @@ export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
 const WINDOW_RADIUS = 4;
-const DECLARATION_WINDOW_LINES = 24;
 
 export interface ContextSourceSelection {
   score: number;
@@ -174,33 +173,16 @@ function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
 
   if (matchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
 
-  // A graph-selected dependency can have no task-word matches. Returning only
-  // its imports/header hides the implementation the caller needs. Use bounded
-  // exported declaration text windows instead; these are not semantic parsing
-  // or a claim that the entire declaration/body has been captured.
-  const declarationLines = matchLines.length === 0 && selectionScore > 0
-    ? lines.flatMap((line, index) => /^export\s+(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*/.test(line) ? [index + 1] : [])
-    : [];
-  const declarationFallback = declarationLines.length > 0;
   const ranges = matchLines.length > 0
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
-    : declarationFallback
-      ? declarationLines.map((startLine, index) => ({
-        startLine,
-        endLine: Math.min(lines.length, startLine + DECLARATION_WINDOW_LINES - 1, (declarationLines[index + 1] ?? lines.length + 1) - 1),
-      }))
-      : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
+    : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
 
   return ranges.map(({ startLine, endLine }) => {
     const content = lines.slice(startLine - 1, endLine).join("\n");
     const lowerContent = content.toLowerCase();
     const contentReasons = tokens.filter((token) => lowerContent.includes(token));
     const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
-    const reasons = [...new Set([
-      ...selectionReasons,
-      ...(declarationFallback ? ["selection:declaration-text-window"] : []),
-      ...lexicalReasons,
-    ])].slice(0, MAX_REASON_TOKENS);
+    const reasons = [...new Set([...selectionReasons, ...lexicalReasons])].slice(0, MAX_REASON_TOKENS);
     const contentScore = contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0);
     return {
       path: normalizedPath,
