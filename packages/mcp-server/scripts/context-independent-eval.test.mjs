@@ -29,10 +29,39 @@ test("loads distinct pinned external MIT corpora with exact snapshot identities"
 
 test("independent corpus report remains offline and claim-bounded", async () => {
   const report = evaluateIndependentCorpora(await loadIndependentCorpora());
+  const failureSummary = report.corpora.flatMap((item) =>
+    item.report.cases
+      .filter((caseReport) => !caseReport.pass)
+      .map((caseReport) => ({
+        repository: item.repository,
+        id: caseReport.id,
+        qualityNonRegression: caseReport.qualityNonRegression,
+        lexical: {
+          selectedPaths: caseReport.arms.lexical.selectedPaths,
+          missingEvidence: caseReport.arms.lexical.missingEvidence,
+          evidenceRecall: caseReport.arms.lexical.evidenceRecall,
+          pathPrecision: caseReport.arms.lexical.pathPrecision,
+        },
+        changedPaths: {
+          selectedPaths: caseReport.arms.changedPaths.selectedPaths,
+          missingEvidence: caseReport.arms.changedPaths.missingEvidence,
+          evidenceRecall: caseReport.arms.changedPaths.evidenceRecall,
+          pathPrecision: caseReport.arms.changedPaths.pathPrecision,
+        },
+        graphAssisted: {
+          selectedPaths: caseReport.arms.graphAssisted.selectedPaths,
+          missingEvidence: caseReport.arms.graphAssisted.missingEvidence,
+          evidenceRecall: caseReport.arms.graphAssisted.evidenceRecall,
+          pathPrecision: caseReport.arms.graphAssisted.pathPrecision,
+          pass: caseReport.arms.graphAssisted.pass,
+        },
+      })),
+  );
+
   assert.equal(report.aggregate.repositoryCount, 2);
   assert.ok(report.aggregate.sourceCount >= 5);
   assert.ok(report.aggregate.caseCount >= 4);
-  assert.equal(report.aggregate.pass, true);
+  assert.equal(report.aggregate.pass, true, JSON.stringify(failureSummary, null, 2));
   assert.equal(report.truth.wholeRepositoriesMeasured, false);
   assert.equal(report.truth.blindedHoldout, false);
   assert.equal(report.truth.annotationsVisibleToImplementation, true);
@@ -48,7 +77,7 @@ test("independent corpus report remains offline and claim-bounded", async () => 
   assert.equal(report.truth.publicationAuthorized, false);
 
   for (const item of report.corpora) {
-    assert.equal(item.report.aggregate.pass, true);
+    assert.equal(item.report.aggregate.pass, true, `${item.repository} independent corpus failed`);
     assert.equal(item.report.truth.credentialsUsed, false);
     assert.equal(item.report.truth.providerRequests, 0);
     assert.equal(item.report.truth.snapshotCodeExecuted, false);
