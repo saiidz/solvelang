@@ -1,0 +1,111 @@
+{
+  "schema": "solvelang.context.repository-corpus.v1",
+  "repository": "saiidz/solvelang",
+  "commit": "c36f2b18e3393b8174943e01b79d56c65ce83c58",
+  "license": "MIT",
+  "scope": "six complete source files; not a whole-repository or agent-task benchmark",
+  "sources": [
+    {
+      "path": "packages/mcp-server/src/context-pack.ts",
+      "gitBlobSha1": "d9dda78dd2d39873bacf3af233eb49660bb9b02b",
+      "sha256": "1d75d64a3c444c0cebcdeef1963cdd6d23c308427ee6197832a8ea5fe3343938"
+    },
+    {
+      "path": "packages/mcp-server/src/context-selection.ts",
+      "gitBlobSha1": "fc292677a91476d93923e234f794a6d3a6a0f7be",
+      "sha256": "1c1a5656a081e92714bdf1fae2d732f600060e7f7c4b3d26f441e74730e636f6"
+    },
+    {
+      "path": "packages/mcp-server/src/remote-cli.ts",
+      "gitBlobSha1": "0f92017f6110c5f34cc62e83b179f2b2739fd886",
+      "sha256": "8b14cbee2ade9ed3d62e4c1a8d7073b20cc57d59686791dccea6f1251b605ae8"
+    },
+    {
+      "path": "site/app/components/JsonLd.tsx",
+      "gitBlobSha1": "a9c591bee87fca7764457666c5521c46ac4f3e0b",
+      "sha256": "88225c53b080938b7c6d1177b8b80d198268d6eeff4f44ae738c3d04aee5d228"
+    },
+    {
+      "path": "site/app/components/jsonLdSerializer.mjs",
+      "gitBlobSha1": "bc49efcd8a1d82092b42874bfe056db9c1fa8740",
+      "sha256": "6c658d427a515748dc2b5426288cc8205a74e2b79ba0f276f18ca658bf990c8a"
+    },
+    {
+      "path": "site/qa/jsonld-security.test.mjs",
+      "gitBlobSha1": "29c20d1c1840b81040436d15135acb0ce64d4775",
+      "sha256": "fb1a8d9e418e3eec7e94d7237b3cbed977fd3ddef8d5d1c2e35ddc24bb61c8a2"
+    }
+  ],
+  "cases": [
+    {
+      "id": "jsonld-escape-review",
+      "task": "Review serializeJsonLd escaping and JSON.parse roundtrip.",
+      "changedPaths": [
+        "site/app/components/jsonLdSerializer.mjs"
+      ],
+      "budgetBytes": 2048,
+      "requiredEvidence": {
+        "site/app/components/jsonLdSerializer.mjs": [
+          "unsafeJsonLdCharacters",
+          "return serialized.replace("
+        ],
+        "site/qa/jsonld-security.test.mjs": [
+          "assert.equal(JSON.parse(serialized).name, hostile);"
+        ],
+        "site/app/components/JsonLd.tsx": [
+          "dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}"
+        ]
+      },
+      "minPathPrecision": 0.75
+    },
+    {
+      "id": "jsonld-caller-dependency",
+      "task": "Trace JsonLd rendering wiring.",
+      "changedPaths": [
+        "site/app/components/JsonLd.tsx"
+      ],
+      "budgetBytes": 2048,
+      "requiredEvidence": {
+        "site/app/components/JsonLd.tsx": [
+          "dangerouslySetInnerHTML={{ __html: serializeJsonLd(data) }}"
+        ],
+        "site/app/components/jsonLdSerializer.mjs": [
+          "return serialized.replace("
+        ]
+      },
+      "minPathPrecision": 0.5
+    },
+    {
+      "id": "remote-fatal-diagnosis",
+      "task": "Diagnose fatal startup stderr process.exit.",
+      "changedPaths": [
+        "packages/mcp-server/src/remote-cli.ts"
+      ],
+      "budgetBytes": 2048,
+      "requiredEvidence": {
+        "packages/mcp-server/src/remote-cli.ts": [
+          "process.exit(1);",
+          "console.error(\"SolveLang remote MCP fatal error:\""
+        ]
+      },
+      "minPathPrecision": 0.5
+    },
+    {
+      "id": "context-path-boundary",
+      "task": "Review normalizeContextSelectionPath traversal rejection.",
+      "changedPaths": [
+        "packages/mcp-server/src/context-selection.ts"
+      ],
+      "budgetBytes": 4096,
+      "requiredEvidence": {
+        "packages/mcp-server/src/context-selection.ts": [
+          "return normalizeContextPath(value);"
+        ],
+        "packages/mcp-server/src/context-pack.ts": [
+          "segment === \"..\""
+        ]
+      },
+      "minPathPrecision": 0.5
+    }
+  ]
+}
