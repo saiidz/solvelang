@@ -1,136 +1,153 @@
 # Solve Context v0
 
-Status: **foundation / not yet a released context-optimization product**  
-Tracking epic: #898
+Status: **implemented repository product foundation with real-source regression coverage; not yet a newly published/distributed context-optimization release and not yet proven by complete real-agent/provider measurements**  
+Tracking epic: #898  
+Repository status reconciled through #920 on 2026-09-15.
 
 ## Purpose
 
-Solve Context is a separate product layer for Claude Code and Codex. It is not part of the SolveLang language semantics and it is not Solve Runners. SolveLang can dogfood it, but the context engine must work for arbitrary repositories.
+Solve Context is a separate product layer for Claude Code and Codex. It is not part of SolveLang language semantics and it is not Solve Runners. SolveLang can dogfood it, but the context engine is designed for arbitrary repositories.
 
-The goal is to reduce coding-agent context cost and noise without sacrificing correctness. The first principle is to prevent irrelevant context from being read in the first place. Compression is a later fallback, not the primary architecture.
+The product thesis is: **prevent irrelevant context from being read first; compact only when necessary and only when correctness can be preserved.**
 
-## Why this is different
+## Implemented today
 
-A generic compression proxy sees content after the agent or tool has already produced it. Solve Context should use task intent plus repository structure to decide what the agent should read before broad file, graph, log, or JSON payloads flood the context window.
+Current repository source includes:
 
-The target experience for both Claude Code and Codex is one shared local-first plugin path backed by deterministic context tools:
+1. `solvelang_context_plan` — bounded deterministic task-aware planning;
+2. `solvelang_context_pack` — content-addressed exact excerpts with source provenance and byte budgets;
+3. `solvelang_context_retrieve` — stale-source-safe exact retrieval;
+4. `solvelang_context_handoff` and validation — portable Claude ↔ Codex task state without automatic instruction-file mutation;
+5. correctness-first structured compaction/expansion for JSON/log/diff payloads;
+6. changed-path priority and bounded direct relationships from an integrity-validated supplied Solve Graph;
+7. deterministic selection reasons, path/source ranges, source/excerpt hashes, omission/truncation truth and stable ordering;
+8. pinned first-party real-source regressions from SolveLang;
+9. independently pinned Chalk and node-fetch source subsets with equal-budget lexical/changed-path/graph-assisted comparisons;
+10. an offline agent-run record/report contract for future approved real Claude/Codex measurements;
+11. #920 pair-integrity rules requiring baseline and Solve Context arms to use the same fixture/provider/model/agent/record class, outcome-evaluation basis and required-evidence denominator.
 
-1. plan the smallest relevant context set,
-2. package exact excerpts with source provenance,
-3. retrieve originals by content-addressed handle,
-4. hand the same task state between agents,
-5. compact only live-zone content when a safe deterministic or reversible transform exists.
+## What is not established yet
 
-## Competitive engineering target
+The repository does **not** currently establish:
 
-Headroom demonstrates a useful market baseline: local context compression, proxying, agent wrappers, MCP tools, reversible retrieval, cross-agent memory, session learning, output shaping, and savings telemetry.
+- a public current-main Solve Context release after MCP v0.2.0;
+- real Claude/Codex provider-token savings;
+- real-agent task-success improvement or quality equivalence across the full benchmark suite;
+- provider cache-reuse improvement;
+- end-to-end agent latency improvement;
+- superiority over Headroom or another context product;
+- a live provider proxy;
+- a provenance/memory learner that is part of the released product.
 
-Solve Context should exceed that baseline by emphasizing **context prevention, repository/task awareness, and provider-fidelity contracts**. Headroom's public realignment audit currently documents bug classes involving cache-hot prompt mutation, JSON reserialization, cache-control boundaries, history compression, OpenAI Responses field preservation, numeric precision, and streaming reconstruction. Those are treated here as explicit classes of regressions to design out, not as behavior to emulate.
+Synthetic/pinned-source excerpt-byte reduction is not provider-token savings.
 
-No production claim that Solve Context is "better than Headroom" is permitted until repeatable Claude/Codex benchmark evidence exists.
-
-## V0 contract
-
-V0 introduces a deterministic context-pack contract. It does not proxy provider traffic and it does not summarize source code.
+## Context-pack contract
 
 A context pack contains:
 
-- a schema identifier,
-- a content-addressed pack ID,
-- a hash of the task text rather than the task text itself,
-- a hard byte budget,
-- measured selected bytes,
-- explicit truncation truth,
-- exact workspace-relative source paths,
-- exact line ranges,
-- SHA-256 identities for the complete source and selected excerpt,
-- a stable retrieval handle,
-- deterministic relevance reasons and score,
-- the exact selected source text.
+- a schema identifier;
+- a content-addressed pack ID;
+- a hash of task text rather than storing the task text as pack identity;
+- a hard UTF-8 byte budget;
+- measured selected bytes and explicit omission/truncation truth;
+- normalized workspace-relative source paths;
+- exact line ranges;
+- SHA-256 identities for complete source and selected excerpt;
+- stable retrieval handles;
+- deterministic relevance reasons/score;
+- exact selected source text.
 
 The canonical schema is `schemas/solve-context-pack.v0.schema.json`.
 
 ## Selection behavior
 
-The initial builder in `packages/mcp-server/src/context-pack.ts` is intentionally simple and deterministic:
+Selection is local and deterministic. It combines lexical evidence with optional explicit changed paths and an optional supplied Solve Graph. Current behavior includes:
 
-- task text is tokenized locally,
-- task tokens are matched against normalized workspace-relative paths and source lines,
-- matching lines expand to bounded nearby line windows,
-- overlapping windows merge,
-- candidates are ranked deterministically,
-- candidates that would exceed the hard byte budget are omitted rather than silently truncated,
-- irrelevant sources are omitted rather than summarized or hallucinated,
-- output ordering is stable regardless of source-input order.
+- local task-token/path/source matching;
+- bounded lexical windows;
+- deterministic whole-line budget fragments when a matching window is larger than remaining budget;
+- changed-path priority before the discovery read cap;
+- one-hop graph dependency/dependent/test evidence;
+- bounded exported-declaration text windows for graph-selected neighbors where necessary to preserve relevant implementation evidence;
+- global ranking of fragments using actual scores with stable tie handling;
+- exact provenance for every included excerpt;
+- explicit omissions rather than hidden summarization.
 
-This is a foundation, not the final relevance model. Later phases should add Solve Graph, git diff, symbol, dependency, and affected-test evidence without weakening determinism or provenance.
+The graph input is local and integrity-validated but is not an authenticated statement of workspace freshness. The tool reports that distinction rather than pretending a checksum proves current workspace truth.
 
 ## Safety invariants
 
-### Local and read-only
+### Local-first and read-only
 
-The V0 pack builder performs no network requests, provider calls, repository writes, credential reads, or workflow execution.
+Context optimization does not imply a model call, network call, repository write, credential read, dependency installation or repository-source execution.
 
 ### Source identity
 
-Every selected excerpt records both:
+Every selected excerpt retains complete-source and excerpt identity. Retrieval rejects stale source when the workspace content no longer matches the handle.
 
-- `sourceSha256` for the complete source supplied to the builder, and
-- `excerptSha256` for the exact selected content.
+### Path and privacy bounds
 
-Future retrieval must reject stale handles when the source identity no longer matches.
-
-### Path identity
-
-Context paths are normalized workspace-relative identities. Absolute paths, drive-qualified paths, traversal segments, and duplicate empty path segments are rejected.
+Paths are normalized workspace-relative identities; unsafe/traversal-style paths and likely sensitive paths are rejected according to the reviewed runtime policy. Workspace discovery remains bounded.
 
 ### Budget truth
 
-`selectedBytes` is measured from the exact UTF-8 excerpt payload. `truncated` is true only when at least one relevant candidate was omitted by the budget. V0 does not publish token-savings percentages because no provider tokenizer is involved yet.
+`selectedBytes` is measured from exact UTF-8 content. Content that cannot fit is omitted or represented by an explicitly bounded exact fragment according to the reviewed algorithm; no hidden summary is presented as exact source.
 
-### No hidden summarization
+### Provider/cache truth
 
-V0 excerpts are exact source text. If content does not fit, it is omitted and counted. Future lossy transforms must be explicitly labeled and reversible.
+Current context-pack operation does not mutate provider request prefixes. Future safe-mode measurement requires `cacheHotBytesChanged: 0` to be measured, not inferred from missing data.
 
-## Required next phases
+## Evaluation status
 
-### Phase B — MCP plan / pack / retrieve
+The evaluation stack now has three layers:
 
-Add read-only MCP tools to the existing shared Claude/Codex server:
+### Synthetic deterministic suite
 
-- `solvelang_context_plan`
-- `solvelang_context_pack`
-- `solvelang_context_retrieve`
+Covers all six acceptance categories:
 
-Workspace discovery must remain bounded and must not recursively ingest ignored/binary/vendor trees without explicit policy.
+- monorepo bug fix;
+- GitHub issue triage;
+- CI/log diagnosis;
+- multi-file refactor;
+- JSON-heavy tool output;
+- cross-agent handoff.
 
-### Phase C — Claude/Codex handoff
+Synthetic results are regression evidence only.
 
-Add `solvelang_context_handoff` with a portable local task-state contract containing goals, decisions, unresolved questions, changed-source identities, relevant tests, and context handles. Handoff must not automatically rewrite `CLAUDE.md`, `AGENTS.md`, or other repository instruction files.
+### Pinned source regressions
 
-### Phase D — structured-output compaction
+- first-party SolveLang source subset;
+- independent external subsets from Chalk and node-fetch.
 
-Implement lossless transforms first for repetitive JSON, tables, logs, and diffs. Error/failure lines must remain byte-exact. Any semantic summary must carry retrieval handles to the original material.
+These prove deterministic selection/integrity behavior on immutable source snapshots but are not blinded whole-repository or live-agent benchmarks.
 
-### Phase E — quality and savings evals
+### Real-agent record/report contract
 
-Run repeatable Claude Code and Codex fixtures for bug fixing, CI diagnosis, refactoring, issue triage, JSON-heavy tools, and cross-agent handoff. Record task success, evidence retention, latency, measured tokens, and any observable provider-cache effects.
+Future separately authorized baseline-vs-Solve-Context runs can be summarized only when records pass strict identity and measurement validation. `benchmarkEvidenceComplete` remains false until measured pairs cover all six categories, both Claude and Codex, both handoff directions, no quality regression, provider-reported tokens for every measured pair, measured latency, measured selection precision/recall and measured zero safe-mode cache-hot mutation for every context arm.
 
-### Phase F — optional provider proxy
+Even a complete engineering matrix keeps publication/public-percentage authorization false until separately approved.
 
-A provider proxy is allowed only after raw-byte and streaming conformance fixtures exist. Required invariants include:
+## Distribution truth
 
-- unchanged blocks remain byte-identical,
-- cache-hot prefixes are never dynamically rewritten for memory injection,
-- Anthropic `cache_control` boundaries are honored,
-- OpenAI Responses fields such as `phase` are preserved,
-- numeric representation is not lossy,
-- tool-call IDs and content-part order are stable,
-- UTF-8 is parsed at complete byte boundaries,
-- thinking/signature/citation deltas are preserved,
-- mid-stream errors and missing terminators remain visible as failures,
-- an optimizer that cannot prove a safe rewrite forwards the original content.
+The latest published MCP GitHub release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial post-v0.2.0 Solve Context work. Repository packaging/plugin/consumer tests prove that current source can be packaged and consumed; they do not mean the old public v0.2.0 pin contains #913–#920 behavior.
+
+A future versioned MCP/plugin release is therefore a distinct remaining milestone.
+
+## Projected next work
+
+These are priorities, not promised dates:
+
+1. add broader independent/blinded repository fixtures without weakening budgets/evidence;
+2. fix only demonstrated selection defects exposed by those fixtures;
+3. run separately authorized real Claude/Codex baseline-vs-context tasks covering all acceptance categories and both handoff directions;
+4. collect truthful provider-token/latency/cache/selection/quality evidence;
+5. qualify a future versioned distribution containing current-main capabilities;
+6. consider optional provider-proxy or provenance/memory work only as separately reviewed expansion after core evidence is strong.
+
+## Optional provider proxy boundary
+
+A provider proxy is not part of current v0 activation. If later approved, it must be fixture-locked for raw-byte/streaming fidelity: untouched material byte-identical, cache-hot prefixes preserved, Anthropic cache-control boundaries respected, OpenAI Responses fields such as `phase` preserved, numeric/tool/content ordering stable, UTF-8 handled at byte boundaries and streaming errors/termination truth retained. If safe transformation cannot be proven, optimization must fail open to the original content.
 
 ## Success criterion
 
-The product target is not simply a larger compression percentage. Solve Context succeeds when Claude and Codex complete coding tasks with less irrelevant context, exact recoverability of source evidence, stable provider cache behavior, and no measurable quality regression.
+Solve Context succeeds when Claude and Codex complete coding tasks with less irrelevant context **without measurable quality regression**, while exact source evidence remains recoverable and provider/cache behavior stays truthful. Compression percentage alone is not the product goal.

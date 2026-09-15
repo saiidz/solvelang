@@ -1,97 +1,150 @@
 # Solve Context evals v0
 
-Status: **offline structural benchmark**  
-Tracking epic: #898
+Status: **synthetic + pinned real-source regression suites with a strict offline contract for future real-agent measurements; complete real Claude/Codex provider evidence not yet collected**  
+Tracking epic: #898  
+Reconciled through #920 on 2026-09-15.
 
 ## Purpose
 
-This suite makes Solve Context regressions measurable before any marketing claim is made about Claude Code, Codex, token savings, or competitors.
+The evaluation stack makes Solve Context regressions measurable before any public claim is made about Claude Code, Codex, token savings, latency, cache behavior or competitors.
 
-Run it from `packages/mcp-server`:
+Run from `packages/mcp-server`:
 
 ```bash
 npm run eval:context
+npm run eval:context:repository
+npm run eval:context:independent
+npm run test:context-agent-eval-cli
 ```
 
-The command builds the MCP package, runs the fixture suite, prints a deterministic JSON report, and exits non-zero if a required quality gate fails. MCP CI runs the same suite on pull requests that touch the package.
+MCP CI runs these alongside package tests, plugin packaging/roundtrip, packed-consumer proof and dependency audit.
 
-## What v0 measures
+## Evaluation layers
 
-The fixture suite covers five coding-context categories:
+### 1. Synthetic deterministic suite
 
-- bug-fix context selection,
-- CI/log diagnosis,
-- multi-file refactor context,
-- JSON-heavy tool output,
-- Claude-to-Codex handoff freshness.
+`npm run eval:context` covers all six #898 fixture categories:
 
-For context selection it measures:
+- monorepo bug fix;
+- GitHub issue triage;
+- CI/log diagnosis;
+- multi-file refactor;
+- JSON-heavy tool output;
+- cross-agent handoff.
 
-- exact UTF-8 bytes in the synthetic full corpus,
-- exact UTF-8 bytes selected into context excerpts,
-- full-corpus byte reduction,
-- required-path recall,
-- selected-path precision,
-- required evidence-string recall,
-- deterministic pack identity independent of source order,
-- exact source, excerpt, line-range, and handle integrity.
+It records exact bytes, path/evidence precision/recall proxies, integrity and deterministic pack/handoff behavior. Synthetic byte reduction is a regression metric, not provider-token savings.
 
-For handoff it measures:
+### 2. Pinned first-party repository suite
 
-- no source bodies embedded in context references,
-- a fresh handoff validates in the receiver workspace,
-- source drift is detected,
-- stale exact-context references are detected,
-- the transferred handoff checksum remains intact when only the workspace changes.
+`npm run eval:context:repository` uses complete pinned SolveLang source files from an immutable reviewed revision with Git blob/SHA-256 checks and manually authored evidence expectations.
 
-## Required v0 gates
+The suite compares equal-byte-budget arms:
 
-The committed suite currently requires:
+- lexical only;
+- changed-path hints;
+- changed-path plus bounded graph hints.
 
-- path recall: **100%**,
-- evidence recall: **100%**,
-- selected-path precision: **100%**,
-- deterministic output: **required**,
-- exact integrity: **required**,
-- fresh/stale handoff behavior: **required**,
-- mean synthetic full-corpus byte reduction: **at least 70%**.
+It exposed real selector defects that were fixed without weakening fixture budgets, including declaration-window and budget-fragment behavior. Exact source/excerpt identity, omission truth and evidence non-regression remain required.
 
-These thresholds are regression gates for the committed synthetic fixtures. They are not claims about arbitrary repositories.
+### 3. Independent pinned external-source suite
 
-## Truth boundaries
+`npm run eval:context:independent` uses separately pinned MIT source subsets from Chalk and node-fetch. The source snapshots are data only, never executed, and are verified by upstream Git blob identity plus local integrity checks.
 
-A v0 report says `byteReductionIsNotTokenSavings: true` and explicitly records that provider tokens, end-to-end agent task success, and external competitors were not measured.
+These cases exposed additional graph-neighbor/JSDoc/exported-declaration selection gaps. They are independent from SolveLang source but still visible checked-in annotations, so they are **not** a blinded holdout or whole-repository benchmark.
 
-Therefore, a passing v0 suite does **not** establish any of the following:
+### 4. Real-agent measurement record/report contract
 
-- Claude API token savings,
-- OpenAI/Codex token savings,
-- Anthropic prompt-cache savings,
-- answer-quality equivalence,
-- coding-task success-rate improvement,
-- latency improvement,
-- superiority over Headroom or another product.
+`context-agent-eval.ts` defines an offline schema for future separately authorized baseline-vs-Solve-Context Claude/Codex runs. The harness itself does not launch an agent, call a provider or use credentials.
 
-Those require additional controlled benchmarks.
+Summarize previously collected records with:
 
-## Next benchmark levels
+```bash
+cat approved-agent-run-records.json | npm run eval:context:agent-records
+```
 
-### V1 — real repository selection
+The CLI reads bounded stdin only. Do not commit credentials, private prompts or customer content as benchmark records.
 
-Use fixed public repository snapshots and task fixtures with reviewed evidence sets. Record selected bytes, path/evidence recall, retrieval correctness, latency, and repository-scale behavior.
+## Real-agent pair integrity
 
-### V2 — provider token accounting
+A baseline and Solve Context record pair must describe the same:
 
-For supported Claude and Codex workflows, record provider-reported input/cache/output usage where available. Keep byte metrics separate from token metrics and distinguish estimated values from measured values.
+- suite/pair identity;
+- fixture ID/category/revision and handoff direction;
+- agent;
+- provider and model;
+- record class;
+- outcome-evaluation basis;
+- required-evidence denominator.
 
-### V3 — agent task success
+#920 added the last two checks after a review found that different evidence denominators or evaluation bases could otherwise make incomparable arms look equivalent. Pair mismatches now fail closed.
 
-Run fixed coding tasks in isolated repository snapshots for Claude Code and Codex both with and without Solve Context. Grade task success from tests and reviewed acceptance criteria rather than model self-evaluation.
+## Measurement truth
 
-### V4 — competitor comparison
+Token and measurement bases remain distinct:
 
-Only after comparable configuration and workload controls exist, run Solve Context and competing context systems against the same repositories, agent versions, task fixtures, budgets, and quality gates. Publish methodology and raw results alongside any comparative claim.
+- `provider-reported` — only basis included in provider-token aggregates;
+- `local-tokenizer` — reported separately with explicit tokenizer identity;
+- `estimated` — reported separately with explicit estimator identity;
+- `unavailable` — requires null metrics, never guesses;
+- `synthetic` — fixture/test data only and excluded from measured aggregates.
+
+Measured latency, selection precision/recall and cache-hot-byte evidence are also distinct from estimated/unavailable/synthetic values.
+
+A context arm cannot hide a quality regression behind lower input size. Quality non-regression requires that Solve Context does not lose baseline task success and does not reduce exact-evidence recall.
+
+## `benchmarkEvidenceComplete`
+
+The engineering evidence matrix remains incomplete until **all** of the following are true for measured pairs:
+
+- all six acceptance categories are covered;
+- both Claude and Codex are covered;
+- both `claude-to-codex` and `codex-to-claude` handoff directions are covered;
+- no quality regression is present;
+- every measured pair has provider-reported token usage;
+- every measured pair has measured wall-clock latency;
+- every Solve Context arm has measured selection precision and recall;
+- every safe-mode Solve Context arm has measured `cacheHotBytesChanged: 0`.
+
+Missing, local-tokenizer, estimated or synthetic values cannot satisfy these completion gates.
+
+Even when the engineering matrix becomes complete, the report keeps `publicationAuthorized: false` and `publicPercentageClaimAllowed: false`; business/publication approval is separate.
+
+## Current regression gates
+
+The committed synthetic/pinned-source suites preserve their reviewed exact-integrity, evidence-recall and deterministic-output requirements. Where fixture-specific byte-reduction thresholds exist, those are local regression gates only and must not be generalized to arbitrary repositories or provider tokens.
+
+## What is not yet measured
+
+The repository does not yet provide complete evidence for:
+
+- Claude API/provider input/output token reduction on the acceptance suite;
+- OpenAI/Codex provider input/output token reduction on the acceptance suite;
+- provider cache reuse improvement;
+- end-to-end coding-task success equivalence/improvement across all categories;
+- end-to-end agent latency improvement;
+- a blinded whole-repository benchmark;
+- a controlled competitor comparison.
+
+## Projected benchmark progression
+
+These are priorities, not promised dates:
+
+### Next — broader independent/blinded selection evidence
+
+Add larger or blinded fixed repository tasks with reviewed immutable evidence sets. Fix only demonstrated selector gaps; do not relax evidence budgets to make a score pass.
+
+### Next — provider token + latency accounting
+
+Run separately authorized Claude/Codex tasks and capture provider-reported usage plus measured wall time. Keep provider, local-tokenizer and estimates separated.
+
+### Next — task-success benchmark
+
+Grade baseline/context task success through tests and reviewed acceptance criteria rather than model self-evaluation. Include both handoff directions.
+
+### Later — competitor comparison
+
+Only after comparable agent versions, repositories, budgets, provider settings and quality gates exist should competitor comparisons be run. Methodology and raw evidence must accompany any comparative claim.
 
 ## Claim policy
 
-Until V3/V4 evidence exists, describe Solve Context as an engineering target designed to exceed generic compression-only approaches. Do not state that it has been measured to beat Headroom in production.
+Describe Solve Context as a correctness-first context-selection/compaction system with synthetic and pinned-source regression evidence. Do **not** state that it has been measured to beat Headroom, that it saves a specific provider-token percentage, or that it improves real-agent success/latency until the corresponding measured evidence exists and publication is separately approved.

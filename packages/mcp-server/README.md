@@ -1,108 +1,167 @@
 # SolveLang MCP Server
 
-Local-first, read-only workflow and Solve Graph analysis for MCP clients such as Codex and Claude Code.
+Local-first, read-only workflow, Solve Graph and Solve Context analysis for MCP clients such as Codex and Claude Code.
 
-## Run with npx
+## Distribution status
 
-Node.js 20 or newer is required. Point the server at the local workspace its tools may read:
+The canonical public plugin currently pins `@solvelang/mcp-server@0.2.0`, and the latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Graph/Solve Context work added after that release.
+
+That means:
+
+- `npx --yes @solvelang/mcp-server@0.2.0` uses the historical published package line;
+- the current source tree must not be assumed to match the public v0.2.0 artifact;
+- source-checkout instructions below are the correct way to evaluate current-main capabilities;
+- repository packing/consumer tests prove release readiness, not publication;
+- a future versioned release is required before current-main behavior is publicly distributed.
+
+## Published package usage
+
+Node.js 20 or newer is required. For the published v0.2.0 line:
 
 ```bash
 SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
-  npx --yes @solvelang/mcp-server
+  npx --yes @solvelang/mcp-server@0.2.0
 ```
 
-No global install or SolveLang repository clone is required. For `.solve` validation, make `solvec` available on `PATH` or set `SOLVELANG_SOLVEC` to its executable. The n8n and Solve Graph tools do not require `solvec`.
+Call `solvelang_capabilities` / MCP list-tools to inspect the exact tools exposed by the installed version. Do not infer current-main tools from this README when using an older published package.
 
-## Tools
+## Current source usage
 
-- `solvelang_analyze_n8n` — deterministic structural scan from either a workspace-relative n8n JSON file or raw JSON supplied directly.
+To run the repository version:
+
+```bash
+git clone https://github.com/saiidz/solvelang.git
+cd solvelang/packages/mcp-server
+npm ci
+npm run build
+SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project node dist/src/index.js
+```
+
+For `.solve` validation, make `solvec` available on `PATH` or set:
+
+```bash
+SOLVELANG_SOLVEC=/absolute/path/to/solvec \
+SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
+node dist/src/index.js
+```
+
+## Current repository tool families
+
+### Workflow / n8n
+
+- `solvelang_analyze_n8n` — deterministic structural scan from workspace-relative path or bounded in-memory raw JSON.
 - `solvelang_validate_solve` — validates a `.solve` file through the local `solvec` executable.
-- `solvelang_generate_n8n_report` — returns Markdown or CI-friendly JSON evidence without writing files.
-- `solvelang_graph_find_nodes` — searches a canonical Solve Graph by node kind, text, or exact evidence path.
-- `solvelang_graph_search_nodes` — ranks bounded node matches by deterministic label, identity, evidence-path, and string-metadata evidence.
-- `solvelang_graph_dependencies` — traverses outbound dependency relationships from stable Solve Graph node IDs.
-- `solvelang_graph_dependents` — traverses inbound dependency relationships from stable Solve Graph node IDs.
-- `solvelang_graph_shortest_path` — finds one deterministic bounded shortest dependency or dependent path between stable node IDs and returns safe node summaries plus relationship/traversal hops.
-- `solvelang_graph_explain_shortest_path` — runs the same bounded shortest-path query and returns a deterministic human-readable explanation with explicit complete-versus-partial search truth.
-- `solvelang_graph_alternative_paths` — enumerates bounded deterministic simple dependency or dependent paths between stable node IDs.
-- `solvelang_graph_explain_alternative_paths` — runs the bounded alternative-path query and returns deterministic path explanations with explicit depth, path-count, and traversal-state truncation truth.
-- `solvelang_graph_impact` — computes bounded transitive impact for changed nodes while excluding containment-only noise by default.
-- `solvelang_graph_explain_impact` — runs the same bounded dependent-impact traversal and returns deterministic structural explanations with explicit query-versus-presentation truncation truth.
-- `solvelang_graph_affected_validations` — finds bounded structural test, workflow, and job candidates among a changed node's transitive dependents, with query-versus-presentation truncation truth.
-- `solvelang_graph_cycles` — finds bounded deterministic strongly connected components and representative directed cycles; a cycle is structural evidence, not automatically a defect.
-- `solvelang_graph_hotspots` — ranks bounded structural hotspot candidates by direct and transitive dependents without claiming runtime criticality.
-- `solvelang_graph_entrypoint_candidates` — finds bounded structural route, workflow, job, and `exposes`-related entrypoint candidates without claiming runtime reachability or public exposure.
-- `solvelang_graph_unreachable_candidates` — finds bounded nodes not structurally reached from selected entrypoints; these are not runtime-unreachable or dead-code findings.
-- `solvelang_graph_security_summary` — returns bounded structural permission, resource, route, and relationship candidates; it is not a security audit.
-- `solvelang_capabilities` — reports limits, privacy boundaries, input modes, and available tools.
+- `solvelang_generate_n8n_report` — Markdown or CI-friendly JSON evidence without writing files.
 
-For n8n analysis and reports, provide exactly one of:
+### Solve Graph
 
-- `path`: a workspace-relative JSON file; or
-- `rawJson`: an n8n export supplied directly to the MCP tool.
+Current source includes bounded deterministic tools for:
 
-Raw JSON is bounded before parsing, processed only in memory, never written to disk, never logged, and never sent over the network. JSON reports include a stable schema identifier, deterministic finding order, severity counts, score, and a `pass` boolean suitable for CI policy decisions.
+- node find/ranked search;
+- dependencies/dependents;
+- shortest/alternative paths plus explanations;
+- transitive impact plus explanation;
+- affected validation candidates;
+- cycles and hotspots;
+- entrypoint/unreachable candidates;
+- structural security summary.
 
-For Solve Graph tools, provide exactly one of:
+Graph input can be a workspace-relative canonical graph or raw canonical graph JSON. It must remain analyze-only, declare network/write access false, use stable canonical IDs and pass integrity validation. Graph queries are structural evidence; they do not execute repository code, install dependencies or prove runtime reachability/criticality/security.
 
-- `path`: a workspace-relative canonical `solvelang.graph.v0` JSON document; or
-- `rawJson`: canonical graph JSON supplied directly to the MCP tool.
+### Solve Context
 
-Solve Graph input is accepted only when it is analyze-only, declares `networkAccess=false` and `writeAccess=false`, has stable canonical node/edge IDs, and passes its SHA-256 integrity check. The MCP transport returns only bounded node summaries and traversal evidence; it never executes repository code or mutates the graph or workspace. The MCP-facing tool names use underscore-safe identifiers, while responses preserve deterministic Solve Graph query contracts and explicit explanation schemas for downstream handling.
+Current repository source includes:
 
-Shortest-path queries are breadth-first and deterministic. They can be limited by edge kind, direction, depth, and visited-node count. A no-path response distinguishes complete absence from a bounded search that stopped at a depth or visited-node boundary. For dependent-direction paths, each hop reports both the underlying graph-edge orientation and the traversal orientation so callers do not have to infer reversal semantics.
+- `solvelang_context_plan`
+- `solvelang_context_pack`
+- `solvelang_context_retrieve`
+- `solvelang_context_handoff`
+- `solvelang_context_handoff_validate`
+- `solvelang_context_compact_structured`
+- `solvelang_context_expand_rle`
+- `solvelang_context_capabilities`
 
-The shortest-path explanation tool reuses that exact bounded implementation and then applies the reviewed explanation contract. Found paths become ordered safe structural steps; complete no-path searches state absence only within the configured graph scope; bounded searches explicitly state that absence is not proven. Explanation output remains analyze-only with network and write access fixed to false.
+Solve Context is deterministic/local-first. It selects exact bounded context, preserves source/excerpt provenance, rejects stale retrieval, supports portable Claude ↔ Codex handoff state, and provides correctness-first lossless structured compaction/expansion. These tools do not launch agents, call providers, mutate repositories or imply a provider proxy.
 
-Alternative-path queries enumerate deterministic simple paths and are bounded independently by depth, returned path count, and traversal-state count. The alternative-path explanation tool reuses that exact query contract. It distinguishes a complete result set from bounded partial evidence, reports when additional paths may exist, preserves dependency-versus-dependent edge orientation, and returns only safe structural node summaries. Its schema is `solvelang.mcp.solve-graph.alternative-paths-explanation.v0`.
+## Solve Context evaluation commands
 
-Impact queries traverse inbound dependency relationships from one or more changed node IDs, excluding containment-only noise unless callers explicitly choose different edge kinds. The impact explanation tool validates parent chains and underlying dependent-edge orientation against the canonical graph, reconstructs bounded root-to-dependent paths, and distinguishes traversal truncation from explanation-row truncation. It states no-impact absence only after a complete configured traversal. Its schema is `solvelang.mcp.solve-graph.impact-explanation.v0`.
+```bash
+npm run eval:context
+npm run eval:context:repository
+npm run eval:context:independent
+npm run test:context-agent-eval-cli
+```
 
-Affected-validation queries reuse the bounded impact traversal and return only `test`, `workflow`, and `job` nodes found in that structural evidence. They preserve each candidate's root, depth, and graph-edge evidence, while separately reporting traversal truncation and validation-output truncation. They do not execute validations or assert that graph extraction captures all validation selection conditions.
+- `eval:context` — synthetic deterministic fixtures;
+- `eval:context:repository` — pinned first-party SolveLang source regressions;
+- `eval:context:independent` — independently pinned Chalk/node-fetch source subsets;
+- `test:context-agent-eval-cli` — validates the offline real-agent record/report claim boundaries.
 
-Cycle queries scan the selected graph edges deterministically for strongly connected components, return stable component IDs and one representative directed cycle per component, and keep component-count and per-component-node output truncation explicit. They do not interpret a structural cycle as an error, runtime loop, or defect.
+To summarize separately authorized previously collected agent records:
 
-Hotspot queries score eligible structural candidates from explicit selected edge kinds, first by bounded transitive dependents and then direct dependents. They exclude containment noise by default, state candidate-count and per-hotspot impact truncation separately, and do not claim that a candidate is runtime-critical or defective.
+```bash
+cat approved-agent-run-records.json | npm run eval:context:agent-records
+```
+
+The summarizer itself makes no provider/network call and uses no credentials. After #920, baseline/context record pairs must use the same outcome-evaluation basis and required-evidence denominator in addition to the same fixture/provider/model/agent/record class.
+
+Repository evaluation does **not** establish a public token-savings percentage, improved agent success/latency, provider cache savings or competitor superiority.
+
+## Input and privacy boundaries
+
+For n8n/workflow analysis, provide exactly one of:
+
+- `path`: workspace-relative JSON; or
+- `rawJson`: bounded n8n JSON supplied directly.
+
+For Solve Graph, provide exactly one of `path` or canonical graph `rawJson`.
+
+For Solve Context workspace operations, all file discovery/reading is bounded to the configured workspace and reviewed path/privacy rules. Likely sensitive paths are denied by the context runtime policy.
+
+Raw supplied workflow/graph data is processed in memory, is not written by the read-only tools, and malformed-input errors must not echo sensitive source content.
 
 ## Security boundaries
 
 - Workspace-relative paths only; traversal outside the configured root is rejected.
-- Maximum input size: 2 MB for files and raw JSON, including Solve Graph documents.
-- Maximum n8n node count: 5,000.
-- Solve Graph traversal roots: at most 128; dependency/dependent, impact, and shortest-path depth: at most 64; alternative-path depth: at most 32; alternative paths: at most 32; traversal/result/state limits: at most 10,000 where applicable; impact explanation rows: at most 256.
-- Cycle output: at most 100 components and 100 nodes per returned component; the full selected graph is analyzed before output bounds are applied.
-- Hotspot output: at most 100 candidates; each candidate's bounded dependent traversal is limited by the same depth/result limits as impact analysis.
-- Affected-validation output: at most 100 structural candidates; each query uses the same maximum depth and result limits as impact analysis.
-- No workflow execution, repository execution, network requests, file writes, or credential-value inspection.
-- Solve Graph integrity, stable IDs, endpoints, schema, and read-only execution flags are verified before queries run.
-- Malformed input errors do not echo supplied workflow or graph content.
-- The stdio server writes protocol messages only to stdout and diagnostics only to stderr.
+- Bounded file/raw-input sizes and graph traversal/result/state limits are enforced by tool-specific contracts.
+- No workflow execution, arbitrary repository-source execution, network requests, file writes or credential-value inspection from read-only analysis/context tools.
+- Solve Graph integrity/stable IDs/endpoints/read-only flags are checked before queries.
+- Solve Context preserves explicit source/excerpt hashes, exact ranges and omission/truncation truth.
+- The stdio server writes MCP protocol messages to stdout and diagnostics to stderr.
+- Hosted/remote transport is a separate authenticated boundary and does not inherit local workspace authority automatically.
 
-## Build
+See the implementation/tool schemas for exact per-tool numeric limits; do not copy a limit from one tool family to another.
+
+## Build and qualify current source
 
 ```bash
 cd packages/mcp-server
 npm ci
 npm test
+npm run eval:context
+npm run eval:context:repository
+npm run eval:context:independent
+npm run test:context-agent-eval-cli
+npm run test:plugin-roundtrip
 npm run test:packed
 ```
 
-## Run from a source checkout
+MCP CI also runs the exact locked dependency audit. `test:plugin-roundtrip` and `test:packed` pack/install current repository source into clean temporary consumers and verify the shared protocol/entrypoints/allowlist. They do not publish to npm or prove an external marketplace install.
 
-```bash
-SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project node dist/src/index.js
-```
+## Client configuration
 
-For `.solve` validation, build `solvec` or provide its path:
+See:
 
-```bash
-SOLVELANG_SOLVEC=/absolute/path/to/solvec node dist/src/index.js
-```
+- `plugins/solvelang/` for the canonical published-package plugin bundle;
+- `docs/integrations/mcp-codex-claude.md` for published-vs-current-source Codex/Claude instructions;
+- `plugins/codex/` and `plugins/claude/` for legacy/manual examples.
 
-Use the templates under `plugins/codex` and `plugins/claude` to connect supported clients.
+## Hosted remote boundary
+
+The repository includes a deliberately read-only Streamable HTTP transport foundation. A public hosted MCP service would still require separate deployment, authentication, rate limits, privacy/retention controls and production approval. Local plugin/source qualification does not establish that endpoint as live.
 
 ## Releases
 
-`@solvelang/mcp-server@0.1.0` is publicly available on npm. The raw-JSON, CI-report, and Solve Graph changes are later-version readiness work; this branch intentionally does not change the package version or publish a release.
+The historical public release line is v0.2.0. Current `main` contains later work but intentionally has **not** been represented here as a newly published version.
 
-Trusted Publishing is the required release path. The release workflow runs only for a published GitHub Release, requires the protected `npm-production` environment and `NPM_SCOPE_OWNERSHIP_VERIFIED=true`, checks that the `v<version>` tag matches this manifest, reruns the unit and packed-install tests, and publishes with npm's GitHub Actions identity. Do not add an npm access token or create a tag or release outside the approved release process.
+Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a tag/release outside the approved release process. A future release must select a new version, bind it to the reviewed source, rerun the package/consumer/security gates and then use the protected publishing boundary.

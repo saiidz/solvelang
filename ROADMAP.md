@@ -1,74 +1,112 @@
 # SolveLang Roadmap
 
-This is the active roadmap for `saiidz/solvelang`. Separate **implemented and repository-tested**, **published**, **deployed**, and **verified with a live provider**. A merged PR, an available runner, or a passing mock test does not establish the later states.
+This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **implemented and repository-tested**, **published**, **deployed**, and **verified with a live provider/customer path**. A merge or green CI result proves only repository state unless a separate deployment/provider record says otherwise.
 
-## Evidence and scope
+## Current evidence checkpoint
 
-The reconciled baseline is the repository through #914, commit `c36f2b18e3393b8174943e01b79d56c65ce83c58`. Refresh live refs, PRs, checks and the relevant issue before acting; this checkpoint is not a permanently current head. The older detailed [September 4 roadmap](https://github.com/saiidz/solvelang/blob/c36f2b18e3393b8174943e01b79d56c65ce83c58/ROADMAP.md) is preserved in Git history, not the active work queue.
+Reconciled on **2026-09-15** from `main` immediately after PR **#920** (`5d07787c77dbe297b9bb52ba350669d6f9561a5e`). Live GitHub state always wins if this checkpoint becomes stale.
 
-The original repository-completion mission [#820](https://github.com/saiidz/solvelang/issues/820) is closed. It does not close the newer product work or authorize a commercial launch. The active tracks are:
+The original repository-completion mission, #820, is closed. Current open project tracks are:
 
-| Track | Repository implementation | Remaining completion gate |
+| Track | Current repository state | Remaining gate |
 | --- | --- | --- |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | Account/API/Admin foundations, billing ownership/replay/recovery and disable controls, data-recovery verification, billing/priority monitoring preparation | Required-check/review enforcement, rollout-specific permissions, approved deployments, live billing/priority/monitoring/recovery evidence, customer acceptance and business decisions |
-| [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, exact approval/single-use claim, runtime credential/kill-switch/lifecycle boundaries through #866–#870 | Concrete external backend qualification, exact project/key scope, fresh owner authorization, one bounded live request and lifecycle evidence |
-| [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP and optional Gmail support, tenant/mailbox/secret binding, durable claims/cursors, account controls and synthetic end-to-end qualification through #906; monitoring/recovery preparation | Separately approved default-off deployment, scoped credentials, new-message canary and actual task/reply/stop/recovery outcomes |
-| [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Exact context packs, plan/retrieve/handoff tools, structured compaction, synthetic evals, changed-file and bounded supplied-graph selection through #913; locked dependency security gate through #914 | Real-repository and agent evaluation, measured quality/token/latency evidence, reviewed remaining product features, versioned distribution and clean consumer installation |
+| [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, and pair-integrity hardening through #913–#920 | Larger independent/blinded evaluation; actual Claude/Codex baseline-vs-context runs; provider-reported token/latency/cache/quality evidence; versioned distribution of current-main capabilities |
+| [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
+| [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin and TOTP infrastructure are live; billing/priority/support-provider activation remain separately gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
 
-## Implemented product surfaces — do not rebuild them
+## Working today
 
-### Language, browser runtime and developer tools
+### Language, runtime and browser
 
-Rust remains the canonical language engine. The CLI supports `.solve` execution, imports, control flow, functions, collections, structured diagnostics, formatting/linting/checking and hardened execution modes. The local stdio LSP and opt-in editor package remain deliberately narrower than a workspace-wide IDE or hosted execution service.
+- Rust is the canonical language engine.
+- `solvec` supports run/validate/check/lint/fmt/tokens/ast, explicit local modules, structured diagnostics and hardened execution modes.
+- `solvec-core` is host-incapable; `solvec-wasm` is deny-all with shared conformance/resource-limit coverage.
+- `/run/` consumes the reviewed pinned/hash-verified WASM handoff and fails closed. The historical TypeScript preview is not an execution fallback.
+- Current native release-artifact evidence is **Linux x86_64 only**. macOS ARM64 and Windows x64 are not released-platform claims yet.
 
-Pure-core extraction is complete: `solvec-core` is host-incapable and `solvec-wasm` is deny-all, with shared conformance and resource-limit coverage. The repository's `/run/` consumes the reviewed pinned, hash-verified audited WASM handoff and fails closed when loading fails. **The old TypeScript preview is not an execution fallback.** Changes to that source are not proof that a new public version was deployed.
+### Workflow intelligence and audits
 
-### Workflow Preflight, Repository Audit and Solve Graph
-
-Workflow Preflight analyzes exported workflows locally. Repository Audit and Solve Graph provide bounded static ingestion, supported language/framework/config/deployment relationships, dependency and conservative dead-code evidence, graph queries and explanations, affected-test/workflow mapping, security/architecture summaries, integrity-covered reports and the local visual explorer. Read-only MCP exposes the qualified graph/query surfaces. These analyses do not execute repository source, resolve registries or grant write/remediation authority.
-
-The historical dependency/graph/browser trains are retained in the linked history and [active handoff](docs/active-buildout-handoff.md). Only extend them to fix a demonstrated gap; do not recreate completed foundations.
-
-### Server Audit
-
-Server Audit is read-only and non-remediating. It includes fixed allowlisted collection, bounded snapshot/schema validation, system/service/process/listener/package/filesystem/web/certificate/backup/log evidence, structural relationships, coverage and contradiction truth, redaction and canonical JSON/HTML reporting. Its source/object/finding bounds and partial/unavailable evidence must remain explicit. Automatic remote remediation is not a current capability.
+- Workflow Preflight, Repository Audit / Solve Graph and Server Audit are bounded, deterministic, read-only analysis products.
+- Solve Graph includes dependency/relationship queries, explanations, affected validations, security/architecture summaries and local browser/MCP surfaces.
+- Server Audit retains bounded collection, redaction, coverage/contradiction truth and deterministic reporting.
+- None of these surfaces grants source execution or remediation authority.
 
 ### Self-Driving
 
-The product direction is Observe → Understand → Find → Propose → Test → PR → Deploy → Measure → Learn. Each stage has its own authority boundary; the diagram grants none.
-
-The repository has advanced beyond the September 4 observe-only snapshot. Observation, bounded suggestion/patch preparation, tested-PR governance and injected GitHub write/credential boundaries through #850–#863 are implemented, alongside PostHog isolation through #870. That is not a live GitHub App signer, an active provider connection, automatic merge permission or production rollout authority. A concrete external credential/signing backend and a qualified owner-authorized activation are still required for real side effects. Observe mode must continue rejecting write-capable actions.
-
-The older provider-neutral sanitized Self-Driving context envelope is not a claim that the newer **Solve Context** agent product in #898 is complete.
+Repository-safe Self-Driving supports the progression from observe/suggest through reviewed patch/PR execution contracts and isolated credential boundaries. It does **not** imply an active provider connection, live GitHub App signer, automatic merge service or production rollout authority.
 
 ### Codex, Claude and Solve Context
 
-Canonical installed-package MCP protocol qualification for Codex and Claude is merged through #871. Solve Context adds deterministic bounded context selection, source hashes/handles, stale-source rejection, cross-agent handoff validation and JSON/log/diff compaction. #913 adds changed-path priority and bounded direct relationships from a supplied Solve Graph; it does not perform unrestricted repository execution or network discovery.
+Solve Context is now substantially beyond its original foundation:
 
-Synthetic byte-reduction metrics are not measured model-token savings, lower latency or improved task success. The next evaluation work needs fixed real source revisions, known expected evidence, honest omissions, actual agent outcomes and reproducible measurements. External package/plugin publication, updated installation pins and actual customer installs remain distinct from repository CI. The memory/provenance learner and optional provider proxy require their own reviewed scope; do not silently make optional expansion a first-release prerequisite.
+- exact context plan/pack/retrieve tools;
+- stale-source rejection and content-addressed handles;
+- Claude ↔ Codex handoff creation/validation;
+- JSON/log/diff lossless compaction with exact expansion;
+- changed-path priority and supplied Solve Graph one-hop evidence;
+- first-party pinned real-source regressions;
+- independently pinned Chalk and node-fetch source regressions;
+- a strict offline record/report contract for future real Claude/Codex measurements;
+- fail-closed pair comparability: baseline and Solve Context arms must use the same fixture/provider/model/agent/record class, outcome basis and required-evidence denominator.
 
-### Connected support
+The repository **does not yet have measured real-agent token savings or a valid public performance percentage**. Synthetic byte reduction is not provider-token savings.
 
-#896 qualifies an actual provider implementation, not merely a planning preview. The owner's existing `hello@solve-lang.com` mailbox is supported by the native IMAP/SMTP path; Gmail is optional. Preserve the existing mailbox and routing. A shared mail endpoint grants no access to other mailboxes, projects or server settings.
+### Connected support and production account foundation
 
-Incoming mail and model output are untrusted data, not authorization. Tenant/mailbox binding, verified TLS, durable claims, new-message cutover, no blind retry after ambiguous provider outcomes, suspension, pause and revocation remain mandatory. Repository tests use synthetic messages/providers only. Live ingestion, external task creation and sending are separately gated.
+Repository code supports native IMAP/SMTP for the existing SolveLang mailbox, optional Gmail, durable ingress/action state, safe cutover/recovery and account/operator controls. The support stack/provider path remains default-off until separately approved and deployed.
 
-## Release, security and operations
+Separately verified production evidence records API access, customer username/email + password sign-in, private Admin and TOTP infrastructure as live. Subscription billing, paid priority/provider execution, general managed workflow execution and the first PostHog canary remain off/unproven unless a newer protected production record says otherwise.
 
-Billing ownership/replay/payment-recovery and fail-closed internal mutation controls are merged through #879. Release machinery includes annotated-tag/source binding, packaged CLI version/provenance verification and non-publishable candidate/regeneration evidence through #885. Do not repeat those foundations or confuse candidate artifacts with a published release.
+## Distribution truth
 
-Recorded native artifact evidence is Linux x86_64 only. macOS ARM64 and Windows x64 require exact-platform build/package/install qualification before release-support claims. Browser/WASM is a separately qualified bounded runtime, not a substitute for native platform evidence. Runner availability and site tests do not establish native release support.
+The latest published GitHub MCP Server release is **v0.2.0** from 2026-07-20. Current repository source contains substantial MCP/Solve Context capabilities added after that release. Therefore:
 
-The [production-readiness record](docs/production-readiness.md), #113 and exact deployment/provider evidence govern launch decisions. The [August 20 production record](docs/current-production-status-2026-08-20.md) is dated evidence, not a fresh environment audit. Existing account/API/Admin/TOTP infrastructure must not be rebuilt just because an old plan calls it pending. Billing and paid-priority/provider activation remain gated in the last verified launch record. Monitoring code is not proof of deployed alarms, a working alert destination or a completed restore drill.
+- `@solvelang/mcp-server@0.2.0` is the published historical package line;
+- current-main capabilities must not be claimed as distributed through that old pin;
+- a future versioned MCP/package/plugin release is required before current-main Solve Context behavior can be described as publicly distributed;
+- repository CI proving a clean tarball/consumer install is release-readiness evidence, not publication.
 
-Keep current-head dependency audits, security review, rollback/disable paths, data protection and customer-facing acceptance qualified. Fix reported vulnerabilities rather than ignoring advisories. Seller identity, Terms/Privacy, refunds/cancellation, retention and support/billing commitments need owner/business decisions; a prepared page or checklist is not approval.
+## Project projection
 
-## Execution order and permission boundaries
+These are **priority projections, not delivery dates or completion percentages**.
 
-Work one hot implementation/merge candidate at a time, refresh its base/head/scope, fix actual failures on its existing branch, and require all applicable current-head checks plus clean blocking review state before expected-head merging. Missing, queued, cancelled or stale checks are not green. Use self-hosted Mac/Oracle/Windows only according to the current repository contract; never substitute another platform for required Mac evidence or change runner registration/services.
+### Priority 0 — prove Solve Context with real evidence
 
-When blocked by a live gate, continue independent repository implementation, realistic evaluation, release qualification or a demonstrated documentation correction. Do not create status-only PRs or new scaffolding merely to keep a loop busy. Do not publish unsupported completion percentages.
+1. Expand independent/blinded repository evaluation without weakening evidence budgets.
+2. Run separately authorized Claude and Codex baseline-vs-Solve-Context tasks covering all six acceptance categories and both handoff directions.
+3. Record provider-reported input/output usage, measured latency, selection precision/recall, task/evidence quality and zero cache-hot mutation where required.
+4. Keep public percentage/comparative claims disabled until the acceptance matrix is complete and reviewed.
+5. Prepare a versioned MCP/plugin distribution path for current-main capabilities after repository qualification.
 
-Repository-safe work does not authorize production deployment, AWS/IAM/KMS/DNS/private-ingress/Admin changes, live credentials/providers, inbox reads, messages/tasks, customer mutations, TOTP enrollment, billing/priority activation, charges/refunds, restoration drills or release/marketplace publication. Each needs its separately scoped approval and evidence. Historical approvals on #161/#164/#169 are not standing production permission.
+### Priority 0 — strengthen repository governance
 
-**Solve Runners/Solblend remains a separate deferred product, security and commercial boundary.** Its provisioning, registration, pricing, operating-system support and customer compute do not become part of this roadmap's launch authority.
+- Configure `main` protection/rules so required current-head checks and intended review policy are enforced by GitHub rather than manual discipline alone.
+- Preserve exact-head merge practice and security/advisory repair even after rules are strengthened.
+
+### Priority 1 — controlled product activation
+
+- Connected support: deploy default-off only under exact-scope approval, then prove one new-message task/reply and stop/recovery path.
+- PostHog: qualify the concrete credential/lifecycle backend and perform only the separately authorized bounded canary.
+- Billing/priority: keep disabled until live Stripe/provider configuration, monitoring, recovery, customer/legal materials and owner approvals are complete.
+
+### Priority 1 — release qualification
+
+- Add exact-platform native build/package/install evidence before claiming macOS ARM64 or Windows x64 support.
+- Select and publish future CLI/MCP versions only through the reviewed release boundaries; repository version metadata alone is not publication.
+
+### Deferred / separate product
+
+**Solve Runners / Solblend remains a separate security and commercial product.** Runner provisioning, customer compute, pricing and OS-capacity work do not become SolveLang launch authority.
+
+## Validation policy
+
+Work one hot implementation candidate at a time. Before merge, require the exact proposed head to have all applicable terminal-success checks and a clean blocking-review state. For MCP/Solve Context work this includes package tests, synthetic and pinned-repository evals, agent-record contract tests, dependency audit, plugin roundtrip and packed-consumer proof in addition to applicable repository CI/Rust/WASM lanes.
+
+Trusted Mac, Oracle ARM64 and Windows lanes are platform-specific evidence. Oracle/Windows never substitute for a declared Mac requirement, and runner availability is not itself a released-platform claim.
+
+## Hard boundaries
+
+Repository-safe work does not authorize production deployment, AWS/IAM/KMS/DNS/Cloudflare/Admin mutation, provider credentials, inbox reads/sends, external task creation, customer mutation, TOTP enrollment, Stripe configuration, charges/refunds, billing/priority activation, production source execution, restore drills, package/tag/release publication or business/legal commitments.
+
+Consult [`docs/production-readiness.md`](docs/production-readiness.md), the active issues above and exact dated deployment/provider records for those decisions.

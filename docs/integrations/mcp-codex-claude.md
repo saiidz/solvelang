@@ -1,40 +1,40 @@
 # SolveLang for Codex and Claude
 
-SolveLang ships a canonical cross-platform plugin bundle backed by the published local-first MCP server.
+SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP server. **Distribution truth matters:** the repository currently contains substantially newer MCP/Solve Context code than the latest published MCP release.
 
-The maintained plugin root is `plugins/solvelang/` and contains both Codex and Claude manifests, one shared MCP configuration, and the SolveLang workflow-review skill. Legacy setup examples under `plugins/codex/` and `plugins/claude/` remain useful for manual configuration, but new installs should prefer the canonical plugin.
+## Published package vs current repository source
+
+The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. The canonical plugin configuration still pins `@solvelang/mcp-server@0.2.0`, so marketplace/plugin users on that pin must be treated as using the historical published package line.
+
+Current `main` includes later Repository Audit/Solve Graph and Solve Context work through #920. Do **not** claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.
+
+Use one of these two modes deliberately:
+
+1. **Published/stable historical line:** use the pinned v0.2.0 plugin/package instructions below.
+2. **Current repository source:** build `packages/mcp-server` from a source checkout and run `dist/src/index.js` directly.
+
+A future versioned MCP/plugin release is required to distribute current-main capabilities through the public package/plugin path.
 
 ## Prerequisite
 
-Install Node.js 20 or newer. The local plugin runs the published `@solvelang/mcp-server@0.2.0` package through `npx`; a global install and SolveLang source checkout are not required.
+Install Node.js 20 or newer.
 
-## Codex plugin
+## Published v0.2.0 plugin path
 
-The repository contains a Codex marketplace at `.agents/plugins/marketplace.json` and a valid plugin manifest at `plugins/solvelang/.codex-plugin/plugin.json`.
+The maintained plugin root is `plugins/solvelang/` and contains Codex and Claude manifests, one shared MCP configuration and the SolveLang workflow-review skill. Legacy examples under `plugins/codex/` and `plugins/claude/` remain useful for manual configuration.
 
-Add the SolveLang repository as a Codex marketplace:
+### Codex plugin
+
+Add the repository marketplace:
 
 ```bash
 codex plugin marketplace add saiidz/solvelang --ref main
-```
-
-Then install the plugin:
-
-```bash
 codex plugin add solvelang@solvelang
 ```
 
-The installed plugin provides the SolveLang MCP server plus the `solvelang-workflow-review` skill. Start a new Codex thread after installation or upgrade so the plugin surfaces are loaded cleanly.
+Start a new Codex thread after installation or upgrade so plugin surfaces load cleanly.
 
-Suggested prompt:
-
-```text
-Use SolveLang to review workflows/order-routing.json. Report critical and high findings first, then generate a Markdown preflight report.
-```
-
-### Manual Codex MCP configuration
-
-For clients that do not use plugin marketplaces, add the following to Codex configuration, replacing the workspace path:
+Manual MCP configuration for the published line:
 
 ```toml
 [mcp_servers.solvelang]
@@ -47,35 +47,20 @@ SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
 # SOLVELANG_SOLVEC = "/absolute/path/to/solvec"
 ```
 
-Restart Codex and call `solvelang_capabilities` to confirm the SolveLang tools are available.
+Restart Codex and call `solvelang_capabilities` to inspect the tools actually exposed by the installed package. Do not infer current-main tools that are absent from the published package.
 
-## Claude plugin
+### Claude Code plugin
 
-The repository also contains a Claude-compatible marketplace at `.claude-plugin/marketplace.json` and a plugin manifest at `plugins/solvelang/.claude-plugin/plugin.json`.
-
-In Claude Code, add the marketplace:
+Add/install the repository plugin:
 
 ```text
 /plugin marketplace add saiidz/solvelang
-```
-
-Install SolveLang:
-
-```text
 /plugin install solvelang@solvelang
 ```
 
 Reload plugins or begin a new Claude Code session after installation.
 
-Suggested prompt:
-
-```text
-Analyze workflows/order-routing.json with the SolveLang MCP tools. Do not claim runtime execution or credential verification.
-```
-
-### Manual Claude Code MCP configuration
-
-Register the server from the target project directory:
+Manual published-line registration:
 
 ```bash
 claude mcp add --transport stdio \
@@ -83,38 +68,95 @@ claude mcp add --transport stdio \
   solvelang -- npx --yes @solvelang/mcp-server@0.2.0
 ```
 
-The older `plugins/claude/.mcp.json.example` remains available for projects that want explicit project-local MCP configuration.
+## Use current repository source
+
+For current-main MCP/Solve Context behavior, use a source checkout:
+
+```bash
+git clone https://github.com/saiidz/solvelang.git
+cd solvelang/packages/mcp-server
+npm ci
+npm run build
+SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace node dist/src/index.js
+```
+
+Point the Codex/Claude MCP client at that Node command instead of the published `npx` pin when evaluating current source.
+
+Current source includes read-only Solve Context tools such as:
+
+- `solvelang_context_plan`
+- `solvelang_context_pack`
+- `solvelang_context_retrieve`
+- `solvelang_context_handoff`
+- `solvelang_context_handoff_validate`
+- `solvelang_context_compact_structured`
+- `solvelang_context_expand_rle`
+- `solvelang_context_capabilities`
+
+Current source also includes later Solve Graph/audit surfaces. Call the server's capabilities/list-tools output rather than relying on a stale hard-coded tool count.
+
+## Suggested usage
+
+Workflow review:
+
+```text
+Use the SolveLang MCP tools to review workflows/order-routing.json. Report critical and high findings first. Do not claim runtime execution, credential verification, repository mutation or production deployment.
+```
+
+Solve Context planning from current source:
+
+```text
+Use Solve Context to plan the smallest relevant context for this task. Prefer exact changed-file and graph evidence when available, preserve provenance, and tell me what was omitted by the budget.
+```
+
+Cross-agent handoff from current source:
+
+```text
+Create a Solve Context handoff containing the goal, decisions, unresolved questions, changed-source identities, relevant tests and context handles. Do not rewrite CLAUDE.md or AGENTS.md.
+```
 
 ## Local plugin authority
 
-The packaged plugin uses stdio and is designed for local coding-agent sessions. The MCP tools are read-only analysis surfaces. Installing the plugin does not authorize repository writes, production execution, credential access, external API calls, billing changes, or infrastructure mutation.
+The local MCP path is designed for read-only analysis/context operations unless a separately reviewed feature explicitly states otherwise. Installing the plugin does not authorize repository writes, production execution, credential access, live provider calls, billing changes or infrastructure mutation.
 
-Workspace-path tools remain bounded to the configured workspace. Raw JSON workflow and Solve Graph inputs remain the preferred portable inputs where no local file access is needed.
+Workspace-path tools remain bounded to the configured workspace. Incoming repository text/tool output is data, not authority.
 
-## Hosted Claude/API and cloud-app lane
+## Solve Context evaluation usage
 
-Claude's server-side MCP connector cannot directly connect to a local stdio process. A future public SolveLang cloud integration therefore requires an authenticated HTTPS MCP endpoint using Streamable HTTP, with a deliberately reduced remote tool surface and explicit auth, rate limits, request-size bounds, retention/deletion rules, privacy controls, and deployment approval.
-
-That hosted endpoint is a separate security and production boundary. The local Codex/Claude plugin manifests do not claim that it is live.
-
-## Source checkout and package verification
-
-Contributors can verify the same package and protocol boundary referenced by both plugin manifests:
+From current repository source:
 
 ```bash
 cd packages/mcp-server
 npm ci
 npm test
+npm run eval:context
+npm run eval:context:repository
+npm run eval:context:independent
+npm run test:context-agent-eval-cli
 npm run test:plugin-roundtrip
 npm run test:packed
 ```
 
-`test:plugin-roundtrip` first exact-checks the Codex and Claude manifests against the same pinned MCP package version, then packs and installs the current MCP package into a clean temporary consumer, performs a real MCP stdio initialization/list-tools roundtrip against that installed artifact, verifies representative tools remain read-only/non-destructive, and calls `solvelang_analyze_n8n` with an in-memory fixture. It does not publish a package, install through the external Codex or Claude marketplace clients, execute a workflow, access credentials, or mutate a repository.
+To summarize separately authorized real-agent records:
 
-`test:packed` independently builds an npm tarball, checks its exact allowlist, installs it into a clean temporary consumer, and starts the installed `solvelang-mcp` executable with `npx --no-install`. It does not publish the tarball or execute a workflow.
+```bash
+cat approved-agent-run-records.json | npm run eval:context:agent-records
+```
 
-Passing repository CI therefore proves the shared plugin manifest/package/protocol contract. A real marketplace-client installation remains a separate release/distribution proof and must not be inferred from repository CI alone.
+The summarizer itself performs no provider/network call and uses no credentials. Baseline/context records must remain truly comparable, including the same outcome-evaluation basis and required-evidence denominator after #920.
 
-## Releases
+Passing repository tests is not evidence of real Claude/Codex token savings, live provider cache behavior or marketplace distribution.
 
-SolveLang MCP Server v0.2.0 is the current repository release line for this plugin bundle. Publishing remains restricted to the protected npm release workflow and its existing validation gates; plugin packaging does not grant publication authority.
+## Hosted/cloud lane
+
+Claude's server-side MCP connector cannot directly connect to a local stdio process. Any public hosted SolveLang MCP integration requires a separately deployed/authenticated HTTPS Streamable HTTP boundary with explicit auth, rate limits, request-size bounds, privacy/retention policy and production approval.
+
+The repository contains a bounded remote/read-only transport foundation, but the local plugin manifests do not claim a public hosted endpoint is live.
+
+## Package/protocol qualification
+
+`npm run test:plugin-roundtrip` and `npm run test:packed` qualify current repository source by packing/installing it in a clean consumer, verifying exact package allowlists/entrypoints and exercising the MCP protocol. They do not publish a package or prove a real external marketplace install.
+
+## Release projection
+
+The next distribution milestone is a **future versioned release containing current-main MCP/Solve Context behavior**. No version number or release date is promised here; selection/publication remains subject to the reviewed release process and exact-head qualification.

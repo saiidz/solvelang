@@ -1,739 +1,372 @@
 # SolveLang Strategy
 
-_Last updated: 2026-08-06._
+_Last reconciled: 2026-09-15, repository state through #920._
+
+This document replaces the dated August 2026 calendar roadmap with current priority projections while preserving the durable product, audience, service, proof, portfolio and decision principles that still apply. Older dated strategy remains available in Git history as historical planning evidence.
 
 ## Strategic premise
 
 SolveLang should become valuable before it becomes large.
 
-The near-term objective is not to build a universal automation platform. It is to turn an existing technical prototype into a credible portfolio, a repeatable consulting method, and a focused product direction.
+The project is no longer only a language prototype. Current repository work spans:
 
-The positioning is:
+- a readable workflow language and canonical Rust runtime;
+- deterministic Workflow Intelligence / Repository Audit / Solve Graph / Server Audit surfaces;
+- a local-first Codex/Claude MCP integration path;
+- the separate Solve Context context-selection/compaction layer;
+- repository-safe Self-Driving authority/safety contracts;
+- connected-support foundations;
+- a limited separately verified live customer-account/API/Admin/TOTP foundation.
 
-> **SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.**
+Those surfaces must remain clearly separated by maturity: repository implementation is not publication, publication is not deployment, and deployment is not measured provider/customer success.
 
 The operating model is:
 
-1. make workflow intent readable and reviewable,
-2. separate deterministic logic from AI-assisted judgment,
-3. validate and explain safety boundaries,
-4. use existing platforms when they are the right execution environment,
-5. productize repeated consulting patterns over time.
+1. make workflow and repository intent readable, reviewable and evidence-backed;
+2. separate deterministic logic from model-driven judgment;
+3. reduce irrelevant agent context without sacrificing exact source provenance;
+4. make authority, privacy, provider and production boundaries explicit;
+5. use established execution/integration platforms when they remain the better runtime;
+6. productize repeated high-value patterns only after evidence justifies expansion.
 
 ## Mission
 
-Help technical teams, operators, and consultants describe AI-assisted business processes in a form that humans can read, engineers can review, and organizations can audit.
+Help technical teams, operators, consultants and AI coding workflows express, inspect and reason about systems in forms humans can review and machines can validate without silently expanding authority.
 
 ## Vision
 
-A future in which business workflows are not trapped inside screenshots, visual canvases, proprietary exports, or undocumented application code.
+A future where important workflow and engineering intent is not trapped inside screenshots, visual canvases, opaque prompts, proprietary exports or undocumented application code.
 
-SolveLang should become a portable explanation and design layer for workflows: one source-controlled definition that communicates intent, AI boundaries, tools, approvals, expected outputs, and failure behavior.
-
-This vision does not require SolveLang to execute every workflow itself. The most credible long-term architecture may allow approved SolveLang definitions to target existing runtimes and integration platforms.
+SolveLang should provide portable, source-controlled definitions and evidence that communicate deterministic rules, model-assisted decisions, tools, approvals, dependencies, expected outputs and failure behavior. That does not require SolveLang to replace every runtime or orchestration platform.
 
 ## Principles
 
 ### Readable
-
-A workflow should communicate its purpose without requiring the reader to reverse-engineer framework plumbing.
+Intent should be understandable without reverse-engineering framework plumbing.
 
 ### Version controllable
-
-Workflow changes should be diffable, reviewable, attributable, and reversible.
+Changes should be diffable, reviewable, attributable and reversible.
 
 ### Human understandable
+A process owner should be able to discuss the system with an engineer even when they do not implement the runtime.
 
-A process owner should be able to discuss the workflow with an engineer, even when the owner cannot implement the runtime.
-
-### AI friendly
-
-The language should be easy for AI systems to explain, draft, validate, and transform, while never treating generated output as automatically correct.
+### AI friendly, not AI-trusting
+Models should be able to explain, draft and use SolveLang tooling, but generated output and incoming data are never automatically correct or authoritative.
 
 ### Auditable
+Decision points, data movement, tool/provider access, approvals, evidence and failure paths should remain explicit.
 
-The workflow should expose decision points, tool access, data movement, approvals, and failure paths.
+### Correctness first
+Token/byte savings, automation breadth and launch speed never justify hidden quality regression or weakened safety gates.
 
-### Maintainable
-
-Reusable components, clear naming, diagnostics, tests, and documentation are more important than clever syntax.
+### Local-first where practical
+Analysis/context planning should avoid network/provider/credential requirements when deterministic local evidence is enough.
 
 ### Composable
+Small validated modules, reports, graph evidence and context packs should combine without hiding their provenance or authority.
 
-Small validated workflows and modules should combine into larger processes without hiding their behavior.
+## Product pillars
+
+### 1. SolveLang language and runtime
+
+A readable source-controlled workflow language with a canonical Rust implementation, explicit local modules, deterministic validation/check/lint/format tooling, structured diagnostics, bounded browser/WASM preview and hardened execution modes.
+
+Near-term strategy: correctness, clarity and implementation-backed specification before a rushed universal package ecosystem or 1.0 promise.
+
+### 2. Workflow Intelligence / Repository Audit / Solve Graph / Server Audit
+
+Local/read-only deterministic analysis that explains workflow/repository/server structure, relationships, affected validation candidates, architecture/security evidence and bounded uncertainty. Static/collected evidence should assist review without being misrepresented as runtime truth or automatic remediation authority.
+
+### 3. Solve Context
+
+A separate product layer for Claude Code and Codex based on **context prevention before compression**.
+
+Current source includes exact plan/pack/retrieve/handoff, correctness-first structured compaction, changed-path/graph-aware selection, pinned real-source regressions and strict real-agent measurement contracts through #920.
+
+Strategic next milestone: measured real-agent evidence plus versioned distribution, not another foundational rewrite.
+
+### 4. Self-Driving authority layer
+
+The Observe → Understand → Find → Propose → Test → PR → Deploy → Measure → Learn direction remains useful only when each stage has an explicit authority boundary. Repository code includes bounded suggestion/PR/provider credential contracts, but live signers/providers, auto-merge and production rollout remain separately activated capabilities.
+
+### 5. Connected support
+
+Repository code now includes native IMAP/SMTP plus optional Gmail support foundations with durable state, safe cutover/recovery, controls and monitoring preparation. Strategy: prove one narrow reliable support workflow under exact-scope authorization before broadening automation.
+
+### 6. Account/API/Admin commercial foundation
+
+API access, customer password accounts, private Admin and TOTP infrastructure have separate live evidence. That is a foundation, not proof the full SaaS/business model is launched. Billing, paid priority/provider execution, connected-support activation and managed workflow execution remain separately gated.
 
 ## Product truth model
 
-Every public document and interface should classify capabilities using these labels.
+Every current-facing document should classify claims by evidence state.
 
-### Working today
+### Implemented / repository-tested
+Behavior present in current source and covered by appropriate tests/CI.
 
-Supported by the repository and manually or automatically testable now.
+### Published / distributed
+A versioned artifact actually released to users. The latest published MCP GitHub release is **v0.2.0 (2026-07-20)** and predates substantial current-main Solve Context work.
 
-Current examples include:
+### Deployed / live
+A separately verified external/production state. Current central evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live; billing, paid priority/provider execution, connected-support activation, first PostHog canary and general managed execution are not established live.
 
-- the Rust lexer, parser, AST, and interpreter prototype
-- CLI run, validate, tokens, AST, and help commands
-- variables, conditions, loops, functions, arrays, objects, imports, JSON helpers, and diagnostics documented in the language reference
-- source-located runtime errors
-- hardened execution modes that restrict sensitive capabilities
-- a local-first deterministic Workflow Intelligence Studio
-- a smaller browser-safe `/run` preview
-- repository examples, documentation, tests, and launch-readiness controls
+### Measured
+A performance/quality/adoption claim backed by the required measurement basis. Solve Context has synthetic and pinned-source regression evidence, but complete real Claude/Codex provider-token/task/cache/latency evidence is not yet established.
 
-### Experimental
-
-Implemented but unstable, narrow, provider-dependent, or unsuitable for production promises.
-
-Current examples include:
-
-- HTTP helpers
-- file and environment helpers
-- AI agent syntax
-- local AI fallback behavior
-- optional OpenAI-backed responses
-- draft generation from the broader Studio model
-- test-mode API access, customer accounts, and subscription infrastructure
-
-### Planned
-
-A direction or roadmap item without a working implementation.
-
-Examples include:
-
-- stable language specification
-- full hosted Rust runtime
-- production integrations
-- managed workflow execution
-- runtime adapters for established orchestration platforms
-- broader AI-provider support
-- production packaging and releases
-- enterprise governance and durability
-
-No planned capability should be written as if it exists.
+### Planned / projected
+Direction without a completed implementation/distribution/live/measurement claim. Projection is priority, not a promised delivery date or percentage.
 
 ## Ideal users
 
-### Primary: technical founders and hands-on operators
+### Technical founders and hands-on operators
 
-Characteristics:
+Good fit when teams:
 
-- own internal processes across several SaaS tools
-- understand the business problem but may not want a large custom application
-- need better documentation and control than ad hoc automation provides
-- are willing to work with a technical consultant
+- own important internal processes across several SaaS/custom tools;
+- understand the business problem but do not want a large custom application;
+- need better documentation/control than ad hoc automation provides;
+- value source-controlled review and explicit AI/tool boundaries.
 
-Best initial problems:
+Strong early problems include support intake/triage, lead qualification/routing, approval workflows, document classification, recurring operational reporting and human-reviewed AI summarization.
 
-- support intake and triage
-- lead qualification and routing
-- approval workflows
-- document classification
-- recurring operational reports
-- human-reviewed AI summarization
+### Automation consultants and small agencies
 
-### Primary: automation consultants and small agencies
+They often build in n8n, Make, Zapier, Pipedream or custom code but need a consistent discovery/specification/audit/handoff method. SolveLang can be the readable specification/evidence layer even when another platform executes the workflow.
 
-Characteristics:
+### Engineering teams using AI-assisted development/workflows
 
-- implement workflows in n8n, Make, Zapier, Pipedream, custom code, or mixed environments
-- need a consistent discovery and documentation method
-- struggle with handoff, maintenance, and scope control
-- benefit from reusable examples and audit artifacts
+Good fit when teams care about Git, tests, deterministic analysis, safety boundaries, dependency evidence, context quality and explicit model/tool authority. Solve Context and Solve Graph should complement existing coding agents/runtimes rather than demand replacement.
 
-SolveLang can become their specification and explanation layer, even when another platform executes the final workflow.
+### Recruiters and hiring managers
 
-### Secondary: engineering teams evaluating AI-assisted workflows
+Not product users, but a relevant repository audience. The project should make technical proof easy to inspect across language/runtime design, Rust/TypeScript, cloud/security, deterministic analysis, MCP/context engineering and product decision-making.
 
-Characteristics:
+## Users not to target first
 
-- care about Git, review, tests, safety boundaries, and observability
-- want deterministic logic separated from model behavior
-- may use LangGraph, OpenAI Agents SDK, Temporal, Airflow, or internal services
+- nontechnical consumers seeking one-click personal automation;
+- enterprises requiring certified production orchestration immediately;
+- data teams seeking an Airflow replacement;
+- backend teams seeking a Temporal replacement;
+- organizations selecting a BPMN standards suite;
+- buyers whose primary requirement is thousands of connectors;
+- teams expecting autonomous agents with no human governance;
+- customers expecting a finished managed execution/SaaS platform today.
 
-SolveLang should help them prototype intent and produce review artifacts, not demand replacement of their runtime.
+## Differentiation
 
-### Secondary: recruiters and hiring managers
+SolveLang's defensible near-term differentiation is the combination of:
 
-They are not product users, but they are an important audience for the repository. They should be able to verify that the founder can:
+- a real language/runtime implementation rather than only UI configuration;
+- deterministic, bounded, read-only evidence and explicit uncertainty;
+- readable/source-controlled workflow intent;
+- source-level diagnostics and local modules;
+- Solve Graph structural evidence;
+- Solve Context prevention-first context selection with exact provenance;
+- explicit authority boundaries for model/provider/write/production actions;
+- honest maturity/distribution/deployment labels.
 
-- design and implement a language runtime
-- work in Rust and TypeScript
-- build APIs and cloud infrastructure
-- reason about security and IAM
-- design AI-assisted workflows
-- write tests and diagnostics
-- communicate architecture and tradeoffs
-- convert technical work into product and business strategy
+Do not differentiate by claiming an unmeasured savings percentage, unsupported enterprise reliability, or universal runtime coverage.
 
-## Users SolveLang should not target first
+## Usage strategy
 
-- nontechnical consumers seeking one-click personal automations
-- enterprises requiring certified production orchestration immediately
-- data teams seeking a replacement for Airflow
-- backend teams seeking a replacement for Temporal
-- organizations selecting a BPMN standard suite
-- buyers whose main requirement is thousands of connectors
-- teams expecting autonomous AI workers without human governance
+### Language/runtime
+Make local deterministic CLI usage excellent first: readable workflows, actionable diagnostics, explicit modules, safe modes and clear specification.
 
-## Unique value proposition
+### Audit/graph
+Optimize for developer/operator review: exact evidence, stable identities, bounded uncertainty, reusable JSON/Markdown/visual outputs and no source execution.
 
-### Core value proposition
+### Codex/Claude + Solve Context
+Support two explicit lanes:
 
-> Define business-process logic, AI-assisted decisions, tools, approvals, and safety boundaries in readable source-controlled workflows.
+- **published historical package:** use the version actually released (currently v0.2.0) and inspect its actual capabilities;
+- **current repository source:** build `packages/mcp-server` from source to evaluate current-main Solve Context behavior until a new version is published.
 
-### Why that matters
+Never blur those lanes.
 
-Visual automations are quick to build but can be hard to review and maintain. General-purpose code is powerful but often hides process intent behind implementation detail. Agent frameworks enable complex AI behavior but are primarily designed for engineers.
+### Commercial/API
+Use the live account/API foundation conservatively. Avoid enabling billing/provider execution merely to create the appearance of launch. Commercial activation should follow evidence, monitoring/recovery readiness, customer/legal clarity and explicit approval.
 
-SolveLang aims to occupy the middle layer:
+## Current project projection
 
-- simpler than a full application codebase
-- more reviewable than a visual canvas
-- more explicit than an autonomous agent prompt
-- lighter than enterprise BPM suites
-- portable across implementation choices over time
+These are priorities, not delivery-date promises.
 
-### Defensible near-term differentiation
+### P0 — prove Solve Context
 
-- language implementation rather than only UI configuration
-- deterministic analysis and explicit safety modes
-- human-readable process source
-- source-level diagnostics
-- local-first workflow analysis
-- clear maturity labels
-- service-first implementation path
+- Broaden independent/blinded repository evaluation without weakening evidence sets or byte budgets.
+- Run separately authorized real Claude and Codex baseline-vs-context tasks across all six fixture classes and both handoff directions.
+- Record provider-reported tokens, measured latency, selection precision/recall, task/evidence quality and zero safe-mode cache-hot mutation.
+- Keep public percentage/competitor claims fail-closed until evidence and separate publication review are complete.
+- Qualify a future versioned MCP/plugin release containing current-main capabilities.
 
-## Product architecture strategy
+### P0 — enforce repository governance
 
-### Layer 1: language and static understanding
+The current `Protect main` ruleset does not enforce the checks/reviews the engineering loop already treats as mandatory. Strengthen repository rules so required current-head checks and intended review policy are enforced by GitHub rather than manual discipline alone.
 
-Purpose:
+### P1 — controlled activation
 
-- parse and validate workflow source
-- expose readable diagnostics
-- model deterministic control flow
-- identify AI, tool, data, and approval boundaries
-- generate explanation and evidence artifacts
+- Connected support: deploy default-off under exact-scope approval, then prove one new-message task/reply plus stop/recovery outcome.
+- PostHog: qualify concrete credential/lifecycle scope and run only the separately authorized bounded canary.
+- Billing/priority: keep off until provider configuration, monitoring/recovery, customer/legal acceptance and explicit owner approvals are complete.
 
-Priority: highest.
+### P1 — release/platform evidence
 
-### Layer 2: trusted local execution
+- Add exact macOS ARM64 and Windows x64 native build/package/install evidence before cross-platform native support claims.
+- Select new CLI/MCP versions only through the reviewed source/tag/artifact/publication path.
 
-Purpose:
+### Separate/deferred — Solve Runners / Solblend
 
-- run prototype workflows through the Rust CLI
-- preserve explicit safety modes
-- support deterministic examples
-- keep side effects controlled and documented
+Runner provisioning, customer compute, OS capacity and pricing are a distinct security/commercial product. SolveLang may dogfood runner infrastructure, but Solve Runners must not silently become language/audit/context launch authority.
 
-Priority: high, but production claims remain prohibited.
+## Service and revenue strategy
 
-### Layer 3: Studio and derived views
+### Stage 1 — fixed-scope expert services
 
-Purpose:
+Initial revenue can come from expertise without pretending subscription software is finished.
 
-- visualize workflows
-- run deterministic analysis
-- simulate scenarios
-- review traces and quality indicators
-- export evidence
+Examples:
 
-Rule: the visual view is derived from explicit workflow definitions and analysis; it should not replace the source of truth.
+- workflow clarity / explainability audits;
+- automation rescue/documentation;
+- repository/workflow architecture reviews;
+- bounded prototype sprints using the customer's chosen runtime;
+- AI-boundary/tool/approval reviews.
 
-### Layer 4: provider and platform adapters
+Sell clear outcomes/deliverables and explicit exclusions rather than generic “AI transformation.”
 
-Possible future targets:
+### Stage 2 — implementation and maintenance
 
-- OpenAI Agents SDK
-- n8n
-- Pipedream
-- Temporal
-- Airflow
-- custom HTTP services
+Where demand is real:
 
-Priority: only after service work proves repeated demand.
+- implement/refactor workflows using appropriate client platforms;
+- use SolveLang definitions/evidence for specification and review;
+- include acceptance tests, failure handling, rollback and handoff;
+- optionally provide maintenance/change review with model/platform costs reported separately.
 
-### Layer 5: managed hosted execution
+### Stage 3 — reusable paid assets/tools
 
-Possible future purpose:
+Only after repeated demand: report generators, audit templates, workflow packs, implementation accelerators, CI validation or training/workshops.
 
-- authenticated workflow execution
-- managed secrets and connections
-- usage metering
-- logs and traces
-- team environments
-- deployment controls
+### Stage 4 — narrow SaaS/managed tooling
 
-Priority: later. This layer has the highest security, reliability, compliance, and operational burden and should not be rushed.
-
-## 90-day roadmap
-
-The roadmap is organized by outcomes, not feature volume.
-
-### Days 1–30: make the project understandable and demonstrable
-
-**Portfolio**
-
-- rewrite the README around the new positioning
-- add exact current-maturity labels
-- publish a recruiter-first navigation path
-- document architecture and repository structure
-- remove unsupported marketing language
-
-**Demo**
-
-- define what works today, preview, experimental, and planned
-- choose one canonical support-triage demo
-- create a 90-second and 5-minute walkthrough
-- capture required screenshots and expected outputs
-
-**Examples**
-
-- standardize examples around problem, input, workflow, output, explanation, business value, and limitations
-- validate every executable example with the canonical CLI
-
-**Business**
-
-- define one entry offer: workflow discovery and explainability audit
-- define scope, deliverables, timeline, price hypothesis, and exclusions
-
-**Success criteria**
-
-- a new visitor understands SolveLang in under 10 seconds
-- a developer can run the canonical demo in under 15 minutes
-- a recruiter can find technical proof without reading the whole repository
-- no roadmap item is presented as available
-
-### Days 31–60: turn the repository into a service-delivery asset
-
-**Consulting assets**
-
-- create discovery questionnaire
-- create current-state workflow inventory template
-- create risk and AI-boundary checklist
-- create implementation proposal template
-- create 30-day delivery plan
-
-**Developer experience**
-
-- improve CLI help and onboarding gaps discovered during documentation work
-- standardize terminology and folder naming
-- improve error messages only where reproducible friction exists
-
-**Evidence**
-
-- produce architecture diagrams
-- document engineering decisions and tradeoffs
-- publish sample audit deliverables using fictional data
-
-**Outbound**
-
-- create a small list of founder-led outreach targets
-- offer a fixed-scope pilot rather than a software subscription
-
-**Success criteria**
-
-- one complete fictional client engagement can be demonstrated end to end
-- every service deliverable maps to a repository artifact
-- the founder can explain the project at 90-second, 5-minute, and 15-minute depths
-
-### Days 61–90: validate demand and productize repetition
-
-**Customer discovery**
-
-- conduct targeted interviews with technical founders, agencies, and operations teams
-- record problems, current tools, maintenance pain, buying authority, and willingness to pay
-- avoid counting compliments as demand
-
-**Paid pilot goal**
-
-- sell a workflow audit, documentation sprint, or prototype implementation
-- collect permission before publishing any case study
-- measure time spent and reusable assets created
-
-**Product decisions**
-
-- identify repeated needs across engagements
-- prioritize one narrow reusable capability
-- reject features that only serve one hypothetical buyer
-
-**Success criteria**
-
-- at least one paid or clearly budgeted pilot, or an explicit conclusion that the offer needs repositioning
-- documented evidence for the next product investment
-- a backlog ordered by observed demand rather than speculation
-
-## 12-month roadmap
-
-### Quarter 1: credibility and first service offer
-
-- complete portfolio, demo, recruiter, business, and open-source packets
-- establish canonical examples
-- validate API-access test infrastructure without production claims
-- launch workflow audit and implementation services
-
-### Quarter 2: repeatable service delivery
-
-- deliver small projects using existing client platforms
-- use SolveLang definitions as specifications and handoff artifacts
-- build reusable templates for common business processes
-- document anonymized patterns and lessons
-- improve validation and explanation based on real delivery friction
-
-### Quarter 3: first narrow productization
-
-Choose only one based on evidence, such as:
-
-- workflow explainability report generator
-- visual-flow-to-readable-specification service
-- deterministic AI-boundary auditor
-- approved workflow template pack
-- adapter for one execution platform
-
-Do not launch multiple product lines.
-
-### Quarter 4: evaluate managed product economics
-
-- measure service revenue, delivery time, repeated requests, support burden, and hosting risk
-- decide whether to remain service-led, offer paid developer tooling, or build a narrow hosted product
-- create production-readiness criteria before exposing managed execution
-- pursue partnerships with automation agencies or implementation firms if useful
-
-## Revenue roadmap
-
-### Stage 1: fixed-scope services
-
-The first revenue should come from expertise, not subscription software.
-
-#### Workflow clarity audit
-
-Possible scope:
-
-- interview stakeholders
-- inventory current process and tools
-- identify failure points and manual work
-- separate deterministic and AI-assisted decisions
-- produce readable workflow specification
-- produce risk and implementation recommendations
-
-Initial pricing hypothesis: a fixed fee based on scope, not an hourly public rate. The business packet should test ranges rather than present unvalidated prices as established market rates.
-
-#### Workflow prototype sprint
-
-Possible scope:
-
-- one approved use case
-- one SolveLang specification
-- one implementation prototype in an agreed platform
-- test cases and failure paths
-- documentation and handoff
-
-#### Automation rescue and documentation
-
-For organizations with fragile Zapier, Make, or n8n workflows:
-
-- inventory existing automation
-- document hidden assumptions
-- identify duplicated logic and unsafe AI steps
-- recommend simplification
-- produce maintenance documentation
-
-### Stage 2: implementation and retainers
-
-#### Implementation package
-
-- build or refactor workflows using the client's chosen tools
-- use SolveLang artifacts for specification and review
-- include acceptance criteria, tests, and rollback plan
-
-#### Monthly maintenance
-
-- monitor failures
-- review changes
-- update documentation
-- control model and automation costs
-- perform quarterly workflow audits
-
-### Stage 3: reusable paid assets
-
-Potential products after demand validation:
-
-- industry workflow packs
-- audit templates
-- implementation accelerators
-- CI validation tools
-- report generators
-- private training and workshops
-
-### Stage 4: narrow SaaS or managed developer tool
-
-Only pursue when repeated service work demonstrates:
-
-- a frequent problem
-- a consistent buyer
-- measurable value
-- manageable support burden
-- safe and economical hosting
-- a reason existing platforms cannot solve it adequately
+Pursue only if repeated work establishes a frequent problem, consistent buyer, measurable value, manageable support/hosting risk and a reason existing platforms cannot solve it adequately.
 
 ## Service packaging principles
 
-- Sell outcomes and deliverables, not "AI transformation."
+- Sell outcomes and deliverables, not hype.
 - Use fixed scope and explicit exclusions.
 - Require a human approval owner for consequential decisions.
-- Prefer the client's existing tools when appropriate.
+- Prefer customer/existing tools when appropriate.
 - Never promise full automation before observing the process.
-- Include failure handling and maintenance in every implementation plan.
-- Document model, platform, and usage costs separately.
+- Include failure handling and maintenance in implementation plans.
+- Document model/platform/usage costs separately.
 
-## Technical roadmap
+## Marketing and proof
 
-### Immediate
+Useful themes include maintainability of visual automation, separating deterministic rules from AI judgment, reviewing workflows/repositories in Git, context quality, failure/approval design, and honest runtime/tool choice.
 
-- preserve parser/runtime correctness
-- maintain fail-closed safety behavior
-- keep executable examples validated
-- improve status labeling and documentation
-- stabilize test-mode API authorization and billing infrastructure
-- document the boundary between Studio and canonical runtime
+Proof hierarchy:
 
-### Near term
-
-- improve static analysis around AI and side-effect boundaries
-- define a minimal workflow explanation schema
-- improve deterministic report export
-- strengthen examples and tests
-- document compatibility guarantees and known gaps
-- create architecture decision records for major changes
-
-### Evidence-led future
-
-- typed workflow interfaces
-- explicit approval primitives
-- provider-neutral AI step declarations
-- trace and evidence schema
-- adapter interface for external runtimes
-- one validated execution adapter
-- packaging and release automation
-
-### Later, only with readiness criteria
-
-- hosted full runtime
-- managed connections and secrets
-- team workspaces
-- deployment environments
-- production observability
-- billing and quotas
-- support and incident procedures
-- compliance work
-
-## Marketing roadmap
-
-### Foundation
-
-- honest README
-- clear website hero
-- current-status page
-- canonical demo
-- architecture diagram
-- recruiter packet
-- consulting packet
-
-### Content themes
-
-1. Why visual automations become hard to maintain.
-2. How to separate business rules from AI judgment.
-3. How to review workflows in Git.
-4. How to document failure and approval paths.
-5. How to choose between Zapier, n8n, Temporal, Airflow, and agent frameworks.
-6. Building an interpreter and safety model in Rust.
-7. Honest lessons from AI-assisted product development.
-
-### Distribution
-
-- GitHub repository and releases
-- founder LinkedIn posts
-- technical architecture articles
-- short demo videos
-- implementation case studies with permission
-- targeted outreach to agencies and technical founders
-- relevant open-source communities without spam
-
-### Proof hierarchy
-
-Marketing claims should use the strongest available proof in this order:
-
-1. reproducible test or command
-2. source code and documentation
-3. screenshot or recorded demo
-4. anonymized client result with permission
-5. customer quote with permission
+1. reproducible test/command;
+2. source code and documentation;
+3. captured demo/evidence artifact;
+4. anonymized customer result with permission;
+5. customer quote with permission.
 
 Never substitute aspirational copy for proof.
 
-## Portfolio strategy
+## Portfolio and hiring value
 
-SolveLang should demonstrate senior-level work across multiple dimensions.
+SolveLang should make senior-level work inspectable across:
 
-### Language engineering
+- language engineering — lexer/parser/AST/interpreter/modules/diagnostics;
+- systems/platform — Rust, TypeScript, APIs, AWS, DynamoDB/IAM, CI/release boundaries;
+- AI/context — tool/provider boundaries, Solve Context, evaluation contracts, correctness/safety;
+- product/developer experience — Studio, CLI, docs, examples and maturity labeling;
+- technical product/consulting — competitive analysis, roadmap tradeoffs, service packaging and architecture communication.
 
-- lexer, parser, AST, interpreter
-- diagnostics
-- imports and runtime semantics
-- language reference and examples
-
-### Systems and platform engineering
-
-- Rust runtime
-- API design
-- AWS SAM infrastructure
-- DynamoDB consistency and transactions
-- IAM least privilege
-- CI/CD and test-mode gates
-
-### AI engineering
-
-- explicit agent syntax
-- provider adapters
-- guardrails and safety boundaries
-- deterministic versus model-driven behavior
-- usage and cost awareness
-
-### Product engineering
-
-- local-first Studio
-- user-facing examples
-- status and maturity design
-- demo experience
-- documentation architecture
-
-### Technical product and consulting
-
-- competitive analysis
-- roadmap prioritization
-- service packaging
-- ROI reasoning
-- discovery and implementation methodology
-
-## Hiring-position alignment
-
-### AI engineer / AI automation engineer
-
-Emphasize workflow modeling, provider integration, safety, evaluation boundaries, prompt/tool declarations, and cost-aware execution.
-
-### Software engineer
-
-Emphasize Rust, parser/runtime design, tests, diagnostics, APIs, TypeScript, and architecture.
-
-### Platform engineer
-
-Emphasize IAM, DynamoDB transactions, serverless deployment, fail-closed configuration, observability plans, and runtime boundaries.
-
-### Solutions engineer / implementation engineer
-
-Emphasize translating business processes into technical systems, demos, integration strategy, scoping, and handoff.
-
-### Developer relations
-
-Emphasize language design communication, examples, onboarding, docs, demos, and open-source readiness.
-
-### Technical product manager
-
-Emphasize market mapping, truth-based maturity labels, roadmap tradeoffs, service-led validation, and measurable milestones.
-
-## Decision framework for new features
+## Feature decision framework
 
 Before accepting a feature, answer:
 
 1. Which validated user problem does it solve?
-2. Is the need about description, analysis, execution, or operations?
-3. Does an established platform already solve the runtime problem better?
+2. Is the need description, analysis, context, execution or operations?
+3. Does an established platform solve the runtime problem better?
 4. Can SolveLang integrate instead of duplicate?
-5. What new security or support burden appears?
-6. How will the feature be tested and demonstrated?
-7. Is it working, experimental, or planned?
-8. Does it strengthen the portfolio, consulting offer, or validated product path?
-9. Can it be delivered in a small reviewable PR?
+5. What security/privacy/support burden appears?
+6. What authority does the feature require, and how is it bounded?
+7. How will it be tested/evaluated?
+8. Is it implemented, published, deployed, measured or only projected?
+9. Can it be delivered in a small reviewable change?
 
-Reject or defer work that cannot answer these questions.
+Reject/defer work that cannot answer these questions.
 
-## Key risks
+## Key risks and controls
 
 ### Scope expansion
-
-Risk: trying to become a language, IDE, SaaS automation platform, agent framework, BPM suite, and consulting business simultaneously.
-
-Control: one primary positioning and one narrow outcome per PR.
+Risk: becoming a language, IDE, SaaS platform, agent framework, BPM suite and runner business simultaneously.  
+Control: explicit product boundaries, one hot mission/PR, and evidence-led expansion.
 
 ### Marketing ahead of reality
+Risk: copy creates expectations the repository/provider/production state cannot satisfy.  
+Control: implementation/publication/deployment/measurement labels and reproducible proof.
 
-Risk: portfolio copy creates expectations the runtime cannot satisfy.
-
-Control: status labels, reproducible demos, and explicit limitations.
-
-### Building infrastructure before demand
-
-Risk: expensive hosted execution consumes time and money without customers.
-
-Control: service-first validation and readiness gates.
+### Infrastructure before demand
+Risk: managed execution/provider infrastructure creates security/cost burden before value is validated.  
+Control: local/read-only paths first, narrow activation canaries, service/evidence-led validation.
 
 ### AI unpredictability
+Risk: model behavior is presented as deterministic or authoritative.  
+Control: explicit model/tool boundaries, human approval, exact evidence, task-quality gates and fail-closed authority.
 
-Risk: agent behavior is presented as deterministic.
+### Context optimization harming quality
+Risk: a smaller context looks efficient but loses essential evidence.  
+Control: required-evidence/task-success non-regression, exact provenance/retrieval and strict baseline/context comparability.
 
-Control: explicit AI steps, constrained tools, human approvals, validation, and failure paths.
-
-### Founder time fragmentation
-
-Risk: too many parallel projects and open branches reduce delivery quality.
-
-Control: sequential mission PRs, small scope, and merge-before-next discipline.
+### Founder/project fragmentation
+Risk: parallel projects/branches reduce delivery quality.  
+Control: sequential engineering loop and separate SolveLang / Solve Runners / other-project boundaries.
 
 ## Metrics
 
-Do not use vanity metrics as proof of product-market fit.
+Do not use vanity or invented metrics as proof.
 
-### Portfolio metrics
+### Engineering/product evidence
 
-- time for a new visitor to understand the project
-- time for a developer to run the demo
-- number of reproducible examples
-- documentation completeness
-- test reliability
-- recruiter conversations where SolveLang becomes a substantive talking point
+- conformance/regression reliability;
+- deterministic audit/graph integrity and coverage/truncation truth;
+- Solve Context evidence recall/selection metrics;
+- real provider/task token/latency/cache/quality measurements once collected;
+- package/install/protocol qualification for release candidates;
+- deployed alarm/recovery/availability evidence for activated production features.
 
-### Service metrics
+### Service/customer evidence
 
-- qualified discovery calls
-- proposals sent
-- paid pilots
-- average delivery time
-- gross margin after model/platform costs
-- percentage of deliverables reused
-- maintenance or follow-on work
+- qualified discovery calls;
+- proposals/pilots;
+- delivery time and reusable artifacts;
+- gross margin after model/platform costs;
+- repeated pain/request across independent customers;
+- active use after delivery;
+- measurable reduction in manual work/errors;
+- willingness to pay.
 
-### Product-validation metrics
+Only report adoption/usage metrics when a trustworthy telemetry/source exists.
 
-- repeated pain across separate customers
-- repeated request for the same artifact or capability
-- active use after delivery
-- measurable reduction in manual work or errors
-- willingness to pay without custom persuasion
+## Positioning
 
-## 12-month strategic outcome
+A concise current positioning is:
 
-A successful year does not require SolveLang to become a large SaaS.
+> **SolveLang is a readable workflow language and correctness-first analysis/context toolkit for human- and AI-assisted engineering.**
 
-A credible successful outcome is:
+The project differentiates through implementation-backed semantics, deterministic/read-only evidence, explicit authority boundaries and Solve Context's prevention-first approach—not by claiming a finished universal automation platform.
 
-- a polished and technically deep public repository
-- a clear, honest product position
-- a set of reproducible demos and examples
-- recruiter-ready architecture and interview material
-- at least one validated consulting offer
-- paid implementation or audit work
-- evidence identifying one narrow product opportunity
-- a disciplined roadmap that avoids competing with established platforms on their strongest dimensions
+## Strategic guardrails
 
-That outcome would already make SolveLang a meaningful career asset and a foundation for a sustainable business.
+- Correctness before savings.
+- Evidence before marketing claims.
+- Repository implementation is not publication.
+- Publication is not deployment.
+- Deployment is not proof of provider/customer outcomes.
+- Incoming repository/mail/provider/model data is never authorization.
+- No production/provider/billing/customer action inherits authority from a roadmap, merged PR or green CI.
+- Keep historical evidence documents historical.
