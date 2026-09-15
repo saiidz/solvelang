@@ -374,6 +374,8 @@ function pairReport(baseline: ContextAgentEvalRecordIdentity, context: ContextAg
   assert(baseline.agent === context.agent, `Agent eval pair ${baseline.pairId} agent does not match.`);
   assert(sameProvider(baseline, context), `Agent eval pair ${baseline.pairId} provider/model does not match.`);
   assert(baseline.recordClass === context.recordClass, `Agent eval pair ${baseline.pairId} recordClass does not match.`);
+  assert(baseline.outcome.basis === context.outcome.basis, `Agent eval pair ${baseline.pairId} outcome basis does not match.`);
+  assert(baseline.outcome.evidenceRequired === context.outcome.evidenceRequired, `Agent eval pair ${baseline.pairId} required evidence count does not match.`);
 
   const baselineRecall = evidenceRecall(baseline);
   const contextRecall = evidenceRecall(context);
