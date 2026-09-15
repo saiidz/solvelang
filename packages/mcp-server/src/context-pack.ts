@@ -9,7 +9,6 @@ export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 
 const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
-const MAX_TOKEN_OCCURRENCES_PER_RANK = 2;
 const WINDOW_RADIUS = 4;
 const DECLARATION_WINDOW_LINES = 24;
 const DECLARATION_LEADING_COMMENT_LINES = 16;
@@ -51,7 +50,6 @@ export interface ContextPack {
 
 interface Candidate {
   lexicalTokenCount: number;
-  rankingScore: number;
   declarationTextWindow?: boolean;
   selection?: ContextSourceSelection;
   path: string;
@@ -88,24 +86,12 @@ export function normalizeContextPath(input: string): string {
   return normalized;
 }
 
-function singularTaskToken(token: string): string | undefined {
-  if (token.length < 5 || !token.endsWith("s") || token.endsWith("ss") || token.endsWith("us") || token.endsWith("is")) {
-    return undefined;
-  }
-  if (token.endsWith("ies")) return `${token.slice(0, -3)}y`;
-  if (/(?:ches|shes|xes|zes|sses)$/.test(token)) return token.slice(0, -2);
-  return token.slice(0, -1);
-}
-
 export function contextTaskTokens(task: string): string[] {
   const matches = task.toLowerCase().match(/[a-z0-9_./:@-]{2,}/g) ?? [];
   const deduped = new Set<string>();
   for (const token of matches) {
     const trimmed = token.replace(/^[./:@-]+|[./:@-]+$/g, "");
-    const singular = singularTaskToken(trimmed);
-    for (const candidate of [trimmed, singular]) {
-      if (candidate && candidate.length >= 2 && deduped.size < 128) deduped.add(candidate);
-    }
+    if (trimmed.length >= 2) deduped.add(trimmed);
     if (deduped.size >= 128) break;
   }
   return [...deduped].sort();
@@ -143,10 +129,6 @@ function countOccurrences(haystack: string, needle: string): number {
     count += 1;
     offset = next + needle.length;
   }
-}
-
-function boundedRankingOccurrences(haystack: string, needle: string): number {
-  return Math.min(MAX_TOKEN_OCCURRENCES_PER_RANK, countOccurrences(haystack, needle));
 }
 
 function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Array<{ startLine: number; endLine: number }> {
@@ -190,21 +172,17 @@ function budgetRanges(
   return bounded;
 }
 
-function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection, declarationTextWindow = false): { score: number; rankingScore: number; reasons: string[]; lexicalTokenCount: number } {
+function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection, declarationTextWindow = false): { score: number; reasons: string[]; lexicalTokenCount: number } {
   const lowerPath = path.toLowerCase();
   const lowerContent = content.toLowerCase();
   const pathReasons = tokens.filter((token) => lowerPath.includes(token));
   const contentReasons = tokens.filter((token) => lowerContent.includes(token));
   const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
-  const selectionScore = selection?.score ?? 0;
   return {
     lexicalTokenCount: lexicalReasons.length,
     score: pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0)
       + contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0)
-      + selectionScore,
-    rankingScore: pathReasons.reduce((total, token) => total + 6 * boundedRankingOccurrences(lowerPath, token), 0)
-      + contentReasons.reduce((total, token) => total + 2 * boundedRankingOccurrences(lowerContent, token), 0)
-      + selectionScore,
+      + (selection?.score ?? 0),
     reasons: [...new Set([
       ...(selection?.reasons ?? []),
       ...(declarationTextWindow ? ["selection:declaration-text-window"] : []),
@@ -366,12 +344,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 }
 
 function candidateSort(left: Candidate, right: Candidate): number {
-  return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
-    || right.rankingScore - left.rankingScore
-    || right.lexicalTokenCount - left.lexicalTokenCount
-    || compareText(left.path, right.path)
-    || left.startLine - right.startLine
-    || left.endLine - right.endLine;
+  return right.score - left.score || right.lexicalTokenCount - left.lexicalTokenCount || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
 }
 
 /** Global priority must be reconsidered after splitting: a fragment does not
