@@ -91,10 +91,12 @@ agent or contact a provider. The caller supplies records collected by a separate
 authorized run, and the local harness validates and summarizes them.
 
 A pair must use the same suite/pair fixture identity, pinned fixture revision, agent,
-provider and model. The baseline cannot claim a Solve Context pack; the context arm
+provider and model. Cross-agent handoff fixtures must also identify the direction as
+`claude-to-codex` or `codex-to-claude`; other categories cannot set a handoff direction.
+The baseline cannot claim a Solve Context pack or selection metrics. The context arm
 must identify its pack and selected bytes. Task success and exact-evidence counts are
-kept beside usage, latency and cache-hot mutation evidence so a smaller context cannot
-hide a quality regression.
+kept beside usage, latency, selection precision/recall and cache-hot mutation evidence
+so a smaller context cannot hide a quality regression.
 
 Measurement bases are intentionally distinct:
 
@@ -105,11 +107,12 @@ Measurement bases are intentionally distinct:
 - `synthetic` is allowed only in `synthetic-test` records; those pairs are excluded
   from measured aggregates and cannot make benchmark evidence complete.
 
-Likewise, measured wall-clock latency and measured cache-hot byte evidence are kept
-separate from estimated, unavailable or synthetic values. A measured context arm can
-record `cacheHotBytesChanged: 0`; the report does not infer zero from missing data.
-The quality gate fails when a context arm loses baseline task success or exact-evidence
-recall even if provider-reported input tokens fall sharply.
+Likewise, measured wall-clock latency, selection precision/recall and cache-hot byte
+evidence are kept separate from estimated, unavailable or synthetic values. A measured
+safe-mode context arm must record `cacheHotBytesChanged: 0` to count toward completion;
+the report does not infer zero from missing data. The quality gate fails when a context
+arm loses baseline task success or exact-evidence recall even if provider-reported
+input tokens fall sharply.
 
 To summarize previously collected records, pass a JSON array on stdin:
 
@@ -123,10 +126,13 @@ uses synthetic-only records to verify the CLI and claim boundaries in MCP CI. Do
 commit real provider credentials, prompts containing secrets, or private customer
 content as benchmark records.
 
-The report tracks the six #898 acceptance categories and both Claude/Codex agents,
-but `benchmarkEvidenceComplete` remains false until measured pairs cover every
-category and both agents, pass the quality gate, and every measured pair has
-provider-reported token usage plus measured latency. Even then the report truth keeps
+`benchmarkEvidenceComplete` remains false until measured pairs satisfy **all** of the
+#898 acceptance gates: every six-category fixture class is covered, both Claude and
+Codex have measured pairs, both handoff directions are measured, quality does not
+regress, every measured pair has provider-reported token usage and measured latency,
+every Solve Context arm has measured selection precision/recall, and every safe-mode
+context arm has measured `cacheHotBytesChanged: 0`. Missing/estimated/synthetic values
+cannot satisfy these gates. Even a complete engineering report keeps
 `publicationAuthorized: false` and `publicPercentageClaimAllowed: false`; repository
 evidence is not business/publication approval.
 
@@ -142,6 +148,6 @@ not token savings, and local timing is not end-to-end agent latency.
 
 Issue #898 still needs broader/larger independently pinned or blinded evaluation,
 actual Claude/Codex task runs including bidirectional long-session handoff, measured
-quality/token/cache/latency evidence, and distribution proof before public savings or
-comparative-performance claims. These suites grant no provider credential, network,
-billing, deployment, publication, or Solve Runner authority.
+quality/token/cache/selection/latency evidence, and distribution proof before public
+savings or comparative-performance claims. These suites grant no provider credential,
+network, billing, deployment, publication, or Solve Runner authority.
