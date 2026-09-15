@@ -11,7 +11,7 @@ import { sha256Text } from "../src/context-pack.js";
 const revision = sha256Text("fixture revision");
 const packId = `scp_${sha256Text("pack").slice(0, 32)}`;
 
-function record(variant: "baseline" | "solve_context", overrides: Record<string, unknown> = {}) {
+function record(variant: "baseline" | "solve_context", overrides: Record<string, unknown> = {}): any {
   const base = {
     schema: CONTEXT_AGENT_EVAL_RECORD_SCHEMA,
     suiteId: "suite-2026-09",
