@@ -51,6 +51,8 @@ export interface ContextPack {
 
 interface Candidate {
   lexicalTokenCount: number;
+  graphSpecificity: number;
+  graphTokenLineCounts?: ReadonlyMap<string, number>;
   declarationTextWindow?: boolean;
   selection?: ContextSourceSelection;
   path: string;
@@ -151,6 +153,21 @@ function countOccurrences(haystack: string, needle: string): number {
   }
 }
 
+function graphSpecificityScore(
+  content: string,
+  tokens: string[],
+  tokenLineCounts?: ReadonlyMap<string, number>,
+): number {
+  if (!tokenLineCounts) return 0;
+  const lowerContent = content.toLowerCase();
+  return tokens.reduce((total, token) => {
+    if (!lowerContent.includes(token)) return total;
+    const lineCount = tokenLineCounts.get(token) ?? MAX_GRAPH_MATCH_LINES_PER_TOKEN + 1;
+    if (lineCount > MAX_GRAPH_MATCH_LINES_PER_TOKEN) return total;
+    return total + MAX_GRAPH_MATCH_LINES_PER_TOKEN + 1 - lineCount;
+  }, 0);
+}
+
 function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Array<{ startLine: number; endLine: number }> {
   const sorted = [...ranges].sort((left, right) => left.startLine - right.startLine || left.endLine - right.endLine);
   const merged: Array<{ startLine: number; endLine: number }> = [];
@@ -221,6 +238,7 @@ function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes:
       endLine: candidate.startLine + range.endLine - 1,
       content,
       bytes: Buffer.byteLength(content, "utf8"),
+      graphSpecificity: graphSpecificityScore(content, tokens, candidate.graphTokenLineCounts),
       ...scoreExcerpt(candidate.path, content, tokens, candidate.selection, candidate.declarationTextWindow),
     };
   }).sort(candidateSort);
@@ -360,6 +378,8 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
       endLine,
       sourceSha256,
       selection,
+      graphTokenLineCounts,
+      graphSpecificity: graphSpecificityScore(content, tokens, graphTokenLineCounts),
       declarationTextWindow,
       ...scoreExcerpt(normalizedPath, content, tokens, selection, declarationTextWindow),
       content,
@@ -370,6 +390,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
 function candidateSort(left: Candidate, right: Candidate): number {
   return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
+    || right.graphSpecificity - left.graphSpecificity
     || right.score - left.score
     || right.lexicalTokenCount - left.lexicalTokenCount
     || compareText(left.path, right.path)
