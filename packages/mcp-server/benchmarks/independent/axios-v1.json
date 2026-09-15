@@ -1,3 +1,10 @@
 {
-  "repository": "axios/axios"
+  "schema": "solvelang.context.repository-corpus.v1",
+  "capture": "external-pinned-source-subset-v1",
+  "repository": "axios/axios",
+  "license": "MIT",
+  "licenseNoticeFile": "LICENSE-axios.txt",
+  "scope": "four complete core source files from an independent external repository",
+  "sources": [],
+  "cases": []
 }
