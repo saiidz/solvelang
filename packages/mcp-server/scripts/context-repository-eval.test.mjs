@@ -175,7 +175,22 @@ test("lexical matches keep their existing context-window behavior", () => {
 test("candidate omissions stay visible when declaration windows exceed the budget", () => {
   const text = Array.from({ length: 80 }, (_, i) => `export function member${i}() {\n  return '${"x".repeat(60)}';\n}\n`).join("");
   const pack = buildContextPack("unmatched_task_word", [selected("src/functions.ts", text)], 1024);
-  assert.ok(pack.selectedBytes <= 1024);
+  assert.equal(pack.selectedBytes, 1024);
   assert.equal(pack.truncated, true);
-  assert.equal(pack.entries.length + pack.omittedCandidates, 80);
+  // Omission counts now describe final fragments, not the original 80 windows.
+  // Pin the actual ranges and content so fragmentation cannot hide lost evidence.
+  assert.deepEqual(pack.entries.map((entry) => [entry.startLine, entry.endLine]), [
+    ...Array.from({ length: 10 }, (_, i) => [i * 3 + 1, i * 3 + 3]),
+    [33, 33], [36, 36], [39, 39], [42, 42],
+  ]);
+  assert.equal(pack.omittedCandidates, 74);
+  const lines = text.split("\n");
+  for (const entry of pack.entries) {
+    assert.equal(entry.content, lines.slice(entry.startLine - 1, entry.endLine).join("\n"));
+    assert.equal(entry.sourceSha256, sha256Text(text));
+    assert.equal(entry.excerptSha256, sha256Text(entry.content));
+    assert.equal(entry.bytes, Buffer.byteLength(entry.content));
+    assert.ok(entry.reasons.includes("selection:declaration-text-window"));
+  }
+  assert.equal(pack.entries.reduce((sum, entry) => sum + entry.bytes, 0), pack.selectedBytes);
 });
