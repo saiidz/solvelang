@@ -61,6 +61,8 @@ jobs:
         run: npm run eval:context
       - name: Run pinned real-source context regressions
         run: npm run eval:context:repository
+      - name: Run independent pinned repository context regressions
+        run: npm run eval:context:independent
       - name: Validate Codex and Claude plugin packaging
         run: node scripts/validate-plugin-packaging.mjs
       - name: Prove Codex and Claude plugin MCP roundtrip
