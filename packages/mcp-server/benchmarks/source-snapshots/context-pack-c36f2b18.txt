@@ -47,7 +47,6 @@ export interface ContextPack {
 }
 
 interface Candidate {
-  selection?: ContextSourceSelection;
   path: string;
   startLine: number;
   endLine: number;
@@ -141,63 +140,7 @@ function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Arr
   return merged;
 }
 
-/** Partition merged match windows at whole-line boundaries before ranking them.
- * A single over-budget line remains its own candidate so omission stays explicit;
- * never clip UTF-8 content or let that line hide smaller neighboring evidence.
- */
-function budgetRanges(
-  lines: string[],
-  ranges: Array<{ startLine: number; endLine: number }>,
-  budgetBytes: number,
-): Array<{ startLine: number; endLine: number }> {
-  const bounded: Array<{ startLine: number; endLine: number }> = [];
-  for (const range of ranges) {
-    let startLine = range.startLine;
-    let bytes = 0;
-    for (let line = range.startLine; line <= range.endLine; line += 1) {
-      const lineBytes = Buffer.byteLength(lines[line - 1], "utf8");
-      if (line > startLine && bytes + 1 + lineBytes > budgetBytes) {
-        bounded.push({ startLine, endLine: line - 1 });
-        startLine = line;
-        bytes = 0;
-      }
-      bytes += (line > startLine ? 1 : 0) + lineBytes;
-    }
-    bounded.push({ startLine, endLine: range.endLine });
-  }
-  return bounded;
-}
-
-function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection): { score: number; reasons: string[] } {
-  const lowerPath = path.toLowerCase();
-  const lowerContent = content.toLowerCase();
-  const pathReasons = tokens.filter((token) => lowerPath.includes(token));
-  const contentReasons = tokens.filter((token) => lowerContent.includes(token));
-  const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
-  return {
-    score: pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0)
-      + contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0)
-      + (selection?.score ?? 0),
-    reasons: [...new Set([...(selection?.reasons ?? []), ...lexicalReasons])].slice(0, MAX_REASON_TOKENS),
-  };
-}
-
-function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes: number): Candidate[] {
-  const lines = candidate.content.split("\n");
-  return budgetRanges(lines, [{ startLine: 1, endLine: lines.length }], budgetBytes).map((range) => {
-    const content = lines.slice(range.startLine - 1, range.endLine).join("\n");
-    return {
-      ...candidate,
-      startLine: candidate.startLine + range.startLine - 1,
-      endLine: candidate.startLine + range.endLine - 1,
-      content,
-      bytes: Buffer.byteLength(content, "utf8"),
-      ...scoreExcerpt(candidate.path, content, tokens, candidate.selection),
-    };
-  }).sort(candidateSort);
-}
-
-function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: number): Candidate[] {
+function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
   const normalizedPath = normalizeContextPath(source.path);
   assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_CONTEXT_SOURCE_BYTES);
 
@@ -210,6 +153,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     }
   }
   const selectionScore = selection?.score ?? 0;
+  const selectionReasons = selection?.reasons ?? [];
 
   const lines = source.text.replace(/\r\n/g, "\n").split("\n");
   const lowerLines = lines.map((line) => line.toLowerCase());
@@ -233,15 +177,20 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
     : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
 
-  return budgetRanges(lines, ranges, budgetBytes).map(({ startLine, endLine }) => {
+  return ranges.map(({ startLine, endLine }) => {
     const content = lines.slice(startLine - 1, endLine).join("\n");
+    const lowerContent = content.toLowerCase();
+    const contentReasons = tokens.filter((token) => lowerContent.includes(token));
+    const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
+    const reasons = [...new Set([...selectionReasons, ...lexicalReasons])].slice(0, MAX_REASON_TOKENS);
+    const contentScore = contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0);
     return {
       path: normalizedPath,
       startLine,
       endLine,
       sourceSha256,
-      selection,
-      ...scoreExcerpt(normalizedPath, content, tokens, selection),
+      score: pathScore + contentScore + selectionScore,
+      reasons,
       content,
       bytes: Buffer.byteLength(content, "utf8"),
     };
@@ -282,37 +231,31 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
 
   const tokens = contextTaskTokens(task);
   const orderedSources = [...sources].sort((left, right) => compareText(normalizeContextPath(left.path), normalizeContextPath(right.path)));
-  const candidates = orderedSources.flatMap((source) => buildCandidates(source, tokens, budgetBytes)).sort(candidateSort);
+  const candidates = orderedSources.flatMap((source) => buildCandidates(source, tokens)).sort(candidateSort);
 
   let selectedBytes = 0;
   const entries: ContextPackEntry[] = [];
   let omittedCandidates = 0;
 
   for (const candidate of candidates) {
-    const remainingBytes = budgetBytes - selectedBytes;
-    const fragments = candidate.bytes > remainingBytes && remainingBytes > 0
-      ? partitionCandidate(candidate, tokens, remainingBytes)
-      : [candidate];
-    for (const fragment of fragments) {
-      if (fragment.bytes === 0 || selectedBytes + fragment.bytes > budgetBytes) {
-        omittedCandidates += 1;
-        continue;
-      }
-      const excerptSha256 = sha256Text(fragment.content);
-      entries.push({
-        handle: contextEntryHandle(fragment.path, fragment.sourceSha256, fragment.startLine, fragment.endLine, excerptSha256),
-        path: fragment.path,
-        startLine: fragment.startLine,
-        endLine: fragment.endLine,
-        sourceSha256: fragment.sourceSha256,
-        excerptSha256,
-        bytes: fragment.bytes,
-        score: fragment.score,
-        reasons: fragment.reasons,
-        content: fragment.content,
-      });
-      selectedBytes += fragment.bytes;
+    if (candidate.bytes === 0 || selectedBytes + candidate.bytes > budgetBytes) {
+      omittedCandidates += 1;
+      continue;
     }
+    const excerptSha256 = sha256Text(candidate.content);
+    entries.push({
+      handle: contextEntryHandle(candidate.path, candidate.sourceSha256, candidate.startLine, candidate.endLine, excerptSha256),
+      path: candidate.path,
+      startLine: candidate.startLine,
+      endLine: candidate.endLine,
+      sourceSha256: candidate.sourceSha256,
+      excerptSha256,
+      bytes: candidate.bytes,
+      score: candidate.score,
+      reasons: candidate.reasons,
+      content: candidate.content,
+    });
+    selectedBytes += candidate.bytes;
   }
 
   entries.sort((left, right) => compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine);
