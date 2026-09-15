@@ -10,7 +10,6 @@ export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
 const WINDOW_RADIUS = 4;
-const DECLARATION_WINDOW_LINES = 24;
 
 export interface ContextSourceSelection {
   score: number;
@@ -48,9 +47,6 @@ export interface ContextPack {
 }
 
 interface Candidate {
-  lexicalTokenCount: number;
-  declarationTextWindow?: boolean;
-  selection?: ContextSourceSelection;
   path: string;
   startLine: number;
   endLine: number;
@@ -144,68 +140,7 @@ function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Arr
   return merged;
 }
 
-/** Partition merged match windows at whole-line boundaries before ranking them.
- * A single over-budget line remains its own candidate so omission stays explicit;
- * never clip UTF-8 content or let that line hide smaller neighboring evidence.
- */
-function budgetRanges(
-  lines: string[],
-  ranges: Array<{ startLine: number; endLine: number }>,
-  budgetBytes: number,
-): Array<{ startLine: number; endLine: number }> {
-  const bounded: Array<{ startLine: number; endLine: number }> = [];
-  for (const range of ranges) {
-    let startLine = range.startLine;
-    let bytes = 0;
-    for (let line = range.startLine; line <= range.endLine; line += 1) {
-      const lineBytes = Buffer.byteLength(lines[line - 1], "utf8");
-      if (line > startLine && bytes + 1 + lineBytes > budgetBytes) {
-        bounded.push({ startLine, endLine: line - 1 });
-        startLine = line;
-        bytes = 0;
-      }
-      bytes += (line > startLine ? 1 : 0) + lineBytes;
-    }
-    bounded.push({ startLine, endLine: range.endLine });
-  }
-  return bounded;
-}
-
-function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection, declarationTextWindow = false): { score: number; reasons: string[]; lexicalTokenCount: number } {
-  const lowerPath = path.toLowerCase();
-  const lowerContent = content.toLowerCase();
-  const pathReasons = tokens.filter((token) => lowerPath.includes(token));
-  const contentReasons = tokens.filter((token) => lowerContent.includes(token));
-  const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
-  return {
-    lexicalTokenCount: lexicalReasons.length,
-    score: pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0)
-      + contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0)
-      + (selection?.score ?? 0),
-    reasons: [...new Set([
-      ...(selection?.reasons ?? []),
-      ...(declarationTextWindow ? ["selection:declaration-text-window"] : []),
-      ...lexicalReasons,
-    ])].slice(0, MAX_REASON_TOKENS),
-  };
-}
-
-function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes: number): Candidate[] {
-  const lines = candidate.content.split("\n");
-  return budgetRanges(lines, [{ startLine: 1, endLine: lines.length }], budgetBytes).map((range) => {
-    const content = lines.slice(range.startLine - 1, range.endLine).join("\n");
-    return {
-      ...candidate,
-      startLine: candidate.startLine + range.startLine - 1,
-      endLine: candidate.startLine + range.endLine - 1,
-      content,
-      bytes: Buffer.byteLength(content, "utf8"),
-      ...scoreExcerpt(candidate.path, content, tokens, candidate.selection, candidate.declarationTextWindow),
-    };
-  }).sort(candidateSort);
-}
-
-function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: number): Candidate[] {
+function buildCandidates(source: ContextSource, tokens: string[]): Candidate[] {
   const normalizedPath = normalizeContextPath(source.path);
   assertBoundedText(`Context source ${normalizedPath}`, source.text, MAX_CONTEXT_SOURCE_BYTES);
 
@@ -218,6 +153,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     }
   }
   const selectionScore = selection?.score ?? 0;
+  const selectionReasons = selection?.reasons ?? [];
 
   const lines = source.text.replace(/\r\n/g, "\n").split("\n");
   const lowerLines = lines.map((line) => line.toLowerCase());
@@ -237,33 +173,24 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
   if (matchLines.length === 0 && pathScore === 0 && selectionScore === 0) return [];
 
-  // A graph-selected dependency can have no task-word matches. Returning only
-  // its imports/header hides the implementation the caller needs. Use bounded
-  // exported declaration text windows instead; these are not semantic parsing
-  // or a claim that the entire declaration/body has been captured.
-  const declarationLines = matchLines.length === 0 && selectionScore > 0
-    ? lines.flatMap((line, index) => /^export\s+(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*/.test(line) ? [index + 1] : [])
-    : [];
-  const declarationFallback = declarationLines.length > 0;
   const ranges = matchLines.length > 0
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
-    : declarationFallback
-      ? declarationLines.map((startLine, index) => ({
-        startLine,
-        endLine: Math.min(lines.length, startLine + DECLARATION_WINDOW_LINES - 1, (declarationLines[index + 1] ?? lines.length + 1) - 1),
-      }))
-      : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
+    : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
 
-  return budgetRanges(lines, ranges, budgetBytes).map(({ startLine, endLine }) => {
+  return ranges.map(({ startLine, endLine }) => {
     const content = lines.slice(startLine - 1, endLine).join("\n");
+    const lowerContent = content.toLowerCase();
+    const contentReasons = tokens.filter((token) => lowerContent.includes(token));
+    const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
+    const reasons = [...new Set([...selectionReasons, ...lexicalReasons])].slice(0, MAX_REASON_TOKENS);
+    const contentScore = contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0);
     return {
       path: normalizedPath,
       startLine,
       endLine,
       sourceSha256,
-      selection,
-      declarationTextWindow: declarationFallback,
-      ...scoreExcerpt(normalizedPath, content, tokens, selection, declarationFallback),
+      score: pathScore + contentScore + selectionScore,
+      reasons,
       content,
       bytes: Buffer.byteLength(content, "utf8"),
     };
@@ -271,45 +198,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 }
 
 function candidateSort(left: Candidate, right: Candidate): number {
-  return right.score - left.score || right.lexicalTokenCount - left.lexicalTokenCount || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
-}
-
-/** Global priority must be reconsidered after splitting: a fragment does not
- * inherit its parent's lexical score. A heap avoids repeatedly sorting or
- * shifting the full candidate array while retaining deterministic tie breaks.
- */
-class CandidateQueue {
-  private readonly heap: Candidate[] = [];
-
-  get size(): number { return this.heap.length; }
-
-  push(candidate: Candidate): void {
-    this.heap.push(candidate);
-    let index = this.heap.length - 1;
-    while (index > 0) {
-      const parent = Math.floor((index - 1) / 2);
-      if (candidateSort(this.heap[parent], this.heap[index]) <= 0) break;
-      [this.heap[parent], this.heap[index]] = [this.heap[index], this.heap[parent]];
-      index = parent;
-    }
-  }
-
-  pop(): Candidate | undefined {
-    const first = this.heap[0];
-    const last = this.heap.pop();
-    if (this.heap.length > 0 && last) {
-      this.heap[0] = last;
-      let index = 0;
-      while (index * 2 + 1 < this.heap.length) {
-        let child = index * 2 + 1;
-        if (child + 1 < this.heap.length && candidateSort(this.heap[child + 1], this.heap[child]) < 0) child += 1;
-        if (candidateSort(this.heap[index], this.heap[child]) <= 0) break;
-        [this.heap[index], this.heap[child]] = [this.heap[child], this.heap[index]];
-        index = child;
-      }
-    }
-    return first;
-  }
+  return right.score - left.score || compareText(left.path, right.path) || left.startLine - right.startLine || left.endLine - right.endLine;
 }
 
 function canonicalPackIdentity(taskSha256: string, budgetBytes: number, entries: ContextPackEntry[]): string {
@@ -342,29 +231,15 @@ export function buildContextPack(task: string, sources: ContextSource[], budgetB
 
   const tokens = contextTaskTokens(task);
   const orderedSources = [...sources].sort((left, right) => compareText(normalizeContextPath(left.path), normalizeContextPath(right.path)));
-  const candidates = new CandidateQueue();
-  for (const source of orderedSources) {
-    for (const candidate of buildCandidates(source, tokens, budgetBytes)) candidates.push(candidate);
-  }
+  const candidates = orderedSources.flatMap((source) => buildCandidates(source, tokens)).sort(candidateSort);
 
   let selectedBytes = 0;
   const entries: ContextPackEntry[] = [];
   let omittedCandidates = 0;
 
-  while (candidates.size > 0) {
-    const candidate = candidates.pop()!;
-    const remainingBytes = budgetBytes - selectedBytes;
-    if (candidate.bytes === 0 || remainingBytes === 0) {
+  for (const candidate of candidates) {
+    if (candidate.bytes === 0 || selectedBytes + candidate.bytes > budgetBytes) {
       omittedCandidates += 1;
-      continue;
-    }
-    if (candidate.bytes > remainingBytes) {
-      // Requeue fitting fragments at their own score before selecting any one
-      // of them. An indivisible over-budget line cannot fit any later budget.
-      for (const fragment of partitionCandidate(candidate, tokens, remainingBytes)) {
-        if (fragment.bytes === 0 || fragment.bytes > remainingBytes) omittedCandidates += 1;
-        else candidates.push(fragment);
-      }
       continue;
     }
     const excerptSha256 = sha256Text(candidate.content);
