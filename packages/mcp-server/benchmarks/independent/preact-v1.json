@@ -1,0 +1,71 @@
+{
+  "schema": "solvelang.context.repository-corpus.v1",
+  "capture": "external-pinned-source-subset-v1",
+  "repository": "preactjs/preact",
+  "commitParts": ["8101ff821690817c7786", "739c317af215c62a0cff"],
+  "license": "MIT",
+  "licenseNoticeFile": "LICENSE-preact.txt",
+  "scope": "all thirteen runtime JavaScript files under src/ from an independent external repository; excludes declarations, tests, and non-core packages",
+  "sources": [
+    {"path": "src/component.js", "gitBlobSha1Parts": ["21ab0f955706cc9c5fb0", "0171537be80ad87a8cc7"]},
+    {"path": "src/constants.js", "gitBlobSha1Parts": ["1fd0015b130576325ed9", "58714d2278b948db65ee"]},
+    {"path": "src/create-context.js", "gitBlobSha1Parts": ["12b8e61ac343eed43716", "e01c964578653cb258ec"]},
+    {"path": "src/create-element.js", "gitBlobSha1Parts": ["18f734652b03b7a1a6f2", "70a2efb806894ce48db8"]},
+    {"path": "src/create-portal.js", "gitBlobSha1Parts": ["93c3a3c2c5a4ec41fd7a", "e9a4aa950872739ac076"]},
+    {"path": "src/index.js", "gitBlobSha1Parts": ["045fb679cfb6c813509f", "3b01be3eee151496ef0c"]},
+    {"path": "src/options.js", "gitBlobSha1Parts": ["174f3227057ba56605c1", "88e2d54a3da31fc4cb74"]},
+    {"path": "src/render.js", "gitBlobSha1Parts": ["047abe845174a8604ce1", "e9cd9da659cc5e2f5a0c"]},
+    {"path": "src/util.js", "gitBlobSha1Parts": ["3f1d9bd2d6388d0245a5", "955b71f789c70a235d67"]},
+    {"path": "src/diff/catch-error.js", "gitBlobSha1Parts": ["ed72179f1966df442e79", "676ae5746d930f5892bd"]},
+    {"path": "src/diff/children.js", "gitBlobSha1Parts": ["1a56f70932c3b3af79c2", "8c0ad51ade84117b63b9"]},
+    {"path": "src/diff/index.js", "gitBlobSha1Parts": ["a23d80586b615b5474fe", "3659cf079aeef4f87c1e"]},
+    {"path": "src/diff/props.js", "gitBlobSha1Parts": ["27c00f290ff2213c3ff3", "c3fad1880f2794614a8a"]}
+  ],
+  "cases": [
+    {
+      "id": "preact-root-render-diff-commit",
+      "task": "Trace Preact root rendering from root VNode creation through diff and commit.",
+      "changedPaths": ["src/render.js"],
+      "budgetBytes": 24576,
+      "requiredEvidence": {
+        "src/render.js": ["parentDom._children = createVNode(Fragment, { children: [vnode] });", "commitRoot(commitQueue, parentDom._children, refQueue);"],
+        "src/create-element.js": ["export function createVNode(type, props, key, ref, original) {"],
+        "src/diff/index.js": ["export function diff(", "export function commitRoot(commitQueue, root, refQueue) {"]
+      },
+      "minPathPrecision": 0.25
+    },
+    {
+      "id": "preact-keyed-child-minimal-move",
+      "task": "Trace keyed child reordering from matching and longest-increasing-subsequence move marking to DOM insertion and sibling lookup.",
+      "changedPaths": ["src/diff/children.js"],
+      "budgetBytes": 24576,
+      "requiredEvidence": {
+        "src/diff/children.js": ["let moved = false;", "tails[lo] = childVNode._index;", "newChildren[i]._flags |= INSERT_VNODE;", "parentDom.insertBefore(parentVNode._dom, oldDom || NULL);"],
+        "src/component.js": ["export function getDomSibling(vnode, childIndex) {"]
+      },
+      "minPathPrecision": 0.25
+    },
+    {
+      "id": "preact-dom-event-property-flow",
+      "task": "Trace DOM property and event updates from diffElementNodes into setProperty and logical event-clock protection.",
+      "changedPaths": ["src/diff/props.js"],
+      "budgetBytes": 16384,
+      "requiredEvidence": {
+        "src/diff/props.js": ["export function setProperty(dom, name, value, oldValue, namespace) {", "value[EVENT_ATTACHED] = eventClock;", "e[EVENT_DISPATCHED] < eventHandler[EVENT_ATTACHED]"],
+        "src/diff/index.js": ["setProperty(dom, i, value, oldProps[i], namespace);"]
+      },
+      "minPathPrecision": 0.25
+    },
+    {
+      "id": "preact-context-subscriber-rerender",
+      "task": "Trace context provider value changes into forced subscriber rerenders.",
+      "changedPaths": ["src/create-context.js"],
+      "budgetBytes": 8192,
+      "requiredEvidence": {
+        "src/create-context.js": ["subs.forEach(c => {", "c._bits |= COMPONENT_FORCE;", "enqueueRender(c);"],
+        "src/component.js": ["export function enqueueRender(c) {"]
+      },
+      "minPathPrecision": 0.25
+    }
+  ]
+}
