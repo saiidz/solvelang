@@ -34,6 +34,13 @@ const CORPORA = [
     license: new URL("../benchmarks/independent/LICENSE-node-fetch.txt", import.meta.url),
     licenseFile: "LICENSE-node-fetch.txt",
   },
+  {
+    id: "preact",
+    manifest: new URL("../benchmarks/independent/preact-v1.json", import.meta.url),
+    snapshots: new URL("../benchmarks/independent/preact-snapshots/", import.meta.url),
+    license: new URL("../benchmarks/independent/LICENSE-preact.txt", import.meta.url),
+    licenseFile: "LICENSE-preact.txt",
+  },
 ];
 
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
