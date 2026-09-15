@@ -6,6 +6,7 @@ import { evaluateRepositoryCorpus, gitBlobSha1, pinnedImportGraph, scorePack, va
 const original = await loadRepositoryCorpus();
 const copy = () => structuredClone(original);
 const selected = (path, text) => ({ path, text, selection: { score: 64, reasons: ["graph:dependency:imports:fixture-edge"] } });
+const graphSource = (path, text) => ({ path, text, sha256: sha256Text(text), gitBlobSha1: gitBlobSha1(text) });
 
 // These assertions pin the reviewed benchmark, rather than trusting editable thresholds alone.
 test("real-source corpus is pinned to six verified blobs and four independent task annotations", () => {
@@ -109,6 +110,27 @@ test("import graph includes only three resolved literal edges and reports two mi
       assert.ok(source.text.split("\n")[evidence.line - 1].includes(evidence.literal));
     }
   }
+});
+
+test("extensionless pinned ESM imports resolve only to exact in-corpus JS/TS files or index files", () => {
+  const sources = [
+    graphSource("src/root.js", [
+      "import { helper } from './helper';",
+      "import { nested } from './nested';",
+      "import { typed } from './typed';",
+      "import { missing } from './missing';",
+    ].join("\n")),
+    graphSource("src/helper.js", "export const helper = 1;\n"),
+    graphSource("src/nested/index.js", "export const nested = 1;\n"),
+    graphSource("src/typed.ts", "export const typed = 1;\n"),
+  ];
+  const graph = pinnedImportGraph({ sources });
+  assert.equal(graph.document.edges.length, 3);
+  assert.equal(graph.document.limits.unresolvedRelativeImports, 1);
+  const literals = graph.document.edges.flatMap((edge) => edge.evidence.map((item) => item.literal)).sort();
+  assert.deepEqual(literals, ["./helper", "./nested", "./typed"]);
+  assert.equal(graph.document.execution.networkAccess, false);
+  assert.equal(graph.document.execution.writeAccess, false);
 });
 
 test("source reordering preserves the graph identity and all pack identities", () => {
