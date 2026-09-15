@@ -67,6 +67,18 @@ the first-party corpus. These are independent external source subsets, not compl
 repository measurements. Their annotations are checked in and visible to the
 implementation, so they are not a blinded holdout.
 
+The external cases exposed a second bounded-selection gap: a graph-selected neighbor
+could have a real lexical hit in an exported declaration or its leading JSDoc while
+the fixed ±4-line lexical window still omitted later implementation evidence or the
+declaration itself. For one-hop `graph:dependency:*` and `graph:dependent:*` sources
+only, a lexical hit may now expand into a bounded exported declaration text window.
+That expansion recognizes exported function/class declarations plus exported
+`const`/`let`/`var` bindings and can include up to 16 leading comment/JSDoc lines;
+the resulting window remains capped at 24 lines and stops before the next exported
+declaration. Explicit changed paths retain their previous lexical/header behavior and
+provenance. The benchmark budgets and required evidence were not loosened to make
+these cases pass.
+
 ## Limits and remaining proof
 
 The first-party regression corpus plus the two external subsets improve coverage but
