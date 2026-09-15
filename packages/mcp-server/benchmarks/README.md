@@ -1,6 +1,6 @@
 # Solve Context evaluation evidence
 
-Status reconciled through #920 on 2026-09-15. These are repository evaluation contracts and regression fixtures, not public provider-performance claims.
+Status reconciled through #922 on 2026-09-15. These are repository evaluation contracts and regression fixtures, not public provider-performance claims.
 
 ## Synthetic baseline
 
@@ -50,32 +50,50 @@ against either baseline. Lower byte counts alone cannot make a case pass.
 
 ## Independent external source subsets
 
-Run `npm run eval:context:independent` from `packages/mcp-server`. The suite uses two
-separately pinned MIT repositories rather than SolveLang itself:
+Run `npm run eval:context:independent` from `packages/mcp-server`. The suite now uses
+three separately pinned MIT repositories rather than SolveLang itself:
 
+- `axios/axios` at `ed95c083f574e869bfe894866d95a01825f8ff4e`, with complete pinned
+  `lib/core/Axios.js`, `InterceptorManager.js`, `dispatchRequest.js`, and
+  `transformData.js` files.
 - `chalk/chalk` at `661317e6f91fe7c90306c2c48ea9354562ee9146`, with complete pinned
   `source/index.js` and `source/utilities.js` files.
 - `node-fetch/node-fetch` at `8b3320d2a7c07bce4afc6b2bf6c3bbddda85b01f`, with complete pinned
   `src/response.js`, `src/body.js`, and `src/headers.js` files.
 
+That is **3 repositories, 9 complete source files, and 7 fixed tasks**. #922 adds the
+Axios corpus and three cross-file tasks covering request-interceptor iteration,
+request-data transformation, and asynchronous interceptor-to-dispatch flow. The
+existing Chalk/node-fetch tasks and their budgets/evidence requirements were not
+relaxed or rewritten.
+
 The checked-in MIT notices are retained beside the corpora. Snapshot filenames are
 the reviewed upstream Git blob SHA-1 values, `*.txt -text` prevents checkout newline
 conversion, and each offline run recomputes the Git blob identity before deriving a
-SHA-256 used by integrity and excerpt-provenance checks. The runner has no arbitrary
-path or URL input, performs no network calls and never executes the captured source.
+SHA-256 used by integrity and excerpt-provenance checks. The Axios manifest stores
+Git identities in bounded segments only to avoid secret-scanner false positives;
+the loader reassembles them and requires the same exact 40-hex Git identities before
+reading any snapshot. The runner has no arbitrary path or URL input, performs no
+network calls and never executes captured source.
 
-Four dependency-oriented tasks exercise Chalk multiline/closed-style helpers and
-node-fetch response cloning/content-type/header flows. They reuse the same equal-byte
-lexical, changed-path, and graph-assisted arms and non-regression contract as the
-first-party corpus. These are independent external source subsets, not complete
-repository measurements. Their annotations are checked in and visible to the
-implementation, so they are not a blinded holdout.
+The #922 exact-head run passed all seven external tasks with the existing selector.
+For the three Axios cases, every arm retained **100% required path recall and 100%
+required evidence recall** under its fixed byte budget; selected-path precision was
+`0.5` because each task selected all four files in the intentionally small Axios
+subset while requiring two. The cases therefore expose useful future precision room,
+but they did **not** demonstrate a correctness/selection defect that justified an
+algorithm change in #922.
 
-The external cases exposed graph-neighbor selection gaps where a lexical/JSDoc hit
-could still omit the exported declaration or later implementation evidence. For
+These are independent external source subsets, not complete repository measurements.
+Their annotations are checked in and visible to the implementation, so they are
+**not** a blinded holdout. The annotations are grading data and are not passed into
+the selector. Report truth records both facts explicitly.
+
+Earlier external cases exposed graph-neighbor selection gaps where a lexical/JSDoc
+hit could still omit the exported declaration or later implementation evidence. For
 one-hop `graph:dependency:*` and `graph:dependent:*` sources, the selector can expand
 into a bounded exported declaration text window while preserving exact budget and
-provenance. The benchmark budgets/evidence were not loosened to make these cases pass.
+provenance. The benchmark budgets/evidence were not loosened to make those cases pass.
 
 ## Agent-run measurement records
 
@@ -150,7 +168,7 @@ does not mean public v0.2.0 consumers receive current-main behavior.
 
 ## Limits and remaining proof
 
-The first-party regression corpus plus the two external subsets improve coverage but
+The first-party regression corpus plus the three external subsets improve coverage but
 do not constitute a whole-repository benchmark, a blinded held-out evaluation or a
 completed Claude/Codex coding task. The record/report contract makes future real
 measurements comparable; it does not create those measurements. Provider input/output
@@ -158,8 +176,9 @@ tokens, cache reuse, real task-success rates and competitor results remain unmea
 until separately authorized runs supply truthful records. Excerpt-byte reduction is
 not token savings, and local timing is not end-to-end agent latency.
 
-Issue #898 still needs broader/larger independently pinned or blinded evaluation,
-actual Claude/Codex task runs including bidirectional long-session handoff, measured
-quality/token/cache/selection/latency evidence, and versioned distribution proof before
-public savings or comparative-performance claims. These suites grant no provider
-credential, network, billing, deployment, publication or Solve Runner authority.
+Issue #898 still needs broader/larger independently pinned or genuinely blinded
+evaluation beyond these small source subsets, actual Claude/Codex task runs including
+bidirectional long-session handoff, measured quality/token/cache/selection/latency
+evidence, and versioned distribution proof before public savings or
+comparative-performance claims. These suites grant no provider credential, network,
+billing, deployment, publication or Solve Runner authority.

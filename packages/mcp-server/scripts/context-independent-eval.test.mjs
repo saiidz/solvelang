@@ -15,10 +15,10 @@ const selected = (path, text) => ({
 
 test("loads distinct pinned external MIT corpora with exact snapshot identities", async () => {
   const loaded = await loadIndependentCorpora();
-  assert.equal(loaded.length, 2);
+  assert.equal(loaded.length, 3);
   assert.deepEqual(
     loaded.map(({ corpus }) => corpus.repository).sort(),
-    ["chalk/chalk", "node-fetch/node-fetch"],
+    ["axios/axios", "chalk/chalk", "node-fetch/node-fetch"],
   );
 
   for (const { corpus, licenseNoticeSha256 } of loaded) {
@@ -32,6 +32,11 @@ test("loads distinct pinned external MIT corpora with exact snapshot identities"
       assert.ok(source.text.length > 0);
     }
   }
+
+  const axios = loaded.find(({ corpus }) => corpus.repository === "axios/axios");
+  assert.ok(axios);
+  assert.equal(axios.corpus.sources.length, 4);
+  assert.equal(axios.corpus.cases.length, 3);
 });
 
 test("selected lexical function hits retain bounded later implementation evidence", () => {
@@ -116,13 +121,14 @@ test("independent corpus report remains offline and claim-bounded", async () => 
       })),
   );
 
-  assert.equal(report.aggregate.repositoryCount, 2);
-  assert.ok(report.aggregate.sourceCount >= 5);
-  assert.ok(report.aggregate.caseCount >= 4);
+  assert.equal(report.aggregate.repositoryCount, 3);
+  assert.ok(report.aggregate.sourceCount >= 9);
+  assert.ok(report.aggregate.caseCount >= 7);
   assert.equal(report.aggregate.pass, true, JSON.stringify(failureSummary, null, 2));
   assert.equal(report.truth.wholeRepositoriesMeasured, false);
   assert.equal(report.truth.blindedHoldout, false);
   assert.equal(report.truth.annotationsVisibleToImplementation, true);
+  assert.equal(report.truth.annotationsPassedToSelector, false);
   assert.equal(report.truth.byteReductionIsNotTokenSavings, true);
   assert.equal(report.truth.providerTokens, null);
   assert.equal(report.truth.providerCacheReuse, null);

@@ -1,0 +1,50 @@
+{
+  "schema": "solvelang.context.repository-corpus.v1",
+  "capture": "external-pinned-source-subset-v1",
+  "repository": "axios/axios",
+  "commitParts": ["ed95c083f574e869bfe8", "94866d95a01825f8ff4e"],
+  "license": "MIT",
+  "licenseNoticeFile": "LICENSE-axios.txt",
+  "scope": "four complete core source files from an independent external repository",
+  "sources": [
+    {"path": "lib/core/Axios.js", "gitBlobSha1Parts": ["4555b226d948448014c8", "b540acb8471eeb80eb3e"]},
+    {"path": "lib/core/InterceptorManager.js", "gitBlobSha1Parts": ["df61137681887ccc0ad0", "6a162b2d851e47599978"]},
+    {"path": "lib/core/dispatchRequest.js", "gitBlobSha1Parts": ["39a2fd68f7a0ff00db13", "8ae131a88922bf965d23"]},
+    {"path": "lib/core/transformData.js", "gitBlobSha1Parts": ["f22c474356d07a7fb7b0", "595640ab139e9472e2cc"]}
+  ],
+  "cases": [
+    {
+      "id": "axios-request-interceptor-iteration",
+      "task": "Trace Axios request interceptor iteration and synchronous handling across the manager boundary.",
+      "changedPaths": ["lib/core/Axios.js"],
+      "budgetBytes": 12288,
+      "requiredEvidence": {
+        "lib/core/Axios.js": ["this.interceptors.request.forEach", "synchronousRequestInterceptors"],
+        "lib/core/InterceptorManager.js": ["utils.forEach(this.handlers", "options.synchronous"]
+      },
+      "minPathPrecision": 0.5
+    },
+    {
+      "id": "axios-dispatch-request-transform",
+      "task": "Review request data transformation from dispatchRequest into transformData and normalized headers.",
+      "changedPaths": ["lib/core/dispatchRequest.js"],
+      "budgetBytes": 8192,
+      "requiredEvidence": {
+        "lib/core/dispatchRequest.js": ["config.data = transformData.call"],
+        "lib/core/transformData.js": ["headers.normalize()"]
+      },
+      "minPathPrecision": 0.5
+    },
+    {
+      "id": "axios-async-interceptor-dispatch-chain",
+      "task": "Follow the asynchronous interceptor chain from Axios into the request dispatcher.",
+      "changedPaths": ["lib/core/Axios.js"],
+      "budgetBytes": 12288,
+      "requiredEvidence": {
+        "lib/core/Axios.js": ["dispatchRequest.bind(this)", "promise.then(chain"],
+        "lib/core/dispatchRequest.js": ["function dispatchRequest"]
+      },
+      "minPathPrecision": 0.5
+    }
+  ]
+}

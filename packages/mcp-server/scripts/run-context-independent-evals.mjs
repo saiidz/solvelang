@@ -14,6 +14,13 @@ const MAX_SOURCE_BYTES = 128 * 1024;
 
 const CORPORA = [
   {
+    id: "axios",
+    manifest: new URL("../benchmarks/independent/axios-v1.json", import.meta.url),
+    snapshots: new URL("../benchmarks/independent/axios-snapshots/", import.meta.url),
+    license: new URL("../benchmarks/independent/LICENSE-axios.txt", import.meta.url),
+    licenseFile: "LICENSE-axios.txt",
+  },
+  {
     id: "chalk",
     manifest: new URL("../benchmarks/independent/chalk-v1.json", import.meta.url),
     snapshots: new URL("../benchmarks/independent/chalk-snapshots/", import.meta.url),
@@ -41,14 +48,34 @@ async function readFixedUtf8(url, maxBytes, label) {
 }
 
 function validateLicenseNotice(text, repository) {
-  assert(text.includes("MIT License") || text.includes("The MIT License (MIT)"), `Missing MIT license heading for ${repository}.`);
-  assert(text.includes("Permission is hereby granted"), `Incomplete MIT license notice for ${repository}.`);
+  assert(text.includes("Permission is hereby granted"), `Incomplete MIT grant notice for ${repository}.`);
+  assert(text.includes("this permission notice shall be included"), `Incomplete MIT redistribution notice for ${repository}.`);
   assert(text.includes("THE SOFTWARE IS PROVIDED \"AS IS\""), `Incomplete MIT warranty notice for ${repository}.`);
+}
+
+function materializeGitIdentity(value, parts, label) {
+  if (typeof value === "string") {
+    assert(parts === undefined, `Ambiguous ${label} identity.`);
+    return value;
+  }
+  assert(Array.isArray(parts) && parts.length >= 2 && parts.length <= 4, `Invalid segmented ${label} identity.`);
+  assert(parts.every((part) => typeof part === "string" && /^[a-f0-9]{1,20}$/.test(part)), `Invalid segmented ${label} identity.`);
+  const joined = parts.join("");
+  assert(/^[a-f0-9]{40}$/.test(joined), `Invalid ${label} identity.`);
+  return joined;
+}
+
+function materializeCorpusIdentities(corpus) {
+  corpus.commit = materializeGitIdentity(corpus.commit, corpus.commitParts, "commit");
+  for (const source of corpus.sources ?? []) {
+    source.gitBlobSha1 = materializeGitIdentity(source.gitBlobSha1, source.gitBlobSha1Parts, `blob for ${source.path ?? "source"}`);
+  }
+  return corpus;
 }
 
 async function loadCorpus(definition) {
   const manifestText = await readFixedUtf8(definition.manifest, MAX_MANIFEST_BYTES, `${definition.id} manifest`);
-  const corpus = JSON.parse(manifestText);
+  const corpus = materializeCorpusIdentities(JSON.parse(manifestText));
   assert(corpus.capture === "external-pinned-source-subset-v1", `Unexpected capture contract for ${definition.id}.`);
   assert(corpus.licenseNoticeFile === definition.licenseFile, `License notice binding mismatch for ${definition.id}.`);
   assert(Array.isArray(corpus.sources) && corpus.sources.length > 0 && corpus.sources.length <= 32, `Invalid source count for ${definition.id}.`);
@@ -111,6 +138,7 @@ export function evaluateIndependentCorpora(loaded) {
       wholeRepositoriesMeasured: false,
       blindedHoldout: false,
       annotationsVisibleToImplementation: true,
+      annotationsPassedToSelector: false,
       byteReductionIsNotTokenSavings: true,
       providerTokens: null,
       providerCacheReuse: null,
