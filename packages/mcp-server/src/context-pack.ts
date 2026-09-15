@@ -9,7 +9,7 @@ export const MAX_CONTEXT_SOURCE_BYTES = 2 * 1024 * 1024;
 
 const MAX_TASK_BYTES = 16 * 1_024;
 const MAX_REASON_TOKENS = 8;
-const MAX_TOKEN_OCCURRENCES_PER_EXCERPT = 2;
+const MAX_TOKEN_OCCURRENCES_PER_RANK = 2;
 const WINDOW_RADIUS = 4;
 const DECLARATION_WINDOW_LINES = 24;
 const DECLARATION_LEADING_COMMENT_LINES = 16;
@@ -51,6 +51,7 @@ export interface ContextPack {
 
 interface Candidate {
   lexicalTokenCount: number;
+  rankingScore: number;
   declarationTextWindow?: boolean;
   selection?: ContextSourceSelection;
   path: string;
@@ -144,8 +145,8 @@ function countOccurrences(haystack: string, needle: string): number {
   }
 }
 
-function boundedOccurrences(haystack: string, needle: string): number {
-  return Math.min(MAX_TOKEN_OCCURRENCES_PER_EXCERPT, countOccurrences(haystack, needle));
+function boundedRankingOccurrences(haystack: string, needle: string): number {
+  return Math.min(MAX_TOKEN_OCCURRENCES_PER_RANK, countOccurrences(haystack, needle));
 }
 
 function mergeRanges(ranges: Array<{ startLine: number; endLine: number }>): Array<{ startLine: number; endLine: number }> {
@@ -189,17 +190,21 @@ function budgetRanges(
   return bounded;
 }
 
-function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection, declarationTextWindow = false): { score: number; reasons: string[]; lexicalTokenCount: number } {
+function scoreExcerpt(path: string, content: string, tokens: string[], selection?: ContextSourceSelection, declarationTextWindow = false): { score: number; rankingScore: number; reasons: string[]; lexicalTokenCount: number } {
   const lowerPath = path.toLowerCase();
   const lowerContent = content.toLowerCase();
   const pathReasons = tokens.filter((token) => lowerPath.includes(token));
   const contentReasons = tokens.filter((token) => lowerContent.includes(token));
   const lexicalReasons = [...new Set([...pathReasons, ...contentReasons])].sort();
+  const selectionScore = selection?.score ?? 0;
   return {
     lexicalTokenCount: lexicalReasons.length,
-    score: pathReasons.reduce((total, token) => total + 6 * boundedOccurrences(lowerPath, token), 0)
-      + contentReasons.reduce((total, token) => total + 2 * boundedOccurrences(lowerContent, token), 0)
-      + (selection?.score ?? 0),
+    score: pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0)
+      + contentReasons.reduce((total, token) => total + 2 * countOccurrences(lowerContent, token), 0)
+      + selectionScore,
+    rankingScore: pathReasons.reduce((total, token) => total + 6 * boundedRankingOccurrences(lowerPath, token), 0)
+      + contentReasons.reduce((total, token) => total + 2 * boundedRankingOccurrences(lowerContent, token), 0)
+      + selectionScore,
     reasons: [...new Set([
       ...(selection?.reasons ?? []),
       ...(declarationTextWindow ? ["selection:declaration-text-window"] : []),
@@ -284,14 +289,14 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
   const lowerPath = normalizedPath.toLowerCase();
   const sourceSha256 = sha256Text(source.text);
   const pathReasons = tokens.filter((token) => lowerPath.includes(token));
-  const pathScore = pathReasons.reduce((total, token) => total + 6 * boundedOccurrences(lowerPath, token), 0);
+  const pathScore = pathReasons.reduce((total, token) => total + 6 * countOccurrences(lowerPath, token), 0);
 
   const matchLines: Array<{ line: number; reasons: string[]; score: number }> = [];
   for (let index = 0; index < lowerLines.length; index += 1) {
     const line = lowerLines[index];
     const reasons = tokens.filter((token) => line.includes(token));
     if (reasons.length === 0) continue;
-    const score = reasons.reduce((total, token) => total + 2 * boundedOccurrences(line, token), 0) + pathScore;
+    const score = reasons.reduce((total, token) => total + 2 * countOccurrences(line, token), 0) + pathScore;
     matchLines.push({ line: index + 1, reasons, score });
   }
 
@@ -362,7 +367,7 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
 
 function candidateSort(left: Candidate, right: Candidate): number {
   return (right.selection?.score ?? 0) - (left.selection?.score ?? 0)
-    || right.score - left.score
+    || right.rankingScore - left.rankingScore
     || right.lexicalTokenCount - left.lexicalTokenCount
     || compareText(left.path, right.path)
     || left.startLine - right.startLine
