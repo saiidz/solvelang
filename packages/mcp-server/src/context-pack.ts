@@ -206,8 +206,16 @@ function partitionCandidate(candidate: Candidate, tokens: string[], budgetBytes:
   }).sort(candidateSort);
 }
 
-function isExportedDeclaration(line: string): boolean {
+function isLegacyExportedDeclaration(line: string): boolean {
+  return /^export\s+(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*/.test(line);
+}
+
+function isExtendedExportedDeclaration(line: string): boolean {
   return /^export\s+(?:(?:async\s+)?(?:function|class)\s+[A-Za-z_$][\w$]*|(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=)/.test(line);
+}
+
+function hasGraphSelection(selection?: ContextSourceSelection): boolean {
+  return selection?.reasons.some((reason) => reason.startsWith("graph:dependency:") || reason.startsWith("graph:dependent:")) ?? false;
 }
 
 function declarationWindowStart(lines: string[], declarationLine: number, previousDeclarationLine: number): number {
@@ -276,38 +284,46 @@ function buildCandidates(source: ContextSource, tokens: string[], budgetBytes: n
     ? mergeRanges(matchLines.map(({ line }) => ({ startLine: Math.max(1, line - WINDOW_RADIUS), endLine: Math.min(lines.length, line + WINDOW_RADIUS) })))
     : [];
 
-  // Structural selection can nominate a dependency whose useful implementation
-  // sits beyond a narrow lexical window. Keep lexical-only behavior unchanged,
-  // but for selected sources allow bounded exported declaration windows when
-  // they actually extend coverage around a task match. Include leading JSDoc so
-  // semantic comment matches can reach the declaration they describe.
-  const declarationLines = selectionScore > 0
-    ? lines.flatMap((line, index) => isExportedDeclaration(line) ? [index + 1] : [])
+  // Preserve the original no-match declaration fallback exactly. The newer
+  // lexical-to-declaration expansion is intentionally narrower: it applies only
+  // to one-hop graph neighbors, not explicit changed roots or arbitrary hints.
+  const legacyDeclarationLines = matchLines.length === 0 && selectionScore > 0
+    ? lines.flatMap((line, index) => isLegacyExportedDeclaration(line) ? [index + 1] : [])
     : [];
-  const declarationRanges = declarationLines.map((declarationLine, index) => {
-    const startLine = declarationWindowStart(lines, declarationLine, declarationLines[index - 1] ?? 0);
+  const legacyDeclarationRanges = legacyDeclarationLines.map((startLine, index) => ({
+    startLine,
+    endLine: Math.min(
+      lines.length,
+      startLine + DECLARATION_WINDOW_LINES - 1,
+      (legacyDeclarationLines[index + 1] ?? lines.length + 1) - 1,
+    ),
+  }));
+  const declarationFallback = legacyDeclarationRanges.length > 0;
+
+  const graphDeclarationLines = matchLines.length > 0 && hasGraphSelection(selection)
+    ? lines.flatMap((line, index) => isExtendedExportedDeclaration(line) ? [index + 1] : [])
+    : [];
+  const graphDeclarationRanges = graphDeclarationLines.map((declarationLine, index) => {
+    const startLine = declarationWindowStart(lines, declarationLine, graphDeclarationLines[index - 1] ?? 0);
     return {
       startLine,
       endLine: Math.min(
         lines.length,
         startLine + DECLARATION_WINDOW_LINES - 1,
-        (declarationLines[index + 1] ?? lines.length + 1) - 1,
+        (graphDeclarationLines[index + 1] ?? lines.length + 1) - 1,
       ),
     };
   });
-
-  const declarationFallback = matchLines.length === 0 && declarationRanges.length > 0;
-  const declarationExpansions = matchLines.length > 0
-    ? declarationRanges.filter((range) =>
-      matchLines.some(({ line }) => rangeContainsLine(range, line))
-      && !lexicalRanges.some((lexicalRange) => rangeContainsRange(lexicalRange, range)))
-    : [];
-  const declarationTextRanges = declarationFallback ? declarationRanges : declarationExpansions;
+  const declarationExpansions = graphDeclarationRanges.filter((range) =>
+    matchLines.some(({ line }) => rangeContainsLine(range, line))
+    && !lexicalRanges.some((lexicalRange) => rangeContainsRange(lexicalRange, range))
+  );
+  const declarationTextRanges = declarationFallback ? legacyDeclarationRanges : declarationExpansions;
 
   const ranges = matchLines.length > 0
     ? mergeRanges([...lexicalRanges, ...declarationExpansions])
     : declarationFallback
-      ? declarationRanges
+      ? legacyDeclarationRanges
       : [{ startLine: 1, endLine: Math.min(lines.length, WINDOW_RADIUS * 2 + 1) }];
 
   return budgetRanges(lines, ranges, budgetBytes).map(({ startLine, endLine }) => {
