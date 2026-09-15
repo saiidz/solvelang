@@ -145,3 +145,23 @@ test("graph-selected lexical windows ignore high-frequency bridge terms when spe
   assert.ok(pack.entries.some((entry) => entry.content.includes("setProperty(dom, value, oldValue, namespace);")));
   assertExactPack(pack, [source]);
 });
+
+test("rare graph evidence outranks common graph evidence within the same structural tier", () => {
+  const lines: string[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    lines.push(`common ${"x".repeat(70)}`);
+    lines.push(...Array(9).fill(`// spacer ${"y".repeat(70)}`));
+  }
+  lines.push(...Array(4).fill(`// tail ${"z".repeat(70)}`));
+  lines.push("rare critical_graph_marker");
+  lines.push(...Array(4).fill(`// end ${"q".repeat(70)}`));
+
+  const source: ContextSource = {
+    path: "src/graph-source.ts",
+    selection: { score: 64, reasons: ["graph:dependency:imports:edge"] },
+    text: lines.join("\n"),
+  };
+  const pack = buildContextPack("common rare", [source], 1_024);
+  assert.ok(pack.entries.some((entry) => entry.content.includes("critical_graph_marker")));
+  assertExactPack(pack, [source]);
+});
