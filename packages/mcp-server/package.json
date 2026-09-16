@@ -97,6 +97,7 @@
     "test:plugin-roundtrip": "node scripts/smoke-plugin-roundtrip.mjs",
     "test:release-candidate": "node scripts/validate-release-candidate.mjs",
     "test:release-finalization": "npm run build && node scripts/qualify-release-finalization.mjs",
+    "test:distribution-finalization": "node scripts/qualify-distribution-finalization.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
     "start": "node dist/src/index.js",
     "start:remote": "node dist/src/remote-cli.js"
