@@ -4,6 +4,7 @@ import { sha256Text } from "../dist/src/context-pack.js";
 import { gitBlobSha1 } from "./run-context-repository-evals.mjs";
 import {
   answerKeyCommitment,
+  createSelectionReceipt,
   digest,
   runHeldoutSelection,
   scoreHeldoutSelection,
@@ -64,43 +65,51 @@ test("selection input structurally excludes answer-key and grading fields", () =
   }), /unsupported fields/);
 });
 
-test("selection transcript is deterministic for the same public input", () => {
+test("selection transcript and receipt are deterministic for the same public input", () => {
   const { publicInput } = fixture();
   const first = runHeldoutSelection(publicInput);
   const second = runHeldoutSelection(structuredClone(publicInput));
   assert.deepEqual(second, first);
+  assert.deepEqual(createSelectionReceipt(second), createSelectionReceipt(first));
   assert.equal(first.truth.deterministicTranscript, true);
 });
 
 test("precommitted synthetic key scores only after selection and stays claim-bounded", () => {
   const { publicInput, answerKey } = fixture();
   const transcript = runHeldoutSelection(publicInput);
+  const receipt = createSelectionReceipt(transcript);
   assert.equal(transcript.truth.answerKeyPresentInSelectorInput, false);
   assert.equal(transcript.truth.answerKeyCommitmentPresentBeforeSelection, true);
   assert.equal(transcript.truth.blindedEvidenceEstablishedByProtocolAlone, false);
 
-  const report = scoreHeldoutSelection(transcript, answerKey);
+  const report = scoreHeldoutSelection(transcript, receipt, answerKey);
   assert.equal(report.aggregate.pass, true);
   assert.equal(report.recordClass, "synthetic-test");
   assert.equal(report.truth.answerKeyMatchedPreSelectionCommitment, true);
+  assert.equal(report.truth.selectionReceiptMatchedTranscript, true);
   assert.equal(report.truth.syntheticEvidence, true);
   assert.equal(report.truth.genuinelyBlindedEvidenceEstablished, false);
   assert.equal(report.truth.independentEvaluatorAttestationRequired, true);
+  assert.equal(report.truth.externalReceiptPublicationRequiredForBlindingClaim, true);
   assert.equal(report.truth.publicationAuthorized, false);
 });
 
 test("revealed key cannot be changed after selection", () => {
   const { publicInput, answerKey } = fixture();
   const transcript = runHeldoutSelection(publicInput);
+  const receipt = createSelectionReceipt(transcript);
   const tampered = structuredClone(answerKey);
   tampered.cases[0].minPathPrecision = 0.5;
-  assert.throws(() => scoreHeldoutSelection(transcript, tampered), /does not match the pre-selection commitment/);
+  assert.throws(() => scoreHeldoutSelection(transcript, receipt, tampered), /does not match the pre-selection commitment/);
 });
 
-test("transcript tampering fails before hidden-key scoring", () => {
+test("transcript cannot diverge from the recorded selection receipt", () => {
   const { publicInput, answerKey } = fixture();
   const transcript = runHeldoutSelection(publicInput);
+  const receipt = createSelectionReceipt(transcript);
   const tampered = structuredClone(transcript);
   tampered.cases[0].arms.graphAssisted.pack.selectedBytes += 1;
-  assert.throws(() => scoreHeldoutSelection(tampered, answerKey), /transcript identity mismatch/);
+  const { transcriptSha256: ignored, ...tamperedBody } = tampered;
+  tampered.transcriptSha256 = digest(tamperedBody);
+  assert.throws(() => scoreHeldoutSelection(tampered, receipt, answerKey), /receipt transcript mismatch/);
 });
