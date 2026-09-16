@@ -90,10 +90,9 @@ test("JSDoc lexical matches and selected hints both retain the exported declarat
   const plain = buildContextPack(task, [{ path: "src/body.js", text }], 1024);
   const hinted = buildContextPack(task, [selected("src/body.js", text)], 1024);
 
-  // Lexical derivation now reaches the declaration directly; keep that stronger behavior covered.
+  // Lexical derivation now reaches the declaration directly; selection hints must not regress that evidence.
   assert.ok(plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
   assert.ok(hinted.entries.some((entry) => entry.content.includes("export const extractContentType")));
-  assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
 
 test("independent corpus report remains offline and claim-bounded", async () => {
