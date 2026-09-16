@@ -1,0 +1,45 @@
+{
+  "schema": "solvelang.main-protection.v1",
+  "targetBranch": "main",
+  "requiredStatusChecks": [
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "jobId": "rust",
+      "checkName": "Rust runtime"
+    },
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "jobId": "site",
+      "checkName": "Static site"
+    },
+    {
+      "workflow": ".github/workflows/rust.yml",
+      "jobId": "solvec",
+      "checkName": "SolveLang Rust security and tests"
+    },
+    {
+      "workflow": ".github/workflows/wasm-artifact-security.yml",
+      "jobId": "audit",
+      "checkName": "WASM artifact security"
+    }
+  ],
+  "conditionalStatusChecks": [
+    {
+      "workflow": ".github/workflows/mcp-ci.yml",
+      "reason": "Path-filtered to MCP/plugin changes; unsafe as a global required status check."
+    },
+    {
+      "workflow": ".github/workflows/launch-readiness-ci.yml",
+      "reason": "Path-filtered to launch/release surfaces; unsafe as a global required status check."
+    }
+  ],
+  "intendedRuleset": {
+    "requirePullRequest": true,
+    "requiredApprovals": 0,
+    "requireConversationResolution": true,
+    "requireStatusChecks": true,
+    "requireBranchesUpToDate": true,
+    "blockDeletion": true,
+    "blockNonFastForward": true
+  }
+}

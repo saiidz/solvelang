@@ -115,6 +115,10 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
+      - name: Validate main protection contract
+        working-directory: .
+        run: node ops/governance/validate-main-protection-contract.mjs
+
       - name: Install dependencies
         run: npm ci
 
