@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   solvec:
+    name: SolveLang Rust security and tests
     runs-on: ubuntu-latest
     defaults:
       run:
