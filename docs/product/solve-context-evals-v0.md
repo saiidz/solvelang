@@ -1,8 +1,8 @@
 # Solve Context evals v0
 
-Status: **synthetic + pinned real-source regression suites with a strict offline contract for future real-agent measurements; complete real Claude/Codex provider evidence not yet collected**  
+Status: **synthetic + pinned real-source regression suites, a precommitted held-out scoring protocol, and a strict offline contract for future real-agent measurements; genuinely independent held-out evidence and complete real Claude/Codex provider evidence are not yet collected**  
 Tracking epic: #898  
-Reconciled through #923 on 2026-09-15.
+Reconciled through #924 candidate work on 2026-09-16.
 
 ## Purpose
 
@@ -14,10 +14,20 @@ Run from `packages/mcp-server`:
 npm run eval:context
 npm run eval:context:repository
 npm run eval:context:independent
+npm run test:context-holdout
 npm run test:context-agent-eval-cli
 ```
 
-MCP CI runs these alongside package tests, plugin packaging/roundtrip, packed-consumer proof and dependency audit.
+For a separately prepared two-party held-out run, selection and scoring are intentionally separate:
+
+```bash
+cat public-heldout-input.json | npm run eval:context:holdout:select > selection-output.json
+cat score-input-with-transcript-receipt-and-revealed-key.json | npm run eval:context:holdout:score
+```
+
+The selection output contains both the deterministic transcript and a selection receipt bound to its transcript SHA-256. The independent evaluator should record or publish that receipt after selection and before revealing the answer key. The commands accept bounded stdin only. Do not pass credentials, private customer content, file/URL arguments, or an unrevealed answer key to the selector.
+
+MCP CI runs the synthetic protocol contract alongside package tests, pinned-source regressions, plugin packaging/roundtrip, packed-consumer proof and dependency audit.
 
 ## Evaluation layers
 
@@ -64,13 +74,45 @@ The committed aggregate is therefore **4 external repositories, 22 complete sour
 - suppress high-frequency bridge terms when a graph-selected source also contains more specific task evidence;
 - rank explicit structural selection evidence ahead of unrelated lexical repetition under tight budgets.
 
-Those changes are covered by focused regression tests and do not relax existing corpus evidence, precision, budget, determinism or exact-integrity gates. The final candidate independent regression reports the full **4-repository / 22-file / 11-task aggregate passing**.
+Those changes are covered by focused regression tests and do not relax existing corpus evidence, precision, budget, determinism or exact-integrity gates. The final #923 independent regression reports the full **4-repository / 22-file / 11-task aggregate passing**.
 
 The annotations remain checked into the repository and visible to implementation authors, so the suite is **not** a blinded holdout or whole-repository benchmark. The grading annotations are not passed into the selector, and the report states both facts explicitly.
 
-Earlier Chalk/node-fetch cases exposed graph-neighbor/JSDoc/exported-declaration selection gaps. Axios broadened the corpus without exposing a new correctness defect. Preact is the first larger coherent runtime-tree increment and did expose the additional selector/harness gaps listed above.
+### 4. Precommitted held-out answer-key protocol
 
-### 4. Real-agent measurement record/report contract
+#924 introduces a separate two-party protocol so future evidence does not need to place grading annotations beside the selector implementation.
+
+The independent evaluator prepares two artifacts before selection:
+
+1. a **public selection input** containing the pinned source corpus, tasks, fixed byte budgets, changed paths and only a SHA-256 commitment to the hidden answer key;
+2. a **private answer key** containing required verbatim evidence and minimum path-precision thresholds.
+
+The selector accepts the first artifact only. Its schema rejects answer keys, `requiredEvidence`, grading thresholds and unsupported fields. It performs no network/provider calls and emits a deterministic content-addressed transcript that binds:
+
+- repository and exact commit pin;
+- exact source Git blob/SHA-256 identities;
+- source-catalog digest;
+- public-input digest;
+- graph snapshot identity;
+- case/task/budget/changed-path inputs;
+- the answer-key commitment that existed before selection;
+- all exact selected packs and determinism evidence.
+
+The selector also emits a **selection receipt** containing the evaluation/source identity, answer-key commitment and transcript SHA-256. For a real held-out process, the evaluator must record or publish this receipt before the key is revealed. That gives the later scorer an external anchor for the exact transcript that existed before grading.
+
+Only after selection does the scorer receive the transcript, recorded selection receipt and revealed answer key. It rejects transcript/receipt divergence, receipt tampering, source-catalog mismatch, missing/duplicate cases, invalid evidence, and any answer key whose canonical SHA-256 no longer matches the pre-selection commitment. Scoring reuses the existing exact path/evidence/integrity/budget gates rather than a weaker parallel metric.
+
+CI uses only a `synthetic-test` answer key to prove the protocol. That test verifies:
+
+- grading data cannot enter selector input;
+- repeated selection yields the same transcript and receipt identity;
+- a revealed key cannot be edited after selection;
+- a transcript cannot diverge from the recorded receipt even if its internal hash is recomputed;
+- synthetic protocol proof cannot become a public blinded-performance claim.
+
+This protocol **does not itself establish genuinely blinded evidence**. A real held-out result still requires an independent evaluator/process that actually withholds the key from selector authors/operators, precommits it before selection, records/publishes the selection receipt before key reveal, and later provides the matching reveal plus independent-process attestation. The score report remains fail-closed on that distinction.
+
+### 5. Real-agent measurement record/report contract
 
 `context-agent-eval.ts` defines an offline schema for future separately authorized baseline-vs-Solve-Context Claude/Codex runs. The harness itself does not launch an agent, call a provider or use credentials.
 
@@ -131,6 +173,8 @@ Even when the engineering matrix becomes complete, the report keeps `publication
 
 The committed synthetic/pinned-source suites preserve their reviewed exact-integrity, evidence-recall and deterministic-output requirements. Where fixture-specific byte-reduction thresholds exist, those are local regression gates only and must not be generalized to arbitrary repositories or provider tokens.
 
+The held-out protocol preserves the same quality gates but separates answer-key possession from selection and adds a transcript receipt that can be externally anchored before key reveal. Its synthetic CI fixture validates process mechanics only.
+
 ## What is not yet measured
 
 The repository does not yet provide complete evidence for:
@@ -140,16 +184,16 @@ The repository does not yet provide complete evidence for:
 - provider cache reuse improvement;
 - end-to-end coding-task success equivalence/improvement across all categories;
 - end-to-end agent latency improvement;
-- a genuinely blinded/held-out benchmark;
+- an independently executed genuinely blinded/held-out benchmark result;
 - a controlled competitor comparison.
 
 ## Projected benchmark progression
 
 These are priorities, not promised dates:
 
-### Next — genuinely blinded/held-out evidence
+### Next — independently execute the held-out protocol
 
-The external suite now includes a materially larger coherent runtime-tree corpus, but its grading annotations are still checked into the same public repository. The next repository-evidence improvement should use a genuinely held-out answer key or independent evaluation process rather than merely adding more visible annotations. Do not relax evidence budgets to make a score pass.
+Use an evaluator/process outside the selector-authoring loop to choose a fixed pinned corpus/tasks, keep the answer key private, record the key commitment before selection, record/publish the returned selection receipt before revealing the key, then reveal the matching key only to the scorer. Record the external process/attestation separately. Do not treat the CI synthetic fixture as this evidence.
 
 ### Next — provider token + latency accounting
 
@@ -165,4 +209,4 @@ Only after comparable agent versions, repositories, budgets, provider settings a
 
 ## Claim policy
 
-Describe Solve Context as a correctness-first context-selection/compaction system with synthetic and pinned-source regression evidence. Do **not** state that it has been measured to beat Headroom, that it saves a specific provider-token percentage, or that it improves real-agent success/latency until the corresponding measured evidence exists and publication is separately approved.
+Describe Solve Context as a correctness-first context-selection/compaction system with synthetic and pinned-source regression evidence plus a repository-qualified precommitted held-out scoring protocol. Do **not** state that a genuinely blinded benchmark has been completed, that Solve Context has been measured to beat Headroom, that it saves a specific provider-token percentage, or that it improves real-agent success/latency until the corresponding measured evidence exists and publication is separately approved.
