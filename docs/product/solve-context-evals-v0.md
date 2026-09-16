@@ -21,11 +21,11 @@ npm run test:context-agent-eval-cli
 For a separately prepared two-party held-out run, selection and scoring are intentionally separate:
 
 ```bash
-cat public-heldout-input.json | npm run eval:context:holdout:select > selection-transcript.json
-cat score-input-with-revealed-key.json | npm run eval:context:holdout:score
+cat public-heldout-input.json | npm run eval:context:holdout:select > selection-output.json
+cat score-input-with-transcript-receipt-and-revealed-key.json | npm run eval:context:holdout:score
 ```
 
-The commands accept bounded stdin only. Do not pass credentials, private customer content, file/URL arguments, or an unrevealed answer key to the selector.
+The selection output contains both the deterministic transcript and a selection receipt bound to its transcript SHA-256. The independent evaluator should record or publish that receipt after selection and before revealing the answer key. The commands accept bounded stdin only. Do not pass credentials, private customer content, file/URL arguments, or an unrevealed answer key to the selector.
 
 MCP CI runs the synthetic protocol contract alongside package tests, pinned-source regressions, plugin packaging/roundtrip, packed-consumer proof and dependency audit.
 
@@ -82,7 +82,7 @@ The annotations remain checked into the repository and visible to implementation
 
 #924 introduces a separate two-party protocol so future evidence does not need to place grading annotations beside the selector implementation.
 
-The independent evaluator prepares two artifacts:
+The independent evaluator prepares two artifacts before selection:
 
 1. a **public selection input** containing the pinned source corpus, tasks, fixed byte budgets, changed paths and only a SHA-256 commitment to the hidden answer key;
 2. a **private answer key** containing required verbatim evidence and minimum path-precision thresholds.
@@ -98,17 +98,19 @@ The selector accepts the first artifact only. Its schema rejects answer keys, `r
 - the answer-key commitment that existed before selection;
 - all exact selected packs and determinism evidence.
 
-Only after selection does the scorer receive the transcript and revealed answer key. It rejects transcript tampering, source-catalog mismatch, missing/duplicate cases, invalid evidence, and any answer key whose canonical SHA-256 no longer matches the pre-selection commitment. Scoring reuses the existing exact path/evidence/integrity/budget gates rather than a weaker parallel metric.
+The selector also emits a **selection receipt** containing the evaluation/source identity, answer-key commitment and transcript SHA-256. For a real held-out process, the evaluator must record or publish this receipt before the key is revealed. That gives the later scorer an external anchor for the exact transcript that existed before grading.
+
+Only after selection does the scorer receive the transcript, recorded selection receipt and revealed answer key. It rejects transcript/receipt divergence, receipt tampering, source-catalog mismatch, missing/duplicate cases, invalid evidence, and any answer key whose canonical SHA-256 no longer matches the pre-selection commitment. Scoring reuses the existing exact path/evidence/integrity/budget gates rather than a weaker parallel metric.
 
 CI uses only a `synthetic-test` answer key to prove the protocol. That test verifies:
 
 - grading data cannot enter selector input;
-- repeated selection yields the same transcript identity;
+- repeated selection yields the same transcript and receipt identity;
 - a revealed key cannot be edited after selection;
-- a transcript cannot be edited before scoring;
+- a transcript cannot diverge from the recorded receipt even if its internal hash is recomputed;
 - synthetic protocol proof cannot become a public blinded-performance claim.
 
-This protocol **does not itself establish genuinely blinded evidence**. A real held-out result still requires an independent evaluator/process that actually withholds the key from selector authors/operators, precommits it before selection, and later provides the matching reveal/attestation. The score report remains fail-closed on that distinction.
+This protocol **does not itself establish genuinely blinded evidence**. A real held-out result still requires an independent evaluator/process that actually withholds the key from selector authors/operators, precommits it before selection, records/publishes the selection receipt before key reveal, and later provides the matching reveal plus independent-process attestation. The score report remains fail-closed on that distinction.
 
 ### 5. Real-agent measurement record/report contract
 
@@ -171,7 +173,7 @@ Even when the engineering matrix becomes complete, the report keeps `publication
 
 The committed synthetic/pinned-source suites preserve their reviewed exact-integrity, evidence-recall and deterministic-output requirements. Where fixture-specific byte-reduction thresholds exist, those are local regression gates only and must not be generalized to arbitrary repositories or provider tokens.
 
-The held-out protocol preserves the same quality gates but separates answer-key possession from selection. Its synthetic CI fixture validates process mechanics only.
+The held-out protocol preserves the same quality gates but separates answer-key possession from selection and adds a transcript receipt that can be externally anchored before key reveal. Its synthetic CI fixture validates process mechanics only.
 
 ## What is not yet measured
 
@@ -191,7 +193,7 @@ These are priorities, not promised dates:
 
 ### Next — independently execute the held-out protocol
 
-Use an evaluator/process outside the selector-authoring loop to choose a fixed pinned corpus/tasks, keep the answer key private, publish/record the key commitment before selection, then reveal the matching key only to the scorer. Record the external process/attestation separately. Do not treat the CI synthetic fixture as this evidence.
+Use an evaluator/process outside the selector-authoring loop to choose a fixed pinned corpus/tasks, keep the answer key private, record the key commitment before selection, record/publish the returned selection receipt before revealing the key, then reveal the matching key only to the scorer. Record the external process/attestation separately. Do not treat the CI synthetic fixture as this evidence.
 
 ### Next — provider token + latency accounting
 
