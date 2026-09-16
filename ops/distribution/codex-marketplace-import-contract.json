@@ -1,0 +1,14 @@
+{
+  "schema": "solvelang.codex.marketplace-import.v1",
+  "sourceRepository": "https://github.com/saiidz/solvelang",
+  "sourcePath": "",
+  "recommendedBranch": "main",
+  "marketplaceManifest": ".agents/plugins/marketplace.json",
+  "marketplaceName": "solvelang",
+  "pluginName": "solvelang",
+  "pluginSourcePath": "./plugins/solvelang",
+  "product": "CODEX",
+  "workspacePolicyAuthority": "external-admin",
+  "workspaceImportImpliesPublicDirectoryPublication": false,
+  "publicDirectoryPublicationAuthorized": false
+}
