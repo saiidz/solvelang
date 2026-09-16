@@ -59,6 +59,8 @@ jobs:
       - run: npm test
       - name: Validate selected release candidate boundary
         run: npm run test:release-candidate
+      - name: Qualify staged v0.3.0 release finalization
+        run: npm run test:release-finalization
       - name: Run Solve Context offline evals
         run: npm run eval:context
       - name: Run pinned real-source context regressions
