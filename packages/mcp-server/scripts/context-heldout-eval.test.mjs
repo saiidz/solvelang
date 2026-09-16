@@ -77,5 +77,22 @@ test("precommitted synthetic key scores only after selection and stays claim-bou
   assert.equal(report.truth.answerKeyMatchedPreSelectionCommitment, true);
   assert.equal(report.truth.syntheticEvidence, true);
   assert.equal(report.truth.genuinelyBlindedEvidenceEstablished, false);
+  assert.equal(report.truth.independentEvaluatorAttestationRequired, true);
   assert.equal(report.truth.publicationAuthorized, false);
+});
+
+test("revealed key cannot be changed after selection", () => {
+  const { publicInput, answerKey } = fixture();
+  const transcript = runHeldoutSelection(publicInput);
+  const tampered = structuredClone(answerKey);
+  tampered.cases[0].minPathPrecision = 0.5;
+  assert.throws(() => scoreHeldoutSelection(transcript, tampered), /does not match the pre-selection commitment/);
+});
+
+test("transcript tampering fails before hidden-key scoring", () => {
+  const { publicInput, answerKey } = fixture();
+  const transcript = runHeldoutSelection(publicInput);
+  const tampered = structuredClone(transcript);
+  tampered.cases[0].arms.graphAssisted.pack.selectedBytes += 1;
+  assert.throws(() => scoreHeldoutSelection(tampered, answerKey), /transcript identity mismatch/);
 });
