@@ -69,7 +69,31 @@ function canonical(value) {
 }
 const digest = (value) => sha256Text(JSON.stringify(canonical(value)));
 
-/** Only literal relative imports present in the pinned subset become graph edges. No resolver or source execution. */
+function resolvePinnedImport(byPath, resolved) {
+  const exact = byPath.get(resolved);
+  if (exact) return exact;
+
+  // Preserve the existing JS-specifier to pinned TypeScript-source fallback.
+  if (resolved.endsWith(".js")) return byPath.get(`${resolved.slice(0, -3)}.ts`);
+
+  // For extensionless relative ESM imports, resolve only against a small,
+  // deterministic allowlist of paths that already exist in the validated
+  // pinned corpus. This performs no filesystem lookup, package resolution,
+  // network access, or source execution.
+  if (path.posix.extname(resolved)) return undefined;
+  for (const candidate of [
+    `${resolved}.js`,
+    `${resolved}.ts`,
+    `${resolved}/index.js`,
+    `${resolved}/index.ts`,
+  ]) {
+    const target = byPath.get(candidate);
+    if (target) return target;
+  }
+  return undefined;
+}
+
+/** Only literal relative imports present in the pinned subset become graph edges. No filesystem/package resolver or source execution. */
 export function pinnedImportGraph(corpus) {
   const schema = "solvelang.graph.v0";
   const nodes = corpus.sources.map((source) => ({
@@ -87,7 +111,7 @@ export function pinnedImportGraph(corpus) {
       const match = lines[index].match(/^\s*(?:import\s+[^;]*|})\s+from\s+["'](\.{1,2}\/[^"']+)["'];?\s*$/);
       if (!match) continue;
       const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(source.path), match[1]));
-      const target = byPath.get(resolved) ?? (resolved.endsWith(".js") ? byPath.get(resolved.slice(0, -3) + ".ts") : undefined);
+      const target = resolvePinnedImport(byPath, resolved);
       if (!target) { unresolvedRelativeImports += 1; continue; }
       const from = byPath.get(source.path).id;
       const kind = "imports";

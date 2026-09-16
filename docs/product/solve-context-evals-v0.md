@@ -2,7 +2,7 @@
 
 Status: **synthetic + pinned real-source regression suites with a strict offline contract for future real-agent measurements; complete real Claude/Codex provider evidence not yet collected**  
 Tracking epic: #898  
-Reconciled through #922 on 2026-09-15.
+Reconciled through #923 on 2026-09-15.
 
 ## Purpose
 
@@ -48,19 +48,27 @@ It exposed real selector defects that were fixed without weakening fixture budge
 
 ### 3. Independent pinned external-source suite
 
-`npm run eval:context:independent` now uses separately pinned MIT source subsets from:
+`npm run eval:context:independent` uses separately pinned MIT source subsets from:
 
 - `axios/axios` — four complete core source files and three cross-file tasks;
 - `chalk/chalk` — two complete source files and two tasks;
-- `node-fetch/node-fetch` — three complete source files and two tasks.
+- `node-fetch/node-fetch` — three complete source files and two tasks;
+- `preactjs/preact` — the complete 13-file JavaScript runtime tree under `src/` (including `src/diff/`) and four cross-file tasks.
 
-The committed aggregate is therefore **3 external repositories, 9 complete source files and 7 fixed tasks**. Snapshots are data only, never executed, and are verified by exact upstream Git blob identity plus local SHA-256/integrity checks.
+The committed aggregate is therefore **4 external repositories, 22 complete source files and 11 fixed tasks**. Snapshots are data only, never executed, and are verified by exact upstream Git blob identity plus local SHA-256/integrity checks.
 
-#922 added the Axios cases without changing selector/runtime code or weakening the existing Chalk/node-fetch fixtures. Exact-head MCP CI reported all seven external tasks passing. In the three Axios cases, all arms preserved **100% required path recall and 100% required evidence recall** under the fixed budgets. Selected-path precision was `0.5` because the deliberately small four-file Axios subset caused all four files to be selected for tasks requiring two; this is useful precision headroom, not a demonstrated correctness defect.
+#922 added the Axios cases without changing selector/runtime code. #923 materially increased the corpus with Preact and exposed additional deterministic selection/harness gaps before merge. The resulting focused repairs:
+
+- resolve extensionless relative ESM imports only against exact JS/TS or `index` paths already present in the validated pinned corpus;
+- derive bounded singular and `-tion` task-token aliases so related declaration/callsite wording can be reached without semantic guessing;
+- suppress high-frequency bridge terms when a graph-selected source also contains more specific task evidence;
+- rank explicit structural selection evidence ahead of unrelated lexical repetition under tight budgets.
+
+Those changes are covered by focused regression tests and do not relax existing corpus evidence, precision, budget, determinism or exact-integrity gates. The final candidate independent regression reports the full **4-repository / 22-file / 11-task aggregate passing**.
 
 The annotations remain checked into the repository and visible to implementation authors, so the suite is **not** a blinded holdout or whole-repository benchmark. The grading annotations are not passed into the selector, and the report states both facts explicitly.
 
-Earlier Chalk/node-fetch cases exposed graph-neighbor/JSDoc/exported-declaration selection gaps. Those defects were fixed without relaxing their evidence/budget requirements. The Axios increment did not expose a new selector defect, so #922 intentionally adds no algorithm change.
+Earlier Chalk/node-fetch cases exposed graph-neighbor/JSDoc/exported-declaration selection gaps. Axios broadened the corpus without exposing a new correctness defect. Preact is the first larger coherent runtime-tree increment and did expose the additional selector/harness gaps listed above.
 
 ### 4. Real-agent measurement record/report contract
 
@@ -132,16 +140,16 @@ The repository does not yet provide complete evidence for:
 - provider cache reuse improvement;
 - end-to-end coding-task success equivalence/improvement across all categories;
 - end-to-end agent latency improvement;
-- a blinded whole-repository benchmark;
+- a genuinely blinded/held-out benchmark;
 - a controlled competitor comparison.
 
 ## Projected benchmark progression
 
 These are priorities, not promised dates:
 
-### Next — broader or genuinely blinded selection evidence
+### Next — genuinely blinded/held-out evidence
 
-The external suite is broader after #922, but it still consists of small checked-in source subsets with visible grading annotations. Add a larger repository-scale task or a genuinely blinded/held-out evidence source. Fix only demonstrated selector gaps; do not relax evidence budgets to make a score pass.
+The external suite now includes a materially larger coherent runtime-tree corpus, but its grading annotations are still checked into the same public repository. The next repository-evidence improvement should use a genuinely held-out answer key or independent evaluation process rather than merely adding more visible annotations. Do not relax evidence budgets to make a score pass.
 
 ### Next — provider token + latency accounting
 

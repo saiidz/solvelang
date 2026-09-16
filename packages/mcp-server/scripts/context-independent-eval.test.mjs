@@ -15,10 +15,10 @@ const selected = (path, text) => ({
 
 test("loads distinct pinned external MIT corpora with exact snapshot identities", async () => {
   const loaded = await loadIndependentCorpora();
-  assert.equal(loaded.length, 3);
+  assert.equal(loaded.length, 4);
   assert.deepEqual(
     loaded.map(({ corpus }) => corpus.repository).sort(),
-    ["axios/axios", "chalk/chalk", "node-fetch/node-fetch"],
+    ["axios/axios", "chalk/chalk", "node-fetch/node-fetch", "preactjs/preact"],
   );
 
   for (const { corpus, licenseNoticeSha256 } of loaded) {
@@ -37,6 +37,11 @@ test("loads distinct pinned external MIT corpora with exact snapshot identities"
   assert.ok(axios);
   assert.equal(axios.corpus.sources.length, 4);
   assert.equal(axios.corpus.cases.length, 3);
+
+  const preact = loaded.find(({ corpus }) => corpus.repository === "preactjs/preact");
+  assert.ok(preact);
+  assert.equal(preact.corpus.sources.length, 13);
+  assert.equal(preact.corpus.cases.length, 4);
 });
 
 test("selected lexical function hits retain bounded later implementation evidence", () => {
@@ -64,7 +69,7 @@ test("selected lexical function hits retain bounded later implementation evidenc
   assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
 
-test("selected JSDoc hits reach the exported const declaration they describe", () => {
+test("JSDoc lexical matches and selected hints both retain the exported declaration", () => {
   const text = [
     "/**",
     " * Performs the operation extract a Content-Type value from object.",
@@ -85,9 +90,9 @@ test("selected JSDoc hits reach the exported const declaration they describe", (
   const plain = buildContextPack(task, [{ path: "src/body.js", text }], 1024);
   const hinted = buildContextPack(task, [selected("src/body.js", text)], 1024);
 
-  assert.ok(!plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
+  // Lexical derivation now reaches the declaration directly; selection hints must not regress that evidence.
+  assert.ok(plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
   assert.ok(hinted.entries.some((entry) => entry.content.includes("export const extractContentType")));
-  assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
 
 test("independent corpus report remains offline and claim-bounded", async () => {
@@ -121,9 +126,9 @@ test("independent corpus report remains offline and claim-bounded", async () => 
       })),
   );
 
-  assert.equal(report.aggregate.repositoryCount, 3);
-  assert.ok(report.aggregate.sourceCount >= 9);
-  assert.ok(report.aggregate.caseCount >= 7);
+  assert.equal(report.aggregate.repositoryCount, 4);
+  assert.equal(report.aggregate.sourceCount, 22);
+  assert.equal(report.aggregate.caseCount, 11);
   assert.equal(report.aggregate.pass, true, JSON.stringify(failureSummary, null, 2));
   assert.equal(report.truth.wholeRepositoriesMeasured, false);
   assert.equal(report.truth.blindedHoldout, false);
