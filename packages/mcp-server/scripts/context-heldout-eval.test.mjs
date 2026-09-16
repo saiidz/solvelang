@@ -64,6 +64,14 @@ test("selection input structurally excludes answer-key and grading fields", () =
   }), /unsupported fields/);
 });
 
+test("selection transcript is deterministic for the same public input", () => {
+  const { publicInput } = fixture();
+  const first = runHeldoutSelection(publicInput);
+  const second = runHeldoutSelection(structuredClone(publicInput));
+  assert.deepEqual(second, first);
+  assert.equal(first.truth.deterministicTranscript, true);
+});
+
 test("precommitted synthetic key scores only after selection and stays claim-bounded", () => {
   const { publicInput, answerKey } = fixture();
   const transcript = runHeldoutSelection(publicInput);
