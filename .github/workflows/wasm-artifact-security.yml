@@ -8,6 +8,7 @@ permissions:
   contents: read
 jobs:
   audit:
+    name: WASM artifact security
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
