@@ -63,6 +63,8 @@ jobs:
         run: npm run test:release-candidate
       - name: Qualify staged v0.3.0 release finalization
         run: npm run test:release-finalization
+      - name: Rehearse full v0.3.0 distribution transition
+        run: npm run test:distribution-finalization
       - name: Validate Codex GitHub marketplace import contract
         run: node ../../ops/distribution/validate-codex-marketplace-import.mjs
       - name: Run Solve Context offline evals
