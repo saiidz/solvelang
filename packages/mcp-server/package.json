@@ -95,6 +95,7 @@
     "test:context-agent-eval-cli": "npm run build && node --test scripts/context-agent-eval-cli.test.mjs",
     "test:packed": "node scripts/smoke-packed.mjs",
     "test:plugin-roundtrip": "node scripts/smoke-plugin-roundtrip.mjs",
+    "test:release-candidate": "node scripts/validate-release-candidate.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
     "start": "node dist/src/index.js",
     "start:remote": "node dist/src/remote-cli.js"
