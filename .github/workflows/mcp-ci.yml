@@ -57,6 +57,8 @@ jobs:
           cache-dependency-path: packages/mcp-server/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: Validate selected release candidate boundary
+        run: npm run test:release-candidate
       - name: Run Solve Context offline evals
         run: npm run eval:context
       - name: Run pinned real-source context regressions
