@@ -53,3 +53,29 @@ function fixture() {
   };
   return { publicInput, answerKey };
 }
+
+test("selection input structurally excludes answer-key and grading fields", () => {
+  const { publicInput } = fixture();
+  assert.equal(validatePublicHoldout(publicInput), publicInput);
+  assert.throws(() => validatePublicHoldout({ ...publicInput, answerKey: {} }), /unsupported fields/);
+  assert.throws(() => validatePublicHoldout({
+    ...publicInput,
+    cases: [{ ...publicInput.cases[0], requiredEvidence: { "src/request.js": ["prepareRequest"] } }],
+  }), /unsupported fields/);
+});
+
+test("precommitted synthetic key scores only after selection and stays claim-bounded", () => {
+  const { publicInput, answerKey } = fixture();
+  const transcript = runHeldoutSelection(publicInput);
+  assert.equal(transcript.truth.answerKeyPresentInSelectorInput, false);
+  assert.equal(transcript.truth.answerKeyCommitmentPresentBeforeSelection, true);
+  assert.equal(transcript.truth.blindedEvidenceEstablishedByProtocolAlone, false);
+
+  const report = scoreHeldoutSelection(transcript, answerKey);
+  assert.equal(report.aggregate.pass, true);
+  assert.equal(report.recordClass, "synthetic-test");
+  assert.equal(report.truth.answerKeyMatchedPreSelectionCommitment, true);
+  assert.equal(report.truth.syntheticEvidence, true);
+  assert.equal(report.truth.genuinelyBlindedEvidenceEstablished, false);
+  assert.equal(report.truth.publicationAuthorized, false);
+});
