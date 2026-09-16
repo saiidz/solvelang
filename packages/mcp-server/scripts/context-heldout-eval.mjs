@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { performance } from "node:perf_hooks";
 import { buildContextPack, sha256Text } from "../dist/src/context-pack.js";
 import { buildContextSelection, normalizeContextSelectionPath } from "../dist/src/context-selection.js";
 import { gitBlobSha1, pinnedImportGraph, scorePack } from "./run-context-repository-evals.mjs";
@@ -88,13 +86,10 @@ export function runHeldoutSelection(rawInput) {
     const arms = {};
     for (const [name, selection] of [["lexical", undefined], ["changedPaths", changed], ["graphAssisted", assisted]]) {
       const sources = input.sources.map((source) => ({ path: source.path, text: source.text, ...(selection ? { selection: selection.hints.get(source.path) } : {}) }));
-      const started = performance.now();
       const pack = buildContextPack(fixture.task, sources, fixture.budgetBytes);
-      const packLatencyMs = performance.now() - started;
       const reversed = buildContextPack(fixture.task, [...sources].reverse(), fixture.budgetBytes);
       arms[name] = {
         pack,
-        packLatencyMs,
         deterministic: JSON.stringify(pack) === JSON.stringify(reversed),
       };
     }
@@ -119,6 +114,7 @@ export function runHeldoutSelection(rawInput) {
     truth: {
       answerKeyPresentInSelectorInput: false,
       answerKeyCommitmentPresentBeforeSelection: true,
+      deterministicTranscript: true,
       providerRequests: 0,
       credentialsUsed: false,
       networkDuringSelection: false,
@@ -174,7 +170,7 @@ export function scoreHeldoutSelection(transcript, rawKey) {
     const arms = {};
     for (const [name, arm] of Object.entries(fixture.arms)) {
       const score = scorePack(arm.pack, scoringFixture, transcript.sources);
-      arms[name] = { ...score, deterministic: arm.deterministic, packLatencyMs: arm.packLatencyMs };
+      arms[name] = { ...score, deterministic: arm.deterministic };
     }
     const qualityNonRegression = arms.graphAssisted.evidenceRecall >= arms.lexical.evidenceRecall
       && arms.graphAssisted.evidenceRecall >= arms.changedPaths.evidenceRecall;
@@ -195,6 +191,7 @@ export function scoreHeldoutSelection(transcript, rawKey) {
     truth: {
       answerKeyMatchedPreSelectionCommitment: true,
       answerKeyAbsentFromSelectorInput: true,
+      deterministicTranscript: transcript.truth.deterministicTranscript === true,
       syntheticEvidence: key.recordClass === "synthetic-test",
       externalHeldoutRecordClass: key.recordClass === "external-heldout",
       genuinelyBlindedEvidenceEstablished: false,
