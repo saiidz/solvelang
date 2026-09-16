@@ -88,10 +88,7 @@ export function runHeldoutSelection(rawInput) {
       const sources = input.sources.map((source) => ({ path: source.path, text: source.text, ...(selection ? { selection: selection.hints.get(source.path) } : {}) }));
       const pack = buildContextPack(fixture.task, sources, fixture.budgetBytes);
       const reversed = buildContextPack(fixture.task, [...sources].reverse(), fixture.budgetBytes);
-      arms[name] = {
-        pack,
-        deterministic: JSON.stringify(pack) === JSON.stringify(reversed),
-      };
+      arms[name] = { pack, deterministic: JSON.stringify(pack) === JSON.stringify(reversed) };
     }
     return { id: fixture.id, task: fixture.task, budgetBytes: fixture.budgetBytes, changedPaths: fixture.changedPaths, arms };
   });
@@ -123,6 +120,32 @@ export function runHeldoutSelection(rawInput) {
     },
   };
   return { ...body, transcriptSha256: digest(body) };
+}
+
+export function createSelectionReceipt(transcript) {
+  assert(transcript?.schema === "solvelang.context.heldout-selection-transcript.v1", "Unsupported heldout transcript schema.");
+  const { transcriptSha256, ...body } = transcript;
+  assert(typeof transcriptSha256 === "string" && transcriptSha256 === digest(body), "Heldout transcript identity mismatch.");
+  const receiptBody = {
+    schema: "solvelang.context.heldout-selection-receipt.v1",
+    evaluationId: transcript.evaluationId,
+    repository: transcript.repository,
+    commit: transcript.commit,
+    answerKeyCommitment: transcript.answerKeyCommitment,
+    transcriptSha256,
+  };
+  return { ...receiptBody, receiptSha256: digest(receiptBody) };
+}
+
+function validateSelectionReceipt(receipt, transcript) {
+  exactKeys(receipt, ["schema", "evaluationId", "repository", "commit", "answerKeyCommitment", "transcriptSha256", "receiptSha256"], "Heldout selection receipt");
+  assert(receipt.schema === "solvelang.context.heldout-selection-receipt.v1", "Unsupported heldout selection-receipt schema.");
+  const { receiptSha256, ...body } = receipt;
+  assert(receiptSha256 === digest(body), "Heldout selection receipt identity mismatch.");
+  assert(receipt.evaluationId === transcript.evaluationId && receipt.repository === transcript.repository && receipt.commit === transcript.commit, "Heldout selection receipt source identity mismatch.");
+  assert(receipt.answerKeyCommitment === transcript.answerKeyCommitment, "Heldout selection receipt answer-key commitment mismatch.");
+  assert(receipt.transcriptSha256 === transcript.transcriptSha256, "Heldout selection receipt transcript mismatch.");
+  return receipt;
 }
 
 export function validateAnswerKey(key, transcript) {
@@ -157,10 +180,11 @@ export function validateAnswerKey(key, transcript) {
   return key;
 }
 
-export function scoreHeldoutSelection(transcript, rawKey) {
+export function scoreHeldoutSelection(transcript, receipt, rawKey) {
   assert(transcript?.schema === "solvelang.context.heldout-selection-transcript.v1", "Unsupported heldout transcript schema.");
   const { transcriptSha256, ...body } = transcript;
   assert(typeof transcriptSha256 === "string" && transcriptSha256 === digest(body), "Heldout transcript identity mismatch.");
+  validateSelectionReceipt(receipt, transcript);
   assert(transcript.truth?.answerKeyPresentInSelectorInput === false && transcript.truth?.answerKeyCommitmentPresentBeforeSelection === true, "Heldout transcript does not prove key separation.");
   const key = validateAnswerKey(rawKey, transcript);
   const keyed = new Map(key.cases.map((fixture) => [fixture.id, fixture]));
@@ -185,17 +209,20 @@ export function scoreHeldoutSelection(transcript, rawKey) {
     schema: "solvelang.context.heldout-score-report.v1",
     evaluationId: transcript.evaluationId,
     transcriptSha256,
+    selectionReceiptSha256: receipt.receiptSha256,
     answerKeyCommitment: transcript.answerKeyCommitment,
     recordClass: key.recordClass,
     evaluatorId: key.evaluatorId,
     truth: {
       answerKeyMatchedPreSelectionCommitment: true,
+      selectionReceiptMatchedTranscript: true,
       answerKeyAbsentFromSelectorInput: true,
       deterministicTranscript: transcript.truth.deterministicTranscript === true,
       syntheticEvidence: key.recordClass === "synthetic-test",
       externalHeldoutRecordClass: key.recordClass === "external-heldout",
       genuinelyBlindedEvidenceEstablished: false,
       independentEvaluatorAttestationRequired: true,
+      externalReceiptPublicationRequiredForBlindingClaim: true,
       providerTokens: null,
       agentTaskSuccess: null,
       externalCompetitorMeasured: false,
@@ -226,14 +253,15 @@ async function main() {
   assert(mode === "select" || mode === "score", "Usage: context-heldout-eval.mjs select|score");
   assert(process.argv.length === 3, "Heldout evaluator accepts no file, URL, or credential arguments.");
   const input = await readBoundedStdin();
-  const result = mode === "select"
-    ? runHeldoutSelection(input)
-    : (() => {
-        exactKeys(input, ["transcript", "answerKey"], "Heldout score input");
-        return scoreHeldoutSelection(input.transcript, input.answerKey);
-      })();
+  if (mode === "select") {
+    const transcript = runHeldoutSelection(input);
+    process.stdout.write(`${JSON.stringify({ transcript, selectionReceipt: createSelectionReceipt(transcript) }, null, 2)}\n`);
+    return;
+  }
+  exactKeys(input, ["transcript", "selectionReceipt", "answerKey"], "Heldout score input");
+  const result = scoreHeldoutSelection(input.transcript, input.selectionReceipt, input.answerKey);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  if (mode === "score" && !result.aggregate.pass) process.exitCode = 1;
+  if (!result.aggregate.pass) process.exitCode = 1;
 }
 
 if (process.argv[1]?.endsWith("context-heldout-eval.mjs")) {
