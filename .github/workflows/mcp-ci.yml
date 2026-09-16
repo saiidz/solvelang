@@ -9,6 +9,7 @@ on:
       - 'plugins/codex/**'
       - 'plugins/claude/**'
       - 'plugins/solvelang/**'
+      - 'ops/distribution/**'
       - '.agents/plugins/marketplace.json'
       - '.claude-plugin/marketplace.json'
       - '.github/workflows/mcp-ci.yml'
@@ -20,6 +21,7 @@ on:
       - 'plugins/codex/**'
       - 'plugins/claude/**'
       - 'plugins/solvelang/**'
+      - 'ops/distribution/**'
       - '.agents/plugins/marketplace.json'
       - '.claude-plugin/marketplace.json'
       - '.github/workflows/mcp-ci.yml'
@@ -61,6 +63,8 @@ jobs:
         run: npm run test:release-candidate
       - name: Qualify staged v0.3.0 release finalization
         run: npm run test:release-finalization
+      - name: Validate Codex GitHub marketplace import contract
+        run: node ../../ops/distribution/validate-codex-marketplace-import.mjs
       - name: Run Solve Context offline evals
         run: npm run eval:context
       - name: Run pinned real-source context regressions
