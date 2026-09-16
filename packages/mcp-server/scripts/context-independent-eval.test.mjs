@@ -69,7 +69,7 @@ test("selected lexical function hits retain bounded later implementation evidenc
   assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
 
-test("selected JSDoc hits reach the exported const declaration they describe", () => {
+test("JSDoc lexical matches and selected hints both retain the exported declaration", () => {
   const text = [
     "/**",
     " * Performs the operation extract a Content-Type value from object.",
@@ -90,7 +90,8 @@ test("selected JSDoc hits reach the exported const declaration they describe", (
   const plain = buildContextPack(task, [{ path: "src/body.js", text }], 1024);
   const hinted = buildContextPack(task, [selected("src/body.js", text)], 1024);
 
-  assert.ok(!plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
+  // Lexical derivation now reaches the declaration directly; keep that stronger behavior covered.
+  assert.ok(plain.entries.some((entry) => entry.content.includes("export const extractContentType")));
   assert.ok(hinted.entries.some((entry) => entry.content.includes("export const extractContentType")));
   assert.ok(hinted.entries.some((entry) => entry.reasons.includes("selection:declaration-text-window")));
 });
