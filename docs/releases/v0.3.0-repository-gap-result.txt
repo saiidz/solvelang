@@ -1,0 +1,2 @@
+stale-plugin-readme-v020-truth=fixed-on-branch
+other-concrete-no-credit-code-gap=none-identified
