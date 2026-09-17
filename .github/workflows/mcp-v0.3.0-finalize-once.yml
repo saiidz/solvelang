@@ -1,0 +1,124 @@
+name: One-time MCP v0.3.0 finalization
+
+on:
+  push:
+    branches:
+      - release/mcp-v0.3.0-finalize
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mcp-v0.3.0-finalize-once
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout held release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release/mcp-v0.3.0-finalize
+          fetch-depth: 1
+
+      - name: Apply exact release-ready version transition
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const readJson = (path) => JSON.parse(fs.readFileSync(path, 'utf8'));
+          const writeJson = (path, value) => fs.writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+          const replaceExact = (path, from, to) => {
+            const text = fs.readFileSync(path, 'utf8');
+            const first = text.indexOf(from);
+            if (first < 0 || text.indexOf(from, first + from.length) >= 0) {
+              throw new Error(`${path}: expected exactly one marker ${from}`);
+            }
+            fs.writeFileSync(path, text.replace(from, to));
+          };
+
+          const candidatePath = 'packages/mcp-server/release-candidate.json';
+          const candidate = readJson(candidatePath);
+          if (candidate.schema !== 'solvelang.mcp.release-candidate.v1') throw new Error('unexpected candidate schema');
+          if (candidate.candidateVersion !== '0.3.0') throw new Error('unexpected candidate version');
+          if (candidate.publishedVersion !== '0.2.0') throw new Error('unexpected published version');
+          if (candidate.state !== 'selected-not-published') throw new Error(`unexpected candidate state ${candidate.state}`);
+          if (candidate.publicationAuthorized !== false) throw new Error('publication must remain unauthorized');
+
+          const next = candidate.candidateVersion;
+          const published = candidate.publishedVersion;
+
+          const packagePath = 'packages/mcp-server/package.json';
+          const packageJson = readJson(packagePath);
+          if (packageJson.version !== published) throw new Error('package.json is not on published version');
+          packageJson.version = next;
+          writeJson(packagePath, packageJson);
+
+          const lockPath = 'packages/mcp-server/package-lock.json';
+          const lock = readJson(lockPath);
+          if (lock.version !== published || lock.packages?.['']?.version !== published) {
+            throw new Error('package-lock root is not on published version');
+          }
+          lock.version = next;
+          lock.packages[''].version = next;
+          writeJson(lockPath, lock);
+
+          replaceExact(
+            'packages/mcp-server/src/index.ts',
+            `{ name: "solvelang", version: "${published}" }`,
+            `{ name: "solvelang", version: "${next}" }`,
+          );
+          replaceExact(
+            'packages/mcp-server/src/remote.ts',
+            `{ name: "solvelang-remote", version: "${published}" }`,
+            `{ name: "solvelang-remote", version: "${next}" }`,
+          );
+
+          for (const path of [
+            'plugins/solvelang/.codex-plugin/plugin.json',
+            'plugins/solvelang/.claude-plugin/plugin.json',
+          ]) {
+            const plugin = readJson(path);
+            if (plugin.version !== published) throw new Error(`${path} is not on published version`);
+            plugin.version = next;
+            writeJson(path, plugin);
+          }
+
+          const mcpPath = 'plugins/solvelang/.mcp.json';
+          const mcp = readJson(mcpPath);
+          const pin = mcp.mcpServers?.solvelang?.args?.[1];
+          if (pin !== `@solvelang/mcp-server@${published}`) throw new Error('canonical npx pin is not on published version');
+          mcp.mcpServers.solvelang.args[1] = `@solvelang/mcp-server@${next}`;
+          writeJson(mcpPath, mcp);
+
+          const claudeMarketplacePath = '.claude-plugin/marketplace.json';
+          const claudeMarketplace = readJson(claudeMarketplacePath);
+          if (claudeMarketplace.plugins?.length !== 1 || claudeMarketplace.plugins[0].version !== published) {
+            throw new Error('Claude marketplace is not on published version');
+          }
+          claudeMarketplace.plugins[0].version = next;
+          writeJson(claudeMarketplacePath, claudeMarketplace);
+
+          candidate.state = 'release-ready-not-published';
+          candidate.publicationAuthorized = false;
+          candidate.publicPluginTracksPublishedVersion = false;
+          writeJson(candidatePath, candidate);
+          NODE
+
+      - name: Remove one-time workflow from held branch
+        run: rm .github/workflows/mcp-v0.3.0-finalize-once.yml
+
+      - name: Validate generated diff
+        run: |
+          git diff --check
+          git diff --name-only
+
+      - name: Commit release-ready state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/mcp-server/package.json packages/mcp-server/package-lock.json packages/mcp-server/src/index.ts packages/mcp-server/src/remote.ts packages/mcp-server/release-candidate.json plugins/solvelang/.codex-plugin/plugin.json plugins/solvelang/.claude-plugin/plugin.json plugins/solvelang/.mcp.json .claude-plugin/marketplace.json .github/workflows/mcp-v0.3.0-finalize-once.yml
+          git commit -m "release(mcp): finalize held v0.3.0 metadata"
+          git push origin HEAD:release/mcp-v0.3.0-finalize
