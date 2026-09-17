@@ -12,6 +12,7 @@ const testWorkflowName = "deploy-api-access.yml";
 const productionWorkflowNames = [
   "deploy-admin-console-gateway-production.yml",
   "deploy-api-access-production-admin-crm.yml",
+  "deploy-api-access-production-billing.yml",
   "deploy-api-access-production-customer-accounts.yml",
   "deploy-api-access-production-foundation.yml",
   "deploy-api-access-production-totp-kms.yml",
@@ -69,6 +70,12 @@ test("test deployment is isolated while every production mutation uses the repos
   assert.ok(
     customerAccountsSource.indexOf("Wait for earlier production deployment requests")
       < customerAccountsSource.indexOf("Verify production stack and capture exact feature state"),
+  );
+
+  const billingSource = await workflow("deploy-api-access-production-billing.yml");
+  assert.ok(
+    billingSource.indexOf("Wait for earlier production deployment requests")
+      < billingSource.indexOf("Capture exact production feature state"),
   );
 
   const adminCrmSource = await workflow("deploy-api-access-production-admin-crm.yml");

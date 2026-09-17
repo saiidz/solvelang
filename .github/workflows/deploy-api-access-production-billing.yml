@@ -1,0 +1,360 @@
+name: Deploy API Access Production Subscription Billing
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production_subscription_billing:
+        description: Confirm enabling live SolveLang subscription billing on the existing production API stack
+        required: true
+        default: false
+        type: boolean
+      confirm_stripe_account_reviewed:
+        description: Confirm the protected live Stripe account ID is the intended legal billing account for SolveLang
+        required: true
+        default: false
+        type: boolean
+      confirm_no_canary_charge:
+        description: Confirm this deployment must not create a test, canary, or customer charge
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      API_ACCESS_MODE: live
+      API_ACCESS_ENABLED: "true"
+      CUSTOMER_ACCOUNTS_ENABLED: "true"
+      SUBSCRIPTION_BILLING_ENABLED: "true"
+      DISABLED_TOTP_KMS_ARN: arn:aws:kms:us-east-1:000000000000:key/disabled
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      SITE_ORIGIN: ${{ vars.SITE_ORIGIN }}
+      CUSTOMER_AUTH_EMAIL_SENDER: ${{ vars.CUSTOMER_AUTH_EMAIL_SENDER }}
+      CUSTOMER_AUTH_EMAIL_REPLY_TO: ${{ vars.CUSTOMER_AUTH_EMAIL_REPLY_TO }}
+      OPERATIONS_ALARM_TOPIC_ARN: ${{ vars.OPERATIONS_ALARM_TOPIC_ARN }}
+      STRIPE_EXPECTED_ACCOUNT_ID: ${{ vars.STRIPE_EXPECTED_ACCOUNT_ID }}
+      STRIPE_API_DEVELOPER_PRICE_ID: ${{ vars.STRIPE_API_DEVELOPER_PRICE_ID }}
+      STRIPE_API_PRO_PRICE_ID: ${{ vars.STRIPE_API_PRO_PRICE_ID }}
+      STRIPE_API_BUSINESS_PRICE_ID: ${{ vars.STRIPE_API_BUSINESS_PRICE_ID }}
+      API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
+      CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce protected production billing boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production subscription billing deployment must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_production_subscription_billing }}" == "true" ]] || { echo "Explicit production billing confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_stripe_account_reviewed }}" == "true" ]] || { echo "Explicit Stripe account identity confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_no_canary_charge }}" == "true" ]] || { echo "Explicit no-canary-charge confirmation is required." >&2; exit 1; }
+          [[ "$API_ACCESS_MODE" == live ]]
+          [[ "$API_ACCESS_ENABLED" == true ]]
+          [[ "$CUSTOMER_ACCOUNTS_ENABLED" == true ]]
+          [[ "$SUBSCRIPTION_BILLING_ENABLED" == true ]]
+          [[ "$STACK_NAME" == *prod* || "$STACK_NAME" == *production* ]] || { echo "Production stack name must contain prod or production." >&2; exit 1; }
+          [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
+          [[ "$SITE_ORIGIN" == https://* ]]
+          [[ "$OPERATIONS_ALARM_TOPIC_ARN" == arn:aws:sns:${AWS_REGION}:*:* ]] || { echo "OPERATIONS_ALARM_TOPIC_ARN must be an SNS topic in the production region." >&2; exit 1; }
+          [[ "$STRIPE_EXPECTED_ACCOUNT_ID" == acct_* ]] || { echo "STRIPE_EXPECTED_ACCOUNT_ID must be configured in the protected production environment." >&2; exit 1; }
+          [[ "$STRIPE_SECRET_KEY" == sk_live_* || "$STRIPE_SECRET_KEY" == rk_live_* ]] || { echo "Production requires an sk_live_* or rk_live_* Stripe key." >&2; exit 1; }
+          [[ "$STRIPE_SECRET_KEY" != sk_test_* && "$STRIPE_SECRET_KEY" != rk_test_* ]]
+          [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]] || { echo "Production requires a Stripe webhook signing secret." >&2; exit 1; }
+          (( ${#API_KEY_PEPPER} >= 32 ))
+          (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
+          (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
+          [[ "$API_KEY_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_KEY_PEPPER" ]]
+          [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
+          test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
+          test -n "$AWS_REGION"
+          for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
+            [[ "$price_id" == price_* ]]
+          done
+          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_PRO_PRICE_ID" ]]
+          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+          [[ "$STRIPE_API_PRO_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+
+      - name: Assume production read-only preflight role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Capture exact production feature state
+        id: before
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
+
+          api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
+          api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          accounts_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          totp_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          totp_kms="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpKmsKeyArn") | .ParameterValue] | first // empty' <<<"$stack")"
+          crm_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$stack")"
+          billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ -n "$totp_kms" ]] || totp_kms="$DISABLED_TOTP_KMS_ARN"
+
+          [[ "$api_enabled" == true ]] || { echo "Production API access must already be enabled." >&2; exit 1; }
+          [[ "$accounts_enabled" == true ]] || { echo "Production customer accounts must already be enabled." >&2; exit 1; }
+          [[ "$billing_enabled" == false ]] || { echo "Production subscription billing must be disabled before first activation." >&2; exit 1; }
+          [[ "$totp_enabled" == true || "$totp_enabled" == false ]]
+          [[ "$crm_enabled" == true || "$crm_enabled" == false ]]
+          [[ "$totp_kms" =~ ^arn:[a-z0-9-]+:kms:[a-z0-9-]+:[0-9]{12}:key/.+$ ]]
+
+          if [[ "$totp_enabled" == true ]]; then
+            [[ "$totp_kms" != "$DISABLED_TOTP_KMS_ARN" ]] || { echo "Enabled TOTP has no real KMS key." >&2; exit 1; }
+            account_id="$(aws sts get-caller-identity --query Account --output text)"
+            [[ "$totp_kms" == "arn:aws:kms:${AWS_REGION}:${account_id}:key/"* ]] || { echo "TOTP KMS key must belong to the production account and region." >&2; exit 1; }
+            key_metadata="$(aws kms describe-key --key-id "$totp_kms" --output json)"
+            jq -e '.KeyMetadata.KeyState == "Enabled" and .KeyMetadata.KeyManager == "CUSTOMER" and .KeyMetadata.KeySpec == "SYMMETRIC_DEFAULT" and .KeyMetadata.KeyUsage == "ENCRYPT_DECRYPT" and .KeyMetadata.MultiRegion == false' <<<"$key_metadata" >/dev/null
+            aws kms get-key-rotation-status --key-id "$totp_kms" --query KeyRotationEnabled --output text | grep -qx True
+          fi
+
+          health="$(curl --fail --silent --show-error "$api_base/health")"
+          jq -e --argjson totp "$totp_enabled" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+
+          {
+            echo "api_base=$api_base"
+            echo "totp_enabled=$totp_enabled"
+            echo "totp_kms=$totp_kms"
+            echo "crm_enabled=$crm_enabled"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact live Stripe account, prices, and webhook without charging
+        env:
+          API_BASE: ${{ steps.before.outputs.api_base }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          account="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" https://api.stripe.com/v1/account)"
+          jq -e --arg expected "$STRIPE_EXPECTED_ACCOUNT_ID" '.id == $expected' <<<"$account" >/dev/null
+
+          verify_price() {
+            local price_id="$1" expected_amount="$2"
+            local response
+            response="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" "https://api.stripe.com/v1/prices/$price_id")"
+            jq -e \
+              --argjson amount "$expected_amount" \
+              '.active == true and .livemode == true and .type == "recurring" and .currency == "usd" and .unit_amount == $amount and .recurring.interval == "month" and .recurring.interval_count == 1' \
+              <<<"$response" >/dev/null
+          }
+          verify_price "$STRIPE_API_DEVELOPER_PRICE_ID" 4900
+          verify_price "$STRIPE_API_PRO_PRICE_ID" 19900
+          verify_price "$STRIPE_API_BUSINESS_PRICE_ID" 69900
+
+          webhook_url="$API_BASE/stripe/subscriptions/webhook"
+          endpoints="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" 'https://api.stripe.com/v1/webhook_endpoints?limit=100')"
+          jq -e \
+            --arg url "$webhook_url" \
+            '[.data[] | select(
+              .url == $url
+              and .livemode == true
+              and .status == "enabled"
+              and (
+                (.enabled_events | index("*")) != null
+                or (
+                  (.enabled_events | index("customer.subscription.created")) != null
+                  and (.enabled_events | index("customer.subscription.updated")) != null
+                  and (.enabled_events | index("customer.subscription.deleted")) != null
+                )
+              )
+            )] | length == 1' <<<"$endpoints" >/dev/null
+
+      - name: Validate production billing candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          sam validate --lint --template template.yaml
+          sam build --template template.yaml
+          grep -q '^  SubscriptionBillingRequirements:' template.yaml
+          grep -q 'Subscription billing requires a Stripe secret key.' template.yaml
+          grep -q 'Subscription billing requires a signed webhook secret.' template.yaml
+          ! grep -q '^  SubscriptionBillingRemainsTestOnly:' template.yaml
+
+      - name: Assume production deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Prepare dedicated production SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]]
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Enable production subscription billing while preserving unrelated feature state
+        id: deploy
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          PRESERVED_TOTP_KMS: ${{ steps.before.outputs.totp_kms }}
+          PRESERVED_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            ApiAccessEnabled="true"
+            ApiAccessMode="live"
+            CustomerAccountsEnabled="true"
+            CustomerTotpEnabled="$PRESERVED_TOTP_ENABLED"
+            CustomerTotpKmsKeyArn="$PRESERVED_TOTP_KMS"
+            AdminCrmEnabled="$PRESERVED_CRM_ENABLED"
+            SubscriptionBillingEnabled="true"
+            SiteOrigin="$SITE_ORIGIN"
+            ApiKeyPepper="$API_KEY_PEPPER"
+            ApiAccessAdminSecret="$API_ACCESS_ADMIN_SECRET"
+            CustomerAuthPepper="$CUSTOMER_AUTH_PEPPER"
+            CustomerAuthEmailSender="$CUSTOMER_AUTH_EMAIL_SENDER"
+            StripeSecretKey="$STRIPE_SECRET_KEY"
+            StripeSubscriptionWebhookSecret="$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET"
+            StripeApiDeveloperPriceId="$STRIPE_API_DEVELOPER_PRICE_ID"
+            StripeApiProPriceId="$STRIPE_API_PRO_PRICE_ID"
+            StripeApiBusinessPriceId="$STRIPE_API_BUSINESS_PRICE_ID"
+          )
+          [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix "$STACK_NAME-subscription-billing" \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+
+      - name: Verify billing is enabled without creating a charge
+        env:
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          PRESERVED_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
+          billing_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          crm_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
+          [[ "$billing_enabled" == true ]]
+          [[ "$crm_enabled" == "$PRESERVED_CRM_ENABLED" ]]
+
+          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          jq -e --argjson totp "$PRESERVED_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == true' <<<"$health" >/dev/null
+
+          function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id ApiAccessFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          billing_flag="$(aws lambda get-function-configuration --function-name "$function_name" --query 'Environment.Variables.API_SUBSCRIPTION_BILLING_ENABLED' --output text)"
+          [[ "$billing_flag" == true ]]
+
+          webhook_status="$(curl --silent --output /tmp/solvelang-webhook-enabled-probe.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
+          [[ "$webhook_status" == 400 ]]
+          jq -e '.code == "invalid_webhook"' /tmp/solvelang-webhook-enabled-probe.json >/dev/null
+
+      - name: Re-apply production operations baseline
+        run: bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
+
+      - name: Verify billing monitoring is armed
+        shell: bash
+        run: |
+          set -euo pipefail
+          function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id ApiAccessFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          log_group="/aws/lambda/${function_name}"
+          filter_name="$(aws logs describe-metric-filters --log-group-name "$log_group" --filter-name-prefix "${STACK_NAME}-subscription-webhook-failures" --query 'metricFilters[0].filterName' --output text)"
+          [[ "$filter_name" == "${STACK_NAME}-subscription-webhook-failures" ]]
+
+          alarm="$(aws cloudwatch describe-alarms --alarm-names "${STACK_NAME}-subscription-webhook-failures" --output json)"
+          jq -e \
+            --arg topic "$OPERATIONS_ALARM_TOPIC_ARN" \
+            '.MetricAlarms[0].ActionsEnabled == true
+             and .MetricAlarms[0].TreatMissingData == "notBreaching"
+             and .MetricAlarms[0].Threshold == 3
+             and .MetricAlarms[0].Period == 300
+             and .MetricAlarms[0].StateValue != "ALARM"
+             and (.MetricAlarms[0].AlarmActions | index($topic)) != null' \
+            <<<"$alarm" >/dev/null
+
+      - name: Roll back to the exact pre-billing feature state if post-deploy verification fails
+        if: ${{ failure() && steps.deploy.outcome == 'success' }}
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          INITIAL_API_ACCESS_ENABLED: "true"
+          INITIAL_CUSTOMER_ACCOUNTS_ENABLED: "true"
+          INITIAL_CUSTOMER_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          INITIAL_CUSTOMER_TOTP_KMS_KEY_ARN: ${{ steps.before.outputs.totp_kms }}
+          INITIAL_ADMIN_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/rollback-production-customer-accounts.sh
+          bash scripts/configure-production-foundation.sh "$STACK_NAME" "$AWS_REGION" "$OPERATIONS_ALARM_TOPIC_ARN"
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        env:
+          API_BASE: ${{ steps.before.outputs.api_base }}
+          PRESERVED_TOTP_ENABLED: ${{ steps.before.outputs.totp_enabled }}
+          PRESERVED_CRM_ENABLED: ${{ steps.before.outputs.crm_enabled }}
+        shell: bash
+        run: |
+          {
+            echo "## SolveLang production subscription billing rollout"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Stack: \`$STACK_NAME\`"
+            echo "- Region: \`$AWS_REGION\`"
+            echo "- API base: \`$API_BASE\`"
+            echo "- API access enabled: **true**"
+            echo "- Customer accounts enabled: **true**"
+            echo "- Authenticator 2FA state preserved: **$PRESERVED_TOTP_ENABLED**"
+            echo "- Admin CRM state preserved: **$PRESERVED_CRM_ENABLED**"
+            echo "- Subscription billing enabled: **true**"
+            echo "- Live Stripe account identity: verified against protected environment configuration"
+            echo "- Developer / Pro / Business recurring prices: verified"
+            echo "- Stripe subscription webhook endpoint: verified"
+            echo "- Billing webhook failure monitoring: armed"
+            echo "- Canary/customer charge performed by this workflow: **no**"
+            echo
+            echo "A separate explicitly authorized payment canary is still required before recording end-to-end charge evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
