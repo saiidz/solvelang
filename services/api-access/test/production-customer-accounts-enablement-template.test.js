@@ -18,12 +18,15 @@ test("template permits reviewed live customer accounts with required auth contro
   assert.doesNotMatch(source, /Customer accounts are test-mode only until production review is complete\./);
 });
 
-test("template keeps subscription billing test-only", async () => {
+test("template permits reviewed production billing while retaining billing prerequisites", async () => {
   const source = await template();
-  assert.match(source, /SubscriptionBillingRemainsTestOnly:/);
+  assert.match(source, /SubscriptionBillingRequirements:/);
   assert.match(source, /Subscription billing requires API access to be enabled\./);
   assert.match(source, /Browser subscription billing requires customer accounts to be enabled\./);
-  assert.match(source, /Subscription billing is test-mode only until production review is complete\./);
+  assert.match(source, /Subscription billing requires a Stripe secret key\./);
+  assert.match(source, /Subscription billing requires a signed webhook secret\./);
   assert.match(source, /StripeSecretKey:/);
   assert.match(source, /StripeSubscriptionWebhookSecret:/);
+  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly:/);
+  assert.doesNotMatch(source, /Subscription billing is test-mode only until production review is complete\./);
 });

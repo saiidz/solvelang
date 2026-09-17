@@ -37,6 +37,7 @@ jobs:
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
 
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +77,7 @@ jobs:
           [[ "$STRIPE_SECRET_KEY" == sk_live_* || "$STRIPE_SECRET_KEY" == rk_live_* ]] || { echo "Production requires an sk_live_* or rk_live_* Stripe key." >&2; exit 1; }
           [[ "$STRIPE_SECRET_KEY" != sk_test_* ]]
           [[ "$STRIPE_SECRET_KEY" != rk_test_* ]]
+          [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]] || { echo "Production requires a Stripe webhook signing secret." >&2; exit 1; }
           test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
           for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
             [[ "$price_id" == price_* ]]
@@ -113,14 +115,17 @@ jobs:
       - name: Build API access stack locally
         run: sam build --template template.yaml
 
-      - name: Prove current template still blocks live deployment
+      - name: Verify reviewed production billing prerequisites
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'Customer accounts are test-mode only until production review is complete' template.yaml
-          grep -q 'Subscription billing is test-mode only until production review is complete' template.yaml
+          grep -q 'SubscriptionBillingRequirements:' template.yaml
+          grep -q 'Subscription billing requires a Stripe secret key.' template.yaml
+          grep -q 'Subscription billing requires a signed webhook secret.' template.yaml
+          ! grep -q 'SubscriptionBillingRemainsTestOnly:' template.yaml
+          ! grep -q 'Subscription billing is test-mode only until production review is complete' template.yaml
 
       - name: Write validation-only summary
         run: |
-          printf '## SolveLang production readiness preflight\n\n- Mode: `live` configuration validation only\n- Stack name candidate: `%s`\n- Region: `%s`\n- Site origin: `%s`\n- Live Stripe credential: validated (`sk_live_*` or `rk_live_*`)\n- Live Stripe price metadata: validated\n- SES sender: validated\n- Webhook secret: **not required until a production endpoint exists**\n- API tests: passed\n- SAM validate/build: passed\n- Deployment performed: **no**\n- Charges performed: **no**\n\nThe production SAM deployment path remains intentionally blocked pending explicit owner approval and final go/no-go review.\n' \
+          printf '## SolveLang production readiness preflight\n\n- Mode: `live` configuration validation only\n- Stack name candidate: `%s`\n- Region: `%s`\n- Site origin: `%s`\n- Live Stripe credential: validated (`sk_live_*` or `rk_live_*`)\n- Live Stripe price metadata: validated\n- SES sender: validated\n- Webhook secret: validated (value not logged)\n- Production billing prerequisites: validated\n- API tests: passed\n- SAM validate/build: passed\n- Deployment performed: **no**\n- Charges performed: **no**\n\nThe protected production billing deployment remains a separate explicit owner-approved action; this preflight does not enable billing or perform a charge.\n' \
             "$STACK_NAME" "$AWS_REGION" "$SITE_ORIGIN" >> "$GITHUB_STEP_SUMMARY"
