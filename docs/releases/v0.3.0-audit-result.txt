@@ -1,0 +1,4 @@
+repository-gap=stale-onboarding-docs
+fixed=true
+runtime-defect-found=false
+remaining-known-gaps=external
