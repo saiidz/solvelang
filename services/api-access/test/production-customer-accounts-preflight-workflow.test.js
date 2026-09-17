@@ -55,8 +55,8 @@ test("production customer-account preflight validates live account requirements 
   assert.match(source, /Customer accounts require a separate authentication pepper\./);
   assert.match(source, /Customer accounts require a verified SES sender\./);
   assert.match(source, /SubscriptionBillingRequirements/);
-  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly/);
-  assert.doesNotMatch(source, /Subscription billing is test-mode only until production review is complete\./);
+  assert.match(source, /! grep -q 'SubscriptionBillingRemainsTestOnly'/);
+  assert.match(source, /! grep -q 'Subscription billing is test-mode only until production review is complete\.'/);
   assert.doesNotMatch(source, /grep -q 'CustomerAccountsRemainTestOnly'/);
   assert.match(source, /Deployment performed: \*\*no\*\*/);
   assert.match(source, /Email sent: \*\*no\*\*/);
