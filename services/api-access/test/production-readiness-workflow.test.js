@@ -20,28 +20,31 @@ test("production preflight is manual, protected, main-only, and validation-only"
   assert.doesNotMatch(source, /stripe\.com\/v1\/(payment_intents|charges|checkout\/sessions)/);
 });
 
-test("production preflight rejects test resources and accepts only live Stripe credentials", async () => {
+test("production preflight rejects test resources and validates live Stripe billing configuration", async () => {
   const source = await workflow();
   assert.match(source, /STACK_NAME.*prod/);
   assert.match(source, /STACK_NAME.*test/s);
   assert.match(source, /STRIPE_SECRET_KEY.*sk_live_.*rk_live_/s);
   assert.match(source, /STRIPE_SECRET_KEY.*sk_test_/s);
   assert.match(source, /STRIPE_SECRET_KEY.*rk_test_/s);
+  assert.match(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
+  assert.match(source, /whsec_/);
   assert.match(source, /\.livemode == true/);
   assert.match(source, /\.type == "recurring"/);
   assert.match(source, /\.currency == "usd"/);
   assert.match(source, /\.recurring\.interval == "month"/);
-  assert.doesNotMatch(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET/);
-  assert.match(source, /Webhook secret: \*\*not required until a production endpoint exists\*\*/);
+  assert.match(source, /Webhook secret: validated/);
 });
 
-test("production preflight validates but does not weaken the current live-mode deployment block", async () => {
+test("production preflight validates the reviewed production billing prerequisites without deploying", async () => {
   const source = await workflow();
   assert.match(source, /sam validate --lint --template template\.yaml/);
   assert.match(source, /sam build --template template\.yaml/);
-  assert.match(source, /current template still blocks live deployment/i);
-  assert.match(source, /Customer accounts are test-mode only until production review is complete/);
-  assert.match(source, /Subscription billing is test-mode only until production review is complete/);
+  assert.match(source, /SubscriptionBillingRequirements:/);
+  assert.match(source, /Subscription billing requires a Stripe secret key/);
+  assert.match(source, /Subscription billing requires a signed webhook secret/);
+  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly/);
+  assert.doesNotMatch(source, /Subscription billing is test-mode only until production review is complete/);
   assert.match(source, /Deployment performed: \*\*no\*\*/);
   assert.match(source, /Charges performed: \*\*no\*\*/);
 });
