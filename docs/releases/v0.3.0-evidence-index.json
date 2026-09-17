@@ -1,0 +1,12 @@
+{
+  "version": "0.3.0",
+  "recordedAt": "2026-09-17",
+  "releaseCommit": "7d626c4303eba8c81141e94bf446cb89d8612864",
+  "githubReleaseTag": "v0.3.0",
+  "npmPublishWorkflowRun": 35177120485,
+  "npmPublishWorkflowConclusion": "success",
+  "canonicalNpxPin": "@solvelang/mcp-server@0.3.0",
+  "codexManagedWorkspaceEvidence": "external-pending",
+  "publicPluginDirectoryEvidence": "external-pending",
+  "providerMeasurementEvidence": "external-pending"
+}
