@@ -25,38 +25,39 @@ test("production billing rollout is manual, protected, main-only, and explicitly
   assert.match(source, /SUBSCRIPTION_BILLING_ENABLED: "true"/);
 });
 
-test("production billing rollout validates exact live Stripe identity and published monthly prices without charging", async () => {
+test("production billing rollout pins the reviewed merchant catalog and validates exact live monthly prices without charging", async () => {
   const source = await workflow();
   assert.match(source, /STRIPE_EXPECTED_ACCOUNT_ID/);
+  assert.match(source, /acct_1TRDmL4HWc7PvaDY/);
   assert.match(source, /STRIPE_SECRET_KEY.*sk_live_.*rk_live_/s);
   assert.match(source, /STRIPE_SECRET_KEY.*sk_test_/s);
   assert.match(source, /STRIPE_SECRET_KEY.*rk_test_/s);
   assert.match(source, /STRIPE_SUBSCRIPTION_WEBHOOK_SECRET.*whsec_/s);
-  assert.match(source, /https:\/\/api\.stripe\.com\/v1\/account/);
-  assert.match(source, /\.id == \$expected/);
-  assert.match(source, /verify_price "\$STRIPE_API_DEVELOPER_PRICE_ID" 4900/);
-  assert.match(source, /verify_price "\$STRIPE_API_PRO_PRICE_ID" 19900/);
-  assert.match(source, /verify_price "\$STRIPE_API_BUSINESS_PRICE_ID" 69900/);
+  assert.match(source, /price_1U2jBo4HWc7PvaDYXcET6RX9/);
+  assert.match(source, /price_1U2jCa4HWc7PvaDYNE8wPhgr/);
+  assert.match(source, /price_1U2jCx4HWc7PvaDYIvE3ne0Y/);
+  assert.match(source, /verify_price "\$STRIPE_API_DEVELOPER_PRICE_ID" 4900 prod_V2op9bJQn8wIsP/);
+  assert.match(source, /verify_price "\$STRIPE_API_PRO_PRICE_ID" 19900 prod_V2oqkvbRI97wSl/);
+  assert.match(source, /verify_price "\$STRIPE_API_BUSINESS_PRICE_ID" 69900 prod_V2oq35mur6QFXW/);
   assert.match(source, /\.livemode == true/);
   assert.match(source, /\.type == "recurring"/);
   assert.match(source, /\.currency == "usd"/);
   assert.match(source, /\.recurring\.interval == "month"/);
+  assert.doesNotMatch(source, /api\.stripe\.com\/v1\/account/);
+  assert.doesNotMatch(source, /api\.stripe\.com\/v1\/webhook_endpoints/);
   assert.doesNotMatch(source, /api\.stripe\.com\/v1\/(payment_intents|charges|checkout\/sessions)/);
   assert.doesNotMatch(source, /curl[^\n]*-X POST[^\n]*api\.stripe\.com/);
   assert.doesNotMatch(source, /curl[^\n]*--request POST[^\n]*api\.stripe\.com/);
 });
 
-test("production billing rollout verifies the exact live subscription webhook contract", async () => {
+test("production billing rollout verifies webhook routing before enablement and signature enforcement after enablement", async () => {
   const source = await workflow();
-  assert.match(source, /webhook_url="\$API_BASE\/stripe\/subscriptions\/webhook"/);
-  assert.match(source, /api\.stripe\.com\/v1\/webhook_endpoints\?limit=100/);
-  assert.match(source, /\.url == \$url/);
-  assert.match(source, /\.livemode == true/);
-  assert.match(source, /\.status == "enabled"/);
-  assert.match(source, /customer\.subscription\.created/);
-  assert.match(source, /customer\.subscription\.updated/);
-  assert.match(source, /customer\.subscription\.deleted/);
-  assert.match(source, /\] \| length == 1/);
+  assert.match(source, /predeploy_webhook_status.*503/s);
+  assert.match(source, /subscription_billing_disabled/);
+  assert.match(source, /webhook_status.*400/s);
+  assert.match(source, /invalid_webhook/);
+  assert.match(source, /stripe\/subscriptions\/webhook/);
+  assert.doesNotMatch(source, /api\.stripe\.com\/v1\/webhook_endpoints/);
 });
 
 test("production billing rollout preserves unrelated production features and serializes before state capture", async () => {
