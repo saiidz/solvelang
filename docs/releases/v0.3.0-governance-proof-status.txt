@@ -1,0 +1,6 @@
+ruleset=18206723
+active=true
+pull-request-required=true
+conversation-resolution-required=true
+strict-required-checks=true
+bypass-actors=none
