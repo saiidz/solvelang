@@ -1,0 +1,3 @@
+managed-workspace-import=external-admin-required
+managed-workspace-install-proof=pending
+public-plugin-directory=separate-external-gate
