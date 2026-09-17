@@ -43,8 +43,8 @@ test("production preflight validates the reviewed production billing prerequisit
   assert.match(source, /SubscriptionBillingRequirements:/);
   assert.match(source, /Subscription billing requires a Stripe secret key/);
   assert.match(source, /Subscription billing requires a signed webhook secret/);
-  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly/);
-  assert.doesNotMatch(source, /Subscription billing is test-mode only until production review is complete/);
+  assert.match(source, /! grep -q 'SubscriptionBillingRemainsTestOnly:'/);
+  assert.match(source, /! grep -q 'Subscription billing is test-mode only until production review is complete'/);
   assert.match(source, /Deployment performed: \*\*no\*\*/);
   assert.match(source, /Charges performed: \*\*no\*\*/);
 });
