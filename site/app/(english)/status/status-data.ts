@@ -29,7 +29,7 @@ export const statusPage: {
   components: ComponentStatus[];
   incidents: StatusIncident[];
 } = {
-  lastUpdated: "2026-09-13T21:31:00Z",
+  lastUpdated: "2026-09-17T17:56:31Z",
   reportingMode: "manual",
   components: [
     { name: "Website", description: "Public site hosted on AWS Amplify.", state: "not_monitored", note: "The owner reported successful deployments 732 and 733 on September 13, 2026. Deployment success is historical evidence, not an independent live uptime measurement." },
@@ -37,7 +37,7 @@ export const statusPage: {
     { name: "Workflow Intelligence Studio", description: "Local-first deterministic workflow modeling, analysis, and simulation.", state: "not_monitored", note: "Local analysis and hosted-page availability are different things. No independent public health feed is connected." },
     { name: "Audit and support previews", description: "Interactive workflow mapping and triage examples.", state: "not_monitored", note: previewAvailability },
     { name: "API Access and Customer Accounts", description: "Deployed production account and API-access infrastructure.", state: "not_monitored", note: accountAvailability },
-    { name: "API Subscription Billing", description: "Intentionally disabled, not an outage.", state: "not_monitored", note: billingAvailability },
+    { name: "API Subscription Billing", description: "Enabled for controlled production rollout; not independently monitored.", state: "not_monitored", note: billingAvailability },
     { name: "CI and Deployment", description: "GitHub Actions validation and AWS Amplify site publishing.", state: "not_monitored", note: "Successful runs are recorded in GitHub and Amplify. They do not prove continuing service health or the status of an upstream provider." },
   ],
   incidents: [

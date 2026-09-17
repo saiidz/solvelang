@@ -17,6 +17,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Support-triage demo: https://www.solve-lang.com/demo/support-triage/
 - n8n workflow preflight: https://www.solve-lang.com/check/
 - Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
+- API pricing: https://www.solve-lang.com/api-pricing/
 - Public support: https://www.solve-lang.com/support/
 - Source repository: https://github.com/saiidz/solvelang
 - License: https://github.com/saiidz/solvelang/blob/main/LICENSE
@@ -30,12 +31,14 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Public examples and documentation
 - Rule-based workflow audit and support-triage planning previews; no remote tasks or messages are executed
 
-## Deployed with gates — evidence dated September 13, 2026
+## Deployed with gates — evidence dated September 17, 2026
 
 - Public site hosted on AWS Amplify
-- Production API access and customer-account infrastructure verified enabled in owner-provided AWS output
-- API subscription billing is disabled; displayed API plans are not available for purchase
-- Separate checkout services and live billing require their own verification and approval
+- Production API access and customer-account infrastructure verified enabled
+- Production API subscription billing and checkout verified enabled
+- Stripe Developer / Pro / Business prices, subscription webhook signature enforcement, and billing-failure monitoring verified
+- First real-payment canary still pending; broader public payment availability is not yet claimed
+- Paid priority and provider activation remain separate rollout gates
 
 Deployment evidence is not a live health feed or a general-availability claim. Current health is not independently verified by the public status page.
 
@@ -49,7 +52,7 @@ Deployment evidence is not a live health feed or a general-availability claim. C
 
 - Connected inbox-to-action support automation
 - General managed workflow execution and broader qualified production integrations
-- Final release publication and additional platform evidence
+- Additional platform evidence
 - Independent uptime monitoring and operational exercises
 
 ## Important boundaries
