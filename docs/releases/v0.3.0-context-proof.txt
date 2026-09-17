@@ -1,0 +1,3 @@
+repository-protocol-mechanics=qualified
+independent-heldout=pending-external-evaluator
+real-provider-measurements=pending-credits-and-authorization
