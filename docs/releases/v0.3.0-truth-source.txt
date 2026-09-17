@@ -1,0 +1,1 @@
+live-github-and-checked-in-manifests-over-stale-tracking-prose
