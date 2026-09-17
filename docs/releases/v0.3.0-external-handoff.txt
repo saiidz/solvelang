@@ -1,0 +1,3 @@
+first-external-gate=codex-managed-workspace-import-install-proof
+requires=eligible-workspace-admin
+provider-credits-required=false
