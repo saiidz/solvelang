@@ -1,0 +1,12 @@
+{
+  "checkedIn": true,
+  "githubReleasePublished": true,
+  "npmPublishWorkflowSuccessful": true,
+  "canonicalPluginPinnedToRelease": true,
+  "requiredReleaseCommitChecksGreen": true,
+  "mainProtectionContractLive": true,
+  "managedCodexWorkspaceProofRecorded": false,
+  "publicPluginDirectoryProofRecorded": false,
+  "independentHeldoutEvidenceEstablished": false,
+  "realProviderMeasurementEvidenceComplete": false
+}
