@@ -1,0 +1,4 @@
+commit=7d626c4303eba8c81141e94bf446cb89d8612864
+release=v0.3.0
+publish-run=35177120485
+publish-result=success
