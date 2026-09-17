@@ -1,0 +1,1 @@
+record-facts-from-authoritative-live-sources;keep-external-claims-fail-closed
