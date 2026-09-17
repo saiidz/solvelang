@@ -1,0 +1,3 @@
+repository-package-proof=complete
+managed-workspace-proof=pending
+public-directory-proof=pending
