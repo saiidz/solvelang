@@ -104,11 +104,15 @@ test("production operations baseline converts the sanitized marker into a repeat
   assert.match(source, /authorizer-duration \\\n  subscription-webhook-failures/);
 });
 
-test("production deploy policy scopes billing metric-filter writes to SolveLang API log groups", async () => {
+test("production deploy policy scopes billing metric-filter access to SolveLang API log groups", async () => {
   const policy = JSON.parse(await readFile(deployPolicyUrl, "utf8"));
   const statement = policy.Statement.find(({ Sid }) => Sid === "SolveLangProductionApiMetricFilters");
   assert.ok(statement);
-  assert.deepEqual(statement.Action.sort(), ["logs:DeleteMetricFilter", "logs:PutMetricFilter"].sort());
+  assert.deepEqual(statement.Action.sort(), [
+    "logs:DeleteMetricFilter",
+    "logs:DescribeMetricFilters",
+    "logs:PutMetricFilter",
+  ].sort());
   assert.deepEqual(statement.Resource, [
     "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-production-*",
     "arn:aws:logs:*:*:log-group:/aws/lambda/solvelang-api-access-prod-*",
