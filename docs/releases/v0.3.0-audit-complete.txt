@@ -1,0 +1,4 @@
+repository-audit=complete
+found-gap=stale-v0.2.0-plugin-onboarding-copy
+fix-on-branch=true
+merge=pending-required-ci
