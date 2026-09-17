@@ -71,10 +71,15 @@ test("SAM CRM storage is opt-in, retained, encrypted, PITR-protected, and isolat
   assert.doesNotMatch(authorizer, /AdminCrmTable|API_ADMIN_CRM/);
 });
 
-test("admin CRM addition does not weaken billing boundary or inject Stripe configuration when billing is disabled", async () => {
+test("admin CRM addition preserves billing prerequisites and disabled-state gating", async () => {
   const source = await readFile(templateUrl, "utf8");
-  assert.match(source, /SubscriptionBillingRemainsTestOnly:/);
-  assert.match(source, /Subscription billing is test-mode only until production review is complete/);
+  assert.match(source, /SubscriptionBillingRequirements:/);
+  assert.match(source, /Subscription billing requires API access to be enabled/);
+  assert.match(source, /Browser subscription billing requires customer accounts to be enabled/);
+  assert.match(source, /Subscription billing requires a Stripe secret key/);
+  assert.match(source, /Subscription billing requires a signed webhook secret/);
   assert.match(source, /API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled/);
   assert.match(source, /AdminCrmEnabledState:/);
+  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly:/);
+  assert.doesNotMatch(source, /Subscription billing is test-mode only until production review is complete/);
 });
