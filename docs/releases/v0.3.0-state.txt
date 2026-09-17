@@ -1,0 +1,6 @@
+released
+npm-publication-workflow=success
+codex-managed-workspace-proof=external-pending
+public-plugin-directory=external-pending
+independent-heldout=external-pending
+provider-measurements=external-pending
