@@ -1,0 +1,9 @@
+{
+  "repositoryPublication": "complete",
+  "codexManagedWorkspaceImport": "external-admin",
+  "codexManagedWorkspaceInstallUseProof": "external-admin",
+  "publicPluginDirectory": "external-openai-review-listing",
+  "independentHeldoutEvaluation": "external-evaluator",
+  "realProviderMeasurements": "external-provider-credits-and-authorization",
+  "protectedProductionActivations": "separate-exact-scope-authorization"
+}
