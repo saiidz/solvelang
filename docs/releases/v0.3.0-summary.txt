@@ -1,0 +1,5 @@
+v0.3.0 released
+npm publish workflow successful
+required release-commit checks green
+canonical plugin pin v0.3.0
+remaining work external-gated
