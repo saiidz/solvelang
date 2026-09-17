@@ -1,0 +1,7 @@
+import=PASS|FAIL
+visible=PASS|FAIL
+installed=PASS|FAIL
+mcp-start=PASS|FAIL
+tool-discovery=PASS|FAIL
+read-only-tool=PASS|FAIL
+error-if-any=<non-sensitive exact error>
