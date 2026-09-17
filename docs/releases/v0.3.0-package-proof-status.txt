@@ -1,0 +1,5 @@
+package=@solvelang/mcp-server
+version=0.3.0
+github-release=published
+trusted-publish-workflow=success
+packed-consumer-npx-verification=success
