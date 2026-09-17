@@ -1,0 +1,5 @@
+ruleset=Protect main
+id=18206723
+active=true
+bypass=none
+required-checks=Rust runtime|Static site|SolveLang Rust security and tests|WASM artifact security
