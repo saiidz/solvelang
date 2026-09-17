@@ -58,7 +58,7 @@ test("production password-auth preflight verifies password routes, revocation ha
   assert.match(source, /scrypt-v1/);
   assert.match(source, /authVersion/);
   assert.match(source, /SubscriptionBillingRequirements/);
-  assert.doesNotMatch(source, /SubscriptionBillingRemainsTestOnly/);
+  assert.match(source, /! grep -q 'SubscriptionBillingRemainsTestOnly'/);
   assert.match(source, /Wait for earlier production deployment requests/);
   assert.match(source, /INITIAL_API_ACCESS_ENABLED/);
   assert.match(source, /INITIAL_CUSTOMER_ACCOUNTS_ENABLED/);
