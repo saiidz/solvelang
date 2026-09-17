@@ -40,13 +40,19 @@ const candidate = await readJson(path.join(packageRoot, "release-candidate.json"
 const checkedInPackage = await readJson(path.join(packageRoot, "package.json"));
 
 assert.equal(candidate.schema, "solvelang.mcp.release-candidate.v1");
-assert.equal(candidate.state, "selected-not-published");
-assert.equal(candidate.publicationAuthorized, false, "distribution rehearsal must not grant publication authority");
-assert.equal(candidate.publicPluginTracksPublishedVersion, true);
+assert.equal(
+  ["selected-not-published", "release-ready-not-published"].includes(candidate.state),
+  true,
+  `unsupported release-candidate state ${candidate.state}`,
+);
+assert.equal(candidate.publicationAuthorized, false, "distribution qualification must not grant publication authority");
 assertStableVersion(candidate.publishedVersion, "published version");
 assertStableVersion(candidate.candidateVersion, "candidate version");
 assert.notEqual(candidate.candidateVersion, candidate.publishedVersion);
-assert.equal(checkedInPackage.version, candidate.publishedVersion, "checked-in package must remain on the actually published line before release finalization");
+
+const releaseReady = candidate.state === "release-ready-not-published";
+const checkedInVersion = releaseReady ? candidate.candidateVersion : candidate.publishedVersion;
+assert.equal(checkedInPackage.version, checkedInVersion, "checked-in package version does not match the current release state");
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "solvelang-distribution-finalization-"));
 try {
@@ -80,52 +86,58 @@ try {
 
   const stagedPackageManifestPath = path.join(stagedPackageRoot, "package.json");
   const stagedPackageManifest = await readJson(stagedPackageManifestPath);
-  stagedPackageManifest.version = candidate.candidateVersion;
-  await writeJson(stagedPackageManifestPath, stagedPackageManifest);
-
   const stagedLockPath = path.join(stagedPackageRoot, "package-lock.json");
   const stagedLock = await readJson(stagedLockPath);
-  stagedLock.version = candidate.candidateVersion;
   assert.ok(stagedLock.packages?.[""], "staged lockfile must contain its root package record");
-  stagedLock.packages[""].version = candidate.candidateVersion;
-  await writeJson(stagedLockPath, stagedLock);
 
-  await replaceExact(
-    path.join(stagedPackageRoot, "src", "index.ts"),
-    `{ name: "solvelang", version: "${candidate.publishedVersion}" }`,
-    `{ name: "solvelang", version: "${candidate.candidateVersion}" }`,
-  );
-  await replaceExact(
-    path.join(stagedPackageRoot, "src", "remote.ts"),
-    `{ name: "solvelang-remote", version: "${candidate.publishedVersion}" }`,
-    `{ name: "solvelang-remote", version: "${candidate.candidateVersion}" }`,
-  );
+  if (!releaseReady) {
+    stagedPackageManifest.version = candidate.candidateVersion;
+    stagedLock.version = candidate.candidateVersion;
+    stagedLock.packages[""].version = candidate.candidateVersion;
+    await writeJson(stagedPackageManifestPath, stagedPackageManifest);
+    await writeJson(stagedLockPath, stagedLock);
 
-  for (const manifestPath of [
-    path.join(stagedPluginRoot, ".codex-plugin", "plugin.json"),
-    path.join(stagedPluginRoot, ".claude-plugin", "plugin.json"),
-  ]) {
-    const manifest = await readJson(manifestPath);
-    assert.equal(manifest.version, candidate.publishedVersion, `${path.basename(path.dirname(manifestPath))} must start from the published line`);
-    manifest.version = candidate.candidateVersion;
-    await writeJson(manifestPath, manifest);
+    await replaceExact(
+      path.join(stagedPackageRoot, "src", "index.ts"),
+      `{ name: "solvelang", version: "${candidate.publishedVersion}" }`,
+      `{ name: "solvelang", version: "${candidate.candidateVersion}" }`,
+    );
+    await replaceExact(
+      path.join(stagedPackageRoot, "src", "remote.ts"),
+      `{ name: "solvelang-remote", version: "${candidate.publishedVersion}" }`,
+      `{ name: "solvelang-remote", version: "${candidate.candidateVersion}" }`,
+    );
+
+    for (const manifestPath of [
+      path.join(stagedPluginRoot, ".codex-plugin", "plugin.json"),
+      path.join(stagedPluginRoot, ".claude-plugin", "plugin.json"),
+    ]) {
+      const manifest = await readJson(manifestPath);
+      assert.equal(manifest.version, candidate.publishedVersion, `${path.basename(path.dirname(manifestPath))} must start from the published line`);
+      manifest.version = candidate.candidateVersion;
+      await writeJson(manifestPath, manifest);
+    }
+
+    const stagedMcpManifestPath = path.join(stagedPluginRoot, ".mcp.json");
+    const stagedMcpManifest = await readJson(stagedMcpManifestPath);
+    assert.deepEqual(stagedMcpManifest.mcpServers?.solvelang?.args, [
+      "--yes",
+      `@solvelang/mcp-server@${candidate.publishedVersion}`,
+    ], "checked-in plugin must initially pin the published MCP package");
+    stagedMcpManifest.mcpServers.solvelang.args[1] = `@solvelang/mcp-server@${candidate.candidateVersion}`;
+    await writeJson(stagedMcpManifestPath, stagedMcpManifest);
+
+    const stagedClaudeMarketplacePath = path.join(stagedRoot, ".claude-plugin", "marketplace.json");
+    const stagedClaudeMarketplace = await readJson(stagedClaudeMarketplacePath);
+    assert.equal(stagedClaudeMarketplace.plugins?.length, 1, "Claude marketplace should contain one reviewed SolveLang plugin");
+    assert.equal(stagedClaudeMarketplace.plugins[0].version, candidate.publishedVersion, "Claude marketplace must start from the published line");
+    stagedClaudeMarketplace.plugins[0].version = candidate.candidateVersion;
+    await writeJson(stagedClaudeMarketplacePath, stagedClaudeMarketplace);
+  } else {
+    assert.equal(stagedPackageManifest.version, candidate.candidateVersion);
+    assert.equal(stagedLock.version, candidate.candidateVersion);
+    assert.equal(stagedLock.packages[""].version, candidate.candidateVersion);
   }
-
-  const stagedMcpManifestPath = path.join(stagedPluginRoot, ".mcp.json");
-  const stagedMcpManifest = await readJson(stagedMcpManifestPath);
-  assert.deepEqual(stagedMcpManifest.mcpServers?.solvelang?.args, [
-    "--yes",
-    `@solvelang/mcp-server@${candidate.publishedVersion}`,
-  ], "checked-in plugin must initially pin the published MCP package");
-  stagedMcpManifest.mcpServers.solvelang.args[1] = `@solvelang/mcp-server@${candidate.candidateVersion}`;
-  await writeJson(stagedMcpManifestPath, stagedMcpManifest);
-
-  const stagedClaudeMarketplacePath = path.join(stagedRoot, ".claude-plugin", "marketplace.json");
-  const stagedClaudeMarketplace = await readJson(stagedClaudeMarketplacePath);
-  assert.equal(stagedClaudeMarketplace.plugins?.length, 1, "Claude marketplace should contain one reviewed SolveLang plugin");
-  assert.equal(stagedClaudeMarketplace.plugins[0].version, candidate.publishedVersion, "Claude marketplace must start from the published line");
-  stagedClaudeMarketplace.plugins[0].version = candidate.candidateVersion;
-  await writeJson(stagedClaudeMarketplacePath, stagedClaudeMarketplace);
 
   const stagedCodexMarketplace = await readJson(path.join(stagedRoot, ".agents", "plugins", "marketplace.json"));
   assert.equal(stagedCodexMarketplace.name, "solvelang");
@@ -134,16 +146,14 @@ try {
   assert.deepEqual(stagedCodexMarketplace.plugins[0].source, { source: "local", path: "./plugins/solvelang" });
   assert.equal(stagedCodexMarketplace.plugins[0].policy?.products?.includes("CODEX"), true);
 
-  // Reuse the exact dependency graph already qualified by the checked-in lockfile. Nothing is
-  // installed into or modified in the source repository by this rehearsal.
   await symlink(path.join(packageRoot, "node_modules"), path.join(stagedPackageRoot, "node_modules"), "dir");
 
   await run("npm", ["run", "build"], { cwd: stagedPackageRoot });
   const builtIndex = await readFile(path.join(stagedPackageRoot, "dist", "src", "index.js"), "utf8");
   const builtRemote = await readFile(path.join(stagedPackageRoot, "dist", "src", "remote.js"), "utf8");
   const candidatePattern = new RegExp(`version: ["']${candidate.candidateVersion.replaceAll(".", "\\.")}["']`);
-  assert.match(builtIndex, candidatePattern, "staged local MCP runtime must identify as the candidate version");
-  assert.match(builtRemote, candidatePattern, "staged remote MCP runtime must identify as the candidate version");
+  assert.match(builtIndex, candidatePattern, "qualified local MCP runtime must identify as the candidate version");
+  assert.match(builtRemote, candidatePattern, "qualified remote MCP runtime must identify as the candidate version");
 
   await run(process.execPath, [path.join(stagedPackageRoot, "scripts", "validate-plugin-packaging.mjs")], {
     cwd: stagedPackageRoot,
@@ -153,13 +163,11 @@ try {
     env: { ...process.env, npm_config_cache: path.join(temporaryRoot, "npm-cache") },
   });
 
-  // Re-read the staged metadata after the actual roundtrip. The package/plugin/marketplace
-  // contract must still agree exactly on the candidate version.
   const finalPackage = await readJson(stagedPackageManifestPath);
   const finalCodex = await readJson(path.join(stagedPluginRoot, ".codex-plugin", "plugin.json"));
   const finalClaude = await readJson(path.join(stagedPluginRoot, ".claude-plugin", "plugin.json"));
-  const finalMcp = await readJson(stagedMcpManifestPath);
-  const finalClaudeMarketplace = await readJson(stagedClaudeMarketplacePath);
+  const finalMcp = await readJson(path.join(stagedPluginRoot, ".mcp.json"));
+  const finalClaudeMarketplace = await readJson(path.join(stagedRoot, ".claude-plugin", "marketplace.json"));
   for (const [label, value] of [
     ["package", finalPackage.version],
     ["Codex plugin", finalCodex.version],
@@ -171,11 +179,11 @@ try {
   assert.equal(
     finalMcp.mcpServers?.solvelang?.args?.[1],
     `@solvelang/mcp-server@${candidate.candidateVersion}`,
-    "canonical staged npx pin must target the candidate version",
+    "canonical qualified npx pin must target the candidate version",
   );
 
   console.log(
-    `SolveLang full distribution transition ${candidate.publishedVersion} -> ${candidate.candidateVersion} PASS: package, local/remote runtime, Codex plugin, Claude plugin, Claude marketplace, Codex marketplace, npx pin, clean package install, and MCP roundtrip agree; source/public metadata remains unchanged and publication remains unauthorized.`,
+    `SolveLang full distribution ${releaseReady ? "release-ready validation" : `transition ${candidate.publishedVersion} -> ${candidate.candidateVersion}`} PASS: package, local/remote runtime, Codex plugin, Claude plugin, Claude marketplace, Codex marketplace, npx pin, clean package install, and MCP roundtrip agree; publication remains unauthorized.`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

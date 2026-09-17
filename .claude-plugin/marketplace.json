@@ -9,7 +9,7 @@
     {
       "name": "solvelang",
       "description": "Deterministic, read-only workflow and repository graph analysis through the SolveLang MCP server.",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "SolveLang"
       },

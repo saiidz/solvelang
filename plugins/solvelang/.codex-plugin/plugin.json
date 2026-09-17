@@ -1,6 +1,6 @@
 {
   "name": "solvelang",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Deterministic, read-only SolveLang workflow and repository graph analysis for Codex.",
   "author": {
     "name": "SolveLang",

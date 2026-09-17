@@ -62,18 +62,24 @@ assert.equal(codexManifest.interface?.displayName, "SolveLang");
 assert.equal(codexManifest.interface?.category, "Developer Tools");
 assert.equal(codexManifest.interface?.capabilities?.includes("Read"), true);
 
-assert.equal(candidate.state, "selected-not-published");
+assert.equal(
+  ["selected-not-published", "release-ready-not-published"].includes(candidate.state),
+  true,
+  `unsupported release-candidate state ${candidate.state}`,
+);
 assert.equal(candidate.publicationAuthorized, false);
-assert.equal(packageManifest.version, candidate.publishedVersion, "checked-in package metadata must still describe the published line");
-assert.equal(codexManifest.version, candidate.publishedVersion, "workspace plugin must not advertise an unpublished MCP package version");
+const releaseReady = candidate.state === "release-ready-not-published";
+const expectedDistributionVersion = releaseReady ? candidate.candidateVersion : candidate.publishedVersion;
+assert.equal(packageManifest.version, expectedDistributionVersion, "package metadata must match the current release state");
+assert.equal(codexManifest.version, expectedDistributionVersion, "workspace plugin version must match the current release state");
 assert.deepEqual(mcpManifest, {
   mcpServers: {
     solvelang: {
       command: "npx",
-      args: ["--yes", `@solvelang/mcp-server@${candidate.publishedVersion}`],
+      args: ["--yes", `@solvelang/mcp-server@${expectedDistributionVersion}`],
     },
   },
-}, "workspace plugin must pin the actually published MCP package");
+}, "workspace plugin MCP pin must match the current release state");
 
 for (const requiredPath of [
   path.join(pluginRoot, "README.md"),
@@ -90,5 +96,7 @@ assert.match(frontmatter[1], /^name:\s*solvelang-workflow-review\s*$/m);
 assert.match(frontmatter[1], /^description:\s*\S.+$/m);
 
 console.log(
-  `SolveLang Codex GitHub marketplace import contract PASS: source=${contract.sourceRepository}, path=<root>, branch=${contract.recommendedBranch}, plugin=${contract.pluginName}, published MCP=${candidate.publishedVersion}. Workspace import remains separate from public-directory publication.`,
+  releaseReady
+    ? `SolveLang Codex marketplace RELEASE-READY contract PASS at ${expectedDistributionVersion}; recommended workspace import branch remains main and publication remains unauthorized.`
+    : `SolveLang Codex GitHub marketplace import contract PASS: source=${contract.sourceRepository}, path=<root>, branch=${contract.recommendedBranch}, plugin=${contract.pluginName}, published MCP=${candidate.publishedVersion}. Workspace import remains separate from public-directory publication.`,
 );

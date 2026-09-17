@@ -104,7 +104,7 @@ const remoteSolveGraphShortestPathInputSchema = z.object({
 
 export function createRemoteSolveLangMcpServer(): McpServer {
   const server = new McpServer(
-    { name: "solvelang-remote", version: "0.2.0" },
+    { name: "solvelang-remote", version: "0.3.0" },
     {
       instructions: "Remote SolveLang is raw-JSON-only, deterministic, read-only analysis. It has no workspace path access, subprocess execution, repository mutation, credential inspection, or outbound provider access.",
     },
