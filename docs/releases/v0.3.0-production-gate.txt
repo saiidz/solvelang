@@ -1,0 +1,6 @@
+billing=separate-authorization-required
+paid-priority-provider-execution=separate-authorization-required
+connected-support=separate-authorization-required
+posthog-live-canary=separate-authorization-required
+customer-totp-canary=separate-authorization-required
+restore-drill=separate-authorization-required
