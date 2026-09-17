@@ -75,13 +75,13 @@ test("incident history survives refresh without a fabricated resolution", () => 
   assert.equal(isCurrentIncident({ ...history, state: "monitoring" }), true);
   assert.doesNotMatch(read("app/(english)/status/page.tsx"), /No recorded incidents\./);
 });
-test("homepage and About share one capability inventory; pricing and status preserve billing-off distinction", () => {
+test("homepage, About, pricing, and status share the current controlled-rollout billing facts", () => {
   for (const page of ["landing", "about"]) assert.match(read(`app/(english)/${page}/page.tsx`), /<ProductCapabilities\s*\/>/);
   for (const page of ["api-pricing/page.tsx", "status/status-data.ts"]) assert.match(read(`app/(english)/${page}`), /billingAvailability/);
-  assert.match(billingAvailability, /API subscription billing is disabled/);
-  assert.match(billingAvailability, /Separate checkout services/);
-  assert.match(read("app/brandFacts.ts"), /accountAvailability/);
-  assert.match(read("public/llms.txt"), /API subscription billing is disabled/);
-  assert.equal(capabilityGroups.find((group) => group.id === "disabled").description, billingAvailability);
+  assert.match(billingAvailability, /Production API subscription billing/);
+  assert.match(billingAvailability, /real-payment canary is still pending/);
+  assert.match(read("app/brandFacts.ts"), /status: "production-canary"/);
+  assert.match(read("public/llms.txt"), /Production API subscription billing and checkout verified enabled/);
+  assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
   for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
 });
