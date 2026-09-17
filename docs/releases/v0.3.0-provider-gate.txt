@@ -1,0 +1,3 @@
+independent-heldout=external-evaluator-required
+real-claude-codex-measurements=provider-credits-and-authorization-required
+public-savings-claims=disabled-until-evidence
