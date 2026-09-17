@@ -1,0 +1,3 @@
+github-release=proved
+trusted-npm-publish-workflow=proved
+external-registry-independent-query=not-recorded-here
