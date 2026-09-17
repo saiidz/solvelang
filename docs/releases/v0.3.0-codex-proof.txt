@@ -1,0 +1,4 @@
+repository-marketplace-contract=present
+released-package-pin=0.3.0
+managed-workspace-import-install-use=pending-external-admin
+public-directory=pending-external
