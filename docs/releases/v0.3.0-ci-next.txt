@@ -1,0 +1,6 @@
+open-protected-pr
+wait-required-checks
+fix-if-red
+merge-if-green
+verify-merged-main
+sync-898-113
