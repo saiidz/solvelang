@@ -1,0 +1,3 @@
+release-commit-required-checks=success
+release-publish-workflow=success
+this-docs-branch-required-ci=pending
