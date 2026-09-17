@@ -94,19 +94,17 @@ Rules:
         AssertDescription: Admin CRM requires API access to be enabled.
       - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
         AssertDescription: Admin CRM requires customer accounts to be enabled.
-  SubscriptionBillingRemainsTestOnly:
+  SubscriptionBillingRequirements:
     RuleCondition: !Equals [!Ref SubscriptionBillingEnabled, "true"]
     Assertions:
       - Assert: !Equals [!Ref ApiAccessEnabled, "true"]
         AssertDescription: Subscription billing requires API access to be enabled.
       - Assert: !Equals [!Ref CustomerAccountsEnabled, "true"]
         AssertDescription: Browser subscription billing requires customer accounts to be enabled.
-      - Assert: !Equals [!Ref ApiAccessMode, test]
-        AssertDescription: Subscription billing is test-mode only until production review is complete.
       - Assert: !Not [!Equals [!Ref StripeSecretKey, ""]]
-        AssertDescription: Test subscription billing requires a Stripe secret key.
+        AssertDescription: Subscription billing requires a Stripe secret key.
       - Assert: !Not [!Equals [!Ref StripeSubscriptionWebhookSecret, ""]]
-        AssertDescription: Test subscription billing requires a signed webhook secret.
+        AssertDescription: Subscription billing requires a signed webhook secret.
       - Assert: !Not [!Equals [!Ref StripeApiDeveloperPriceId, ""]]
         AssertDescription: Developer plan Stripe price ID is required.
       - Assert: !Not [!Equals [!Ref StripeApiProPriceId, ""]]
