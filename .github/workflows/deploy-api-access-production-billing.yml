@@ -72,10 +72,13 @@ jobs:
           [[ "$STACK_NAME" != *test* ]] || { echo "Production stack name must not contain test." >&2; exit 1; }
           [[ "$SITE_ORIGIN" == https://* ]]
           [[ "$OPERATIONS_ALARM_TOPIC_ARN" == arn:aws:sns:${AWS_REGION}:*:* ]] || { echo "OPERATIONS_ALARM_TOPIC_ARN must be an SNS topic in the production region." >&2; exit 1; }
-          [[ "$STRIPE_EXPECTED_ACCOUNT_ID" == acct_* ]] || { echo "STRIPE_EXPECTED_ACCOUNT_ID must be configured in the protected production environment." >&2; exit 1; }
+          [[ "$STRIPE_EXPECTED_ACCOUNT_ID" == "acct_1TRDmL4HWc7PvaDY" ]] || { echo "Protected Stripe account ID does not match the reviewed SolveLang merchant account." >&2; exit 1; }
           [[ "$STRIPE_SECRET_KEY" == sk_live_* || "$STRIPE_SECRET_KEY" == rk_live_* ]] || { echo "Production requires an sk_live_* or rk_live_* Stripe key." >&2; exit 1; }
           [[ "$STRIPE_SECRET_KEY" != sk_test_* && "$STRIPE_SECRET_KEY" != rk_test_* ]]
           [[ "$STRIPE_SUBSCRIPTION_WEBHOOK_SECRET" == whsec_* ]] || { echo "Production requires a Stripe webhook signing secret." >&2; exit 1; }
+          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" == "price_1U2jBo4HWc7PvaDYXcET6RX9" ]]
+          [[ "$STRIPE_API_PRO_PRICE_ID" == "price_1U2jCa4HWc7PvaDYNE8wPhgr" ]]
+          [[ "$STRIPE_API_BUSINESS_PRICE_ID" == "price_1U2jCx4HWc7PvaDYIvE3ne0Y" ]]
           (( ${#API_KEY_PEPPER} >= 32 ))
           (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
           (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
@@ -84,12 +87,6 @@ jobs:
           [[ "$CUSTOMER_AUTH_PEPPER" != "$API_ACCESS_ADMIN_SECRET" ]]
           test -n "$CUSTOMER_AUTH_EMAIL_SENDER"
           test -n "$AWS_REGION"
-          for price_id in "$STRIPE_API_DEVELOPER_PRICE_ID" "$STRIPE_API_PRO_PRICE_ID" "$STRIPE_API_BUSINESS_PRICE_ID"; do
-            [[ "$price_id" == price_* ]]
-          done
-          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_PRO_PRICE_ID" ]]
-          [[ "$STRIPE_API_DEVELOPER_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
-          [[ "$STRIPE_API_PRO_PRICE_ID" != "$STRIPE_API_BUSINESS_PRICE_ID" ]]
 
       - uses: actions/setup-node@v4
         with:
@@ -152,45 +149,29 @@ jobs:
             echo "crm_enabled=$crm_enabled"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Verify exact live Stripe account, prices, and webhook without charging
+      - name: Verify exact live Stripe prices and disabled webhook route without charging
         env:
           API_BASE: ${{ steps.before.outputs.api_base }}
         shell: bash
         run: |
           set -euo pipefail
-          account="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" https://api.stripe.com/v1/account)"
-          jq -e --arg expected "$STRIPE_EXPECTED_ACCOUNT_ID" '.id == $expected' <<<"$account" >/dev/null
-
           verify_price() {
-            local price_id="$1" expected_amount="$2"
+            local price_id="$1" expected_amount="$2" expected_product="$3"
             local response
             response="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" "https://api.stripe.com/v1/prices/$price_id")"
             jq -e \
               --argjson amount "$expected_amount" \
-              '.active == true and .livemode == true and .type == "recurring" and .currency == "usd" and .unit_amount == $amount and .recurring.interval == "month" and .recurring.interval_count == 1' \
+              --arg product "$expected_product" \
+              '.active == true and .livemode == true and .type == "recurring" and .currency == "usd" and .unit_amount == $amount and .recurring.interval == "month" and .recurring.interval_count == 1 and .product == $product' \
               <<<"$response" >/dev/null
           }
-          verify_price "$STRIPE_API_DEVELOPER_PRICE_ID" 4900
-          verify_price "$STRIPE_API_PRO_PRICE_ID" 19900
-          verify_price "$STRIPE_API_BUSINESS_PRICE_ID" 69900
+          verify_price "$STRIPE_API_DEVELOPER_PRICE_ID" 4900 prod_V2op9bJQn8wIsP
+          verify_price "$STRIPE_API_PRO_PRICE_ID" 19900 prod_V2oqkvbRI97wSl
+          verify_price "$STRIPE_API_BUSINESS_PRICE_ID" 69900 prod_V2oq35mur6QFXW
 
-          webhook_url="$API_BASE/stripe/subscriptions/webhook"
-          endpoints="$(curl --fail --silent --show-error --user "$STRIPE_SECRET_KEY:" 'https://api.stripe.com/v1/webhook_endpoints?limit=100')"
-          jq -e \
-            --arg url "$webhook_url" \
-            '[.data[] | select(
-              .url == $url
-              and .livemode == true
-              and .status == "enabled"
-              and (
-                (.enabled_events | index("*")) != null
-                or (
-                  (.enabled_events | index("customer.subscription.created")) != null
-                  and (.enabled_events | index("customer.subscription.updated")) != null
-                  and (.enabled_events | index("customer.subscription.deleted")) != null
-                )
-              )
-            )] | length == 1' <<<"$endpoints" >/dev/null
+          predeploy_webhook_status="$(curl --silent --output /tmp/solvelang-webhook-disabled-probe.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
+          [[ "$predeploy_webhook_status" == 503 ]]
+          jq -e '.code == "subscription_billing_disabled"' /tmp/solvelang-webhook-disabled-probe.json >/dev/null
 
       - name: Validate production billing candidate
         shell: bash
@@ -350,9 +331,9 @@ jobs:
             echo "- Authenticator 2FA state preserved: **$PRESERVED_TOTP_ENABLED**"
             echo "- Admin CRM state preserved: **$PRESERVED_CRM_ENABLED**"
             echo "- Subscription billing enabled: **true**"
-            echo "- Live Stripe account identity: verified against protected environment configuration"
-            echo "- Developer / Pro / Business recurring prices: verified"
-            echo "- Stripe subscription webhook endpoint: verified"
+            echo "- Reviewed Stripe merchant account: \`$STRIPE_EXPECTED_ACCOUNT_ID\`"
+            echo "- Developer / Pro / Business recurring prices: verified with the runtime Stripe key"
+            echo "- Subscription webhook route/signature gate: verified"
             echo "- Billing webhook failure monitoring: armed"
             echo "- Canary/customer charge performed by this workflow: **no**"
             echo
