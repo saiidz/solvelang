@@ -1,0 +1,5 @@
+status=pending-external-admin
+repository=saiidz/solvelang
+path=root
+plugin=solvelang
+package=@solvelang/mcp-server@0.3.0
