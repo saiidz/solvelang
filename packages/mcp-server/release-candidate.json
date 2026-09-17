@@ -2,7 +2,7 @@
   "schema": "solvelang.mcp.release-candidate.v1",
   "candidateVersion": "0.3.0",
   "publishedVersion": "0.2.0",
-  "state": "selected-not-published",
+  "state": "release-ready-not-published",
   "publicationAuthorized": false,
-  "publicPluginTracksPublishedVersion": true
+  "publicPluginTracksPublishedVersion": false
 }

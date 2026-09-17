@@ -191,7 +191,7 @@ async function runSolvec(filePath: string): Promise<{ ok: boolean; output: strin
 }
 
 const server = new McpServer(
-  { name: "solvelang", version: "0.2.0" },
+  { name: "solvelang", version: "0.3.0" },
   {
     instructions: "Use SolveLang tools for deterministic workflow and Solve Graph analysis. Tools are read-only, bounded to 2 MB inputs and 5,000 n8n nodes, never execute workflows, never mutate repositories, and process raw JSON only in memory.",
   },
