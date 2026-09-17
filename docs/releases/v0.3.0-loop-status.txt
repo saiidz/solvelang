@@ -1,0 +1,3 @@
+phase=codex-onboarding-polish-and-evidence
+branch=docs/codex-v030-onboarding-proof
+next=protected-pr-ci
