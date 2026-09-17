@@ -9,19 +9,30 @@ It packages one shared read-only MCP configuration and workflow-review skill for
 - MCP configuration: `.mcp.json`
 - shared skill: `skills/solvelang-workflow-review/SKILL.md`
 
+## Install in Codex
+
+For an eligible managed workspace, import this GitHub marketplace using:
+
+- repository: `https://github.com/saiidz/solvelang`
+- import path: repository root / blank
+- marketplace manifest: `.agents/plugins/marketplace.json`
+- plugin: `solvelang`
+
+After the workspace administrator imports the marketplace, install **SolveLang** in Codex and start a fresh session. The plugin's `.mcp.json` launches the public `@solvelang/mcp-server@0.3.0` package through `npx`.
+
+Workspace import is an administrator-controlled Codex action and is separate from global public Plugin Directory publication.
+
 ## Distribution truth
 
-The checked-in plugin currently launches the published `@solvelang/mcp-server@0.2.0` package through `npx`. That is the latest published MCP release (2026-07-20), but it **predates substantial current-main MCP/Solve Context work through #920**.
+SolveLang MCP v0.3.0 is the current checked-in and released package line. The canonical plugin pin is:
 
-Therefore:
+`@solvelang/mcp-server@0.3.0`
 
-- installing this plugin with its current `.mcp.json` pin uses the historical published v0.2.0 package;
-- do not claim that the installed v0.2.0 plugin exposes every tool/capability present on current `main`;
-- call capabilities/list-tools to inspect what the installed package actually provides;
-- use a source checkout of `packages/mcp-server` when evaluating current-main Solve Context behavior;
-- a future versioned MCP/plugin release is required before current-main capabilities are publicly distributed through this pin.
+The v0.3.0 GitHub release triggered the repository's trusted npm publication workflow. That workflow checked out the released commit, verified the tag/package version, ran MCP tests, verified a packed clean-consumer install and `npx` entrypoint, and completed the public-package publish step successfully.
 
-See [`../../docs/integrations/mcp-codex-claude.md`](../../docs/integrations/mcp-codex-claude.md) for published-vs-source usage instructions.
+A successful npm publication does not by itself prove that a particular Codex managed workspace has imported or installed the plugin. Record workspace install/search/use evidence separately after an administrator performs the import.
+
+See [`../../docs/integrations/mcp-codex-claude.md`](../../docs/integrations/mcp-codex-claude.md) for integration details.
 
 ## Authority boundary
 
