@@ -36,28 +36,36 @@ const claudeMarketplace = await readJson(".claude-plugin/marketplace.json");
 const releaseWorkflow = await readFile(resolve(repositoryRoot, ".github/workflows/npm-release.yml"), "utf8");
 
 assert.equal(candidate.schema, "solvelang.mcp.release-candidate.v1");
-assert.equal(candidate.state, "selected-not-published");
-assert.equal(candidate.publicationAuthorized, false, "candidate selection must not grant publication authority");
-assert.equal(candidate.publicPluginTracksPublishedVersion, true);
+assert.equal(
+  ["selected-not-published", "release-ready-not-published"].includes(candidate.state),
+  true,
+  `unsupported release-candidate state ${candidate.state}`,
+);
+assert.equal(candidate.publicationAuthorized, false, "repository state must never grant publication authority");
 assert.equal(isGreaterVersion(candidate.candidateVersion, candidate.publishedVersion), true, "candidate version must advance the published line");
 
-// Until publication is separately authorized and executed, package/lock/plugin metadata must
-// continue to describe the actually published line. The selected next version lives only in
-// the release-candidate record and release notes.
-assert.equal(packageManifest.version, candidate.publishedVersion, "package metadata must remain on the published line before release finalization");
-assert.equal(packageLock.version, candidate.publishedVersion, "lockfile root version must remain on the published line before release finalization");
-assert.equal(packageLock.packages?.[""]?.version, candidate.publishedVersion, "lockfile package version must remain on the published line before release finalization");
+const releaseReady = candidate.state === "release-ready-not-published";
+const expectedDistributionVersion = releaseReady ? candidate.candidateVersion : candidate.publishedVersion;
+assert.equal(
+  candidate.publicPluginTracksPublishedVersion,
+  !releaseReady,
+  "public-plugin tracking flag must match the selected vs held-release state",
+);
+
+assert.equal(packageManifest.version, expectedDistributionVersion, "package metadata version drifted from the release state");
+assert.equal(packageLock.version, expectedDistributionVersion, "lockfile root version drifted from the release state");
+assert.equal(packageLock.packages?.[""]?.version, expectedDistributionVersion, "lockfile package version drifted from the release state");
 
 for (const [label, plugin] of [["Codex", codexPlugin], ["Claude", claudePlugin]]) {
-  assert.equal(plugin.version, candidate.publishedVersion, `${label} public plugin must track the published package line`);
+  assert.equal(plugin.version, expectedDistributionVersion, `${label} plugin version drifted from the release state`);
 }
-assert.equal(claudeMarketplace.plugins?.[0]?.version, candidate.publishedVersion, "Claude marketplace metadata must track the published package line");
+assert.equal(claudeMarketplace.plugins?.[0]?.version, expectedDistributionVersion, "Claude marketplace version drifted from the release state");
 
 const pin = mcpManifest.mcpServers?.solvelang?.args?.[1];
-assert.equal(pin, `@solvelang/mcp-server@${candidate.publishedVersion}`, "canonical plugin must pin the actually published MCP package");
+assert.equal(pin, `@solvelang/mcp-server@${expectedDistributionVersion}`, "canonical plugin MCP pin drifted from the release state");
 
-// Preserve the existing fail-closed publishing boundary. Selecting a candidate must never
-// create a second publish path or turn repository merge into publication authority.
+// Preserve the fail-closed publishing boundary in every repository state. A release-ready
+// branch prepares exact artifacts but still does not create publication authority.
 assert.match(releaseWorkflow, /release:\s*\n\s*types:\s*\n\s*- published/);
 assert.match(releaseWorkflow, /vars\.NPM_SCOPE_OWNERSHIP_VERIFIED == 'true'/);
 assert.match(releaseWorkflow, /environment:\s*npm-production/);
@@ -68,4 +76,8 @@ assert.match(releaseWorkflow, /npm run test:packed/);
 assert.match(releaseWorkflow, /npm publish --access public/);
 assert.doesNotMatch(releaseWorkflow, /NPM_TOKEN|NODE_AUTH_TOKEN/);
 
-console.log(`SolveLang MCP release candidate ${candidate.candidateVersion} SELECTED; published/plugin line remains ${candidate.publishedVersion}; publication remains unauthorized.`);
+console.log(
+  releaseReady
+    ? `SolveLang MCP ${candidate.candidateVersion} RELEASE-READY on held branch; published line remains ${candidate.publishedVersion}; publication remains unauthorized.`
+    : `SolveLang MCP release candidate ${candidate.candidateVersion} SELECTED; published/plugin line remains ${candidate.publishedVersion}; publication remains unauthorized.`,
+);
