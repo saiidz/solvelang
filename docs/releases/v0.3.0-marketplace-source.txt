@@ -1,0 +1,5 @@
+repository=https://github.com/saiidz/solvelang
+path=root
+manifest=.agents/plugins/marketplace.json
+plugin=solvelang
+product=CODEX
