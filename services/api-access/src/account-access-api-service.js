@@ -1,5 +1,6 @@
 const GUARDED_METHODS = new Set([
   "reserveSubscriptionCheckout",
+  "releaseSubscriptionCheckout",
   "provisionSubscription",
   "issueApiKey",
   "consumeUsage",
