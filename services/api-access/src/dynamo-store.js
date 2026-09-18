@@ -212,6 +212,22 @@ export function createDynamoApiAccessStore(documentClient, {
       }
     },
 
+    async releaseSubscriptionCheckout({ accountId, requestId }) {
+      try {
+        await documentClient.send(new UpdateCommand({
+          TableName: accountsTable,
+          Key: { accountId },
+          UpdateExpression: "REMOVE pendingCheckoutRequestId, pendingCheckoutExpiresAt",
+          ConditionExpression: "pendingCheckoutRequestId = :requestId",
+          ExpressionAttributeValues: { ":requestId": requestId },
+        }));
+        return "released";
+      } catch (error) {
+        if (error?.name === "ConditionalCheckFailedException") return "not_owner";
+        throw error;
+      }
+    },
+
     async listKeys(accountId) {
       const response = await documentClient.send(new QueryCommand({
         TableName: keysTable,
