@@ -104,7 +104,8 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
   if (!gateway || typeof gateway.createCheckoutSession !== "function") throw new Error("Stripe subscription gateway is required.");
   if (!apiAccessService
     || typeof apiAccessService.getSubscriptionAccount !== "function"
-    || typeof apiAccessService.reserveSubscriptionCheckout !== "function") {
+    || typeof apiAccessService.reserveSubscriptionCheckout !== "function"
+    || typeof apiAccessService.releaseSubscriptionCheckout !== "function") {
     throw new Error("API access service is required.");
   }
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
@@ -125,7 +126,9 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
         throw new ApiAccessError(503, "subscription_price_unavailable", "API subscription pricing is not configured.");
       }
       await apiAccessService.reserveSubscriptionCheckout({ accountId, requestId });
-      const session = await gateway.createCheckoutSession({
+      let session;
+      try {
+        session = await gateway.createCheckoutSession({
         accountId,
         requestId,
         email,
@@ -135,6 +138,10 @@ export function createSubscriptionCheckoutService({ gateway, apiAccessService, p
         successUrl: `${siteOrigin}/account/api-keys/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${siteOrigin}/api-pricing/?checkout=canceled`,
       });
+      } catch (error) {
+        await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});
+        throw error;
+      }
       if (!session?.id || !session?.url) throw new ApiAccessError(502, "stripe_checkout_unavailable", "Subscription checkout is temporarily unavailable.");
       return { sessionId: session.id, url: session.url };
     },

@@ -126,6 +126,14 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     return { accountId, requestId, expiresAt, duplicate: outcome === "duplicate" };
   }
 
+  async function releaseSubscriptionCheckout(input) {
+    const accountId = cleanId(input.accountId, "Account ID");
+    const requestId = cleanId(input.requestId, "Checkout request ID");
+    if (typeof store.releaseSubscriptionCheckout !== "function") return { accountId, requestId, released: false };
+    const outcome = await store.releaseSubscriptionCheckout({ accountId, requestId });
+    return { accountId, requestId, released: outcome === "released" };
+  }
+
   async function provisionSubscription(input) {
     const timestamp = now();
     const plan = getApiPlan(input.plan);
@@ -266,6 +274,7 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
   return {
     getSubscriptionAccount,
     reserveSubscriptionCheckout,
+    releaseSubscriptionCheckout,
     provisionSubscription,
     issueApiKey,
     revokeApiKey,

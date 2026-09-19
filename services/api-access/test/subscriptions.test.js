@@ -31,6 +31,7 @@ function lifecycleApiService({ existing, provision, reserve } = {}) {
   return {
     getSubscriptionAccount: async () => existing,
     reserveSubscriptionCheckout: reserve ?? (async () => ({ duplicate: false })),
+    releaseSubscriptionCheckout: async () => ({ released: true }),
     provisionSubscription: provision ?? (async (input) => input),
   };
 }

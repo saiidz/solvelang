@@ -13,6 +13,7 @@ function apiService(existing) {
   return {
     getSubscriptionAccount: async () => existing,
     reserveSubscriptionCheckout: async () => ({ duplicate: false }),
+    releaseSubscriptionCheckout: async () => ({ released: true }),
   };
 }
 
@@ -86,4 +87,27 @@ test("fails closed when billing is disabled, a subscription exists, or Stripe om
     () => unavailable.createCheckout({ accountId: "acct_1", requestId: "checkout_3", email: "dev@example.com", plan: "developer" }),
     (error) => error instanceof ApiAccessError && error.code === "stripe_checkout_unavailable",
   );
+});
+
+
+test("releases the checkout reservation when Stripe session creation fails so retry is not stranded", async () => {
+  const calls = [];
+  const apiAccessService = {
+    getSubscriptionAccount: async () => undefined,
+    reserveSubscriptionCheckout: async (input) => { calls.push(["reserve", input]); return { duplicate: false }; },
+    releaseSubscriptionCheckout: async (input) => { calls.push(["release", input]); return { released: true }; },
+  };
+  const service = createEmbeddedSubscriptionCheckoutService({
+    gateway: { createCheckoutSession: async () => { throw new Error("stripe unavailable"); } },
+    apiAccessService,
+    priceIds,
+    siteOrigin: "https://www.solve-lang.com",
+    enabled: true,
+  });
+  await assert.rejects(
+    () => service.createCheckout({ accountId: "acct_1", requestId: "checkout_retry", email: "dev@example.com", plan: "developer" }),
+    /stripe unavailable/,
+  );
+  assert.deepEqual(calls.map(([kind]) => kind), ["reserve", "release"]);
+  assert.equal(calls[1][1].requestId, "checkout_retry");
 });

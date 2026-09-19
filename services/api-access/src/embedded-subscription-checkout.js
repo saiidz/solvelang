@@ -32,7 +32,8 @@ export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessSe
   if (!gateway || typeof gateway.createCheckoutSession !== "function") throw new Error("Stripe subscription gateway is required.");
   if (!apiAccessService
     || typeof apiAccessService.getSubscriptionAccount !== "function"
-    || typeof apiAccessService.reserveSubscriptionCheckout !== "function") {
+    || typeof apiAccessService.reserveSubscriptionCheckout !== "function"
+    || typeof apiAccessService.releaseSubscriptionCheckout !== "function") {
     throw new Error("API access service is required.");
   }
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
@@ -55,7 +56,9 @@ export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessSe
       }
 
       await apiAccessService.reserveSubscriptionCheckout({ accountId, requestId });
-      const session = await gateway.createCheckoutSession({
+      let session;
+      try {
+        session = await gateway.createCheckoutSession({
         accountId,
         requestId,
         email,
@@ -64,6 +67,10 @@ export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessSe
         customerId: input.customerId ? cleanId(input.customerId, "Stripe customer ID") : undefined,
         returnUrl: `${siteOrigin}/account/api-keys/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       });
+      } catch (error) {
+        await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});
+        throw error;
+      }
       if (!session?.id || typeof session.client_secret !== "string" || !session.client_secret) {
         throw new ApiAccessError(502, "stripe_checkout_unavailable", "Subscription checkout is temporarily unavailable.");
       }

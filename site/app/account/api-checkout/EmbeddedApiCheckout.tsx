@@ -4,6 +4,7 @@ import { loadStripe, type Stripe, type StripeEmbeddedCheckout } from "@stripe/st
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  CustomerApiError,
   type CustomerDashboard,
   customerApi,
   newRequestId,
@@ -109,7 +110,11 @@ export function EmbeddedApiCheckout() {
         setLoading(false);
       } catch (caught) {
         if (!active) return;
-        setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
+        if (caught instanceof CustomerApiError && caught.code === "subscription_checkout_conflict") {
+          setError("Your previous checkout is still being finalized. Try again in a moment; you will not be charged twice.");
+        } else {
+          setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
+        }
         setLoading(false);
       }
     }
@@ -164,7 +169,18 @@ export function EmbeddedApiCheckout() {
             {loading ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
             {error ? (
               <div role="alert" className="mx-2 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
-                {error}
+                <p>{error}</p>
+                <button
+                  type="button"
+                  className="mt-4 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  onClick={() => {
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("request_id", newRequestId());
+                    window.location.replace(`/account/api-checkout/?${params.toString()}`);
+                  }}
+                >
+                  Try secure checkout again
+                </button>
               </div>
             ) : null}
             <div ref={mountRef} className={loading || error ? "hidden" : "block"} aria-label="Secure Stripe subscription checkout" />
