@@ -19,7 +19,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 | [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, and pair-integrity hardening through #913–#920 | Larger independent/blinded evaluation; actual Claude/Codex baseline-vs-context runs; provider-reported token/latency/cache/quality evidence; versioned distribution of current-main capabilities |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin and TOTP infrastructure are live; billing/priority/support-provider activation remain separately gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; real-payment acceptance, priority and support activation remain gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
 
 ## Working today
 
@@ -62,7 +62,7 @@ The repository **does not yet have measured real-agent token savings or a valid 
 
 Repository code supports native IMAP/SMTP for the existing SolveLang mailbox, optional Gmail, durable ingress/action state, safe cutover/recovery and account/operator controls. The support stack/provider path remains default-off until separately approved and deployed.
 
-Separately verified production evidence records API access, customer username/email + password sign-in, private Admin and TOTP infrastructure as live. Subscription billing, paid priority/provider execution, general managed workflow execution and the first PostHog canary remain off/unproven unless a newer protected production record says otherwise.
+Separately verified production evidence records API access, customer username/email + password sign-in, private Admin and TOTP infrastructure as live. Subscription billing is enabled for controlled rollout, with real-payment acceptance pending. Paid priority/provider execution, general managed workflow execution and the first PostHog canary remain off/unproven.
 
 ## Distribution truth
 
@@ -92,7 +92,7 @@ These are **priority projections, not delivery dates or completion percentages**
 
 - Connected support: deploy default-off only under exact-scope approval, then prove one new-message task/reply and stop/recovery path.
 - PostHog: qualify the concrete credential/lifecycle backend and perform only the separately authorized bounded canary.
-- Billing/priority: keep disabled until live Stripe/provider configuration, monitoring, recovery, customer/legal materials and owner approvals are complete.
+- Billing: preserve the enabled controlled rollout and complete scoped real-payment/customer acceptance before broader launch. Paid priority/provider execution stays disabled until its own configuration, monitoring, recovery and authorization gates pass.
 
 ### Priority 1 — release qualification
 

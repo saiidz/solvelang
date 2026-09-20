@@ -101,7 +101,7 @@ Repository code now includes native IMAP/SMTP plus optional Gmail support founda
 
 ### 6. Account/API/Admin commercial foundation
 
-API access, customer password accounts, private Admin and TOTP infrastructure have separate live evidence. That is a foundation, not proof the full SaaS/business model is launched. Billing, paid priority/provider execution, connected-support activation and managed workflow execution remain separately gated.
+API access, customer password accounts, private Admin and TOTP infrastructure have separate live evidence. That is a foundation, not proof the full SaaS/business model is launched. Billing is enabled for controlled rollout with real-payment acceptance pending; paid priority/provider execution, connected-support activation and managed workflow execution remain separately gated.
 
 ## Product truth model
 
@@ -184,8 +184,8 @@ Optimize for developer/operator review: exact evidence, stable identities, bound
 ### Codex/Claude + Solve Context
 Support two explicit lanes:
 
-- **published historical package:** use the version actually released (currently v0.2.0) and inspect its actual capabilities;
-- **current repository source:** build `packages/mcp-server` from source to evaluate current-main Solve Context behavior until a new version is published.
+- **published package:** use verified MCP v0.3.0 and inspect its actual capabilities; v0.2.0 is historical;
+- **current repository source:** build `packages/mcp-server` from source to evaluate changes after the tagged v0.3.0 release.
 
 Never blur those lanes.
 
@@ -212,7 +212,7 @@ The `Protect main` ruleset now enforces four strict status checks, pull requests
 
 - Connected support: deploy default-off under exact-scope approval, then prove one new-message task/reply plus stop/recovery outcome.
 - PostHog: qualify concrete credential/lifecycle scope and run only the separately authorized bounded canary.
-- Billing/priority: keep off until provider configuration, monitoring/recovery, customer/legal acceptance and explicit owner approvals are complete.
+- Billing: preserve the enabled controlled rollout; broader launch still requires the scoped real-payment canary and customer/legal acceptance. Paid priority/provider execution remains off pending its separate prerequisites.
 
 ### P1 — release/platform evidence
 

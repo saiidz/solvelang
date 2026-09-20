@@ -30,7 +30,7 @@ SolveLang is an **open-source workflow intelligence product** with a versioned l
 
 The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, browser/WASM tooling, Workflow Intelligence Studio, bounded Repository/Server Audit surfaces, Self-Driving safety/execution contracts, a substantially implemented Solve Context layer, and a separately deployed production customer-account/API/Admin/TOTP foundation.
 
-It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, enabled subscription billing/paid priority, a generally activated support/provider service, a public current-main Solve Context release, enterprise orchestration, or a general integration marketplace.
+It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, broadly accepted subscription payments or enabled paid priority, a generally activated support/provider service, verified marketplace distribution, enterprise orchestration, or a general integration marketplace.
 
 Public claims should use these labels.
 
@@ -52,7 +52,7 @@ Public claims should use these labels.
 - repository-safe Self-Driving Observe/Suggest, patch/preflight, single-use execution-plan/finalization, GitHub-write and PostHog safety contracts; live provider activation and production rollout remain separately gated
 - **Solve Context** plan/pack/retrieve tools, content-addressed retrieval, Claude ↔ Codex handoff, lossless JSON/log/diff compaction, changed-path + supplied-graph ranking, pinned real-source regressions and strict agent-measurement record/report contracts through #913–#920
 - repository-qualified connected-support code with native IMAP/SMTP plus optional Gmail, durable event/action state, safe cutover/recovery, account controls and monitoring preparation; live activation remains separate
-- production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
+- production API access, customer password accounts, private Admin/TOTP infrastructure and controlled-rollout API subscription billing recorded by separate production evidence; real-payment acceptance remains pending
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
 ### Experimental
@@ -65,7 +65,7 @@ Public claims should use these labels.
 - optional OpenAI-backed responses
 - Studio-to-`.solve` draft generation
 - Solve Context selection/compaction quality beyond the committed regression fixtures
-- subscription-billing, paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production
+- paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production; broader billing launch still requires real-payment acceptance
 
 Experimental means implemented but unstable, narrow, provider-dependent, not yet broadly distributed, or not suitable for production promises.
 
@@ -316,7 +316,7 @@ These surfaces provide bounded read-only static/system evidence, graph explanati
 
 ### 6. Account/API/Admin foundation
 
-`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. Billing, paid priority/provider execution and general managed workflow execution remain off/not established live.
+`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. Subscription billing is enabled for controlled rollout with real-payment acceptance pending. Paid priority/provider execution and general managed workflow execution remain off/not established live.
 
 ### 7. Connected support
 
@@ -451,7 +451,7 @@ Its current analysis is deterministic and local-first. It should not be describe
 
 ### Is the account/API system production-ready?
 
-A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. The broader SaaS is not fully launched: subscription billing, paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
+A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. Subscription billing is enabled for controlled rollout, with real-payment acceptance pending. The broader SaaS is not fully launched: paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
 
 ## For recruiters and hiring managers
 
@@ -469,7 +469,7 @@ Current priorities are:
 2. maintain required checks and resolved review threads on `main`;
 3. verify managed-workspace installation and public Plugin Directory distribution;
 4. keep browser/WASM, language/spec and audit truth implementation-backed;
-5. activate support/PostHog/billing/priority only through their separate protected gates;
+5. complete broader billing acceptance and activate support/PostHog/priority only through their separate protected gates;
 6. preserve exact-platform qualification when preparing any public native release.
 
 ## License

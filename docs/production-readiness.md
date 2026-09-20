@@ -60,7 +60,7 @@ The production peppers and admin secret must remain distinct and must not equal 
 
 API access and customer accounts are already enabled in production. Subscription billing is enabled for controlled rollout, with first real-payment canary evidence still pending. Do not treat the live account stack or billing checkout surface as authorization to expose paid priority, provider execution, or broader public payment claims without the remaining evidence.
 
-The customer-account deployment workflow remains manual, main-only, protected by `api-access-production`, and explicitly preserves billing-off behavior. Re-running it is not a routine maintenance step; any new production mutation still requires fresh scope-specific approval.
+The legacy customer-account deployment workflow explicitly sets billing off and is incompatible with routine maintenance of the currently enabled controlled rollout. Do not re-run it for code updates. Use the main-only protected production maintenance workflow documented in `production-api-maintenance.md`, which preserves every live parameter and rejects unrelated infrastructure changes. Deployment authorization remains required.
 
 Support automation is also separate from the live customer-account stack. #903 prepares a default-off production foundation, #906 adds the qualified selectable Gmail/native-Mailcow transport, safe cutover/recovery path, and customer controls needed by the owner's existing `hello@solve-lang.com` mailbox without changing mailbox/DNS/relay configuration, and #908 adds repository-qualified monitoring and state-preserving disable/recovery controls. Applying the IAM supplement, deploying the support stack/monitoring, provisioning exact-scope mailbox/Linear credentials, enabling polling/actions, or running a real provider or stop/recovery canary remain separate owner-authorized gates under #896. The shared mail host is not authorization to operate on other projects, server settings, or mailboxes.
 
@@ -119,7 +119,7 @@ Immediately before each broader production launch step:
 - review session lifetime, sign-in/recovery expiration, and abuse throttles;
 - verify CSRF protections on browser mutations;
 - verify API-key scope and quota enforcement;
-- verify webhook signature verification and duplicate-event handling before billing is enabled;
+- retain current webhook signature-verification and duplicate-event evidence throughout controlled rollout;
 - verify support-worker secret access remains tagged, tenant-scoped, and limited to the approved SolveLang support namespace/endpoints before support activation;
 - verify no plaintext API keys, session tokens, recovery/sign-in tokens, peppers, Stripe secrets, provider credentials, or full payment credentials are logged;
 - document rotation for every production secret or credential reference used by the activated feature.
@@ -142,7 +142,7 @@ Do not generate or publish legal policy text solely from this checklist without 
 
 ## Go/no-go rule
 
-Production subscription billing is **NO-GO** if any item below is false:
+Broader public subscription-billing launch is **NO-GO** if any item below is false:
 
 1. Production GitHub Environment is isolated and protected.
 2. Required current-head merge checks/review policy are actually enforced or the exact protected release procedure provides an equivalent reviewed gate for that action.

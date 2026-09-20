@@ -55,7 +55,7 @@ export default function StudioApp() {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(workflow.scenarios[0]?.id ?? null);
   const [activeRun, setActiveRun] = useState<ScenarioRun | null>(null);
   const [saveStatus, setSaveStatus] = useState("Preparing local workspace…");
-  const [message, setMessage] = useState("Projects save locally. Account uploads require your explicit choice.");
+  const [message, setMessage] = useState(process.env.NEXT_PUBLIC_STUDIO_ACCOUNT_SAVING_ENABLED === "true" ? "Projects save locally. Account uploads require your explicit choice." : "Projects save in this browser. Export a backup to keep a separate copy.");
   const [recoveryRaw, setRecoveryRaw] = useState<string | null>(null);
   const [recoveryStage, setRecoveryStage] = useState<RecoveryStage>("none");
   const [showWizard, setShowWizard] = useState(false);

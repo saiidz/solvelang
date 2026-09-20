@@ -36,7 +36,7 @@ Current repository source includes:
 
 The repository does **not** currently establish:
 
-- a public current-main Solve Context release after MCP v0.2.0;
+- verified managed-workspace installation or public Plugin Directory listing for the published MCP v0.3.0 package;
 - real Claude/Codex provider-token savings;
 - real-agent task-success improvement or quality equivalence across the full benchmark suite;
 - provider cache-reuse improvement;
