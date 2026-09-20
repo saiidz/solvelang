@@ -8,7 +8,7 @@ import type { WorkflowDocument } from "../core/types";
 import styles from "../studio.module.css";
 
 type Remote = { accountId: string; csrfToken: string; revision: number; workspace: CloudWorkspace; updatedAt: string | null };
-export default function AccountWorkspace({ localStatus, onOpen }: { localStatus: string; onOpen: (document: WorkflowDocument) => void }) {
+export default function AccountWorkspace({ localStatus, projects, onOpen }: { localStatus: string; projects: WorkflowDocument[]; onOpen: (document: WorkflowDocument) => void }) {
   const [remote,setRemote]=useState<Remote|null>(null);
   const [status,setStatus]=useState("Local saving is active. Connect to save a private account copy across devices.");
   const [busy,setBusy]=useState(false);
@@ -51,7 +51,7 @@ export default function AccountWorkspace({ localStatus, onOpen }: { localStatus:
     return()=>window.clearTimeout(timer);
   // Autosave observes completed local writes. A request never runs concurrently.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[autosave,localStatus,busy]);
+  },[autosave,localStatus,busy,projects]);
   const start=()=>{
     if(!remote)return;
     if(!window.confirm("Save all projects, versions, and traces from this browser to your signed-in account and enable autosave? This replaces the account snapshot; download its backup first if needed."))return;

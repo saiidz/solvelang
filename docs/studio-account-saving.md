@@ -35,3 +35,11 @@ browser; account B cannot read A; stale revisions return 409; sign-out/account
 switching does not transfer a pending save; offline errors preserve local work;
 export and account-snapshot removal work. No customer project should be used as
 test data. Test environment proof and production acceptance are separate records.
+
+## Validation source
+
+The browser schemas in `site/app/studio/core/{types,schema,workspace-schema}.ts`
+are canonical. The API ships generated JavaScript from those exact sources.
+After changing a schema, run `node services/api-access/scripts/generate-studio-schema.mjs`
+with the site dependencies installed. API CI checks source fingerprints and rejects
+stale generated validators. Both runtimes use Zod 4.4.3 for this contract.

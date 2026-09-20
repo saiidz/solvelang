@@ -1,4 +1,5 @@
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { parseCloudWorkspace } from "./studio-schema/workspace-schema.js";
 import { ApiAccessError } from "./service.js";
 
 // One bounded JSON snapshot per account. Keeping the payload as a string avoids
@@ -6,18 +7,11 @@ import { ApiAccessError } from "./service.js";
 export const MAX_WORKSPACE_BYTES = 256 * 1024;
 const invalid = () => new ApiAccessError(400, "invalid_workspace", "Studio workspace is invalid.");
 export function validateWorkspace(value) {
-  if (!value || value.schemaVersion !== 1 || !Array.isArray(value.projects) || value.projects.length > 50) throw invalid();
-  const ids = new Set();
-  for (const project of value.projects) {
-    const doc = project?.document;
-    if (!doc || doc.schemaVersion !== 1 || typeof doc.id !== "string" || !doc.id || doc.id.length > 500 || ids.has(doc.id)
-      || typeof doc.name !== "string" || !doc.name || !Array.isArray(doc.nodes) || !Array.isArray(doc.edges)
-      || !Array.isArray(doc.scenarios) || !Array.isArray(project.versions) || !Array.isArray(project.traces)) throw invalid();
-    ids.add(doc.id);
-  }
   const payload = JSON.stringify(value);
+  if (typeof payload !== "string") throw invalid();
   if (Buffer.byteLength(payload) > MAX_WORKSPACE_BYTES) throw new ApiAccessError(413, "workspace_too_large", "Account workspace exceeds 256 KiB. Export older projects and history before saving.");
-  return payload;
+  try { return JSON.stringify(parseCloudWorkspace(value)); }
+  catch { throw invalid(); }
 }
 export function createStudioWorkspaceStore(client, tableName) {
   if (!client || !tableName) throw new Error("Studio workspace storage is required.");
