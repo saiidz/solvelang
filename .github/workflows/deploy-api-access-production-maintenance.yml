@@ -1,0 +1,78 @@
+name: Deploy API Access Production Maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute_maintenance:
+        description: Execute the reviewed code/route update while preserving every live parameter (false validates the change set only)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    environment: api-access-production
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      EXECUTE_MAINTENANCE: ${{ inputs.execute_maintenance }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require main and the existing production stack
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$STACK_NAME" == solvelang-api-access-production ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+      - uses: aws-actions/setup-sam@v2
+      - name: Validate and build candidate
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          sam validate --lint --template template.yaml
+          sam build --template template.yaml
+      - name: Assume protected production deployment role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Package code into the existing encrypted artifact bucket
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          aws s3api head-bucket --bucket "$bucket"
+          aws cloudformation package --template-file .aws-sam/build/template.yaml \
+            --s3-bucket "$bucket" --s3-prefix "maintenance/$GITHUB_SHA/code" \
+            --output-template-file "$RUNNER_TEMP/maintenance-packaged.json" --use-json
+      - name: Validate bounded changes and preserve production parameters
+        run: node scripts/production-maintenance.mjs
+      - name: Record maintenance scope
+        run: |
+          {
+            echo "## Production API maintenance"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Execute requested: $EXECUTE_MAINTENANCE"
+            echo "- All existing parameters retained with UsePreviousValue."
+            echo "- Only API/Lambda code, routes and the two Studio invoke permissions allowed."
+            echo "- Data/IAM changes, resource replacement and feature activation rejected."
+            echo "- Account-saving frontend remains separately gated pending two-account acceptance."
+          } >> "$GITHUB_STEP_SUMMARY"
