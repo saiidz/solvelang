@@ -37,7 +37,7 @@ export default function Page() {
           <div className="absolute -right-40 bottom-0 h-[30rem] w-[30rem] rounded-full bg-cyan-400/10 blur-3xl" />
           <div className="relative mx-auto grid max-w-7xl gap-16 px-5 py-20 sm:px-8 sm:py-28 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-32">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100"><span className="h-2 w-2 rounded-full bg-blue-400" />v0.3 · open source · explicit capability boundaries</div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100"><span className="h-2 w-2 rounded-full bg-blue-400" />Open source · explicit capability boundaries</div>
               <p className="mt-8 text-sm font-bold uppercase tracking-[0.22em] text-blue-300">See the system before you automate it.</p>
               <h1 className="mt-4 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.045em] sm:text-6xl lg:text-7xl">A readable, explainable workflow language for AI-assisted business processes.</h1>
               <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">Make deterministic rules, AI-assisted decisions, approvals, tools, failure paths, and human review points understandable before a process becomes opaque automation.</p>
