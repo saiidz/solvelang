@@ -109,9 +109,9 @@ The remaining Solve Context proof is real-agent measurement, broader independent
 
 ## Current distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current `main` contains substantial post-v0.2.0 MCP and Solve Context work. Until another version is separately selected and published:
+The repository source/package line is **v0.3.0** and the `v0.3.0` Git tag exists. External npm/package registry and marketplace publication remain separate facts that must be verified before public distribution claims:
 
-- public `@solvelang/mcp-server@0.2.0` references describe the historical published line;
+- public `@solvelang/mcp-server@0.2.0` references describe the historical package line;
 - current-main usage must be labeled as source/repository usage;
 - clean packed-consumer CI proves release readiness only, not that npm/marketplace users receive current-main behavior.
 

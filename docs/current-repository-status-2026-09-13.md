@@ -35,7 +35,7 @@ Repository billing work is significantly beyond the older readiness-only checkpo
 - entitlement/outbox/delivery-ledger replay behavior is covered;
 - production data-recovery prerequisites are verified read-only;
 - internal subscription mutation routes fail closed when billing is disabled;
-- production billing remains disabled unless separately enabled;
+- this 2026-09-13 checkpoint still treated production billing as disabled unless separately enabled; later controlled-rollout billing commits through #932-#937 supersede that fact where current production billing status is discussed;
 - no repository merge is standing authorization for a Stripe charge, refund, webhook mutation, account mutation, or deployment.
 
 ## Release truth

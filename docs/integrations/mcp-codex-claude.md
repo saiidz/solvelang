@@ -4,16 +4,16 @@ SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP
 
 ## Published package vs current repository source
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. The canonical plugin configuration still pins `@solvelang/mcp-server@0.2.0`, so marketplace/plugin users on that pin must be treated as using the historical published package line.
+The repository source/package line is **v0.3.0** and the `v0.3.0` Git tag exists. Treat npm/package registry and marketplace availability as separate external facts unless verified at the time of claim. Marketplace/plugin users on an old `@solvelang/mcp-server@0.2.0` pin must still be treated as using the historical package line.
 
-Current `main` includes later Repository Audit/Solve Graph and Solve Context work through #920. Do **not** claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.
+Current `main` includes later Repository Audit/Solve Graph and Solve Context work through the v0.3.0 release train. Do **not** claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.
 
 Use one of these two modes deliberately:
 
-1. **Published/stable historical line:** use the pinned v0.2.0 plugin/package instructions below.
+1. **Historical line:** use the pinned v0.2.0 plugin/package instructions below only when deliberately testing that old distribution path.
 2. **Current repository source:** build `packages/mcp-server` from a source checkout and run `dist/src/index.js` directly.
 
-A future versioned MCP/plugin release is required to distribute current-main capabilities through the public package/plugin path.
+External publication/install verification is required before claiming current repository behavior is available through a public package/plugin path.
 
 ## Prerequisite
 

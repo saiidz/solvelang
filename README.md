@@ -116,9 +116,9 @@ cargo build --release
 
 ## Solve Context and MCP usage
 
-### Published package truth
+### Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Context capabilities added after that release. Therefore `@solvelang/mcp-server@0.2.0` must be treated as the historical published package line, **not** as proof that public consumers receive current-main #913–#920 behavior.
+The repository has advanced to the **v0.3.0** source/package line and the `v0.3.0` Git tag exists. Treat this as repository and tag evidence only unless the protected npm/package and marketplace publication records are verified separately. Historical `@solvelang/mcp-server@0.2.0` references remain the old public package line and must not be used as proof that those consumers receive current-main Solve Context behavior.
 
 ### Use current repository source
 

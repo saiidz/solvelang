@@ -65,15 +65,15 @@ Trusted Mac is an owner-controlled self-hosted macOS ARM64 lane. Trusted Oracle 
 
 ## Distribution truth
 
-The latest published MCP GitHub release is **v0.2.0 (2026-07-20)**. Current source has substantial post-v0.2.0 changes. Until a new version is separately selected and published:
+The repository now carries the **v0.3.0** source/package line and the `v0.3.0` Git tag. External npm/package registry and marketplace publication still require separate verification before being claimed.
 
-- keep v0.2.0 references explicitly labeled as the published historical package;
+- keep v0.2.0 references explicitly labeled as the historical package line;
 - use repository-source instructions when documenting current-main capabilities;
-- do not claim a marketplace/npm/public plugin consumer receives #913–#920 behavior merely because repository packaging tests pass.
+- do not claim a marketplace/npm/public plugin consumer receives current-main behavior unless the corresponding external publication/install record is verified.
 
 ## Production truth and hard boundaries
 
-Use [`production-readiness.md`](production-readiness.md), #113 and exact dated deployment/provider evidence. The last central production record says API access, customer password accounts, private Admin and TOTP infrastructure are live; billing, paid priority/provider execution, connected-support activation and the first PostHog canary are not established as live.
+Use [`production-readiness.md`](production-readiness.md), #113 and exact dated deployment/provider evidence. Current production records say API access, customer password accounts, private Admin, TOTP infrastructure, and controlled-rollout API subscription billing are live; paid priority/provider execution, connected-support activation, first real-payment canary evidence, and the first PostHog canary are not established as live.
 
 Preserve the existing `hello@solve-lang.com` mailbox and routing. Native IMAP/SMTP compatibility does not grant authority over other mailboxes, projects or server settings.
 

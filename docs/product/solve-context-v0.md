@@ -129,9 +129,9 @@ Even a complete engineering matrix keeps publication/public-percentage authoriza
 
 ## Distribution truth
 
-The latest published MCP GitHub release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial post-v0.2.0 Solve Context work. Repository packaging/plugin/consumer tests prove that current source can be packaged and consumed; they do not mean the old public v0.2.0 pin contains #913–#920 behavior.
+The repository has advanced to the **v0.3.0** source/package line and the `v0.3.0` Git tag exists. Repository packaging/plugin/consumer tests prove that current source can be packaged and consumed; they do not prove npm/package registry or marketplace publication unless those external records are separately verified. The old public v0.2.0 pin does not contain the later Solve Context behavior.
 
-A future versioned MCP/plugin release is therefore a distinct remaining milestone.
+External distribution verification remains a distinct milestone from repository source/tag state.
 
 ## Projected next work
 

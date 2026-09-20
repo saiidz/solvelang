@@ -4,15 +4,15 @@ Local-first, read-only workflow, Solve Graph and Solve Context analysis for MCP 
 
 ## Distribution status
 
-The canonical public plugin currently pins `@solvelang/mcp-server@0.2.0`, and the latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Graph/Solve Context work added after that release.
+The repository source/package line is `@solvelang/mcp-server@0.3.0`, and the `v0.3.0` Git tag exists. External npm/package registry and marketplace availability are separate facts and must be verified before being claimed.
 
 That means:
 
-- `npx --yes @solvelang/mcp-server@0.2.0` uses the historical published package line;
-- the current source tree must not be assumed to match the public v0.2.0 artifact;
+- `npx --yes @solvelang/mcp-server@0.2.0` uses the historical package line;
+- the current source tree must not be assumed to match the old v0.2.0 artifact;
 - source-checkout instructions below are the correct way to evaluate current-main capabilities;
-- repository packing/consumer tests prove release readiness, not publication;
-- a future versioned release is required before current-main behavior is publicly distributed.
+- repository packing/consumer tests prove release readiness, not external publication;
+- verify npm/package registry or marketplace records before claiming current-main behavior is publicly distributed there.
 
 ## Published package usage
 
@@ -162,6 +162,6 @@ The repository includes a deliberately read-only Streamable HTTP transport found
 
 ## Releases
 
-The historical public release line is v0.2.0. Current `main` contains later work but intentionally has **not** been represented here as a newly published version.
+The repository source/package line is v0.3.0 and the `v0.3.0` Git tag exists. Treat npm/package registry and marketplace availability as separate external facts unless verified at the time of claim.
 
-Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a tag/release outside the approved release process. A future release must select a new version, bind it to the reviewed source, rerun the package/consumer/security gates and then use the protected publishing boundary.
+Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a release/publication outside the approved process.

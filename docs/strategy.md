@@ -105,10 +105,10 @@ Every current-facing document should classify claims by evidence state.
 Behavior present in current source and covered by appropriate tests/CI.
 
 ### Published / distributed
-A versioned artifact actually released to users. The latest published MCP GitHub release is **v0.2.0 (2026-07-20)** and predates substantial current-main Solve Context work.
+A versioned artifact actually released to users. The repository now carries the `v0.3.0` source/package line and Git tag, but npm/package registry and marketplace publication must be verified separately before claiming public distribution through those channels.
 
 ### Deployed / live
-A separately verified external/production state. Current central evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live; billing, paid priority/provider execution, connected-support activation, first PostHog canary and general managed execution are not established live.
+A separately verified external/production state. Current central evidence records API access, customer password accounts, private Admin, TOTP infrastructure, and controlled-rollout API subscription billing as live. Paid priority/provider execution, connected-support activation, first PostHog canary, first real-payment canary evidence, and general managed execution are not established live.
 
 ### Measured
 A performance/quality/adoption claim backed by the required measurement basis. Solve Context has synthetic and pinned-source regression evidence, but complete real Claude/Codex provider-token/task/cache/latency evidence is not yet established.

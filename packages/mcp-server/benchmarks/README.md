@@ -161,10 +161,11 @@ engineering report keeps `publicationAuthorized: false` and
 
 ## Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current
-repository source includes substantial post-v0.2.0 Solve Context and evaluation work.
+The repository source/package line is **v0.3.0**, and the `v0.3.0` Git tag exists.
 The benchmark/package/plugin CI proves current source can be qualified and packed; it
-does not mean public v0.2.0 consumers receive current-main behavior.
+does not prove npm/package registry or marketplace publication unless those external
+records are separately verified. Public v0.2.0 consumers remain on the historical
+package line.
 
 ## Limits and remaining proof
 
