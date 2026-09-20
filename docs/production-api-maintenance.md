@@ -38,3 +38,16 @@ set also fails safely and needs inspection, rather than being treated as proof.
 
 This workflow does not charge customers, activate a provider, change live
 configuration, or qualify authenticated Studio behavior by itself.
+
+## Preserve deployed operational settings
+
+The first real preview (run 35529275426) refused a proposed CRM table change
+and did not execute a stack update. SAM source defaults can differ from live
+operational hardening. Maintenance therefore expands SAM in a non-executed
+compilation change set, then creates a second template from the deployed
+processed template, copying only the two Lambda Code properties, the API Body,
+and the two new Studio permissions. Existing data/IAM/feature settings remain
+byte-for-byte equivalent after canonical comparison. Stack-level edits and
+unrelated resource additions/removals are still rejected. The final projected
+change set undergoes the same resource and complete-template validation before
+it can be executed.
