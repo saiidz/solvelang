@@ -11,9 +11,10 @@ account-authentication, or API-key secrets.
 
 1. Merge the reviewed candidate with all applicable checks green.
 2. Dispatch with `execute_maintenance=false` to package and inspect the real
-   CloudFormation change set. This uploads code and creates/deletes a change set
+   CloudFormation change set. This uploads code and creates a retained change set
    but does not execute a stack update.
-3. Check the exact commit and validated scope, then dispatch that reviewed main
+3. Inspect the retained change-set ARN and resource list in the Actions summary.
+   Check the exact commit and validated scope, then dispatch that reviewed main
    commit with `execute_maintenance=true` under deployment authorization.
 4. Verify unchanged parameter values/health flags and the Studio route's 401
    response without a customer session. Retain the Actions run as evidence.
@@ -22,7 +23,8 @@ account-authentication, or API-key secrets.
 
 Every existing parameter uses `UsePreviousValue`, including secrets and enabled
 billing/TOTP/CRM flags. Parameter additions/removals, IAM/data-resource changes,
-resource replacements, and unrelated route permissions fail closed. Allowed
+resource replacements, non-resource template changes (including Outputs, Rules,
+Conditions and parameter definitions), and unrelated route permissions fail closed. Allowed
 changes are the two existing Lambda code packages, the API body, and the two
 Studio invoke permissions. This intentionally narrow path may reject other
 maintenance work; expand it only through a separately reviewed requirement.

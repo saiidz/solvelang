@@ -30,6 +30,31 @@ export function assertMaintenanceChanges(changes, {rollback = false} = {}) {
   }
 }
 
+// Compare the processed templates as well as resource-level change-set entries.
+// Outputs, Rules, Conditions, parameter constraints/defaults and resource attributes
+// are all part of the preserved contract.
+const canonical = value => JSON.stringify(value, function (_key, item) {
+  return item && typeof item === 'object' && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item).sort(([a],[b]) => a.localeCompare(b))) : item;
+});
+export function assertTemplateBoundary(before, after, {rollback = false} = {}) {
+  const left = structuredClone(before), right = structuredClone(after);
+  for (const template of [left, right]) {
+    for (const id of functionIds) if (template.Resources?.[id]?.Properties) delete template.Resources[id].Properties.Code;
+    if (template.Resources?.ApiAccessHttpApi?.Properties) delete template.Resources.ApiAccessHttpApi.Properties.Body;
+  }
+  for (const id of permissionIds) {
+    const old = left.Resources?.[id], next = right.Resources?.[id];
+    if ((!old && next && !rollback) || (old && !next && rollback)) {
+      const permission = next ?? old;
+      if (permission.Type !== 'AWS::Lambda::Permission' || permission.Properties?.Action !== 'lambda:InvokeFunction'
+        || permission.Properties?.Principal !== 'apigateway.amazonaws.com') throw new Error('Unexpected Studio permission.');
+      delete left.Resources[id]; delete right.Resources[id];
+    }
+  }
+  if (canonical(left) !== canonical(right)) throw new Error('Maintenance changes protected template sections or resource configuration.');
+}
+
 export function assertPreserved(before, after) {
   const normalized = stack => (stack.Parameters ?? []).map(p => [p.ParameterKey, p.ParameterValue, p.ResolvedValue ?? null]).sort((a,b) => a[0].localeCompare(b[0]));
   if (JSON.stringify(normalized(before)) !== JSON.stringify(normalized(after))) throw new Error('Production parameters changed.');
@@ -71,20 +96,32 @@ async function main() {
     aws('s3api','put-object','--bucket',bucket,'--key',`${prefix}/${name}.json`,'--body',path,'--server-side-encryption','AES256');
     const url = `https://s3.${AWS_REGION}.amazonaws.com/${bucket}/${prefix}/${name}.json`;
     const result = json('cloudformation','create-change-set','--stack-name',STACK_NAME,'--change-set-name',name,'--change-set-type','UPDATE','--template-url',url,'--parameters',`file://${paramPath}`,'--capabilities','CAPABILITY_IAM','--description',`Reviewed code maintenance ${GITHUB_SHA}`);
+    let retainPlan = false;
     try {
       aws('cloudformation','wait','change-set-create-complete','--stack-name',STACK_NAME,'--change-set-name',result.Id);
       const changes = json('cloudformation','describe-change-set','--stack-name',STACK_NAME,'--change-set-name',result.Id);
       if (changes.NextToken) throw new Error('Unexpected paginated maintenance change set.');
       assertMaintenanceChanges(changes.Changes, {rollback});
+      const processedResult = json('cloudformation','get-template','--stack-name',STACK_NAME,'--change-set-name',result.Id,'--template-stage','Processed').TemplateBody;
+      const processed = typeof processedResult === 'string' ? JSON.parse(processedResult) : processedResult;
+      const deployedResult = json('cloudformation','get-template','--stack-name',STACK_NAME,'--template-stage','Processed').TemplateBody;
+      const deployed = typeof deployedResult === 'string' ? JSON.parse(deployedResult) : deployedResult;
+      assertTemplateBoundary(deployed, processed, {rollback});
       assertPreserved(before, stack());
       console.log(`${rollback ? 'Rollback' : 'Maintenance'}: ${changes.Changes.length} allowed code/route changes; all parameters preserved.`);
-      if (!rollback && EXECUTE_MAINTENANCE !== 'true') return false;
+      if (!rollback && EXECUTE_MAINTENANCE !== 'true') {
+        retainPlan = true;
+        console.log(`Validated plan retained for inspection: ${result.Id}`);
+        const summary = process.env.GITHUB_STEP_SUMMARY;
+        if (summary) writeFileSync(summary, `\nValidated change set: ${result.Id}\nCommit: ${GITHUB_SHA}\n\n` + changes.Changes.map(({ResourceChange:c}) => `- ${c.Action} ${c.LogicalResourceId} (${c.ResourceType}); scope: ${(c.Scope ?? []).join(', ')}`).join('\n') + '\n', {flag:'a'});
+        return false;
+      }
       aws('cloudformation','execute-change-set','--stack-name',STACK_NAME,'--change-set-name',result.Id);
       aws('cloudformation','wait','stack-update-complete','--stack-name',STACK_NAME);
       return true;
     } finally {
       // Executed change sets are normally deleted by CloudFormation; cleanup is best effort.
-      try { aws('cloudformation','delete-change-set','--stack-name',STACK_NAME,'--change-set-name',result.Id); } catch {}
+      try { if (!retainPlan) aws('cloudformation','delete-change-set','--stack-name',STACK_NAME,'--change-set-name',result.Id); } catch {}
     }
   };
   const executed = deploy(candidate);
