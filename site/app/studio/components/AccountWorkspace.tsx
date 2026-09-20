@@ -71,7 +71,7 @@ export default function AccountWorkspace({ localStatus, onOpen }: { localStatus:
   return <section className={styles.statusBar} aria-label="Account workspace"><div>
     <strong>Account saving {autosave?"· autosave on":""}</strong>
     <p role="status">{status}</p>
-    <p>Up to 50 projects and 256 KiB including history. Stored with encryption at rest. Usage counters remain local. <Link href="/account/">Sign in</Link></p>
+    <p>Up to 50 projects and 256 KiB including history. Stored with encryption at rest. Usage counters remain local. <Link href="/account/api-keys/">Sign in</Link></p>
     <button disabled={busy} onClick={()=>void connect()}>Connect / refresh account</button>{" "}
     {remote?<><button disabled={busy||localStatus!=="Saved locally"} onClick={start}>Save workspace and enable autosave</button>{" "}<button disabled={busy} onClick={()=>setAutosave(false)}>Pause autosave</button>{" "}<button onClick={()=>downloadText("solvelang-account-backup.json",JSON.stringify(remote.workspace,null,2),"application/json")}>Export account backup</button>{" "}<button disabled={busy} onClick={()=>void remove()}>Remove account snapshot</button>
     <ul>{remote.workspace.projects.map((project)=><li key={project.document.id}>{project.document.name}{" "}<button disabled={busy} onClick={()=>{
