@@ -1,6 +1,6 @@
 # SolveLang Runtime Safety
 
-SolveLang is an early beta language runtime. A plain `solvec run` is an unrestricted local execution mode for scripts you trust. Use hardened execution for pure, deterministic, advisory-only evaluation.
+SolveLang is a versioned pre-1.0 language runtime. A plain `solvec run` is an unrestricted local execution mode for scripts you trust. Use hardened execution for pure, deterministic, advisory-only evaluation.
 
 ## Hardened Modes
 

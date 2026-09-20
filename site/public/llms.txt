@@ -2,7 +2,7 @@
 
 SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.
 
-SolveLang is an early-beta open-source language and tooling project. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis. The browser preview uses a pinned WebAssembly safe-core build with host side effects denied, not the full hosted runtime.
+SolveLang is an open-source language and workflow intelligence product. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis. The browser preview uses a pinned WebAssembly safe-core build with host side effects denied, not the full hosted runtime.
 
 SolveLang is not a production durable workflow engine or a general-purpose autonomous AI workforce platform.
 

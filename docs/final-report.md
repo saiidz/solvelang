@@ -4,7 +4,7 @@ _Last updated: 2026-08-06._
 
 ## Executive summary
 
-The master mission transformed SolveLang from a technically interesting early-beta language/runtime repository into a substantially stronger engineering portfolio, demo asset, consulting foundation, and open-source project **without claiming production maturity that does not exist**.
+The master mission transformed SolveLang from a technically interesting pre-release language/runtime repository into a substantially stronger engineering portfolio, demo asset, consulting foundation, and open-source project **without claiming production maturity that does not exist**.
 
 The project is now positioned as:
 
@@ -347,7 +347,7 @@ Before public portfolio promotion, capture real evidence from a validated commit
 
 ## Priority screenshots
 
-1. Homepage hero with early-beta/maturity language visible.
+1. Homepage hero with explicit capability-boundary language visible.
 2. `examples/support_triage.solve` source.
 3. CLI `validate` success.
 4. CLI `run` output.
@@ -661,7 +661,7 @@ SolveLang should now be presented as a project that demonstrates **breadth with 
 
 A strong portfolio summary is:
 
-> SolveLang is an early-beta, open-source workflow language and analysis project for readable AI-assisted business processes. I built the Rust language/runtime, diagnostics and safety controls, browser and Studio product surfaces, experimental serverless API/account infrastructure, and the surrounding product strategy, competitive analysis, demo system, consulting methodology, and open-source contributor experience. The project intentionally separates deterministic rules from AI behavior and distinguishes working, experimental, and planned capabilities.
+> SolveLang is an open-source workflow language and analysis product for readable AI-assisted business processes. I built the Rust language/runtime, diagnostics and safety controls, browser and Studio product surfaces, serverless API/account infrastructure, and the surrounding product strategy, competitive analysis, demo system, consulting methodology, and open-source contributor experience. The project intentionally separates deterministic rules from AI behavior and distinguishes working, experimental, and planned capabilities.
 
 This framing is both technically substantial and defensible in an interview.
 
@@ -683,7 +683,7 @@ The materials are sufficient to begin targeted discovery and fixed-scope pilot o
 
 ## SaaS/product maturity
 
-**Early beta / experimental infrastructure.**
+**Versioned product / selectively activated infrastructure.**
 
 Do not present SolveLang as a production managed automation platform yet.
 

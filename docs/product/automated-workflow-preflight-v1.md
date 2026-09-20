@@ -7,7 +7,7 @@ Create the first no-touch SolveLang product flow:
 1. A visitor uploads an exported n8n workflow JSON file.
 2. SolveLang validates and analyzes it locally in the browser.
 3. The visitor receives an immediate deterministic score and finding preview.
-4. The visitor can download HTML and JSON evidence during the public beta.
+4. The visitor can download HTML and JSON evidence during the free-access period.
 5. Paid access is introduced only after server-side Stripe verification and signed report entitlements exist.
 
 ## Route
@@ -44,13 +44,13 @@ The score is bounded from 0 through 100 and uses fixed severity penalties.
 
 The browser and MCP analyzers run the shared fixtures in `fixtures/n8n-preflight-parity/`. The parity suite locks finding IDs and scores for enabled safeguards, disconnected risky workflows, disabled execution nodes, terminal-free loops, and invalid workflow shapes without coupling the browser bundle to the MCP package.
 
-## Public beta access
+## Public access
 
 The repository remains a static Next.js export. Browser-only code cannot prove that a Stripe payment succeeded or safely protect a paid download.
 
 For that reason:
 
-- the full HTML and JSON reports are explicitly labeled free beta downloads;
+- the full HTML and JSON reports are explicitly labeled free downloads;
 - the application does not display an “Unlock for $49” claim;
 - no Stripe Payment Link is activated in this static version;
 - no client-side query parameter, local-storage value, or redirect is treated as proof of payment.

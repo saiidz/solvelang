@@ -8,7 +8,7 @@ export const metadata: Metadata = {
       "SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes",
   },
   description:
-    "SolveLang is an early-beta, open-source workflow language for making deterministic rules, AI-assisted decisions, approvals, tools, and failure paths readable and reviewable before managed automation.",
+    "SolveLang is an open-source workflow language for making deterministic rules, AI-assisted decisions, approvals, tools, and failure paths readable and reviewable before managed automation.",
   alternates: alternatesForRoute(""),
 };
 

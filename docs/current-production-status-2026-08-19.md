@@ -6,7 +6,7 @@ Repository merges are recorded separately from live production state. A merged p
 
 ## Product maturity
 
-SolveLang remains an early beta / engineering prototype. A working production account/Admin foundation does not imply that general managed SolveLang workflow execution is live.
+SolveLang is a versioned open-source product with working production account/Admin infrastructure. That foundation does not imply that general managed SolveLang workflow execution is live.
 
 ## Production state re-verified on 2026-08-19
 

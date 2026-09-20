@@ -4,7 +4,7 @@
 
 ### 0-15 seconds — problem
 
-“Business workflows often end up split across visual automations, prompts, application code, and undocumented human decisions. SolveLang is an early-beta workflow language designed to make those decisions readable and reviewable.”
+“Business workflows often end up split across visual automations, prompts, application code, and undocumented human decisions. SolveLang is an open-source workflow language designed to make those decisions readable and reviewable.”
 
 ### 15-40 seconds — readable source
 

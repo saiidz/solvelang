@@ -8,7 +8,7 @@ _Last verified: 2026-08-06._
 - Canonical domain: `https://www.solve-lang.com`
 - Source repository: `https://github.com/saiidz/solvelang`
 - Public positioning: **A readable, explainable workflow language designed for AI-assisted business processes.**
-- Maturity: early beta; local Rust runtime is canonical; managed production workflow execution is not claimed.
+- Maturity: versioned open-source product; local Rust runtime is canonical; managed production workflow execution is not claimed.
 
 ## Framework
 
@@ -118,7 +118,7 @@ Updated the optional `site/public/llms.txt` convenience map to the current posit
 
 ## Verified claims used
 
-- SolveLang is an early-beta workflow language/tooling project.
+- SolveLang is an open-source workflow language and intelligence product.
 - The canonical runtime is implemented in Rust.
 - The CLI supports run, validate, token, AST, and help behavior documented in the repository.
 - Hardened modes and source-located diagnostics are implemented and tested.

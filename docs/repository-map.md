@@ -25,7 +25,7 @@ This map describes current repository organization; it does not imply every dire
 
 ## `solvec-core/` and `solvec/` — canonical Rust implementation
 
-**Status:** Working today, early beta.
+**Status:** Working today, versioned pre-1.0.
 
 `solvec-core/` owns pure language representation, analysis, deterministic evaluation, and path-free in-memory module state. The native Rust CLI in `solvec/` remains the canonical executable surface, supplies explicit host adapters, and re-exports the pure language modules under their existing Rust paths.
 

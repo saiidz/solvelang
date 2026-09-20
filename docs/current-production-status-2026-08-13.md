@@ -4,7 +4,7 @@ This document is the current factual status record for production-facing SolveLa
 
 ## Product maturity
 
-SolveLang remains an early beta / engineering prototype. The Rust language runtime, CLI, Studio, and browser preview should not be described as a finished managed workflow-execution platform.
+SolveLang is a versioned open-source product. The Rust language runtime, CLI, Studio, and browser preview should not be described as a finished managed workflow-execution platform.
 
 The production customer-account foundation is further along than the overall language product.
 

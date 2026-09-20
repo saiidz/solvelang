@@ -1,6 +1,6 @@
 # SolveLang Language Reference
 
-SolveLang is an early beta scripting language for readable AI-assisted business workflows. This reference documents the syntax currently supported by the Rust CLI runtime in `solvec/`.
+SolveLang is a versioned pre-1.0 scripting language for readable AI-assisted business workflows. This reference documents the syntax currently supported by the Rust CLI runtime in `solvec/`.
 
 The language is still changing. Treat this document as the current implementation reference, not a stable language specification.
 
@@ -594,7 +594,7 @@ cargo run -- run ../examples/ops_report.solve
 
 ## Stability Status
 
-SolveLang is early beta. The current syntax is implemented and covered by the Rust CLI tests, but it is still subject to change.
+SolveLang is pre-1.0. The current syntax is implemented and covered by the Rust CLI tests, but it is still subject to change.
 
 Expect future changes around:
 
