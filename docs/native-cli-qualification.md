@@ -1,0 +1,24 @@
+# Native CLI qualification
+
+`Native CLI Qualification` runs on the exact PR head or manually selected ref,
+using GitHub-hosted macOS ARM64 and Windows x64 machines. It runs formatting,
+Clippy with warnings denied, and tests for both `solvec-core` and `solvec`, then
+builds a release binary, creates a bounded ZIP package and verifies a clean
+installation's help/version commands. Source SHA, native host, compiler, archive
+checksum and Actions run identity are recorded in `qualification.json`.
+
+The script refuses a mismatched OS/architecture/Rust host, a dirty checkout,
+a different source SHA, or an existing/in-repository output directory. It never
+installs a binary system-wide or publishes a release. The archive is explicitly
+named `qualification.zip` and records `publishable: false`.
+
+A successful run qualifies only that exact source commit and native CLI
+surface. It does not retroactively qualify an existing release tag, establish
+signed/notarized installer support, prove reproducible native binary bytes,
+or replace the separate Linux tagged-release and release-security gates.
+To claim a platform on a public release, repeat qualification for the reviewed
+release commit and retain the resulting run/artifact evidence.
+
+Runner labels `macos-15` (ARM64) and `windows-2022` (x64) follow the
+[GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+The script independently checks the actual host rather than trusting a label.
