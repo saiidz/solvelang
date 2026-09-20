@@ -15,6 +15,7 @@ const productionWorkflowNames = [
   "deploy-api-access-production-billing.yml",
   "deploy-api-access-production-customer-accounts.yml",
   "deploy-api-access-production-foundation.yml",
+  "deploy-api-access-production-maintenance.yml",
   "deploy-api-access-production-totp-kms.yml",
   "deploy-api-access-production-totp.yml",
   "deploy-customer-priority-production-foundation.yml",
@@ -47,7 +48,7 @@ test("test deployment is isolated while every production mutation uses the repos
   for (const name of workflowNames) {
     const source = await workflow(name);
     if (
-      (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy/.test(source))
+      (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy|production-maintenance\.mjs/.test(source))
       || (/solvelang-api-access-production-admin-console/.test(source) && /sam deploy/.test(source))
       || (/solvelang-api-access-production-totp-kms/.test(source) && /cloudformation deploy/.test(source))
     ) deploymentWorkflowNames.push(name);
