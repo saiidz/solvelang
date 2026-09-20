@@ -2,7 +2,7 @@
 
 _Last updated: 2026-08-06._
 
-This audit separates **confirmed behavior**, **engineering risk**, and **planned improvement**. It does not treat an early-beta design choice as a defect merely because a more mature product would use a different architecture.
+This audit separates **confirmed behavior**, **engineering risk**, and **planned improvement**. It does not treat a pre-1.0 design choice as a defect merely because a more mature product would use a different architecture.
 
 ## Executive summary
 

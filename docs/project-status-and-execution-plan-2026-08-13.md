@@ -22,7 +22,7 @@ The immediate rollout blocker was not the password-auth implementation. The prev
 
 | Area | State | Notes |
 |---|---|---|
-| Rust lexer/parser/AST/interpreter | Working beta | Canonical local runtime |
+| Rust lexer/parser/AST/interpreter | Working versioned runtime | Canonical local runtime |
 | `solvec` CLI | Working | Run, validate, tokens, AST |
 | Runtime safety controls | Working | Hardened/safe execution modes |
 | Workflow Intelligence Studio | Working | Local-first deterministic product surface |
@@ -78,7 +78,7 @@ The canonical runtime path is the Rust CLI, not the browser preview.
 
 ## Important maturity boundary
 
-The language remains an early beta. It should not yet be marketed as a mature production general-purpose language or a durable hosted orchestration platform.
+The language remains pre-1.0. It should not be marketed as a mature general-purpose language or a durable hosted orchestration platform.
 
 ## Remaining language work
 

@@ -6,7 +6,7 @@ Target: a new contributor should be productive in under 15 minutes.
 
 ## 1. Understand the product boundary
 
-SolveLang is an early beta project positioned as:
+SolveLang is an open-source project positioned as:
 
 > A readable, explainable workflow language designed for AI-assisted business processes.
 

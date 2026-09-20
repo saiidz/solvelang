@@ -78,7 +78,7 @@ No public token-savings percentage or claim of superiority over another context 
 
 ### Known limitations
 
-- SolveLang remains early beta and has no 1.0 stability guarantee.
+- SolveLang remains pre-1.0 and has no 1.0 stability guarantee.
 - Browser `/run` is a bounded audited WASM preview, not a managed/server execution surface; native `solvec` remains canonical, and cross-host byte reproducibility is not claimed.
 - Remote language packages, registries, dependency installation, and general managed execution are not part of the current local language contract.
 - Current CLI release evidence covers Linux x86_64 only. macOS ARM64 and Windows x64 native release support are not established by the repository release gates.

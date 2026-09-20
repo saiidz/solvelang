@@ -1,6 +1,6 @@
 # Contributing to SolveLang
 
-SolveLang is an early beta workflow-language project. Contributions should preserve the distinction between **working today**, **experimental**, and **planned** capabilities.
+SolveLang is an open-source, pre-1.0 workflow-language project. Contributions should preserve the distinction between **working today**, **experimental**, and **planned** capabilities.
 
 ## Before you start
 

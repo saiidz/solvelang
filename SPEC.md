@@ -1,7 +1,7 @@
 # SolveLang language specification
 
 **Version:** 0.1 (implementation-backed draft)  
-**Status:** early beta; the Rust `solvec` runtime is normative.
+**Status:** versioned pre-1.0; the Rust `solvec` runtime is normative.
 
 This specification describes the executable language implemented by `solvec`.
 It does not promise a static type system, concurrency, remote packages, browser

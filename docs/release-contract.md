@@ -4,7 +4,7 @@
 **Applies to:** the canonical Rust `solvec` language/CLI and repository artifacts  
 **Does not authorize:** production deployment, billing, customer/provider activation, or any live infrastructure mutation
 
-SolveLang is still an early beta. A repository tag or downloadable binary is evidence of a versioned local tool, not evidence that managed execution, billing, paid priority, or any other gated production feature is live.
+SolveLang is a versioned pre-1.0 product. A repository tag or downloadable binary is evidence of a versioned local tool, not evidence that managed execution, billing, paid priority, or any other gated production feature is live.
 
 ## Versioning
 

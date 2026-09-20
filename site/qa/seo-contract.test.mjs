@@ -14,13 +14,27 @@ const routes = read("app/i18n/routes.ts");
 const llms = read("public/llms.txt");
 const landing = read("app/(english)/landing/page.tsx");
 const prompts = JSON.parse(read("data/ai-search-prompts.json"));
+const publicPositioning = [
+  brandFacts,
+  llms,
+  landing,
+  read("app/(english)/about/page.tsx"),
+  read("app/(english)/layout.tsx"),
+  read("app/(english)/page.tsx"),
+  read("app/(english)/run/page.tsx"),
+  read("app/check/WorkflowPreflight.tsx"),
+].join("\n");
+
+test("public positioning does not use beta labels", () => {
+  assert.doesNotMatch(publicPositioning, /\bbeta\b/i);
+});
 
 test("verified brand facts preserve SolveLang maturity boundaries", () => {
   assert.match(
     brandFacts,
     /readable, explainable workflow language designed for AI-assisted business processes/i,
   );
-  assert.match(brandFacts, /early beta/i);
+  assert.match(brandFacts, /general managed workflow execution/i);
   assert.match(brandFacts, /Rust CLI is the canonical runtime/i);
   assert.match(brandFacts, /deterministic, not AI analysis/i);
   assert.match(brandFacts, /experimental-test-mode/);

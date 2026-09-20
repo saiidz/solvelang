@@ -20,7 +20,7 @@ The long-term goal is not to replace every workflow engine. SolveLang may be mos
 
 ## Current maturity
 
-SolveLang is an **early beta and engineering prototype**. This README was reconciled on **2026-09-15** against repository state through PR **#920**. Live GitHub state always wins if that checkpoint becomes stale.
+SolveLang is an **open-source workflow intelligence product** with a versioned local runtime, browser Studio, and production API/account infrastructure. General managed workflow execution remains gated. This README was reconciled on **2026-09-15** against repository state through PR **#920**. Live GitHub state always wins if that checkpoint becomes stale.
 
 The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, browser/WASM tooling, Workflow Intelligence Studio, bounded Repository/Server Audit surfaces, Self-Driving safety/execution contracts, a substantially implemented Solve Context layer, and a separately deployed production customer-account/API/Admin/TOTP foundation.
 

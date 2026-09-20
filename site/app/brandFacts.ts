@@ -23,7 +23,7 @@ export const brandFacts = {
   useCases: ["Customer support triage", "Lead qualification and routing", "Client intake", "Approval workflow design", "Document classification planning", "Recurring operations reporting", "Human-reviewed AI summarization"],
   differentiators: ["Readable workflow intent rather than visual-canvas-first configuration", "Version-control and code-review compatibility", "Explicit separation of deterministic logic and AI-assisted judgment", "Auditable safety and capability boundaries", "Local-first deterministic analysis"],
   limitations: [
-    "SolveLang is an early beta and is not a production managed workflow platform.",
+    "SolveLang is an open-source workflow intelligence product; general managed workflow execution is not currently offered.",
     "The browser preview supports a smaller subset than the Rust CLI runtime.",
     "Workflow Intelligence Studio analysis is deterministic, not AI analysis.",
     "Provider-backed AI, HTTP, file, and environment side effects require separate capability and credential gates.",
