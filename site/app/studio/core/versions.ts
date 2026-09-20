@@ -1,7 +1,7 @@
 import { analyzeWorkflow } from "./analysis";
 import type { VersionSnapshot, WorkflowDocument } from "./types";
 
-function fingerprint(document: WorkflowDocument) {
+export function fingerprint(document: WorkflowDocument) {
   const copy = structuredClone(document);
   copy.updatedAt = "";
   copy.analytics.lastAnalyzedAt = null;

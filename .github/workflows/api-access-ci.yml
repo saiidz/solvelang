@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'services/api-access/**'
+      - 'site/app/studio/core/types.ts'
+      - 'site/app/studio/core/schema.ts'
+      - 'site/app/studio/core/workspace-schema.ts'
       - 'ops/aws/customer-totp-kms-template.yaml'
       - 'ops/aws/production-preflight-policy.json'
       - 'ops/aws/production-foundation-deploy-policy.json'
@@ -27,6 +30,9 @@ on:
       - main
     paths:
       - 'services/api-access/**'
+      - 'site/app/studio/core/types.ts'
+      - 'site/app/studio/core/schema.ts'
+      - 'site/app/studio/core/workspace-schema.ts'
       - 'ops/aws/customer-totp-kms-template.yaml'
       - 'ops/aws/production-preflight-policy.json'
       - 'ops/aws/production-foundation-deploy-policy.json'

@@ -1,3 +1,4 @@
+import { createStudioWorkspaceStore, createStudioWorkspaceHandler } from "./studio-workspace.js";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
@@ -139,8 +140,14 @@ const application = createApiAccessHandler({
   stripeGateway,
 });
 
+const studioWorkspaceApplication = createStudioWorkspaceHandler({
+  enabled: environment.enabled && environment.customerAccountsEnabled, customerAuth, siteOrigin: environment.siteOrigin,
+  store: environment.customerAccountsEnabled ? createStudioWorkspaceStore(documentClient, environment.customerAuthTable) : undefined,
+});
+
 export async function handler(event) {
   const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
+  if (path === "/customer/studio/workspace") return studioWorkspaceApplication(event);
   if (path.includes("/customer/support-automation")) return supportAutomationApplication(event);
   if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) return accountAccessAdminApplication(event);
   if (path.includes("/internal/admin/customers") && adminCustomerApplication) return adminCustomerApplication(event);
