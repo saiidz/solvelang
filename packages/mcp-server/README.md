@@ -22,11 +22,11 @@ That means:
 
 ## Published package usage
 
-Node.js 20 or newer is required. For the published v0.2.0 line:
+Node.js 20 or newer is required. For the published v0.3.0 line:
 
 ```bash
 SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
-  npx --yes @solvelang/mcp-server@0.2.0
+  npx --yes @solvelang/mcp-server@0.3.0
 ```
 
 Call `solvelang_capabilities` / MCP list-tools to inspect the exact tools exposed by the installed version. Do not infer current-main tools from this README when using an older published package.

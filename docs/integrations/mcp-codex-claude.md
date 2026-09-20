@@ -16,7 +16,7 @@ Current `main` includes later Repository Audit/Solve Graph and Solve Context wor
 
 Use one of these two modes deliberately:
 
-1. **Historical line:** use the pinned v0.2.0 plugin/package instructions below only when deliberately testing that old distribution path.
+1. **Published line:** use the pinned v0.3.0 plugin/package instructions below for the verified npm release.
 2. **Current repository source:** build `packages/mcp-server` from a source checkout and run `dist/src/index.js` directly.
 
 External publication/install verification is required before claiming current repository behavior is available through a public package/plugin path.
@@ -25,7 +25,7 @@ External publication/install verification is required before claiming current re
 
 Install Node.js 20 or newer.
 
-## Published v0.2.0 plugin path
+## Published v0.3.0 plugin path
 
 The maintained plugin root is `plugins/solvelang/` and contains Codex and Claude manifests, one shared MCP configuration and the SolveLang workflow-review skill. Legacy examples under `plugins/codex/` and `plugins/claude/` remain useful for manual configuration.
 
@@ -45,7 +45,7 @@ Manual MCP configuration for the published line:
 ```toml
 [mcp_servers.solvelang]
 command = "npx"
-args = ["--yes", "@solvelang/mcp-server@0.2.0"]
+args = ["--yes", "@solvelang/mcp-server@0.3.0"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
@@ -71,7 +71,7 @@ Manual published-line registration:
 ```bash
 claude mcp add --transport stdio \
   --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \
-  solvelang -- npx --yes @solvelang/mcp-server@0.2.0
+  solvelang -- npx --yes @solvelang/mcp-server@0.3.0
 ```
 
 ## Use current repository source
