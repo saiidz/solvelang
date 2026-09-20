@@ -55,6 +55,28 @@ export function assertTemplateBoundary(before, after, {rollback = false} = {}) {
   if (canonical(left) !== canonical(right)) throw new Error('Maintenance changes protected template sections or resource configuration.');
 }
 
+// Production data-resource settings can legitimately differ from source defaults
+// (for example, operations hardening). Build the maintenance template from the
+// deployed template and copy only the reviewed executable properties into it.
+export function projectMaintenanceTemplate(deployed, compiled) {
+  const roots = template => { const root = structuredClone(template); delete root.Resources; return root; };
+  if (canonical(roots(deployed)) !== canonical(roots(compiled))) throw new Error('Maintenance changes protected stack-level template sections.');
+  const original = deployed.Resources ?? {}, candidate = compiled.Resources ?? {};
+  for (const id of Object.keys(original)) if (!candidate[id]) throw new Error(`Candidate removes existing resource ${id}.`);
+  for (const id of Object.keys(candidate)) if (!original[id] && !permissionIds.has(id)) throw new Error(`Candidate adds unrelated resource ${id}.`);
+  const result = structuredClone(deployed);
+  for (const [id, type, property] of [
+    ...[...functionIds].map(id => [id, 'AWS::Lambda::Function', 'Code']),
+    ['ApiAccessHttpApi', 'AWS::ApiGatewayV2::Api', 'Body'],
+  ]) {
+    if (original[id]?.Type !== type || candidate[id]?.Type !== type || !candidate[id].Properties?.[property]) throw new Error(`Missing maintenance property ${id}.${property}.`);
+    result.Resources[id].Properties[property] = structuredClone(candidate[id].Properties[property]);
+  }
+  for (const id of permissionIds) if (!original[id] && candidate[id]) result.Resources[id] = structuredClone(candidate[id]);
+  assertTemplateBoundary(deployed, result);
+  return result;
+}
+
 export function assertPreserved(before, after) {
   const normalized = stack => (stack.Parameters ?? []).map(p => [p.ParameterKey, p.ParameterValue, p.ResolvedValue ?? null]).sort((a,b) => a[0].localeCompare(b[0]));
   if (JSON.stringify(normalized(before)) !== JSON.stringify(normalized(after))) throw new Error('Production parameters changed.');
@@ -124,7 +146,22 @@ async function main() {
       try { if (!retainPlan) aws('cloudformation','delete-change-set','--stack-name',STACK_NAME,'--change-set-name',result.Id); } catch {}
     }
   };
-  const executed = deploy(candidate);
+  // This first change set only expands SAM. It is never executable by this code.
+  const compileName = `compile-${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`;
+  const compilePath = `${RUNNER_TEMP}/maintenance-compile.json`;
+  writeFileSync(compilePath, JSON.stringify(candidate), {mode:0o600});
+  aws('s3api','put-object','--bucket',bucket,'--key',`${prefix}/compile.json`,'--body',compilePath,'--server-side-encryption','AES256');
+  const compilation = json('cloudformation','create-change-set','--stack-name',STACK_NAME,'--change-set-name',compileName,'--change-set-type','UPDATE',
+    '--template-url',`https://s3.${AWS_REGION}.amazonaws.com/${bucket}/${prefix}/compile.json`,'--parameters',`file://${paramPath}`,'--capabilities','CAPABILITY_IAM');
+  let projected;
+  try {
+    aws('cloudformation','wait','change-set-create-complete','--stack-name',STACK_NAME,'--change-set-name',compilation.Id);
+    const body = json('cloudformation','get-template','--stack-name',STACK_NAME,'--change-set-name',compilation.Id,'--template-stage','Processed').TemplateBody;
+    projected = projectMaintenanceTemplate(previous, typeof body === 'string' ? JSON.parse(body) : body);
+  } finally {
+    aws('cloudformation','delete-change-set','--stack-name',STACK_NAME,'--change-set-name',compilation.Id);
+  }
+  const executed = deploy(projected);
   if (!executed) { console.log('Plan validated; no stack update executed.'); return; }
   try {
     assertPreserved(before, stack());
