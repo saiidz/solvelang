@@ -1042,11 +1042,11 @@ fn allowed_roots_control_unhardened_file_reads_and_writes() {
         "solvelang_cli_safe_allowed_roots.solve",
         &format!(
             r#"
-print(read_file("{}"))
-write_file("{}", "created")
+print(read_file({}))
+write_file({}, "created")
 "#,
-            input_path.display(),
-            output_path.display()
+            serde_json::to_string(&input_path.to_string_lossy()).unwrap(),
+            serde_json::to_string(&output_path.to_string_lossy()).unwrap()
         ),
     );
 
@@ -1075,7 +1075,10 @@ fn allowed_roots_reject_paths_outside_root_and_traversal() {
 
     let file = write_temp_solve_file(
         "solvelang_cli_safe_outside_root.solve",
-        &format!(r#"print(read_file("{}"))"#, outside.display()),
+        &format!(
+            "print(read_file({}))",
+            serde_json::to_string(&outside.to_string_lossy()).unwrap()
+        ),
     );
     let (success, stdout, stderr) =
         run_solvec_with_status(&["run", "--allow-root", &root_arg, &file]);

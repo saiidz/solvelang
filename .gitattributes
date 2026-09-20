@@ -1,0 +1,2 @@
+# The public CLI help contract is byte-exact and uses LF on every platform.
+/solvec/tests/fixtures/cli-help.txt text eol=lf

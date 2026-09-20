@@ -62,10 +62,21 @@ fn spec_0_1_fixture_conformance() {
             .unwrap_or_else(|| panic!("case '{name}' args must be an array"))
             .iter()
             .map(|arg| {
-                arg.as_str()
-                    .unwrap_or_else(|| panic!("case '{name}' args must be strings"))
-                    .replace("{entry}", &entry_text)
-                    .replace("{case}", &directory_text)
+                let argument = arg
+                    .as_str()
+                    .unwrap_or_else(|| panic!("case '{name}' args must be strings"));
+                // Join fixture paths natively: Windows canonical paths use the
+                // verbatim prefix, which does not accept a forward-slash suffix.
+                if let Some(relative) = argument.strip_prefix("{case}/") {
+                    canonical_directory
+                        .join(relative)
+                        .to_string_lossy()
+                        .into_owned()
+                } else {
+                    argument
+                        .replace("{entry}", &entry_text)
+                        .replace("{case}", &directory_text)
+                }
             })
             .collect::<Vec<_>>();
 

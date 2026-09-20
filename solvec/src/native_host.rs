@@ -433,10 +433,7 @@ impl RuntimeHost for NativeHost {
 mod tests {
     use super::NativeHost;
     use crate::ast_runtime::ExecutionPolicy;
-    use solvec_core::{
-        evaluator::{Capability, HostRequest, RuntimeHost},
-        value::Value,
-    };
+    use solvec_core::{evaluator::Capability, value::Value};
 
     #[test]
     fn response_budget_failure_retains_the_request_capability() {
@@ -457,6 +454,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn restricted_file_writes_reject_existing_symlinks() {
+        use solvec_core::evaluator::{HostRequest, RuntimeHost};
         use std::os::unix::fs::symlink;
 
         let root = std::env::temp_dir().join(format!(
