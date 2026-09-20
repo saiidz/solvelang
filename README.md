@@ -1,5 +1,11 @@
 # SolveLang
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 > **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
 
 SolveLang is an early-stage language and tooling project for describing business workflows in a form that humans can read, engineers can review, and organizations can audit. The repository also contains local-first audit/graph tooling, Codex/Claude MCP integration, and the separate **Solve Context** context-selection product layer.
@@ -24,7 +30,7 @@ SolveLang is an **open-source workflow intelligence product** with a versioned l
 
 The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, browser/WASM tooling, Workflow Intelligence Studio, bounded Repository/Server Audit surfaces, Self-Driving safety/execution contracts, a substantially implemented Solve Context layer, and a separately deployed production customer-account/API/Admin/TOTP foundation.
 
-It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, enabled subscription billing/paid priority, a generally activated support/provider service, a public current-main Solve Context release, enterprise orchestration, or a general integration marketplace.
+It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, broadly accepted subscription payments or enabled paid priority, a generally activated support/provider service, verified marketplace distribution, enterprise orchestration, or a general integration marketplace.
 
 Public claims should use these labels.
 
@@ -46,7 +52,7 @@ Public claims should use these labels.
 - repository-safe Self-Driving Observe/Suggest, patch/preflight, single-use execution-plan/finalization, GitHub-write and PostHog safety contracts; live provider activation and production rollout remain separately gated
 - **Solve Context** plan/pack/retrieve tools, content-addressed retrieval, Claude ↔ Codex handoff, lossless JSON/log/diff compaction, changed-path + supplied-graph ranking, pinned real-source regressions and strict agent-measurement record/report contracts through #913–#920
 - repository-qualified connected-support code with native IMAP/SMTP plus optional Gmail, durable event/action state, safe cutover/recovery, account controls and monitoring preparation; live activation remains separate
-- production API access, customer password accounts, and private Admin/TOTP infrastructure recorded by separate production evidence; these do not imply managed workflow execution or billing is live
+- production API access, customer password accounts, private Admin/TOTP infrastructure and controlled-rollout API subscription billing recorded by separate production evidence; real-payment acceptance remains pending
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
 ### Experimental
@@ -59,7 +65,7 @@ Public claims should use these labels.
 - optional OpenAI-backed responses
 - Studio-to-`.solve` draft generation
 - Solve Context selection/compaction quality beyond the committed regression fixtures
-- subscription-billing, paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production
+- paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production; broader billing launch still requires real-payment acceptance
 
 Experimental means implemented but unstable, narrow, provider-dependent, not yet broadly distributed, or not suitable for production promises.
 
@@ -70,8 +76,8 @@ Repository validation includes hosted CI plus path-specific Rust/RustSec, WASM, 
 Projection means direction, not a promised date or unsupported completion percentage.
 
 - broader independent/blinded Solve Context evaluation and separately authorized real Claude/Codex baseline-vs-context measurements
-- a future versioned MCP/plugin distribution containing current-main Solve Context capabilities
-- enforced required checks/reviews on `main` rather than manual discipline only
+- managed-workspace installation and public Plugin Directory evidence for the published MCP package
+- maintain the enforced required checks and resolved-review-thread policy on `main`
 - a separately reviewed stable 1.0 language contract
 - broader type checking
 - local package metadata and any future package ecosystem beyond the implemented explicit local-module subset
@@ -116,9 +122,9 @@ cargo build --release
 
 ## Solve Context and MCP usage
 
-### Published package truth
+### Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Context capabilities added after that release. Therefore `@solvelang/mcp-server@0.2.0` must be treated as the historical published package line, **not** as proof that public consumers receive current-main #913–#920 behavior.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 ### Use current repository source
 
@@ -245,7 +251,7 @@ solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
 
-The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and current repository native artifact evidence is Linux x86_64 only; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
+The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and Linux x86_64 release evidence is supplemented by successful macOS ARM64 and Windows x64 candidate qualification in #941; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
 
 ## Runtime safety
 
@@ -310,7 +316,7 @@ These surfaces provide bounded read-only static/system evidence, graph explanati
 
 ### 6. Account/API/Admin foundation
 
-`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. Billing, paid priority/provider execution and general managed workflow execution remain off/not established live.
+`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. Subscription billing is enabled for controlled rollout with real-payment acceptance pending. Paid priority/provider execution and general managed workflow execution remain off/not established live.
 
 ### 7. Connected support
 
@@ -429,7 +435,7 @@ Yes. The Rust CLI executes the supported language locally, and a bounded browser
 
 ### What is Solve Context?
 
-Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements or distributed through a new public version after v0.2.0.
+Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements; the tagged MCP v0.3.0 package is published on npm and GitHub.
 
 ### Does Solve Context save tokens?
 
@@ -437,7 +443,7 @@ The repository has synthetic and pinned-source byte/evidence regressions, not a 
 
 ### Is the published MCP v0.2.0 the same as current `main`?
 
-No. v0.2.0 is the latest published historical MCP release and predates substantial current-main MCP/Solve Context work. Use source checkout instructions for current repository behavior until a new version is separately published.
+No. v0.2.0 is historical. The published v0.3.0 MCP package includes its tagged release source; later main changes require separate distribution.
 
 ### Is Workflow Intelligence Studio AI-powered?
 
@@ -445,7 +451,7 @@ Its current analysis is deterministic and local-first. It should not be describe
 
 ### Is the account/API system production-ready?
 
-A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. The broader SaaS is not fully launched: subscription billing, paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
+A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. Subscription billing is enabled for controlled rollout, with real-payment acceptance pending. The broader SaaS is not fully launched: paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
 
 ## For recruiters and hiring managers
 
@@ -460,11 +466,11 @@ The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md). Strategi
 Current priorities are:
 
 1. prove Solve Context with broader independent and real-agent evidence without weakening quality gates;
-2. enforce required checks/reviews on `main`;
-3. qualify a future versioned current-main MCP/plugin distribution;
+2. maintain required checks and resolved review threads on `main`;
+3. verify managed-workspace installation and public Plugin Directory distribution;
 4. keep browser/WASM, language/spec and audit truth implementation-backed;
-5. activate support/PostHog/billing/priority only through their separate protected gates;
-6. add exact macOS/Windows native release evidence before cross-platform claims.
+5. complete broader billing acceptance and activate support/PostHog/priority only through their separate protected gates;
+6. preserve exact-platform qualification when preparing any public native release.
 
 ## License
 

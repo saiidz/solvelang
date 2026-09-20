@@ -1,5 +1,12 @@
 # SolveLang current repository status — 2026-09-13
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
+
 This document is the current repository-truth checkpoint for `saiidz/solvelang` after the late-stage launch-readiness/security/release-control train. It supersedes stale "current" statements in `ROADMAP.md` and `docs/active-buildout-handoff.md` where those files still describe the 2026-09-04 observe-only/browser-preview state. Historical detail in those documents remains useful, but live GitHub state and this checkpoint win for current repository status.
 
 ## Current reviewed baseline
@@ -35,7 +42,7 @@ Repository billing work is significantly beyond the older readiness-only checkpo
 - entitlement/outbox/delivery-ledger replay behavior is covered;
 - production data-recovery prerequisites are verified read-only;
 - internal subscription mutation routes fail closed when billing is disabled;
-- production billing remains disabled unless separately enabled;
+- this 2026-09-13 checkpoint still treated production billing as disabled unless separately enabled; later controlled-rollout billing commits through #932-#937 supersede that fact where current production billing status is discussed;
 - no repository merge is standing authorization for a Stripe charge, refund, webhook mutation, account mutation, or deployment.
 
 ## Release truth

@@ -1,5 +1,11 @@
 # SolveLang Roadmap
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **implemented and repository-tested**, **published**, **deployed**, and **verified with a live provider/customer path**. A merge or green CI result proves only repository state unless a separate deployment/provider record says otherwise.
 
 ## Current evidence checkpoint
@@ -13,7 +19,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 | [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, and pair-integrity hardening through #913–#920 | Larger independent/blinded evaluation; actual Claude/Codex baseline-vs-context runs; provider-reported token/latency/cache/quality evidence; versioned distribution of current-main capabilities |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin and TOTP infrastructure are live; billing/priority/support-provider activation remain separately gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; real-payment acceptance, priority and support activation remain gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
 
 ## Working today
 
@@ -23,7 +29,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 - `solvec` supports run/validate/check/lint/fmt/tokens/ast, explicit local modules, structured diagnostics and hardened execution modes.
 - `solvec-core` is host-incapable; `solvec-wasm` is deny-all with shared conformance/resource-limit coverage.
 - `/run/` consumes the reviewed pinned/hash-verified WASM handoff and fails closed. The historical TypeScript preview is not an execution fallback.
-- Current native release-artifact evidence is **Linux x86_64 only**. macOS ARM64 and Windows x64 are not released-platform claims yet.
+- Linux x86_64 release evidence exists; #941 adds successful macOS ARM64 and Windows x64 native candidate builds, packages and clean installs. A new public native release remains separate.
 
 ### Workflow intelligence and audits
 
@@ -56,16 +62,14 @@ The repository **does not yet have measured real-agent token savings or a valid 
 
 Repository code supports native IMAP/SMTP for the existing SolveLang mailbox, optional Gmail, durable ingress/action state, safe cutover/recovery and account/operator controls. The support stack/provider path remains default-off until separately approved and deployed.
 
-Separately verified production evidence records API access, customer username/email + password sign-in, private Admin and TOTP infrastructure as live. Subscription billing, paid priority/provider execution, general managed workflow execution and the first PostHog canary remain off/unproven unless a newer protected production record says otherwise.
+Separately verified production evidence records API access, customer username/email + password sign-in, private Admin and TOTP infrastructure as live. Subscription billing is enabled for controlled rollout, with real-payment acceptance pending. Paid priority/provider execution, general managed workflow execution and the first PostHog canary remain off/unproven.
 
 ## Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0** from 2026-07-20. Current repository source contains substantial MCP/Solve Context capabilities added after that release. Therefore:
-
-- `@solvelang/mcp-server@0.2.0` is the published historical package line;
-- current-main capabilities must not be claimed as distributed through that old pin;
-- a future versioned MCP/package/plugin release is required before current-main Solve Context behavior can be described as publicly distributed;
-- repository CI proving a clean tarball/consumer install is release-readiness evidence, not publication.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified
+2026-09-20. It distributes the tagged v0.3.0 source, not arbitrary later main
+changes. v0.2.0 is historical. Managed-workspace installation and public Plugin
+Directory listing remain separate evidence requirements.
 
 ## Project projection
 
@@ -81,18 +85,18 @@ These are **priority projections, not delivery dates or completion percentages**
 
 ### Priority 0 — strengthen repository governance
 
-- Configure `main` protection/rules so required current-head checks and intended review policy are enforced by GitHub rather than manual discipline alone.
+- Maintain the now-enforced strict checks, pull requests and resolved review threads on `main`.
 - Preserve exact-head merge practice and security/advisory repair even after rules are strengthened.
 
 ### Priority 1 — controlled product activation
 
 - Connected support: deploy default-off only under exact-scope approval, then prove one new-message task/reply and stop/recovery path.
 - PostHog: qualify the concrete credential/lifecycle backend and perform only the separately authorized bounded canary.
-- Billing/priority: keep disabled until live Stripe/provider configuration, monitoring, recovery, customer/legal materials and owner approvals are complete.
+- Billing: preserve the enabled controlled rollout and complete scoped real-payment/customer acceptance before broader launch. Paid priority/provider execution stays disabled until its own configuration, monitoring, recovery and authorization gates pass.
 
 ### Priority 1 — release qualification
 
-- Add exact-platform native build/package/install evidence before claiming macOS ARM64 or Windows x64 support.
+- Preserve the #941 macOS ARM64/Windows x64 build/package/install checks for future release candidates; qualify the exact public release source before support claims.
 - Select and publish future CLI/MCP versions only through the reviewed release boundaries; repository version metadata alone is not publication.
 
 ### Deferred / separate product

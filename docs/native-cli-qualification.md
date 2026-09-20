@@ -44,3 +44,21 @@ including the explicit Rust host check, all core/CLI tests and clean package
 installation. Artifact `10610781831` records that exact candidate. This confirms
 the current documented ARM64 label; the check does not rely on an assumed CPU.
 Later source changes require a fresh successful run.
+
+## Both-platform qualification — 2026-09-20
+
+[Run 35530427540](https://github.com/saiidz/solvelang/actions/runs/35530427540)
+passed every step on macOS ARM64 and Windows x64 at source
+`ed0dbcc82467fb690d2d8dd4420a964001b44846`. The Windows run includes the stable
+identity regressions, all original CLI/conformance contracts, release build and
+clean package installation. #941 merged the identical source tree at
+`9a98883cdef2619e6d5b54e57d2c7d2279ec76ae`; its main push checks also passed.
+
+| Platform | Workflow artifact | Artifact-container SHA-256 |
+| --- | --- | --- |
+| macOS ARM64 | `10610698792` | `66d644198d25b1ea0edfee7e1ff2b8a51db1c7c6c040f36a97bb53a94db29bf1` |
+| Windows x64 | `10611202508` | `254620a42764a6de494928fd5aa66a79badac67e03ccfdad94c76acde1da39d3` |
+
+These are GitHub artifact-container digests, not native-binary digests. The
+contained qualification record identifies its ZIP checksum. Artifacts expire
+after 14 days; this evidence does not publish or qualify a new release tag.

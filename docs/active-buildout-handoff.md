@@ -1,8 +1,14 @@
 # SolveLang Active Buildout Handoff
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 Use this handoff to continue **only `saiidz/solvelang`** without recreating merged work or confusing repository implementation with publication/deployment/live-provider proof.
 
-## Current checkpoint
+## Historical checkpoint
 
 Reconciled on **2026-09-15** from `main` immediately after PR **#920** (`5d07787c77dbe297b9bb52ba350669d6f9561a5e`). Always refresh live `main`, open PRs/issues and current workflow state before acting.
 
@@ -14,7 +20,7 @@ The active project queue is #898 (Solve Context), #896 (connected support), #833
 - **Repository Audit / Solve Graph:** bounded static ingestion, graph queries/explanations, affected validation, security/architecture summaries, reports and local browser/MCP surfaces are implemented. No source execution or remediation authority.
 - **Server Audit:** bounded read-only collection, validation, redaction, relationships, posture/coverage truth and deterministic reports are implemented. No automatic remote remediation.
 - **Self-Driving:** observe/suggest/reviewed-patch and bounded PR-execution contracts plus isolated provider/GitHub credential boundaries exist. Live provider activation, real signer backends, auto-merge and production rollout remain separate gates.
-- **Codex/Claude:** installed-package protocol roundtrip and packed-consumer qualification exist. The public v0.2.0 package predates much of current-main Solve Context and must not be described as carrying newer repository features.
+- **Codex/Claude:** installed-package protocol roundtrip and packed-consumer qualification exist. MCP v0.3.0 is published; later main changes still require separate versioned distribution.
 - **Billing/recovery:** ownership/replay/recovery and fail-closed disabled-billing controls are repository-qualified; billing remains a protected live gate.
 - **Release/security:** source/artifact regeneration and Linux x86_64 evidence exist. macOS/Windows native release support and any new public version remain separate.
 - **Connected support:** selectable native IMAP/SMTP and optional Gmail, durable state, account controls, safe cutover/recovery and repository-qualified monitoring exist through #897/#903/#906/#908. Live deployment/provider proof does not.
@@ -45,7 +51,7 @@ What remains is **real evidence and distribution**, not another foundational con
 | [#898](https://github.com/saiidz/solvelang/issues/898) | Broader independent/blinded fixtures; fix any demonstrated selector defect; prepare truthful real-agent measurement inputs; qualify future versioned distribution | No fabricated savings/quality claims, provider credentials or unapproved publication |
 | [#896](https://github.com/saiidz/solvelang/issues/896) | Keep repository implementation/monitoring current and deployment procedure exact | No inbox read/send, task creation, credentials or production support activation without approval |
 | [#833](https://github.com/saiidz/solvelang/issues/833) | Qualify concrete external credential/lifecycle backend and current scope | No live PostHog request without fresh owner authorization |
-| [#113](https://github.com/saiidz/solvelang/issues/113) | Strengthen `main` required-check/review enforcement; keep launch evidence synchronized; prepare only approved rollout prerequisites | No billing/priority/provider/customer mutation from repository authority |
+| [#113](https://github.com/saiidz/solvelang/issues/113) | Preserve enforced `main` checks; keep launch evidence synchronized; finish scoped production acceptance | No billing/priority/provider/customer mutation from repository authority |
 
 ## Working loop
 
@@ -65,15 +71,15 @@ Trusted Mac is an owner-controlled self-hosted macOS ARM64 lane. Trusted Oracle 
 
 ## Distribution truth
 
-The latest published MCP GitHub release is **v0.2.0 (2026-07-20)**. Current source has substantial post-v0.2.0 changes. Until a new version is separately selected and published:
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
-- keep v0.2.0 references explicitly labeled as the published historical package;
+- keep v0.2.0 references explicitly labeled as the historical package line;
 - use repository-source instructions when documenting current-main capabilities;
-- do not claim a marketplace/npm/public plugin consumer receives #913–#920 behavior merely because repository packaging tests pass.
+- do not claim a marketplace/npm/public plugin consumer receives current-main behavior unless the corresponding external publication/install record is verified.
 
 ## Production truth and hard boundaries
 
-Use [`production-readiness.md`](production-readiness.md), #113 and exact dated deployment/provider evidence. The last central production record says API access, customer password accounts, private Admin and TOTP infrastructure are live; billing, paid priority/provider execution, connected-support activation and the first PostHog canary are not established as live.
+Use [`production-readiness.md`](production-readiness.md), #113 and exact dated deployment/provider evidence. Current production records say API access, customer password accounts, private Admin, TOTP infrastructure, and controlled-rollout API subscription billing are live; paid priority/provider execution, connected-support activation, first real-payment canary evidence, and the first PostHog canary are not established as live.
 
 Preserve the existing `hello@solve-lang.com` mailbox and routing. Native IMAP/SMTP compatibility does not grant authority over other mailboxes, projects or server settings.
 

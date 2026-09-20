@@ -1,25 +1,31 @@
 # SolveLang for Codex and Claude
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](../project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP server. **Distribution truth matters:** the repository currently contains substantially newer MCP/Solve Context code than the latest published MCP release.
 
 ## Published package vs current repository source
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. The canonical plugin configuration still pins `@solvelang/mcp-server@0.2.0`, so marketplace/plugin users on that pin must be treated as using the historical published package line.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
-Current `main` includes later Repository Audit/Solve Graph and Solve Context work through #920. Do **not** claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.
+Current `main` includes later Repository Audit/Solve Graph and Solve Context work through the v0.3.0 release train. Do **not** claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.
 
 Use one of these two modes deliberately:
 
-1. **Published/stable historical line:** use the pinned v0.2.0 plugin/package instructions below.
+1. **Published line:** use the pinned v0.3.0 plugin/package instructions below for the verified npm release.
 2. **Current repository source:** build `packages/mcp-server` from a source checkout and run `dist/src/index.js` directly.
 
-A future versioned MCP/plugin release is required to distribute current-main capabilities through the public package/plugin path.
+External publication/install verification is required before claiming current repository behavior is available through a public package/plugin path.
 
 ## Prerequisite
 
 Install Node.js 20 or newer.
 
-## Published v0.2.0 plugin path
+## Published v0.3.0 plugin path
 
 The maintained plugin root is `plugins/solvelang/` and contains Codex and Claude manifests, one shared MCP configuration and the SolveLang workflow-review skill. Legacy examples under `plugins/codex/` and `plugins/claude/` remain useful for manual configuration.
 
@@ -39,7 +45,7 @@ Manual MCP configuration for the published line:
 ```toml
 [mcp_servers.solvelang]
 command = "npx"
-args = ["--yes", "@solvelang/mcp-server@0.2.0"]
+args = ["--yes", "@solvelang/mcp-server@0.3.0"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
@@ -65,7 +71,7 @@ Manual published-line registration:
 ```bash
 claude mcp add --transport stdio \
   --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \
-  solvelang -- npx --yes @solvelang/mcp-server@0.2.0
+  solvelang -- npx --yes @solvelang/mcp-server@0.3.0
 ```
 
 ## Use current repository source
@@ -159,4 +165,4 @@ The repository contains a bounded remote/read-only transport foundation, but the
 
 ## Release projection
 
-The next distribution milestone is a **future versioned release containing current-main MCP/Solve Context behavior**. No version number or release date is promised here; selection/publication remains subject to the reviewed release process and exact-head qualification.
+The next distribution milestone is verified managed-workspace installation and public Plugin Directory listing for MCP v0.3.0. Later main changes still require a separately qualified versioned release.

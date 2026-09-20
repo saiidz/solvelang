@@ -1,26 +1,32 @@
 # SolveLang MCP Server
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](../../docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 Local-first, read-only workflow, Solve Graph and Solve Context analysis for MCP clients such as Codex and Claude Code.
 
 ## Distribution status
 
-The canonical public plugin currently pins `@solvelang/mcp-server@0.2.0`, and the latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Graph/Solve Context work added after that release.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 That means:
 
-- `npx --yes @solvelang/mcp-server@0.2.0` uses the historical published package line;
-- the current source tree must not be assumed to match the public v0.2.0 artifact;
+- `npx --yes @solvelang/mcp-server@0.2.0` uses the historical package line;
+- the current source tree must not be assumed to match the old v0.2.0 artifact;
 - source-checkout instructions below are the correct way to evaluate current-main capabilities;
-- repository packing/consumer tests prove release readiness, not publication;
-- a future versioned release is required before current-main behavior is publicly distributed.
+- repository packing/consumer tests prove release readiness, not external publication;
+- verify npm/package registry or marketplace records before claiming current-main behavior is publicly distributed there.
 
 ## Published package usage
 
-Node.js 20 or newer is required. For the published v0.2.0 line:
+Node.js 20 or newer is required. For the published v0.3.0 line:
 
 ```bash
 SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
-  npx --yes @solvelang/mcp-server@0.2.0
+  npx --yes @solvelang/mcp-server@0.3.0
 ```
 
 Call `solvelang_capabilities` / MCP list-tools to inspect the exact tools exposed by the installed version. Do not infer current-main tools from this README when using an older published package.
@@ -162,6 +168,6 @@ The repository includes a deliberately read-only Streamable HTTP transport found
 
 ## Releases
 
-The historical public release line is v0.2.0. Current `main` contains later work but intentionally has **not** been represented here as a newly published version.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
-Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a tag/release outside the approved release process. A future release must select a new version, bind it to the reviewed source, rerun the package/consumer/security gates and then use the protected publishing boundary.
+Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a release/publication outside the approved process.

@@ -1,6 +1,9 @@
 # Studio account saving
 
-Implementation candidate, not yet deployed or live-verified.
+Backend deployed on 2026-09-20 at main `632b6ff82f2f54babe46e4e11e672675e4ca838e`
+in [run 35531150309](https://github.com/saiidz/solvelang/actions/runs/35531150309).
+Parameter/health preservation and unauthenticated 401 acceptance passed.
+Authenticated two-account acceptance is still pending; frontend controls remain off.
 
 Studio remains local-first. Sign-in alone never uploads existing local workflows.
 The Projects view lets a signed-in user connect, inspect the account snapshot,
