@@ -762,6 +762,7 @@ dependencies = [
  "reqwest",
  "serde_json",
  "solvec-core",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

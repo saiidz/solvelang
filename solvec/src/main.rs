@@ -1,3 +1,6 @@
+#[cfg(windows)]
+mod windows_entry_identity;
+
 use solvec::ast::{Expr, ExprKind, Stmt};
 use solvec::ast_runtime::ExecutionPolicy;
 use solvec::{
@@ -894,7 +897,7 @@ fn freeze_entry_with_imports(
     let entry = fs::canonicalize(filename).map_err(|error| {
         CliFailure::source(format!("failed to resolve '{}': {}", filename, error))
     })?;
-    let metadata = fs::metadata(&entry).map_err(|error| {
+    let metadata = frozen_entry_metadata(&entry).map_err(|error| {
         CliFailure::source(format!(
             "failed to inspect '{}': {}",
             entry.display(),
@@ -938,12 +941,28 @@ fn freeze_entry_with_imports(
     })
 }
 
+#[cfg(windows)]
+type FrozenEntryMetadata = windows_entry_identity::EntryMetadata;
+#[cfg(not(windows))]
+type FrozenEntryMetadata = fs::Metadata;
+
+fn frozen_entry_metadata(entry: &Path) -> std::io::Result<FrozenEntryMetadata> {
+    #[cfg(windows)]
+    {
+        windows_entry_identity::EntryMetadata::open(entry)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::metadata(entry)
+    }
+}
+
 fn read_frozen_entry_content(
     entry: &Path,
-    expected: &fs::Metadata,
+    expected: &FrozenEntryMetadata,
     _hardened: bool,
 ) -> Result<String, CliFailure> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     if _hardened {
         return Err(CliFailure::source(
             "hardened entry loading requires stable file identity verification on this platform",
@@ -952,6 +971,7 @@ fn read_frozen_entry_content(
     let mut file = fs::File::open(entry).map_err(|error| {
         CliFailure::source(format!("failed to read '{}': {}", entry.display(), error))
     })?;
+    #[cfg(not(windows))]
     let opened = file.metadata().map_err(|error| {
         CliFailure::source(format!(
             "failed to inspect '{}': {}",
@@ -959,7 +979,13 @@ fn read_frozen_entry_content(
             error
         ))
     })?;
-    if !same_frozen_entry_identity(expected, &opened) {
+    #[cfg(windows)]
+    let same_identity = expected.matches(&file).map_err(|error| {
+        CliFailure::source(format!("could not verify entry file identity: {}", error))
+    })?;
+    #[cfg(not(windows))]
+    let same_identity = same_frozen_entry_identity(expected, &opened);
+    if !same_identity {
         return Err(CliFailure::source(
             "entry source changed while loading; refusing to freeze a different file",
         ));
@@ -978,7 +1004,7 @@ fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) ->
     expected.dev() == opened.dev() && expected.ino() == opened.ino()
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn same_frozen_entry_identity(expected: &fs::Metadata, opened: &fs::Metadata) -> bool {
     expected.is_file()
         && opened.is_file()
@@ -1607,5 +1633,48 @@ mod tests {
                 .contains("entry source changed while loading")
         );
         let _ = fs::remove_dir_all(root);
+    }
+    #[cfg(windows)]
+    #[test]
+    fn frozen_entry_rejects_replacement_with_matching_size_and_timestamp() {
+        let root = fixture_root();
+        let entry = root.join("entry.solve");
+        fs::write(&entry, "print(1)\n").expect("original entry");
+        let expected = super::frozen_entry_metadata(&entry).expect("stable file identity");
+        let modified = fs::metadata(&entry).unwrap().modified().unwrap();
+        fs::rename(&entry, root.join("original.solve")).expect("retain original object");
+        fs::write(&entry, "print(2)\n").expect("replacement entry");
+        fs::File::options()
+            .write(true)
+            .open(&entry)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        let error = read_frozen_entry_content(&entry, &expected, true)
+            .expect_err("same-size and same-time replacement must not pass identity check");
+        assert!(
+            error
+                .human_message
+                .contains("entry source changed while loading")
+        );
+        drop(expected);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn frozen_entry_accepts_another_handle_to_the_same_file() {
+        let root = fixture_root();
+        let entry = root.join("entry.solve");
+        let alias = root.join("alias.solve");
+        fs::write(&entry, "print(1)\n").unwrap();
+        fs::hard_link(&entry, &alias).unwrap();
+        let expected = super::frozen_entry_metadata(&entry).unwrap();
+        assert_eq!(
+            read_frozen_entry_content(&alias, &expected, true).unwrap(),
+            "print(1)\n"
+        );
+        drop(expected);
+        fs::remove_dir_all(root).unwrap();
     }
 }
