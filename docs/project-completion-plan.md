@@ -1,5 +1,11 @@
 # SolveLang project completion plan
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 _Canonical repository-completion checklist. Reconciled 2026-09-15 from `main` immediately after PR #920 (`5d07787c77dbe297b9bb52ba350669d6f9561a5e`). Live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work. It does **not** authorize production deployment, infrastructure mutation, customer/Admin mutation, email/task actions, live Stripe/provider activity, credential activation, production source execution, restore drills, release/package publication or Solve Runners/Solblend work.
@@ -23,7 +29,7 @@ This plan records repository-safe work. It does **not** authorize production dep
 
 - Host-incapable `solvec-core`, deny-all `solvec-wasm`, shared conformance/resource limits and the pinned audited `/run/` WASM handoff are implemented.
 - Non-publishing release-candidate/tag-regeneration controls and source/version/provenance checks exist.
-- Native artifact evidence remains **Linux x86_64 only**. macOS ARM64 and Windows x64 require exact-platform qualification before support claims.
+- Linux x86_64 release evidence exists. #941 adds successful exact-platform macOS ARM64 and Windows x64 candidate qualification; a new tagged public native release remains separate.
 
 ### Repository Audit / Solve Graph / Server Audit
 
@@ -56,16 +62,16 @@ Repository implementation through #913–#920 includes:
 - completion gates for both agents, all six categories, both handoff directions, provider-reported tokens, measured latency, measured selection metrics, zero safe-mode cache-hot mutation and no quality regression;
 - #920 pair-integrity checks requiring the same outcome basis and required-evidence denominator across baseline/context arms.
 
-The remaining Solve Context proof is real-agent measurement, broader independent/blinded evaluation and versioned distribution. Repository byte reduction is **not** provider-token savings.
+The remaining Solve Context proof is real-agent measurement, blinded outcomes and verified marketplace installation; npm/GitHub v0.3.0 distribution is complete. Repository byte reduction is **not** provider-token savings.
 
 ## Remaining repository-safe milestones
 
 ### A. Truth and governance
 
 - [x] Reconcile `README.md`, `ROADMAP.md`, active handoff, completion plan, Solve Context docs and active GitHub issue wording with current repository state.
-- [ ] Strengthen `main` rules so required current-head checks and intended review policy are enforced by GitHub rather than manual discipline only.
-- [ ] Keep historical evidence documents historical instead of rewriting old deployment/security observations as current facts.
-- [ ] Perform a fresh final security review after the last material repository code change before declaring repository-side completion.
+- [x] Main now enforces four strict status checks, pull requests and resolved review threads; required human approvals remain zero.
+- [x] Keep historical evidence documents historical instead of rewriting old deployment/security observations as current facts.
+- [x] Perform a focused review of the changed Studio, deployment-preservation and Windows-identity boundaries; see `completion-security-review-2026-09-20.md`. This does not close unexecuted provider/account acceptance.
 
 ### B. Solve Context evidence and distribution — #898
 
@@ -73,11 +79,12 @@ The remaining Solve Context proof is real-agent measurement, broader independent
 - [x] Changed-path and supplied graph-aware selection.
 - [x] First-party real-source and independent external-source regression suites.
 - [x] Strict real-agent measurement record/report contract and pair comparability.
-- [ ] Add broader independent/blinded repository fixtures without weakening evidence budgets.
+- [x] Broaden independent pinned fixtures through #922–#924, including Preact and a heldout protocol. Blinded real-agent outcomes remain pending.
 - [ ] Run separately authorized real Claude and Codex baseline-vs-context tasks for all six categories and both handoff directions.
 - [ ] Record provider-reported token usage, measured latency, selection precision/recall, task/evidence quality and required cache-hot mutation evidence.
 - [ ] Keep `benchmarkEvidenceComplete`, public percentage and comparative claims fail-closed until the full acceptance matrix is satisfied.
-- [ ] Select/qualify a future versioned MCP/plugin distribution containing current-main Solve Context; the published v0.2.0 line predates these changes.
+- [x] Publish the tagged MCP v0.3.0 package on npm and GitHub.
+- [ ] Verify managed-workspace marketplace installation and public Plugin Directory listing.
 
 ### C. Connected support — #896
 
@@ -103,15 +110,15 @@ The remaining Solve Context proof is real-agent measurement, broader independent
 
 ### F. Release qualification
 
-- [ ] Add exact-platform build/package/install evidence before claiming macOS ARM64 or Windows x64 native support.
+- [x] Add exact-platform macOS ARM64 and Windows x64 candidate build/package/install evidence (#941). Public release support requires a separately qualified release/tag.
 - [ ] Select future CLI/MCP versions only through reviewed release boundaries.
 - [ ] Do not confuse repository package metadata, `npm pack` smoke tests or GitHub runner availability with public release publication.
 
 ## Current distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current `main` contains substantial post-v0.2.0 MCP and Solve Context work. Until another version is separately selected and published:
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
-- public `@solvelang/mcp-server@0.2.0` references describe the historical published line;
+- public `@solvelang/mcp-server@0.2.0` references describe the historical package line;
 - current-main usage must be labeled as source/repository usage;
 - clean packed-consumer CI proves release readiness only, not that npm/marketplace users receive current-main behavior.
 
@@ -134,11 +141,11 @@ Queued, missing, cancelled, stale or unobserved checks are not green.
 Projection means **priority direction, not a promised date or unsupported completion percentage**:
 
 1. **P0:** finish Solve Context evidence integrity, broader independent evaluation and real-agent measurement.
-2. **P0:** enforce required checks/reviews on `main` at the repository-rules level.
+2. **Completed:** required checks and resolved review threads are enforced on `main`.
 3. **P1:** qualify a versioned current-main MCP/plugin distribution after evidence remains green.
 4. **P1:** activate connected support/PostHog only through their separate approval/provider gates.
 5. **P1:** prepare billing/priority launch only after monitoring, recovery, legal/customer and live provider prerequisites are verified.
-6. **P1/P2:** add exact macOS ARM64 and Windows x64 native release evidence before cross-platform support claims.
+6. **P1/P2:** carry native qualification forward to any proposed public release source/tag.
 7. **Separate/deferred:** Solve Runners / Solblend provisioning, pricing and customer compute.
 
 ## Completion gate

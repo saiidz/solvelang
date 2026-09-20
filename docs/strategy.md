@@ -1,5 +1,11 @@
 # SolveLang Strategy
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 _Last reconciled: 2026-09-15, repository state through #920._
 
 This document replaces the dated August 2026 calendar roadmap with current priority projections while preserving the durable product, audience, service, proof, portfolio and decision principles that still apply. Older dated strategy remains available in Git history as historical planning evidence.
@@ -105,10 +111,10 @@ Every current-facing document should classify claims by evidence state.
 Behavior present in current source and covered by appropriate tests/CI.
 
 ### Published / distributed
-A versioned artifact actually released to users. The latest published MCP GitHub release is **v0.2.0 (2026-07-20)** and predates substantial current-main Solve Context work.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 ### Deployed / live
-A separately verified external/production state. Current central evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live; billing, paid priority/provider execution, connected-support activation, first PostHog canary and general managed execution are not established live.
+A separately verified external/production state. Current central evidence records API access, customer password accounts, private Admin, TOTP infrastructure, and controlled-rollout API subscription billing as live. Paid priority/provider execution, connected-support activation, first PostHog canary, first real-payment canary evidence, and general managed execution are not established live.
 
 ### Measured
 A performance/quality/adoption claim backed by the required measurement basis. Solve Context has synthetic and pinned-source regression evidence, but complete real Claude/Codex provider-token/task/cache/latency evidence is not yet established.
@@ -196,11 +202,11 @@ These are priorities, not delivery-date promises.
 - Run separately authorized real Claude and Codex baseline-vs-context tasks across all six fixture classes and both handoff directions.
 - Record provider-reported tokens, measured latency, selection precision/recall, task/evidence quality and zero safe-mode cache-hot mutation.
 - Keep public percentage/competitor claims fail-closed until evidence and separate publication review are complete.
-- Qualify a future versioned MCP/plugin release containing current-main capabilities.
+- Verify managed-workspace installation and public Plugin Directory listing for the published MCP release.
 
 ### P0 — enforce repository governance
 
-The current `Protect main` ruleset does not enforce the checks/reviews the engineering loop already treats as mandatory. Strengthen repository rules so required current-head checks and intended review policy are enforced by GitHub rather than manual discipline alone.
+The `Protect main` ruleset now enforces four strict status checks, pull requests and resolved review threads. Required human approvals are zero; no actors bypass the ruleset. Preserve this configuration and inspect it before release.
 
 ### P1 — controlled activation
 
@@ -210,7 +216,7 @@ The current `Protect main` ruleset does not enforce the checks/reviews the engin
 
 ### P1 — release/platform evidence
 
-- Add exact macOS ARM64 and Windows x64 native build/package/install evidence before cross-platform native support claims.
+- Maintain the successful #941 macOS ARM64/Windows x64 candidate qualification and require exact tagged-source evidence for any new public native release.
 - Select new CLI/MCP versions only through the reviewed source/tag/artifact/publication path.
 
 ### Separate/deferred — Solve Runners / Solblend

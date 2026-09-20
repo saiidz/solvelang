@@ -1,6 +1,12 @@
 # Solve Context v0
 
-Status: **implemented repository product foundation with real-source regression coverage; not yet a newly published/distributed context-optimization release and not yet proven by complete real-agent/provider measurements**  
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](../project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
+Status: **implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.3.0 package; not yet proven by complete real-agent/provider measurements**
 Tracking epic: #898  
 Repository status reconciled through #920 on 2026-09-15.
 
@@ -129,9 +135,9 @@ Even a complete engineering matrix keeps publication/public-percentage authoriza
 
 ## Distribution truth
 
-The latest published MCP GitHub release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial post-v0.2.0 Solve Context work. Repository packaging/plugin/consumer tests prove that current source can be packaged and consumed; they do not mean the old public v0.2.0 pin contains #913–#920 behavior.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
-A future versioned MCP/plugin release is therefore a distinct remaining milestone.
+External distribution verification remains a distinct milestone from repository source/tag state.
 
 ## Projected next work
 
@@ -141,7 +147,7 @@ These are priorities, not promised dates:
 2. fix only demonstrated selection defects exposed by those fixtures;
 3. run separately authorized real Claude/Codex baseline-vs-context tasks covering all acceptance categories and both handoff directions;
 4. collect truthful provider-token/latency/cache/selection/quality evidence;
-5. qualify a future versioned distribution containing current-main capabilities;
+5. verify managed-workspace installation and Plugin Directory listing for the published release;
 6. consider optional provider-proxy or provenance/memory work only as separately reviewed expansion after core evidence is strong.
 
 ## Optional provider proxy boundary

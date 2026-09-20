@@ -51,3 +51,14 @@ byte-for-byte equivalent after canonical comparison. Stack-level edits and
 unrelated resource additions/removals are still rejected. The final projected
 change set undergoes the same resource and complete-template validation before
 it can be executed.
+
+## Verified production execution — 2026-09-20
+
+At main `632b6ff82f2f54babe46e4e11e672675e4ca838e`,
+[plan 35530924473](https://github.com/saiidz/solvelang/actions/runs/35530924473)
+validated exactly five allowed changes.
+[Execution 35531150309](https://github.com/saiidz/solvelang/actions/runs/35531150309)
+then completed successfully: two Lambda code updates, API routes and two Studio
+invoke permissions. Every existing parameter and checked health/feature flag
+was preserved; the new Studio GET rejected an unauthenticated request with 401.
+No rollback was needed. This does not establish authenticated account roundtrips.

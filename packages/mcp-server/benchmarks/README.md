@@ -1,5 +1,11 @@
 # Solve Context evaluation evidence
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](../../../docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 Status reconciled through #922 on 2026-09-15. These are repository evaluation contracts and regression fixtures, not public provider-performance claims.
 
 ## Synthetic baseline
@@ -161,10 +167,7 @@ engineering report keeps `publicationAuthorized: false` and
 
 ## Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current
-repository source includes substantial post-v0.2.0 Solve Context and evaluation work.
-The benchmark/package/plugin CI proves current source can be qualified and packed; it
-does not mean public v0.2.0 consumers receive current-main behavior.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 ## Limits and remaining proof
 

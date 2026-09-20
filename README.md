@@ -1,5 +1,11 @@
 # SolveLang
 
+## Current verification — 2026-09-20
+
+MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
+remaining live acceptance gates. Older checkpoints below are historical.
+
 > **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
 
 SolveLang is an early-stage language and tooling project for describing business workflows in a form that humans can read, engineers can review, and organizations can audit. The repository also contains local-first audit/graph tooling, Codex/Claude MCP integration, and the separate **Solve Context** context-selection product layer.
@@ -70,8 +76,8 @@ Repository validation includes hosted CI plus path-specific Rust/RustSec, WASM, 
 Projection means direction, not a promised date or unsupported completion percentage.
 
 - broader independent/blinded Solve Context evaluation and separately authorized real Claude/Codex baseline-vs-context measurements
-- a future versioned MCP/plugin distribution containing current-main Solve Context capabilities
-- enforced required checks/reviews on `main` rather than manual discipline only
+- managed-workspace installation and public Plugin Directory evidence for the published MCP package
+- maintain the enforced required checks and resolved-review-thread policy on `main`
 - a separately reviewed stable 1.0 language contract
 - broader type checking
 - local package metadata and any future package ecosystem beyond the implemented explicit local-module subset
@@ -116,9 +122,9 @@ cargo build --release
 
 ## Solve Context and MCP usage
 
-### Published package truth
+### Distribution truth
 
-The latest published GitHub MCP Server release is **v0.2.0 (2026-07-20)**. Current repository source contains substantial MCP/Solve Context capabilities added after that release. Therefore `@solvelang/mcp-server@0.2.0` must be treated as the historical published package line, **not** as proof that public consumers receive current-main #913–#920 behavior.
+MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 ### Use current repository source
 
@@ -245,7 +251,7 @@ solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
 
-The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and current repository native artifact evidence is Linux x86_64 only; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
+The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and Linux x86_64 release evidence is supplemented by successful macOS ARM64 and Windows x64 candidate qualification in #941; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
 
 ## Runtime safety
 
@@ -429,7 +435,7 @@ Yes. The Rust CLI executes the supported language locally, and a bounded browser
 
 ### What is Solve Context?
 
-Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements or distributed through a new public version after v0.2.0.
+Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements; the tagged MCP v0.3.0 package is published on npm and GitHub.
 
 ### Does Solve Context save tokens?
 
@@ -437,7 +443,7 @@ The repository has synthetic and pinned-source byte/evidence regressions, not a 
 
 ### Is the published MCP v0.2.0 the same as current `main`?
 
-No. v0.2.0 is the latest published historical MCP release and predates substantial current-main MCP/Solve Context work. Use source checkout instructions for current repository behavior until a new version is separately published.
+No. v0.2.0 is historical. The published v0.3.0 MCP package includes its tagged release source; later main changes require separate distribution.
 
 ### Is Workflow Intelligence Studio AI-powered?
 
@@ -460,11 +466,11 @@ The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md). Strategi
 Current priorities are:
 
 1. prove Solve Context with broader independent and real-agent evidence without weakening quality gates;
-2. enforce required checks/reviews on `main`;
-3. qualify a future versioned current-main MCP/plugin distribution;
+2. maintain required checks and resolved review threads on `main`;
+3. verify managed-workspace installation and public Plugin Directory distribution;
 4. keep browser/WASM, language/spec and audit truth implementation-backed;
 5. activate support/PostHog/billing/priority only through their separate protected gates;
-6. add exact macOS/Windows native release evidence before cross-platform claims.
+6. preserve exact-platform qualification when preparing any public native release.
 
 ## License
 
