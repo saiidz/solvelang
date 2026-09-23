@@ -2,9 +2,11 @@
 
 ## Current verification — 2026-09-22
 
-Repository status was re-audited on main
-`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after #943. MCP v0.3.0 is published
-on npm and GitHub; main protection is enforced.
+Repository source status was re-audited on main
+`59ab9ff271850454a2029495c2faf34cb93a10c7` after #945. MCP v0.3.0 is published
+on npm and GitHub; main protection is enforced. PR #945 updates the manual Admin
+Gateway workflow to verify and preserve the existing billing state; it did not
+deploy production.
 See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
 remaining live acceptance gates. Older checkpoints below are historical.
 
@@ -12,7 +14,7 @@ This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **
 
 ## Current evidence checkpoint
 
-Reconciled on **2026-09-22** from `main` after PR **#943** (`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd`). Live GitHub state always wins if this checkpoint becomes stale.
+Reconciled on **2026-09-22** from the source baseline on `main` after PR **#945** (`59ab9ff271850454a2029495c2faf34cb93a10c7`). Production evidence remains separately dated; live GitHub state always wins if this checkpoint becomes stale.
 
 The original repository-completion mission, #820, is closed. Current open project tracks are:
 
@@ -21,7 +23,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 | [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, pair-integrity hardening through #920, and published MCP v0.3.0 | Independent held-out evidence; actual Claude/Codex baseline-vs-context runs with provider-reported token/latency/cache/quality evidence; managed-workspace installation and public Plugin Directory listing |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; Studio account saving remains feature-gated; real-payment acceptance, priority and support activation remain gated | Six authenticated Studio production checks, bounded billing canary and customer/legal acceptance, live monitoring/recovery evidence for any activated feature, plus separate owner approvals for protected actions |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; PR #945 makes the manual Admin Gateway workflow preserve that billing state; Studio account saving remains feature-gated; real-payment acceptance, priority and support activation remain gated | Six authenticated Studio production checks, bounded billing canary and customer/legal acceptance, live monitoring/recovery evidence for any activated feature, plus separate owner approvals for protected actions |
 
 ## Working today
 
