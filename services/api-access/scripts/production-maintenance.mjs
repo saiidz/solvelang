@@ -142,8 +142,14 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   }
   const withoutOrigins = variant => { const copy = structuredClone(variant); delete copy.allowOrigins; return copy; };
   const beforeSettings = beforeVariants.variants.map(withoutOrigins);
-  if (!afterVariants.variants.every(variant => beforeSettings.some(settings => canonical(settings) === canonical(withoutOrigins(variant))))
-    || !beforeSettings.every(settings => afterVariants.variants.some(variant => canonical(settings) === canonical(withoutOrigins(variant))))) {
+  const afterSettings = afterVariants.variants.map(withoutOrigins);
+  const sameSettings = (left, right) => canonical(left) === canonical(right);
+  const settingsPreserved = beforeSettings.length === 1
+    ? afterSettings.every(settings => sameSettings(settings, beforeSettings[0]))
+    : afterSettings.length === 1
+      ? beforeSettings.every(settings => sameSettings(settings, afterSettings[0]))
+      : beforeSettings.length === afterSettings.length && beforeSettings.every((settings, index) => sameSettings(settings, afterSettings[index]));
+  if (!settingsPreserved) {
     throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
   }
   const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
