@@ -1,7 +1,7 @@
 # SolveLang full-project completion evidence
 
-Repository status was re-audited on 2026-09-22 at main
-`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after #943. Production/runtime and
+Repository source status was re-audited on 2026-09-22 at main
+`59ab9ff271850454a2029495c2faf34cb93a10c7` after #945. Production/runtime and
 native-platform observations below were checked on 2026-09-20 through main
 `632b6ff82f2f54babe46e4e11e672675e4ca838e` (#938–#942); each external
 observation is separately identified and keeps its own collection date.
@@ -18,6 +18,7 @@ percentage estimate or a count of merged PRs.
 | MCP v0.3.0 publication | Confirmed npm registry and published GitHub Release | Does not prove marketplace installation |
 | Studio account saving | Merged #939 at `8ef4829228e89c1c04ab3f2e0565dc6357b5fce7`; 515 API tests, full Studio suite, five CI workflows passed | Backend deployed in run 35531150309 with configuration preserved; all six authenticated account-isolation, conflict, switching, offline, export and removal checks remain required before frontend enablement |
 | Safe API maintenance deployment | Merged #940 adds bounded changes, parameter preservation and rollback; 521 API tests pass with #942 | Plan 35530924473 and deployment 35531150309 passed; all parameters/health flags preserved; unauthenticated Studio GET returns 401 |
+| Admin Gateway rollout guard | PR [#945](https://github.com/saiidz/solvelang/pull/945) exact head `c709b3a8325404d2f88d83138a1b331c4e8f04fd` passed API Access CI and all four required contexts; merged as `59ab9ff271850454a2029495c2faf34cb93a10c7`. The four required main checks and API Access CI also passed on that merge commit. The manual workflow now preserves the captured billing flag; it was not dispatched. | Future manual dispatch still requires a separate production approval; this repository change is not deployment evidence |
 | Solve Context independent corpus | Chalk/node-fetch/Preact and heldout protocol exist after #922–#924 | Blinded outcomes and actual Claude/Codex provider-token/latency/task-quality matrix |
 | Managed Codex marketplace install | Repository packaging/import contract exists | Actual managed-workspace installation and tool invocation evidence |
 | Public Plugin Directory | Unverified | Submission/review/listing evidence |
@@ -34,6 +35,7 @@ percentage estimate or a count of merged PRs.
 - [PR #938](https://github.com/saiidz/solvelang/pull/938)
 - [PR #943](https://github.com/saiidz/solvelang/pull/943), exact PR-head workflows [MCP CI](https://github.com/saiidz/solvelang/actions/runs/35531758510), [Rust](https://github.com/saiidz/solvelang/actions/runs/35531758506), [Release Candidate CI](https://github.com/saiidz/solvelang/actions/runs/35531758515), [CI](https://github.com/saiidz/solvelang/actions/runs/35531758509), and [WASM artifact security](https://github.com/saiidz/solvelang/actions/runs/35531758514)
 - [PR #939](https://github.com/saiidz/solvelang/pull/939)
+- [PR #945](https://github.com/saiidz/solvelang/pull/945), exact head `c709b3a8325404d2f88d83138a1b331c4e8f04fd`; main checks on merge `59ab9ff271850454a2029495c2faf34cb93a10c7`: [API Access CI](https://github.com/saiidz/solvelang/actions/runs/35809781929), [CI](https://github.com/saiidz/solvelang/actions/runs/35809781905), [Rust](https://github.com/saiidz/solvelang/actions/runs/35809781907), and [WASM artifact security](https://github.com/saiidz/solvelang/actions/runs/35809781899).
 - [Validated production plan](https://github.com/saiidz/solvelang/actions/runs/35530924473) and [successful deployment](https://github.com/saiidz/solvelang/actions/runs/35531150309), both at main `632b6ff82f2f54babe46e4e11e672675e4ca838e`.
 - [Native qualification #941](https://github.com/saiidz/solvelang/pull/941) and [both-platform run](https://github.com/saiidz/solvelang/actions/runs/35530427540).
 - Native workflow artifact IDs: Windows `10611202508`; macOS ARM64 `10610698792`. These expire after 14 days and are qualification evidence, not public releases.

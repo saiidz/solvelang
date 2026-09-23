@@ -2,14 +2,15 @@
 
 ## Current verification — 2026-09-22
 
-Repository status was re-audited on main
-`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after #943. MCP v0.3.0 is
-published on npm and GitHub; main protection is enforced. Production
-observations retain their dated evidence sources.
+Repository source status was re-audited on main
+`59ab9ff271850454a2029495c2faf34cb93a10c7` after #945. MCP v0.3.0 is
+published on npm and GitHub; main protection is enforced. PR #945 corrected the
+manual Admin Gateway workflow's billing-state guard; no production deployment
+was dispatched. Production observations retain their dated evidence sources.
 See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
 remaining live acceptance gates. Older checkpoints below are historical.
 
-_Canonical repository-completion checklist. Reconciled 2026-09-22 from baseline `main` `1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after PR #943. Live GitHub state always wins if this checkpoint becomes stale._
+_Canonical repository-completion checklist. Reconciled 2026-09-22 from source baseline `main` `59ab9ff271850454a2029495c2faf34cb93a10c7` after PR #945. Live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work. It does **not** authorize production deployment, infrastructure mutation, customer/Admin mutation, email/task actions, live Stripe/provider activity, credential activation, production source execution, restore drills, release/package publication or Solve Runners/Solblend work.
 
@@ -73,6 +74,7 @@ The remaining Solve Context proof is real-agent measurement, blinded outcomes an
 
 - [x] Reconcile `README.md`, `ROADMAP.md`, active handoff, completion plan, Solve Context docs and active GitHub issue wording with current repository state.
 - [x] Main now enforces four strict status checks, pull requests and resolved review threads; required human approvals remain zero.
+- [x] PR #945 updates the manual Admin Gateway workflow to capture the current billing flag, verify health against it before deployment and prove the parameter/health value stayed unchanged afterward; no production dispatch occurred.
 - [x] Keep historical evidence documents historical instead of rewriting old deployment/security observations as current facts.
 - [x] Perform a focused review of the changed Studio, deployment-preservation and Windows-identity boundaries; see `completion-security-review-2026-09-20.md`. This does not close unexecuted provider/account acceptance.
 
