@@ -5,6 +5,21 @@ in [run 35531150309](https://github.com/saiidz/solvelang/actions/runs/3553115030
 Parameter/health preservation and unauthenticated 401 acceptance passed.
 Authenticated two-account acceptance is still pending; frontend controls remain off.
 
+On 2026-09-23, PR [#954](https://github.com/saiidz/solvelang/pull/954) merged
+as `e4273de61151f4e703b4ef15c736f334460b9759`; exact-head CI passed before
+the protected maintenance execution in
+[run 35929234257](https://github.com/saiidz/solvelang/actions/runs/35929234257).
+That execution configured `StudioAcceptanceOrigin` to exactly
+`https://studio-acceptance.d3j3fgk4gcxxg2.amplifyapp.com` and preserved the
+existing stack parameters. A production preflight returned 204 with that exact
+origin, credentials enabled and the configured methods/headers. An unrelated
+origin received no CORS allow headers, and an unauthenticated workspace GET
+still returned 401. The acceptance hostname returns 401 with Basic
+authentication when requested without credentials. The protected build has not
+been inspected past that password gate; none of the six authenticated
+acceptance checks has been performed. The canonical Studio account-saving
+controls remain gated.
+
 Studio remains local-first. Sign-in alone never uploads existing local workflows.
 The Projects view lets a signed-in user connect, inspect the account snapshot,
 export it, open a saved project as a new local copy, or explicitly replace the
@@ -57,18 +72,21 @@ password access control. The branch URL follows
 The build also fails closed unless `NEXT_PUBLIC_API_ACCESS_BASE_URL` exactly
 matches the production API endpoint verified in the current readiness record.
 
-The production API accepts that exact generated branch origin only when the
-optional `StudioAcceptanceOrigin` stack parameter is set. It accepts no wildcard,
-custom host, path, or second origin. The existing `SITE_ORIGIN`, partitioned
+The production API currently accepts that exact generated branch origin through
+the `StudioAcceptanceOrigin` stack parameter, deployed in maintenance run
+35929234257. Live preflight checks confirmed that origin and the canonical site
+origin are accepted; an unrelated origin receives no allow headers. No wildcard,
+custom host, path, or second origin is configured. The existing `SITE_ORIGIN`, partitioned
 session cookie, CSRF token, account binding, and revision checks remain in force.
 When a magic-link request comes from the exact configured acceptance branch, its
 link returns to that branch so the partitioned session stays in the same browser
 site partition. Requests without an origin retain the canonical-site callback.
 
-These repository changes do not create the branch, configure its password, turn
-on its branch-only build variable, or deploy the API origin. Complete the six
-real acceptance checks on that isolated surface before considering any broader
-release. The canonical site remains gated.
+Repository code does not create the branch, configure its password, or turn on
+its branch-only build variable. The current branch URL is protected by Basic
+authentication, but its build contents have not been verified past that gate.
+Complete the six real acceptance checks on that isolated surface before
+considering any broader release. The canonical site remains gated.
 
 ## Validation source
 

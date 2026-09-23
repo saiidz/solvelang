@@ -39,6 +39,27 @@ unauthenticated Studio GET. The frontend account-saving flag remains off until
 two-account/cross-device acceptance. This deployment is not payment or provider
 activation evidence.
 
+## Studio acceptance-origin maintenance — 2026-09-23
+
+PR [#954](https://github.com/saiidz/solvelang/pull/954) merged at
+`e4273de61151f4e703b4ef15c736f334460b9759` after all four required main
+workflows and API Access CI passed on the exact merged head. Protected
+maintenance [run 35929234257](https://github.com/saiidz/solvelang/actions/runs/35929234257)
+set `StudioAcceptanceOrigin` to the exact password-protected Amplify branch
+origin. The validated plan allowed only `ApiAccessFunction` and
+`ApiAccessHttpApi` modifications; existing production parameters were
+preserved. The completed workflow and a direct CloudFormation read showed the
+stack at `UPDATE_COMPLETE`.
+
+Live checks returned 204 with credentialed CORS for the exact acceptance
+origin, no CORS allow headers for an unrelated origin, and 401 for an
+unauthenticated Studio workspace GET. An unauthenticated request to the
+acceptance hostname returned 401 with a Basic authentication challenge. The
+acceptance build has not been inspected past its password gate, and none of the
+six authenticated Studio checks has been completed. The canonical Studio
+account-saving UI remains gated; this maintenance does not establish account
+acceptance, payment outcome, or provider activation.
+
 ## Environment isolation
 
 Use the dedicated GitHub Environment `api-access-production`. It must not reuse values from `api-access-test`.
