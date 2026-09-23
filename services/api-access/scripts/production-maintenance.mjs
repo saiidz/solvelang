@@ -52,7 +52,7 @@ export function previousParameters(stack, template, options = {}) {
   return result.sort((left, right) => left.ParameterKey.localeCompare(right.ParameterKey));
 }
 
-const functionIds = new Set(['ApiAccessFunction', 'ApiKeyAuthorizerFunction']);
+const functionIds = new Set(['ApiAccessFunction']);
 const permissionIds = new Set(['ApiAccessFunctionStudioWorkspaceReadPermission', 'ApiAccessFunctionStudioWorkspaceSavePermission']);
 export function assertMaintenanceChanges(changes, {rollback = false} = {}) {
   if (!Array.isArray(changes) || changes.length === 0) throw new Error('No maintenance changes found.');
@@ -62,13 +62,11 @@ export function assertMaintenanceChanges(changes, {rollback = false} = {}) {
     if (c.ResourceType === 'AWS::Lambda::Permission' && permissionIds.has(c.LogicalResourceId) && c.Action === (rollback ? 'Remove' : 'Add')) continue;
     const details = c.Details;
     const targetNames = details?.map(detail => detail.Target?.Name) ?? [];
-    const lambdaCodeOnly = c.ResourceType === 'AWS::Lambda::Function' && functionIds.has(c.LogicalResourceId)
-      && targetNames.length > 0 && targetNames.every(name => name === 'Code');
     const apiAccessFunctionOnly = c.ResourceType === 'AWS::Lambda::Function' && c.LogicalResourceId === 'ApiAccessFunction'
       && targetNames.length > 0 && targetNames.every(name => ['Code', 'Environment', 'Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN'].includes(name));
     const apiBodyOnly = c.ResourceType === 'AWS::ApiGatewayV2::Api' && c.LogicalResourceId === 'ApiAccessHttpApi'
       && targetNames.length > 0 && targetNames.every(name => name === 'Body');
-    const permitted = lambdaCodeOnly || apiAccessFunctionOnly || apiBodyOnly;
+    const permitted = apiAccessFunctionOnly || apiBodyOnly;
     if (!permitted || c.Action !== 'Modify' || !Array.isArray(c.Scope) || c.Scope.some(scope => scope !== 'Properties')
       || details.some(detail => detail.Target?.Attribute !== 'Properties' || detail.Target.RequiresRecreation !== 'Never')) {
       throw new Error(`Maintenance refuses ${c.Action} ${c.ResourceType} ${c.LogicalResourceId}.`);
@@ -83,6 +81,37 @@ const canonical = value => JSON.stringify(value, function (_key, item) {
   return item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a],[b]) => a.localeCompare(b))) : item;
 });
+function assertApiCorsOriginOnly(beforeBody, afterBody) {
+  const locateCors = body => {
+    const matches = [];
+    const visit = (value, path = []) => {
+      if (!value || typeof value !== 'object') return;
+      if (Object.hasOwn(value, 'x-amazon-apigateway-cors')) matches.push({ path: [...path, 'x-amazon-apigateway-cors'], cors: value['x-amazon-apigateway-cors'] });
+      for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
+    };
+    visit(body);
+    if (matches.length !== 1 || !matches[0].cors || !Object.hasOwn(matches[0].cors, 'allowOrigins')) throw new Error('Maintenance requires one explicit API Gateway CORS origin list.');
+    return matches[0];
+  };
+  const beforeCors = locateCors(beforeBody), afterCors = locateCors(afterBody);
+  if (canonical(beforeCors.path) !== canonical(afterCors.path)) throw new Error('Maintenance moved the API Gateway CORS configuration.');
+  const withoutOrigins = body => {
+    const copy = structuredClone(body);
+    let removed = 0;
+    const visit = value => {
+      if (!value || typeof value !== 'object') return;
+      const cors = value['x-amazon-apigateway-cors'];
+      if (cors && Object.hasOwn(cors, 'allowOrigins')) { delete cors.allowOrigins; removed += 1; }
+      for (const child of Object.values(value)) visit(child);
+    };
+    visit(copy);
+    if (removed !== 1) throw new Error('Maintenance could not isolate the API Gateway CORS origin list.');
+    return copy;
+  };
+  if (canonical(withoutOrigins(beforeBody)) !== canonical(withoutOrigins(afterBody))) throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
+  const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
+  if (canonical(afterCors.cors.allowOrigins) !== canonical(expected)) throw new Error('Maintenance adds an unexpected API Gateway CORS origin.');
+}
 function stripAcceptanceRootTransition(left, right, {rollback = false} = {}) {
   const beforeParameter = left.Parameters?.[acceptanceParameter];
   const afterParameter = right.Parameters?.[acceptanceParameter];
@@ -114,6 +143,9 @@ function assertRootBoundary(before, after, options = {}) {
 
 export function assertTemplateBoundary(before, after, {rollback = false} = {}) {
   const left = structuredClone(before), right = structuredClone(after);
+  if (!rollback && left.Resources?.ApiAccessHttpApi?.Properties?.Body && right.Resources?.ApiAccessHttpApi?.Properties?.Body) {
+    assertApiCorsOriginOnly(left.Resources.ApiAccessHttpApi.Properties.Body, right.Resources.ApiAccessHttpApi.Properties.Body);
+  }
   for (const template of [left, right]) {
     for (const id of functionIds) if (template.Resources?.[id]?.Properties) delete template.Resources[id].Properties.Code;
     const variables = template.Resources?.ApiAccessFunction?.Properties?.Environment?.Variables;
