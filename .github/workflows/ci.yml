@@ -168,3 +168,14 @@ jobs:
           test "$(find out -mindepth 1 -maxdepth 1 -type d \( -name fr -o -name ro -o -name ar -o -name he \) | wc -l)" -eq 0
           grep -q '<html lang="en" dir="ltr"' out/index.html
           test ! -d app/api
+
+      - name: Build and verify the opted-in Studio acceptance preview
+        env:
+          AWS_BRANCH: studio-acceptance
+          STUDIO_ACCEPTANCE_PREVIEW_ENABLED: "true"
+          NEXT_PUBLIC_API_ACCESS_BASE_URL: https://3l3y008e94.execute-api.us-east-2.amazonaws.com
+        run: |
+          npm run build:studio-acceptance
+          grep -Rql "Connect / refresh account" out/_next/static/chunks
+          grep -Rql "Studio acceptance preview" out/_next/static/chunks
+          grep -Rql "3l3y008e94.execute-api.us-east-2.amazonaws.com" out/_next/static/chunks
