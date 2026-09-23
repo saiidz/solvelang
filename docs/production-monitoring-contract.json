@@ -17,7 +17,7 @@
     },
     {
       "id": "subscription-billing",
-      "activationGate": "subscription billing remains disabled until these signals have an owner-routed alert implementation",
+      "activationGate": "broader subscription billing remains gated until these signals have a deployed, verified owner-routed alert implementation",
       "signals": [
         "webhook-processing-failure",
         "webhook-handler-lambda-errors",

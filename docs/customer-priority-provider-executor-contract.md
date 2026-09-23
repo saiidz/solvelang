@@ -1,8 +1,8 @@
 # Customer-priority provider executor contract
 
-Status: **repository contracts only; no provider is selected, configured, credentialed, or callable in production.**
+Status: **repository contracts only; no provider is selected, configured, credentialed, or callable in production. API subscription billing is separately enabled for controlled rollout; first-payment acceptance remains pending.**
 
-The dormant production customer-priority foundation is deployed, but queue processing, customer priority exposure, provider execution, and subscription billing remain disabled.
+The dormant production customer-priority foundation is deployed, but queue processing, customer priority exposure, and provider execution remain disabled. This contract does not enable or authorize subscription billing.
 
 ## Provider adapter
 

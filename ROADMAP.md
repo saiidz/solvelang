@@ -1,8 +1,10 @@
 # SolveLang Roadmap
 
-## Current verification — 2026-09-20
+## Current verification — 2026-09-22
 
-MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+Repository status was re-audited on main
+`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after #943. MCP v0.3.0 is published
+on npm and GitHub; main protection is enforced.
 See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
 remaining live acceptance gates. Older checkpoints below are historical.
 
@@ -10,16 +12,16 @@ This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **
 
 ## Current evidence checkpoint
 
-Reconciled on **2026-09-15** from `main` immediately after PR **#920** (`5d07787c77dbe297b9bb52ba350669d6f9561a5e`). Live GitHub state always wins if this checkpoint becomes stale.
+Reconciled on **2026-09-22** from `main` after PR **#943** (`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd`). Live GitHub state always wins if this checkpoint becomes stale.
 
 The original repository-completion mission, #820, is closed. Current open project tracks are:
 
 | Track | Current repository state | Remaining gate |
 | --- | --- | --- |
-| [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, and pair-integrity hardening through #913–#920 | Larger independent/blinded evaluation; actual Claude/Codex baseline-vs-context runs; provider-reported token/latency/cache/quality evidence; versioned distribution of current-main capabilities |
+| [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, pair-integrity hardening through #920, and published MCP v0.3.0 | Independent held-out evidence; actual Claude/Codex baseline-vs-context runs with provider-reported token/latency/cache/quality evidence; managed-workspace installation and public Plugin Directory listing |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; real-payment acceptance, priority and support activation remain gated | Enforced required checks/reviews, rollout-specific permissions, live monitoring/recovery evidence for any activated feature, customer/legal acceptance and explicit owner approvals |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; Studio account saving remains feature-gated; real-payment acceptance, priority and support activation remain gated | Six authenticated Studio production checks, bounded billing canary and customer/legal acceptance, live monitoring/recovery evidence for any activated feature, plus separate owner approvals for protected actions |
 
 ## Working today
 
@@ -81,7 +83,7 @@ These are **priority projections, not delivery dates or completion percentages**
 2. Run separately authorized Claude and Codex baseline-vs-Solve-Context tasks covering all six acceptance categories and both handoff directions.
 3. Record provider-reported input/output usage, measured latency, selection precision/recall, task/evidence quality and zero cache-hot mutation where required.
 4. Keep public percentage/comparative claims disabled until the acceptance matrix is complete and reviewed.
-5. Prepare a versioned MCP/plugin distribution path for current-main capabilities after repository qualification.
+5. Verify managed-workspace installation and public Plugin Directory listing for published v0.3.0; later main changes need separate distribution evidence.
 
 ### Priority 0 — strengthen repository governance
 

@@ -4,7 +4,12 @@ Status: **customer-facing API/account infrastructure is live; API subscription b
 
 This document is the current launch-control summary. Historical preparation and rollout runbooks remain useful procedures, but their original `prepared`, `not deployed`, or `disabled` status text is not authoritative evidence of current production state. Use Issue #113 and the dated production-status records for the evidence trail, and require fresh proof before any protected live action.
 
-## Verified current production boundary — 2026-09-17
+## Verified production boundary — 2026-09-17, preserved through 2026-09-20
+
+The production status below was directly inspected on 2026-09-17. The bounded
+Studio maintenance deployment on 2026-09-20 then verified that existing
+parameters and health flags were preserved; that deployment did not verify a
+payment outcome or provider acceptance.
 
 The following facts have current evidence recorded in Issue #113:
 
@@ -83,6 +88,10 @@ Before broader public billing availability is claimed, verify all of the followi
 - Webhook replay/idempotency and confirmation-delivery behavior remain green under current repository tests.
 - Refund policy is approved before launch.
 
+The prepared first-payment canary is scoped in
+[`production-launch-runbook.md`](production-launch-runbook.md).
+That procedure is preparation only and does not authorize a charge or refund.
+
 Repository tests for billing replay and lifecycle behavior are evidence for code behavior only. They do not replace live Stripe configuration evidence or the explicitly scoped payment canary record.
 
 ## Reliability and recovery
@@ -114,7 +123,7 @@ Immediately before each broader production launch step:
 - run the applicable API tests, site CI/browser acceptance, Rust tests, clippy, formatting, release build, and dependency/security audit;
 - require exact-current-head evidence rather than stale successful checks;
 - review IAM permissions for least privilege;
-- strengthen `main` repository rules so required current-head status checks and review policy are enforced rather than relying only on manual merge discipline;
+- preserve the now-enforced `main` ruleset: pull requests, resolved review conversations and four strict current-head status checks;
 - verify CORS is restricted to the approved production SolveLang origin;
 - review session lifetime, sign-in/recovery expiration, and abuse throttles;
 - verify CSRF protections on browser mutations;
@@ -126,7 +135,7 @@ Immediately before each broader production launch step:
 
 ## Customer/legal launch blockers
 
-Repository review has not established approved production Terms of Service, Privacy Policy, or refund/cancellation policy content that can be treated as owner/legal sign-off for real paying customers. Production subscription launch remains blocked until the business owner approves the customer-facing materials.
+Repository review has not established approved production Terms of Service, Privacy Policy, or refund/cancellation policy content that can be treated as owner/legal sign-off for real paying customers. Broader public subscription launch remains blocked until the business owner approves the customer-facing materials.
 
 At minimum, the billing launch review must confirm:
 
@@ -151,7 +160,7 @@ Broader public subscription-billing launch is **NO-GO** if any item below is fal
 5. Security review is green.
 6. Customer/legal policies are approved and published.
 7. Production launch runbook has been reviewed/dry-run for the exact release scope.
-8. The owner explicitly approves enabling the production billing deployment path.
+8. The owner explicitly approves any broader production billing exposure or further production mutation.
 9. The owner explicitly approves the limited billing canary.
 
 Customer-account access is already live and must not be described as a future first enablement. Any further account-stack mutation still requires its protected workflow and fresh approval. Billing, paid priority, support-provider activation, PostHog activation, restore drills, and other production-sensitive operations remain separately gated.

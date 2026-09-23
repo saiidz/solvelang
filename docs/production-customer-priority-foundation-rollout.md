@@ -2,6 +2,11 @@
 
 Status: **deployed dormant in production from commit `4bb26ab1802d2fbffbb82a5807a1db00b3954820` by workflow run `32431853270`; queue processing, customer priority, provider execution, and billing remain disabled.**
 
+The billing-off observation is specific to that historical foundation rollout.
+Current API subscription billing is enabled for controlled rollout; see
+[`production-readiness.md`](production-readiness.md) for current production
+state. This priority foundation remains dormant.
+
 This rollout intentionally separates durable infrastructure provisioning from customer/worker activation.
 
 ## What the foundation contains

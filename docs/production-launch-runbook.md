@@ -4,6 +4,13 @@ Status: **drafted for future use; not authorization to launch**.
 
 This runbook begins only after the protected test release is healthy and the production-readiness checklist is complete.
 
+**Current-state note (2026-09-22):** Phases 0–4 preserve the historical initial
+deployment sequence; their billing-off expectations are not current production
+state. Production API subscription billing is enabled for controlled rollout.
+Use [`production-readiness.md`](production-readiness.md) for current facts and
+the protected maintenance procedure for code changes. Phase 5 below is a
+prepared payment canary and still requires separate explicit owner approval.
+
 ## Phase 0 — prerequisites for validation-only preflight
 
 Stop immediately if any prerequisite is missing:
@@ -107,19 +114,69 @@ No public promotion yet.
 
 Requires a second explicit owner approval because this phase can create a real charge.
 
-Use the smallest controlled canary practical for the approved business policy. Verify:
+### Prepared bounded scenario
 
-- subscription creation;
-- invoice/receipt and business identity;
-- entitlement activation only after successful payment;
-- plan change behavior;
-- payment-method management;
-- cancellation/resume;
-- webhook duplicate safety;
-- failed-payment handling;
-- monitoring and rollback.
+This plan prepares one successful initial subscription payment; it is not
+authorization to charge or refund.
 
-If a real charge is made for the canary, record the approved customer/account, amount, invoice, expected refund treatment, and final disposition outside source code without storing payment credentials.
+- **Amount and plan:** one Developer subscription at **USD $49.00 total** for
+  one monthly period. Before payment, the authenticated checkout summary must
+  show exactly USD $49.00 with no additional tax or fee. If the amount differs,
+  stop and obtain approval for the exact revised total.
+- **Account and data:** one new, owner-controlled disposable SolveLang account
+  using a synthetic email address and no existing customer records, projects,
+  API keys, or customer source. Use no other person's payment method or data.
+- **Expected provider events:** one completed Checkout Session; a paid initial
+  invoice (`invoice.paid`); and the corresponding
+  `customer.subscription.created` or `customer.subscription.updated` event.
+  The subscription event must identify the disposable account and Developer
+  Price. An initial `incomplete` status may become `active` only after payment.
+  The application processes the signed `customer.subscription.*` events for
+  entitlement state; `checkout.session.completed` and `invoice.paid` are
+  supporting payment evidence, not entitlement writes.
+- **Expected SolveLang transition:** the disposable account moves from no active
+  subscription to Developer / `active` only after the successful payment and
+  matching signed subscription event. Verify the Developer limits of 1,000
+  monthly credits, two active API keys and `repository:audit` scope. No other
+  account or plan changes.
+- **Cancellation:** after recording the accepted result, set cancellation at
+  period end through the authenticated account subscription controls. Verify
+  `cancel_at_period_end`, then verify the final cancellation event and access
+  removal at period end. This does not refund the initial payment. Immediate
+  cancellation or a refund is a separate owner-approved Stripe action.
+- **Failure response:** if amount, identity, event ordering, payment or
+  entitlement differs from this plan, stop the canary and do not start another
+  checkout. Preserve webhook delivery for reconciliation; do not edit
+  entitlement records or retry an ambiguous provider outcome. Use the reviewed
+  state-preserving production maintenance/rollback procedure under its own
+  authorization. Do not run the legacy billing-off customer-account workflow.
+- **Evidence:** in a restricted owner-controlled record, retain the approval,
+  timestamp, checkout/invoice/subscription outcome, amount and currency,
+  sanitized event types/statuses, entitlement before/after, cancellation state,
+  alarms and final disposition. Keep credentials, payment details, raw customer
+  data and full provider payloads out of GitHub and chat.
+
+Before the canary, also verify the live Price and webhook identity, deployed
+#911 alarm destination/actions/state, approved customer disclosures and support
+path, current exact-head checks, and a usable rollback contact. Any failed or
+unknown precondition is a no-go.
+
+### Acceptance checks
+
+For this one-payment canary, verify:
+
+- the Checkout Session and initial paid invoice belong to the disposable account;
+- exactly one Developer entitlement becomes active after the successful payment
+  and matching signed subscription event;
+- event replay does not duplicate or reorder the account entitlement;
+- the expected alarms remain healthy and the rollback contact is reachable; and
+- cancellation-at-period-end is recorded so no later renewal is intended.
+
+Plan changes, payment-method replacement, failed-payment recovery and refunds are
+separate lifecycle cases. Use the repository tests and approved non-production
+provider validation for those cases; do not add charges to this bounded live
+canary. Record the approved amount, invoice outcome, cancellation, and final
+disposition outside source code without storing payment credentials.
 
 ## Phase 6 — post-canary decision
 

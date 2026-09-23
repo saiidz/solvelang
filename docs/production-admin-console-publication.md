@@ -121,7 +121,7 @@ Verify in order:
 5. Admin password login creates the secure host-bound session and returns a CSRF token;
 6. a read-only customer lookup succeeds through the gateway;
 7. sign-out revokes the Admin session;
-8. production billing remains disabled and no email, charge, customer mutation, or CRM mutation is performed by this canary.
+8. no subscription-billing configuration change or charge is part of this Admin publication canary; no email, customer mutation, or CRM mutation is performed either.
 
 Account access-state changes, CRM writes, and permanent termination are operational mutations and are not part of the publication canary.
 
