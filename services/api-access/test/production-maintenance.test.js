@@ -81,7 +81,7 @@ test('processed template comparison rejects invisible stack-level edits and pres
  const unknownConditionalCors=structuredClone(candidate);unknownConditionalCors.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['OtherCondition',{corsConfiguration:{}},{corsConfiguration:{}}]};
  assert.throws(()=>assertTemplateBoundary(original,unknownConditionalCors),/branch shapes: object\{corsConfiguration:object\{\}\}; object\{corsConfiguration:object\{\}\}/);
  const arrayConditionalCors=structuredClone(candidate);arrayConditionalCors.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
- assert.throws(()=>assertTemplateBoundary(original,arrayConditionalCors),/branch shapes: array\(2\)<Ref\(SiteOrigin\),Ref\(StudioAcceptanceOrigin\)>; array\(1\)<Ref\(SiteOrigin\)>/);
+ assert.throws(()=>assertTemplateBoundary(original,arrayConditionalCors),/must be projected into the deployed definition/);
  for(const mutate of [v=>{delete v.Outputs.ApiAccessBaseUrl;},v=>{v.Parameters.Secret.Default='new';},v=>{v.Parameters.StudioAcceptanceOrigin.AllowedPattern='.*';},v=>{v.Conditions.StudioAcceptanceOriginConfigured={'Fn::Equals':['1','1']};},v=>{delete v.Rules;},v=>{v.Resources.ApiAccessFunction.DeletionPolicy='Delete';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.FEATURE='false';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN=previewOrigin;}]){
    const bad=structuredClone(candidate);mutate(bad);assert.throws(()=>assertTemplateBoundary(original,bad),/Maintenance|Studio acceptance environment/);
  }
@@ -91,7 +91,7 @@ test('maintenance projection preserves deployed table and IAM settings despite s
  const deployed={Parameters:{},Outputs:{Base:{Value:'stable'}},Resources:{
   ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{BILLING:'true'}}}},
   ApiKeyAuthorizerFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'}}},
-  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{allowOrigins:[{Ref:'SiteOrigin'}],allowMethods:['GET'],allowHeaders:['authorization']}},Name:'stable'}},
+  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{allowOrigins:[{Ref:'SiteOrigin'}],allowMethods:['GET'],allowHeaders:['authorization'],allowCredentials:true}},Name:'stable'}},
   AdminCrmTable:{Type:'AWS::DynamoDB::Table',Properties:{PointInTimeRecoverySpecification:{PointInTimeRecoveryEnabled:true}}},
   Role:{Type:'AWS::IAM::Role',Properties:{Policies:['deployed-policy']}}
  }};
@@ -100,18 +100,25 @@ test('maintenance projection preserves deployed table and IAM settings despite s
  compiled.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};
  compiled.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};
  compiled.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};
- compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
+ compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',previewOrigin],['https://www.solve-lang.com']]};
  compiled.Resources.ApiKeyAuthorizerFunction.Properties.Code={S3Key:'unauthorized-change'};
  compiled.Resources.AdminCrmTable.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled=false;
  compiled.Resources.Role.Properties.Policies=['source-policy'];
- const result=projectMaintenanceTemplate(deployed,compiled);
+ const projectionOptions={siteOrigin:'https://www.solve-lang.com',studioAcceptanceOriginAction:'enable',studioAcceptanceOrigin:previewOrigin};
+ const result=projectMaintenanceTemplate(deployed,compiled,projectionOptions);
  assert.deepEqual(result.Resources.ApiKeyAuthorizerFunction,deployed.Resources.ApiKeyAuthorizerFunction);
  assert.deepEqual(result.Resources.AdminCrmTable,deployed.Resources.AdminCrmTable);
  assert.deepEqual(result.Resources.Role,deployed.Resources.Role);
  assert.deepEqual(result.Resources.ApiAccessFunction.Properties.Code,{S3Key:'new'});
  assert.deepEqual(result.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN,{Ref:'StudioAcceptanceOrigin'});
  assert.deepEqual(result.Parameters.StudioAcceptanceOrigin,acceptanceParameter);
- assert.deepEqual(result.Resources.ApiAccessHttpApi.Properties.Body,compiled.Resources.ApiAccessHttpApi.Properties.Body);
- assertTemplateBoundary(deployed,result);
- compiled.Outputs.Base.Value='changed';assert.throws(()=>projectMaintenanceTemplate(deployed,compiled),/stack-level/);
+ const projectedBody=result.Resources.ApiAccessHttpApi.Properties.Body;
+ assert.deepEqual(projectedBody['x-amazon-apigateway-cors'].allowOrigins,['https://www.solve-lang.com',previewOrigin]);
+ assert.deepEqual(projectedBody['x-amazon-apigateway-cors'].allowMethods,['GET']);
+ assert.deepEqual(projectedBody['x-amazon-apigateway-cors'].allowHeaders,['authorization']);
+ assert.equal(projectedBody['x-amazon-apigateway-cors'].allowCredentials,true);
+ assertTemplateBoundary(deployed,result,projectionOptions);
+ const wrongOrigin=structuredClone(compiled);wrongOrigin.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']['Fn::If'][1]=['https://www.solve-lang.com','https://evil.example'];
+ assert.throws(()=>projectMaintenanceTemplate(deployed,wrongOrigin,projectionOptions),/do not match the requested exact origin/);
+ compiled.Outputs.Base.Value='changed';assert.throws(()=>projectMaintenanceTemplate(deployed,compiled,projectionOptions),/stack-level/);
 });

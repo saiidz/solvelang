@@ -81,64 +81,102 @@ const canonical = value => JSON.stringify(value, function (_key, item) {
   return item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a],[b]) => a.localeCompare(b))) : item;
 });
+function parseApiGatewayBody(body) {
+  if (typeof body !== 'string') return body;
+  try { return JSON.parse(body); }
+  catch { throw new Error('Maintenance could not parse the processed API Gateway definition.'); }
+}
+function locateCorsExtension(body, label) {
+  const matches = [];
+  const visit = (value, path = []) => {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, 'x-amazon-apigateway-cors')) matches.push({path: [...path, 'x-amazon-apigateway-cors'], cors: value['x-amazon-apigateway-cors']});
+    for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
+  };
+  visit(body);
+  if (matches.length !== 1) throw new Error(`Maintenance requires one API Gateway CORS definition in the ${label} API body (found ${matches.length}).`);
+  if (!matches[0].cors || typeof matches[0].cors !== 'object') throw new Error(`Maintenance requires a structured API Gateway CORS definition in the ${label} API body.`);
+  return matches[0];
+}
+function withoutCorsExtension(body, path) {
+  const copy = structuredClone(body);
+  const parent = path.slice(0, -1).reduce((value, key) => value[key], copy);
+  delete parent[path.at(-1)];
+  return copy;
+}
+function corsVariants(cors, label) {
+  if (Object.hasOwn(cors, 'allowOrigins')) return {condition: null, variants: [cors], originOnly: false};
+  const conditional = cors['Fn::If'];
+  if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
+    && conditional[1] && typeof conditional[1] === 'object' && !Array.isArray(conditional[1])
+    && conditional[2] && typeof conditional[2] === 'object' && !Array.isArray(conditional[2])
+    && conditional.slice(1).every(branch => Object.hasOwn(branch, 'allowOrigins'))) {
+    return {condition: conditional[0], variants: conditional.slice(1), originOnly: false};
+  }
+  if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
+    && conditional.slice(1).every(Array.isArray)) {
+    return {condition: conditional[0], variants: conditional.slice(1).map(allowOrigins => ({allowOrigins})), originOnly: true};
+  }
+  const shapeOf = (value, depth = 0) => {
+    if (Array.isArray(value)) return `array(${value.length})<${value.slice(0, 8).map(item => shapeOf(item, depth + 1)).join(',')}${value.length > 8 ? ',…' : ''}>`;
+    if (!value || typeof value !== 'object') return value === null ? 'null' : typeof value;
+    const keys = Object.keys(value).sort();
+    if (keys.length === 1 && keys[0] === 'Ref' && typeof value.Ref === 'string' && /^[A-Za-z][A-Za-z0-9]+$/.test(value.Ref)) return `Ref(${value.Ref})`;
+    return depth >= 2 ? `object{${keys.join(',')}}` : `object{${keys.map(key => `${key}:${shapeOf(value[key], depth + 1)}`).join(',')}}`;
+  };
+  const keys = Object.keys(cors).sort().join(', ') || 'none';
+  const branchShapes = Array.isArray(conditional) ? conditional.slice(1).map(shapeOf).join('; ') : 'unavailable';
+  throw new Error(`Maintenance requires explicit API Gateway CORS origin lists in every ${label} branch (found keys: ${keys}; branch shapes: ${branchShapes}).`);
+}
+function compiledOriginRequestMatches(variants, condition, options) {
+  const {siteOrigin, studioAcceptanceOrigin, currentStudioAcceptanceOrigin = '', studioAcceptanceOriginAction = 'preserve'} = options;
+  const resolvedAcceptanceOrigin = studioAcceptanceOriginAction === 'enable' ? studioAcceptanceOrigin
+    : studioAcceptanceOriginAction === 'disable' ? '' : currentStudioAcceptanceOrigin;
+  const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
+  const symbolicBranches = condition === acceptanceCondition
+    && canonical(variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
+    && canonical(variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
+  const literalBranches = siteOrigin && condition === acceptanceCondition
+    && canonical(variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])])
+    && canonical(variants[1].allowOrigins) === canonical([siteOrigin]);
+  const directExpected = condition === null && (canonical(variants[0].allowOrigins) === canonical(expected)
+    || canonical(variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])]));
+  return Boolean(symbolicBranches || literalBranches || directExpected);
+}
+function assertCompiledCorsOriginRequest(beforeBody, compiledBody, options) {
+  const before = parseApiGatewayBody(beforeBody), compiled = parseApiGatewayBody(compiledBody);
+  const oldCors = locateCorsExtension(before, 'deployed'), newCors = locateCorsExtension(compiled, 'compiled');
+  if (canonical(oldCors.path) !== canonical(newCors.path)
+    || canonical(withoutCorsExtension(before, oldCors.path)) !== canonical(withoutCorsExtension(compiled, newCors.path))) {
+    throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
+  }
+  const proposed = corsVariants(newCors.cors, 'compiled');
+  if (!compiledOriginRequestMatches(proposed.variants, proposed.condition, options)) throw new Error('Compiled API Gateway CORS origins do not match the requested exact origin.');
+}
+function replaceCorsOrigins(body, origins) {
+  const wasString = typeof body === 'string';
+  const parsed = structuredClone(parseApiGatewayBody(body));
+  const cors = locateCorsExtension(parsed, 'deployed');
+  if (!Object.hasOwn(cors.cors, 'allowOrigins')) throw new Error('Deployed API Gateway CORS definition has no explicit origin list.');
+  cors.cors.allowOrigins = structuredClone(origins);
+  return wasString ? JSON.stringify(parsed) : parsed;
+}
 function assertApiCorsOriginOnly(beforeBody, afterBody, {
   siteOrigin,
   studioAcceptanceOrigin,
   currentStudioAcceptanceOrigin = '',
   studioAcceptanceOriginAction = 'preserve',
 } = {}) {
-  const parseBody = body => {
-    if (typeof body !== 'string') return body;
-    try { return JSON.parse(body); }
-    catch { throw new Error('Maintenance could not parse the processed API Gateway definition.'); }
-  };
-  beforeBody = parseBody(beforeBody);
-  afterBody = parseBody(afterBody);
-  const locateCors = (body, label) => {
-    const matches = [];
-    const visit = (value, path = []) => {
-      if (!value || typeof value !== 'object') return;
-      if (Object.hasOwn(value, 'x-amazon-apigateway-cors')) matches.push({ path: [...path, 'x-amazon-apigateway-cors'], cors: value['x-amazon-apigateway-cors'] });
-      for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
-    };
-    visit(body);
-    if (matches.length !== 1) throw new Error(`Maintenance requires one API Gateway CORS definition in the ${label} API body (found ${matches.length}).`);
-    if (!matches[0].cors || typeof matches[0].cors !== 'object') throw new Error(`Maintenance requires a structured API Gateway CORS definition in the ${label} API body.`);
-    return matches[0];
-  };
-  const beforeCors = locateCors(beforeBody, 'deployed'), afterCors = locateCors(afterBody, 'proposed');
+  beforeBody = parseApiGatewayBody(beforeBody);
+  afterBody = parseApiGatewayBody(afterBody);
+  const beforeCors = locateCorsExtension(beforeBody, 'deployed'), afterCors = locateCorsExtension(afterBody, 'proposed');
   if (canonical(beforeCors.path) !== canonical(afterCors.path)) throw new Error('Maintenance moved the API Gateway CORS configuration.');
-  const withoutCorsExtension = (body, path) => {
-    const copy = structuredClone(body);
-    const parent = path.slice(0, -1).reduce((value, key) => value[key], copy);
-    delete parent[path.at(-1)];
-    return copy;
-  };
   if (canonical(withoutCorsExtension(beforeBody, beforeCors.path)) !== canonical(withoutCorsExtension(afterBody, afterCors.path))) {
     throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
   }
-  const corsVariants = (cors, label) => {
-    if (Object.hasOwn(cors, 'allowOrigins')) return {condition: null, variants: [cors]};
-    const conditional = cors['Fn::If'];
-    const shapeOf = (value, depth = 0) => {
-      if (Array.isArray(value)) return `array(${value.length})<${value.slice(0, 8).map(item => shapeOf(item, depth + 1)).join(',')}${value.length > 8 ? ',…' : ''}>`;
-      if (!value || typeof value !== 'object') return value === null ? 'null' : typeof value;
-      const keys = Object.keys(value).sort();
-      if (keys.length === 1 && keys[0] === 'Ref' && typeof value.Ref === 'string' && /^[A-Za-z][A-Za-z0-9]+$/.test(value.Ref)) return `Ref(${value.Ref})`;
-      return depth >= 2 ? `object{${keys.join(',')}}` : `object{${keys.map(key => `${key}:${shapeOf(value[key], depth + 1)}`).join(',')}}`;
-    };
-    if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
-      && conditional[1] && typeof conditional[1] === 'object' && !Array.isArray(conditional[1])
-      && conditional[2] && typeof conditional[2] === 'object' && !Array.isArray(conditional[2])
-      && conditional.slice(1).every(branch => Object.hasOwn(branch, 'allowOrigins'))) {
-      return {condition: conditional[0], variants: conditional.slice(1)};
-    }
-    const keys = Object.keys(cors).sort().join(', ') || 'none';
-    const branchShapes = Array.isArray(conditional) ? conditional.slice(1).map(shapeOf).join('; ') : 'unavailable';
-    throw new Error(`Maintenance requires explicit API Gateway CORS origin lists in every ${label} branch (found keys: ${keys}; branch shapes: ${branchShapes}).`);
-  };
   const beforeVariants = corsVariants(beforeCors.cors, 'deployed');
   const afterVariants = corsVariants(afterCors.cors, 'proposed');
+  if (afterVariants.originOnly) throw new Error('Proposed API Gateway CORS origins must be projected into the deployed definition.');
   const baselineOrigins = [[{ Ref: 'SiteOrigin' }]];
   if (siteOrigin) baselineOrigins.push([siteOrigin, ...(currentStudioAcceptanceOrigin ? [currentStudioAcceptanceOrigin] : [])]);
   const originsMatchBaseline = origins => baselineOrigins.some(expected => canonical(origins) === canonical(expected));
@@ -160,19 +198,11 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   if (!settingsPreserved) {
     throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
   }
-  const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
   const resolvedAcceptanceOrigin = studioAcceptanceOriginAction === 'enable' ? studioAcceptanceOrigin
     : studioAcceptanceOriginAction === 'disable' ? '' : currentStudioAcceptanceOrigin;
   const exactLiteralOrigins = siteOrigin ? [siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])] : undefined;
-  const symbolicBranches = afterVariants.condition === acceptanceCondition
-    && canonical(afterVariants.variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
-    && canonical(afterVariants.variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
-  const literalBranches = siteOrigin && afterVariants.condition === acceptanceCondition
-    && canonical(afterVariants.variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])])
-    && canonical(afterVariants.variants[1].allowOrigins) === canonical([siteOrigin]);
-  const directExpected = afterVariants.condition === null && (canonical(afterVariants.variants[0].allowOrigins) === canonical(expected)
-    || Boolean(exactLiteralOrigins && canonical(afterVariants.variants[0].allowOrigins) === canonical(exactLiteralOrigins)));
-  if (!symbolicBranches && !literalBranches && !directExpected) {
+  if (!compiledOriginRequestMatches(afterVariants.variants, afterVariants.condition, {siteOrigin, studioAcceptanceOrigin,
+    currentStudioAcceptanceOrigin, studioAcceptanceOriginAction}) || afterVariants.originOnly) {
     throw new Error('Maintenance adds an unexpected API Gateway CORS origin.');
   }
 }
@@ -258,7 +288,14 @@ export function projectMaintenanceTemplate(deployed, compiled, options = {}) {
     ['ApiAccessHttpApi', 'AWS::ApiGatewayV2::Api', 'Body'],
   ]) {
     if (original[id]?.Type !== type || candidate[id]?.Type !== type || !candidate[id].Properties?.[property]) throw new Error(`Missing maintenance property ${id}.${property}.`);
-    result.Resources[id].Properties[property] = structuredClone(candidate[id].Properties[property]);
+    if (id === 'ApiAccessHttpApi') {
+      assertCompiledCorsOriginRequest(original[id].Properties[property], candidate[id].Properties[property], options);
+      const acceptance = options.studioAcceptanceOriginAction === 'enable' ? options.studioAcceptanceOrigin
+        : options.studioAcceptanceOriginAction === 'disable' ? '' : options.currentStudioAcceptanceOrigin ?? '';
+      if (!options.siteOrigin) throw new Error('Maintenance requires the deployed canonical SiteOrigin.');
+      result.Resources[id].Properties[property] = replaceCorsOrigins(original[id].Properties[property],
+        [options.siteOrigin, ...(acceptance ? [acceptance] : [])]);
+    } else result.Resources[id].Properties[property] = structuredClone(candidate[id].Properties[property]);
   }
   const deployedVariables = original.ApiAccessFunction?.Properties?.Environment?.Variables;
   const compiledVariables = candidate.ApiAccessFunction?.Properties?.Environment?.Variables;
