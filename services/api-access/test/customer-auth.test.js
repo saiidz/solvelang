@@ -115,7 +115,7 @@ function deterministicRandom(size) {
   return output;
 }
 
-function setup() {
+function setup({ studioAcceptanceOrigin } = {}) {
   counter = 1;
   const store = new MemoryAuthStore();
   const sent = [];
@@ -124,6 +124,7 @@ function setup() {
     emailGateway: { sendMagicLink: async (message) => sent.push(message) },
     pepper,
     siteOrigin: "https://www.solve-lang.com",
+    studioAcceptanceOrigin,
     now: () => fixedNow,
     randomBytes: deterministicRandom,
   });
@@ -170,6 +171,18 @@ test("sends a fragment-based, version-bound single-use magic link and stores onl
   assert.equal(stored.authVersion, 1);
   assert.equal(stored.token, undefined);
   assert.ok(!JSON.stringify(stored).includes(token));
+});
+
+test("magic links use only the configured acceptance preview origin", async () => {
+  const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+  const { sent, service } = setup({ studioAcceptanceOrigin: previewOrigin });
+  await service.requestMagicLink({ email: "preview@example.com" }, { sourceIp: "203.0.113.9", origin: previewOrigin });
+  assert.match(sent[0].url, /^https:\/\/studio-acceptance\.dabcdef123456\.amplifyapp\.com\/account\/api-keys\/#magic_token=ml_/);
+  await assert.rejects(
+    service.requestMagicLink({ email: "other@example.com" }, { sourceIp: "203.0.113.9", origin: "https://evil.example" }),
+    (error) => error instanceof ApiAccessError && error.statusCode === 403 && error.code === "invalid_origin",
+  );
+  assert.equal(sent.length, 1);
 });
 
 test("email throttling returns the same generic response and does not send twice", async () => {

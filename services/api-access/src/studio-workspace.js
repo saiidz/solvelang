@@ -1,6 +1,7 @@
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { parseCloudWorkspace } from "./studio-schema/workspace-schema.js";
 import { ApiAccessError } from "./service.js";
+import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 
 // One bounded JSON snapshot per account. Keeping the payload as a string avoids
 // DynamoDB nesting limits and makes the size budget independent of user keys.
@@ -44,9 +45,10 @@ export function createStudioWorkspaceStore(client, tableName) {
     },
   };
 }
-export function createStudioWorkspaceHandler({ enabled, customerAuth, store, siteOrigin }) {
-  const response = (statusCode, body) => ({ statusCode, headers: {
-    "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": siteOrigin,
+export function createStudioWorkspaceHandler({ enabled, customerAuth, store, siteOrigin, studioAcceptanceOrigin }) {
+  studioAcceptanceOrigin = parseStudioAcceptanceOrigin(studioAcceptanceOrigin, siteOrigin);
+  const response = (statusCode, body, origin = siteOrigin) => ({ statusCode, headers: {
+    "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": origin,
     "access-control-allow-credentials": "true", "access-control-allow-methods": "GET,POST,OPTIONS",
     "access-control-allow-headers": "content-type,x-solvelang-csrf", "x-content-type-options": "nosniff", vary: "Origin",
   }, body: JSON.stringify(body) });
@@ -54,19 +56,20 @@ export function createStudioWorkspaceHandler({ enabled, customerAuth, store, sit
     try {
       const method = event?.requestContext?.http?.method;
       const headers = Object.fromEntries(Object.entries(event?.headers ?? {}).map(([k,v]) => [k.toLowerCase(),v]));
-      if (headers.origin && headers.origin !== siteOrigin) throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
-      if (method === "OPTIONS") return response(204, {});
+      const origin = headers.origin ?? siteOrigin;
+      if (!isAllowedStudioOrigin(origin, siteOrigin, studioAcceptanceOrigin)) throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
+      if (method === "OPTIONS") return response(204, {}, origin);
       if (!enabled || !customerAuth || !store) throw new ApiAccessError(503, "studio_unavailable", "Account saving is not available yet. Local saving still works.");
-      if (method !== "GET" && method !== "POST") return response(405, { error: "Method not allowed." });
+      if (method !== "GET" && method !== "POST") return response(405, { error: "Method not allowed." }, origin);
       const session = await customerAuth.authenticate(headers.cookie ?? event?.cookies?.join("; "));
-      if (method === "GET") return response(200, { accountId: session.accountId, csrfToken: session.csrfToken, ...await store.read(session.accountId) });
+      if (method === "GET") return response(200, { accountId: session.accountId, csrfToken: session.csrfToken, ...await store.read(session.accountId) }, origin);
       customerAuth.assertCsrf(session, headers["x-solvelang-csrf"]);
       const raw = event.isBase64Encoded ? Buffer.from(event.body ?? "", "base64").toString("utf8") : event.body ?? "";
       if (Buffer.byteLength(raw) > MAX_WORKSPACE_BYTES + 2048) throw new ApiAccessError(413, "workspace_too_large", "Account workspace exceeds 256 KiB.");
       const body = JSON.parse(raw);
       // Prevent a tab belonging to account A from writing after another tab signs in as B.
       if (!body || body.accountId !== session.accountId) throw new ApiAccessError(409, "account_changed", "Your signed-in account changed. Reconnect before saving.");
-      return response(200, { accountId: session.accountId, ...await store.write(session.accountId, body.expectedRevision, body.workspace) });
+      return response(200, { accountId: session.accountId, ...await store.write(session.accountId, body.expectedRevision, body.workspace) }, origin);
     } catch (error) {
       if (error instanceof ApiAccessError) return response(error.statusCode, { error: error.publicMessage, code: error.code });
       if (error instanceof SyntaxError) return response(400, { error: "Invalid workspace JSON.", code: "invalid_workspace" });

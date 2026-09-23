@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createStudioWorkspaceHandler, createStudioWorkspaceStore, validateWorkspace } from "../src/studio-workspace.js";
 import { ApiAccessError } from "../src/service.js";
 const empty = { schemaVersion: 1, projects: [] };
-function fixture() {
+const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+function fixture({ studioAcceptanceOrigin } = {}) {
   const rows = new Map(), calls = [];
   const client = { async send(command) {
     const input = command.input; calls.push(input);
@@ -21,7 +22,7 @@ function fixture() {
     async authenticate(cookie) { if (cookie !== "session=valid") throw new ApiAccessError(401,"invalid_session","Sign in."); return { accountId, csrfToken:"csrf" }; },
     assertCsrf(session, token) { if (token !== session.csrfToken) throw new ApiAccessError(403,"csrf","CSRF required."); },
   };
-  const handler = createStudioWorkspaceHandler({ enabled:true, customerAuth, store, siteOrigin:"https://solve.test" });
+  const handler = createStudioWorkspaceHandler({ enabled:true, customerAuth, store, siteOrigin:"https://solve.test", studioAcceptanceOrigin });
   const request = (method, body, headers={}) => handler({ requestContext:{http:{method}}, cookies:["session=valid"], headers:{origin:"https://solve.test","x-solvelang-csrf":"csrf",...headers},body:JSON.stringify(body) });
   return {store,rows,calls,request,handler,switchAccount:()=>{accountId="account-B";}};
 }
@@ -45,6 +46,16 @@ test("session, CSRF, origin and account switching all fail before writes",async(
  assert.equal((await f.request("POST",body,{"x-solvelang-csrf":"bad"})).statusCode,403);
  assert.equal((await f.request("POST",body,{origin:"https://evil.test"})).statusCode,403);
  f.switchAccount();assert.equal((await f.request("POST",body)).statusCode,409);assert.equal(f.rows.size,0);
+});
+test("only the configured Amplify preview origin is accepted for Studio workspace requests",async()=>{
+ const f=fixture({studioAcceptanceOrigin:previewOrigin});
+ const preflight=await f.request("OPTIONS",undefined,{origin:previewOrigin});
+ assert.equal(preflight.statusCode,204);assert.equal(preflight.headers["access-control-allow-origin"],previewOrigin);
+ const connected=await f.request("GET",undefined,{origin:previewOrigin});
+ assert.equal(connected.statusCode,200);assert.equal(JSON.parse(connected.body).accountId,"account-A");
+ const writes=f.calls.length;
+ const denied=await f.request("POST",{accountId:"account-A",expectedRevision:0,workspace:empty},{origin:"https://studio-acceptance.dattacker.amplifyapp.com"});
+ assert.equal(denied.statusCode,403);assert.equal(f.calls.length,writes);
 });
 test("authenticated roundtrip accepts HTTP API cookies and returns no other account data",async()=>{
  const f=fixture();assert.equal((await f.request("POST",{accountId:"account-A",expectedRevision:0,workspace:empty})).statusCode,200);

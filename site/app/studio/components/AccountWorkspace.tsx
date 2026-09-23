@@ -69,6 +69,7 @@ export default function AccountWorkspace({ localStatus, projects, onOpen }: { lo
     finally{inFlight.current=false;setBusy(false);}
   };
   return <section className={styles.statusBar} aria-label="Account workspace"><div>
+    {process.env.NEXT_PUBLIC_STUDIO_ACCEPTANCE_PREVIEW === "true" ? <p role="note"><strong>Studio acceptance preview:</strong> use disposable test accounts and data only.</p> : null}
     <strong>Account saving {autosave?"· autosave on":""}</strong>
     <p role="status">{status}</p>
     <p>Up to 50 projects and 256 KiB including history. Stored with encryption at rest. Usage counters remain local. <Link href="/account/api-keys/">Sign in</Link></p>

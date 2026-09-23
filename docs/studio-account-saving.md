@@ -31,13 +31,44 @@ This removes the current account copy, not retained infrastructure backups.
 Use a reviewed deployment that preserves existing account, TOTP and billing
 configuration. Do not use the legacy billing-off customer-account deployment for
 this maintenance change. Deploy the API code and both SAM routes before claiming
-account saving is available; site auto-deployment alone is insufficient. Keep `NEXT_PUBLIC_STUDIO_ACCOUNT_SAVING_ENABLED` unset until the backend acceptance checks pass, then set it to `true` and rebuild the site.
+account saving is available; site auto-deployment alone is insufficient. Keep
+`NEXT_PUBLIC_STUDIO_ACCOUNT_SAVING_ENABLED` unset on `main`.
 
 Verify with two disposable test accounts: account A saves and restores in another
 browser; account B cannot read A; stale revisions return 409; sign-out/account
 switching does not transfer a pending save; offline errors preserve local work;
 export and account-snapshot removal work. No customer project should be used as
 test data. Test environment proof and production acceptance are separate records.
+
+## Isolated production acceptance surface
+
+The repository prepares a dedicated Amplify branch named `studio-acceptance`.
+Its build emits account-saving controls only when `AWS_BRANCH` is exactly
+`studio-acceptance` and the branch-only Amplify variable
+`STUDIO_ACCEPTANCE_PREVIEW_ENABLED=true` is set. The build wrapper removes both
+public Studio flags from every other branch, including `main`, even if an
+app-wide public flag was configured accidentally. The acceptance UI labels the
+surface as disposable-data-only.
+
+The public build variable is a build selector, not an access control. Before
+setting it, restrict the `studio-acceptance` branch with Amplify's per-branch
+password access control. The branch URL follows
+`https://studio-acceptance.<Amplify app ID>.amplifyapp.com`.
+The build also fails closed unless `NEXT_PUBLIC_API_ACCESS_BASE_URL` exactly
+matches the production API endpoint verified in the current readiness record.
+
+The production API accepts that exact generated branch origin only when the
+optional `StudioAcceptanceOrigin` stack parameter is set. It accepts no wildcard,
+custom host, path, or second origin. The existing `SITE_ORIGIN`, partitioned
+session cookie, CSRF token, account binding, and revision checks remain in force.
+When a magic-link request comes from the exact configured acceptance branch, its
+link returns to that branch so the partitioned session stays in the same browser
+site partition. Requests without an origin retain the canonical-site callback.
+
+These repository changes do not create the branch, configure its password, turn
+on its branch-only build variable, or deploy the API origin. Complete the six
+real acceptance checks on that isolated surface before considering any broader
+release. The canonical site remains gated.
 
 ## Validation source
 

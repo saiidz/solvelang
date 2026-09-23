@@ -65,6 +65,7 @@ if (environment.customerAccountsEnabled) {
     emailGateway: createCustomerEmailGateway(new SESv2Client({}), { sender: environment.customerAuthEmailSender, replyTo: environment.customerAuthEmailReplyTo }),
     pepper: environment.customerAuthPepper,
     siteOrigin: environment.siteOrigin,
+    studioAcceptanceOrigin: environment.studioAcceptanceOrigin,
     totpFeatureEnabled: environment.customerTotpEnabled,
     totpProtector,
   }));
@@ -129,6 +130,7 @@ const application = createApiAccessHandler({
   enabled: environment.enabled,
   adminSecret: environment.adminSecret,
   siteOrigin: environment.siteOrigin,
+  studioAcceptanceOrigin: environment.studioAcceptanceOrigin,
   customerAccountsEnabled: environment.customerAccountsEnabled,
   customerTotpEnabled: environment.customerTotpEnabled,
   customerAuth,
@@ -142,6 +144,7 @@ const application = createApiAccessHandler({
 
 const studioWorkspaceApplication = createStudioWorkspaceHandler({
   enabled: environment.enabled && environment.customerAccountsEnabled, customerAuth, siteOrigin: environment.siteOrigin,
+  studioAcceptanceOrigin: environment.studioAcceptanceOrigin,
   store: environment.customerAccountsEnabled ? createStudioWorkspaceStore(documentClient, environment.customerAuthTable) : undefined,
 });
 

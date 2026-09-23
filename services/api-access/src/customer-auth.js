@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { ApiAccessError } from "./service.js";
+import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 import { authenticatorUri, encodeBase32, matchingTotpStep } from "./totp.js";
 
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1_000;
@@ -194,6 +195,7 @@ export function createCustomerAuthService({
   emailGateway,
   pepper,
   siteOrigin,
+  studioAcceptanceOrigin,
   totpFeatureEnabled = false,
   totpProtector,
   now = Date.now,
@@ -203,6 +205,7 @@ export function createCustomerAuthService({
   if (!emailGateway || typeof emailGateway.sendMagicLink !== "function") throw new Error("Customer email gateway is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
+  studioAcceptanceOrigin = parseStudioAcceptanceOrigin(studioAcceptanceOrigin, siteOrigin);
   if (totpFeatureEnabled && (!totpProtector || typeof totpProtector.encrypt !== "function" || typeof totpProtector.decrypt !== "function")) {
     throw new Error("TOTP secret protector is required when authenticator 2FA is enabled.");
   }
@@ -313,6 +316,10 @@ export function createCustomerAuthService({
   }
 
   async function requestMagicLink(input, context = {}) {
+    const linkOrigin = context.origin === undefined ? siteOrigin : context.origin;
+    if (!isAllowedStudioOrigin(linkOrigin, siteOrigin, studioAcceptanceOrigin)) {
+      throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
+    }
     const email = normalizeEmail(input?.email);
     const timestamp = now();
     const source = normalizeSource(context.sourceIp);
@@ -347,7 +354,7 @@ export function createCustomerAuthService({
       createdAt: new Date(timestamp).toISOString(),
       expiresAt: Math.floor((timestamp + MAGIC_LINK_TTL_MS) / 1_000),
     });
-    const url = `${siteOrigin}/account/api-keys/#magic_token=${encodeURIComponent(generated.token)}`;
+    const url = `${linkOrigin}/account/api-keys/#magic_token=${encodeURIComponent(generated.token)}`;
     await emailGateway.sendMagicLink({ email, url, expiresMinutes: 15 });
     return { accepted: true };
   }

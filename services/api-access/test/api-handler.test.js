@@ -223,6 +223,28 @@ test("customer routes support password login, credential setup, cookies, ownersh
   );
 });
 
+test("magic-link requests accept only the canonical or configured acceptance origin", async () => {
+  const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+  const requested = [];
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    studioAcceptanceOrigin: previewOrigin,
+    customerAccountsEnabled: true,
+    customerAuth: { requestMagicLink: async (_body, context) => requested.push(context) },
+    customerAccount: {},
+    logger: { error() {} },
+  });
+  const accepted = await handler(event("POST", "/customer/auth/magic-link", { email: "disposable@example.com" }, { origin: previewOrigin }));
+  assert.equal(accepted.statusCode, 202);
+  assert.equal(requested[0].origin, previewOrigin);
+  const denied = await handler(event("POST", "/customer/auth/magic-link", { email: "disposable@example.com" }, { origin: "https://studio-acceptance.dattacker.amplifyapp.com" }));
+  assert.equal(denied.statusCode, 403);
+  assert.equal(requested.length, 1);
+});
+
 test("signed Stripe webhooks bypass admin auth but require signature verification", async () => {
   const seen = [];
   const handler = createApiAccessHandler({
