@@ -1,17 +1,22 @@
 # `main` protection contract
 
-Last reconciled: 2026-09-16.
+Last reconciled: 2026-09-22.
 
 This document defines the repository-side contract for the GitHub ruleset protecting `main`. It does not itself mutate GitHub repository settings. The live ruleset remains authoritative and must be checked after any Settings change.
 
-## Current live gap
+## Current live ruleset
 
-Ruleset `Protect main` (ID `18206723`) is active for the default branch but currently enforces only:
+Ruleset `Protect main` (ID `18206723`) is active for the default branch. A live
+read on 2026-09-22 confirmed it enforces:
 
 - branch deletion protection;
-- non-fast-forward / force-push protection.
+- non-fast-forward / force-push protection;
+- pull requests before merge, with zero required approving reviews;
+- required review-thread resolution; and
+- strict, up-to-date status checks for exactly the four contexts below.
 
-It does **not** currently enforce pull-request-only changes, required status checks, or review-thread resolution.
+No bypass actors are configured. The live ruleset is authoritative; this
+repository document does not mutate GitHub settings.
 
 ## Safe globally required checks
 
@@ -33,9 +38,10 @@ These remain important and must be green whenever they are triggered, but they a
 
 Requiring either globally would leave unrelated pull requests waiting forever for a check that GitHub never schedules.
 
-## Intended GitHub ruleset
+## Enforced GitHub ruleset
 
-For `Settings → Rules → Rulesets → Protect main`, preserve the existing deletion and non-fast-forward protections and configure:
+The verified `Protect main` configuration preserves deletion and
+non-fast-forward protections and requires:
 
 - require a pull request before merging;
 - required approving reviews: **0** while the repository does not have a reliably available non-author reviewer;
@@ -48,9 +54,12 @@ Using zero required approvals still prevents direct pushes when the pull-request
 
 Do not add bypass actors merely to work around a failing or missing check. Fix the check, its trigger, or the branch instead.
 
-## Verification after the Settings change
+## Verification after a future Settings change
 
-Read the live ruleset through GitHub and confirm all of the following before calling governance enforcement complete:
+The live read on 2026-09-22 confirmed the configured rules above, including no
+bypass actors and zero required approving reviews. After any future Settings
+change, read the live ruleset again and confirm all of the following before
+calling governance enforcement complete:
 
 - target remains the default branch;
 - enforcement is active;

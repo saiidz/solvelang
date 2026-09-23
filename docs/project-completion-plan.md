@@ -1,12 +1,15 @@
 # SolveLang project completion plan
 
-## Current verification — 2026-09-20
+## Current verification — 2026-09-22
 
-MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+Repository status was re-audited on main
+`1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after #943. MCP v0.3.0 is
+published on npm and GitHub; main protection is enforced. Production
+observations retain their dated evidence sources.
 See [the current completion checklist](project-completion-evidence-2026-09-20.md) for fresh evidence and
 remaining live acceptance gates. Older checkpoints below are historical.
 
-_Canonical repository-completion checklist. Reconciled 2026-09-15 from `main` immediately after PR #920 (`5d07787c77dbe297b9bb52ba350669d6f9561a5e`). Live GitHub state always wins if this checkpoint becomes stale._
+_Canonical repository-completion checklist. Reconciled 2026-09-22 from baseline `main` `1dfe6f9d838dd17494b9f2c17ae5a0f6856d0ecd` after PR #943. Live GitHub state always wins if this checkpoint becomes stale._
 
 This plan records repository-safe work. It does **not** authorize production deployment, infrastructure mutation, customer/Admin mutation, email/task actions, live Stripe/provider activity, credential activation, production source execution, restore drills, release/package publication or Solve Runners/Solblend work.
 
@@ -142,7 +145,7 @@ Projection means **priority direction, not a promised date or unsupported comple
 
 1. **P0:** finish Solve Context evidence integrity, broader independent evaluation and real-agent measurement.
 2. **Completed:** required checks and resolved review threads are enforced on `main`.
-3. **P1:** qualify a versioned current-main MCP/plugin distribution after evidence remains green.
+3. **P1:** verify managed-workspace installation and public Plugin Directory listing for the published v0.3.0 package.
 4. **P1:** activate connected support/PostHog only through their separate approval/provider gates.
 5. **P1:** prepare billing/priority launch only after monitoring, recovery, legal/customer and live provider prerequisites are verified.
 6. **P1/P2:** carry native qualification forward to any proposed public release source/tag.

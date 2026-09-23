@@ -62,18 +62,20 @@ Record the workspace-visible plugin name, imported source commit, installation p
 
 Because this plugin declares an MCP server, product UI may label an imported plugin **Desktop only**. That label is a product/runtime constraint and is not evidence of a failed marketplace import.
 
-## Version truth before v0.3.0 publication
+## Published version truth
 
-The selected next candidate is v0.3.0, but the actually published MCP/plugin line remains v0.2.0.
+MCP `@solvelang/mcp-server@0.3.0` was published on npm and GitHub, verified
+2026-09-20. The current package, Codex/Claude manifests, Claude marketplace
+metadata and canonical MCP pin all use v0.3.0. The tagged source is the
+published release; later `main` changes are not included automatically.
 
-Until v0.3.0 is separately finalized and published:
+The v0.2.0 package line is historical. A managed-workspace import and an
+OpenAI Plugin Directory listing remain separate, unverified acceptance.
 
-- `packages/mcp-server/package.json` remains v0.2.0;
-- public Codex/Claude plugin manifests remain v0.2.0;
-- `plugins/solvelang/.mcp.json` pins `@solvelang/mcp-server@0.2.0`;
-- a workspace import must not be changed to point at unpublished v0.3.0 package metadata.
-
-PR #927 separately proves that current source can be staged into a clean-installable v0.3.0 tarball without changing those public pins.
+The repository's release-candidate state file records the fail-closed
+pre-publication qualification state; it is not a current npm publication record.
+Use the registry and [GitHub Release v0.3.0](https://github.com/saiidz/solvelang/releases/tag/v0.3.0)
+for publication evidence.
 
 ## Public Plugin Directory boundary
 
