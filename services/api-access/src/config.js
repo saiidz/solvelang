@@ -1,3 +1,5 @@
+import { parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
+
 function required(environment, name, minimum = 1) {
   const value = environment[name];
   if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`);
@@ -77,9 +79,11 @@ export function parseApiAccessEnvironment(environment = process.env) {
   const customer = customerAccounts(environment);
   const automation = supportAutomation(environment);
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
+  const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
     ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation,
-    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin: required(environment, "SITE_ORIGIN"),
+    adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
+    studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
   };
 }
 

@@ -34,6 +34,11 @@ Parameters:
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
+  StudioAcceptanceOrigin:
+    Type: String
+    Default: ""
+    Description: Exact dedicated Amplify acceptance-branch origin; blank disables it.
+    AllowedPattern: '^$|^https://studio-acceptance\.d[a-z0-9]+\.amplifyapp\.com$'
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -116,6 +121,7 @@ Conditions:
   CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
   AdminCrmFeatureEnabled: !Equals [!Ref AdminCrmEnabled, "true"]
+  StudioAcceptanceOriginConfigured: !Not [!Equals [!Ref StudioAcceptanceOrigin, ""]]
 
 Resources:
   ApiAccountsTable:
@@ -256,8 +262,10 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
-        AllowOrigins:
-          - !Ref SiteOrigin
+        AllowOrigins: !If
+          - StudioAcceptanceOriginConfigured
+          - [!Ref SiteOrigin, !Ref StudioAcceptanceOrigin]
+          - [!Ref SiteOrigin]
         AllowCredentials: true
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders:
@@ -304,6 +312,7 @@ Resources:
           API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
+          STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex

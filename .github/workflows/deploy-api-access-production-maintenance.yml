@@ -8,6 +8,20 @@ on:
         required: true
         default: false
         type: boolean
+      studio_acceptance_origin_action:
+        description: Preserve the existing origin, enable the exact dedicated acceptance branch origin, or disable it
+        required: true
+        default: preserve
+        type: choice
+        options:
+          - preserve
+          - enable
+          - disable
+      studio_acceptance_origin:
+        description: Exact https://studio-acceptance.d<app-id>.amplifyapp.com origin; required only when action is enable
+        required: false
+        default: ""
+        type: string
 
 permissions:
   actions: read
@@ -26,6 +40,8 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
       EXECUTE_MAINTENANCE: ${{ inputs.execute_maintenance }}
+      STUDIO_ACCEPTANCE_ORIGIN_ACTION: ${{ inputs.studio_acceptance_origin_action }}
+      STUDIO_ACCEPTANCE_ORIGIN: ${{ inputs.studio_acceptance_origin }}
     steps:
       - uses: actions/checkout@v4
       - name: Require main and the existing production stack
@@ -72,7 +88,7 @@ jobs:
             echo "- Commit: $GITHUB_SHA"
             echo "- Execute requested: $EXECUTE_MAINTENANCE"
             echo "- All existing parameters retained with UsePreviousValue."
-            echo "- Only API/Lambda code, routes and the two Studio invoke permissions allowed."
+            echo "- Only API/Lambda code, routes, the exact Studio acceptance-origin parameter/environment/CORS, and the two Studio invoke permissions are allowed."
             echo "- Data/IAM changes, resource replacement and feature activation rejected."
-            echo "- Account-saving frontend remains separately gated pending two-account acceptance."
+            echo "- Canonical account-saving build remains gated; an acceptance-branch origin does not enable the main-site UI."
           } >> "$GITHUB_STEP_SUMMARY"

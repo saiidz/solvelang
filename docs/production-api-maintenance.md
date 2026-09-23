@@ -18,16 +18,26 @@ account-authentication, or API-key secrets.
    commit with `execute_maintenance=true` under deployment authorization.
 4. Verify unchanged parameter values/health flags and the Studio route's 401
    response without a customer session. Retain the Actions run as evidence.
-5. Complete authenticated two-account/cross-device acceptance before setting
-   `NEXT_PUBLIC_STUDIO_ACCOUNT_SAVING_ENABLED=true` in the site build.
+5. For acceptance only, protect the dedicated Amplify `studio-acceptance` branch
+   with per-branch password access control before enabling its branch-only build
+   variable. The canonical `main` build remains feature-off.
 
 Every existing parameter uses `UsePreviousValue`, including secrets and enabled
-billing/TOTP/CRM flags. Parameter additions/removals, IAM/data-resource changes,
-resource replacements, non-resource template changes (including Outputs, Rules,
-Conditions and parameter definitions), and unrelated route permissions fail closed. Allowed
-changes are the two existing Lambda code packages, the API body, and the two
-Studio invoke permissions. This intentionally narrow path may reject other
-maintenance work; expand it only through a separately reviewed requirement.
+billing/TOTP/CRM flags. The sole optional parameter transition is the exact
+`StudioAcceptanceOrigin`, defaulting to empty and restricted to
+`https://studio-acceptance.d<app-id>.amplifyapp.com`. Its value can be preserved,
+enabled, or disabled explicitly. The maintenance projection permits only the
+corresponding exact Lambda environment variable and API CORS body changes in
+addition to the existing code/routes and Studio invoke permissions. Other
+parameter additions/removals, IAM/data-resource changes, resource replacements,
+non-resource template changes (including unrelated Outputs, Rules, Conditions
+and parameter definitions), and unrelated route permissions fail closed.
+
+The CORS allowlist keeps the canonical origin and adds at most that one exact
+acceptance branch origin; it never uses `*`. Enabling or disabling this origin
+requires the protected production workflow and deployment authorization. The
+workflow verifies the exact credentialed CORS preflight when an origin is set,
+plus the existing health, parameter-preservation, and unauthenticated 401 checks.
 
 CloudFormation performs its normal automatic rollback if an update fails.
 If the update finishes but health/parameter/Studio-auth checks fail, the script
@@ -45,8 +55,8 @@ The first real preview (run 35529275426) refused a proposed CRM table change
 and did not execute a stack update. SAM source defaults can differ from live
 operational hardening. Maintenance therefore expands SAM in a non-executed
 compilation change set, then creates a second template from the deployed
-processed template, copying only the two Lambda Code properties, the API Body,
-and the two new Studio permissions. Existing data/IAM/feature settings remain
+processed template, copying only the two Lambda Code properties, the exact
+acceptance-origin environment variable, the API Body, and the two new Studio permissions. Existing data/IAM/feature settings remain
 byte-for-byte equivalent after canonical comparison. Stack-level edits and
 unrelated resource additions/removals are still rejected. The final projected
 change set undergoes the same resource and complete-template validation before

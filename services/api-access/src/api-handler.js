@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { ApiAccessError } from "./service.js";
+import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -45,6 +46,7 @@ export function createApiAccessHandler({
   enabled = false,
   adminSecret,
   siteOrigin,
+  studioAcceptanceOrigin,
   customerAccountsEnabled = false,
   customerTotpEnabled = false,
   customerAuth,
@@ -59,6 +61,7 @@ export function createApiAccessHandler({
   if (!service) throw new Error("API access service is required.");
   if (typeof adminSecret !== "string" || adminSecret.length < 32) throw new Error("API access admin secret is required.");
   if (typeof siteOrigin !== "string" || !siteOrigin) throw new Error("Site origin is required.");
+  studioAcceptanceOrigin = parseStudioAcceptanceOrigin(studioAcceptanceOrigin, siteOrigin);
   if (customerTotpEnabled && !customerAccountsEnabled) {
     throw new Error("Authenticator 2FA cannot be enabled when customer accounts are disabled.");
   }
@@ -150,7 +153,11 @@ export function createApiAccessHandler({
 
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp });
+        const origin = header(event, "origin");
+        if (origin !== undefined && !isAllowedStudioOrigin(origin, siteOrigin, studioAcceptanceOrigin)) {
+          throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
+        }
+        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
         return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {

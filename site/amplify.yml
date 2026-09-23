@@ -6,9 +6,10 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - npm run test:studio-acceptance-build
         build:
           commands:
-            - npm run build
+            - npm run build:studio-acceptance
       artifacts:
         baseDirectory: out
         files:
