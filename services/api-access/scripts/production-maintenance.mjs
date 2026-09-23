@@ -81,7 +81,12 @@ const canonical = value => JSON.stringify(value, function (_key, item) {
   return item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item).sort(([a],[b]) => a.localeCompare(b))) : item;
 });
-function assertApiCorsOriginOnly(beforeBody, afterBody, {siteOrigin, studioAcceptanceOrigin} = {}) {
+function assertApiCorsOriginOnly(beforeBody, afterBody, {
+  siteOrigin,
+  studioAcceptanceOrigin,
+  currentStudioAcceptanceOrigin = '',
+  studioAcceptanceOriginAction = 'preserve',
+} = {}) {
   const parseBody = body => {
     if (typeof body !== 'string') return body;
     try { return JSON.parse(body); }
@@ -102,9 +107,9 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {siteOrigin, studioAccep
   };
   const beforeCors = locateCors(beforeBody), afterCors = locateCors(afterBody);
   if (canonical(beforeCors.path) !== canonical(afterCors.path)) throw new Error('Maintenance moved the API Gateway CORS configuration.');
-  const baselineOrigins = [{ Ref: 'SiteOrigin' }];
-  if (siteOrigin) baselineOrigins.push(siteOrigin);
-  if (!baselineOrigins.some(expected => canonical(beforeCors.cors.allowOrigins) === canonical([expected]))) throw new Error('Maintenance changes the existing API Gateway origin.');
+  const baselineOrigins = [[{ Ref: 'SiteOrigin' }]];
+  if (siteOrigin) baselineOrigins.push([siteOrigin, ...(currentStudioAcceptanceOrigin ? [currentStudioAcceptanceOrigin] : [])]);
+  if (!baselineOrigins.some(expected => canonical(beforeCors.cors.allowOrigins) === canonical(expected))) throw new Error('Maintenance changes the existing API Gateway origin.');
   const withoutOrigins = body => {
     const copy = structuredClone(body);
     let removed = 0;
@@ -120,7 +125,9 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {siteOrigin, studioAccep
   };
   if (canonical(withoutOrigins(beforeBody)) !== canonical(withoutOrigins(afterBody))) throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
   const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
-  const exactLiteralOrigins = siteOrigin && studioAcceptanceOrigin ? [siteOrigin, studioAcceptanceOrigin] : undefined;
+  const resolvedAcceptanceOrigin = studioAcceptanceOriginAction === 'enable' ? studioAcceptanceOrigin
+    : studioAcceptanceOriginAction === 'disable' ? '' : currentStudioAcceptanceOrigin;
+  const exactLiteralOrigins = siteOrigin ? [siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])] : undefined;
   if (canonical(afterCors.cors.allowOrigins) !== canonical(expected)
     && (!exactLiteralOrigins || canonical(afterCors.cors.allowOrigins) !== canonical(exactLiteralOrigins))) {
     throw new Error('Maintenance adds an unexpected API Gateway CORS origin.');
@@ -297,7 +304,13 @@ async function main() {
       const processed = typeof processedResult === 'string' ? JSON.parse(processedResult) : processedResult;
       const deployedResult = json('cloudformation','get-template','--stack-name',STACK_NAME,'--template-stage','Processed').TemplateBody;
       const deployed = typeof deployedResult === 'string' ? JSON.parse(deployedResult) : deployedResult;
-      assertTemplateBoundary(deployed, processed, {rollback, siteOrigin: siteOriginFrom(planningBaseline, deployed), studioAcceptanceOrigin: acceptedOriginRequest.action === 'enable' ? acceptedOriginRequest.origin : undefined});
+      assertTemplateBoundary(deployed, processed, {
+        rollback,
+        siteOrigin: siteOriginFrom(planningBaseline, deployed),
+        studioAcceptanceOrigin: acceptedOriginRequest.action === 'enable' ? acceptedOriginRequest.origin : undefined,
+        currentStudioAcceptanceOrigin: planningBaseline.Parameters?.find(parameter => parameter.ParameterKey === acceptanceParameter)?.ParameterValue ?? '',
+        studioAcceptanceOriginAction: acceptedOriginRequest.action,
+      });
       assertPreserved(planningBaseline, stack());
       console.log(`${rollback ? 'Rollback' : 'Maintenance'}: ${changes.Changes.length} allowed code/route/acceptance-origin changes; unrelated parameters are preserved.`);
       if (!rollback && EXECUTE_MAINTENANCE !== 'true') {
@@ -329,6 +342,8 @@ async function main() {
     projected = projectMaintenanceTemplate(previous, typeof body === 'string' ? JSON.parse(body) : body, {
       siteOrigin: siteOriginFrom(before, previous),
       studioAcceptanceOrigin: acceptedOriginRequest.action === 'enable' ? acceptedOriginRequest.origin : undefined,
+      currentStudioAcceptanceOrigin: before.Parameters?.find(parameter => parameter.ParameterKey === acceptanceParameter)?.ParameterValue ?? '',
+      studioAcceptanceOriginAction: acceptedOriginRequest.action,
     });
   } finally {
     aws('cloudformation','delete-change-set','--stack-name',STACK_NAME,'--change-set-name',compilation.Id);
