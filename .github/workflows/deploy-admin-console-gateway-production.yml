@@ -8,8 +8,8 @@ on:
         required: true
         default: false
         type: boolean
-      confirm_billing_remains_disabled:
-        description: Confirm subscription billing, Stripe, webhooks, charges, and customer data remain untouched
+      confirm_billing_state_preserved:
+        description: Confirm the current subscription billing flag is preserved and no Stripe, webhook, charge, or customer action is performed
         required: true
         default: false
         type: boolean
@@ -46,7 +46,7 @@ jobs:
           [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Production admin gateway deployment must run from main." >&2; exit 1; }
           [[ "$(git rev-parse HEAD)" == "$GITHUB_SHA" ]] || { echo "Checked-out commit does not match GITHUB_SHA." >&2; exit 1; }
           [[ "${{ inputs.confirm_production_admin_gateway }}" == true ]] || { echo "Explicit admin gateway confirmation is required." >&2; exit 1; }
-          [[ "${{ inputs.confirm_billing_remains_disabled }}" == true ]] || { echo "Explicit billing-disabled confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_billing_state_preserved }}" == true ]] || { echo "Explicit billing-state preservation confirmation is required." >&2; exit 1; }
           [[ "$GATEWAY_STACK_NAME" == "solvelang-api-access-production-admin-console" ]]
           [[ "$API_STACK_NAME" == *prod* || "$API_STACK_NAME" == *production* ]]
           [[ "$API_STACK_NAME" != *test* ]]
@@ -89,10 +89,11 @@ jobs:
           customers="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerAccountsEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
           crm="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$api_stack")"
           billing="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
-          [[ "$api_enabled" == true && "$customers" == true && "$crm" == true && "$billing" == false ]]
+          [[ "$api_enabled" == true && "$customers" == true && "$crm" == true ]]
+          [[ "$billing" == true || "$billing" == false ]] || { echo "Unable to determine the current subscription billing flag." >&2; exit 1; }
           test -n "$api_base"
           health="$(curl --fail --silent --show-error "$api_base/health")"
-          jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
+          jq -e --argjson expectedBilling "$billing" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == $expectedBilling' <<<"$health" >/dev/null
 
           previous_enabled=false
           set +e
@@ -113,6 +114,7 @@ jobs:
           {
             echo "api_base=$api_base"
             echo "previous_enabled=$previous_enabled"
+            echo "billing_enabled=$billing"
           } >> "$GITHUB_OUTPUT"
 
       - name: Run gateway tests
@@ -180,6 +182,7 @@ jobs:
         id: verify
         env:
           API_BASE: ${{ steps.baseline.outputs.api_base }}
+          EXPECTED_BILLING: ${{ steps.baseline.outputs.billing_enabled }}
         shell: bash
         run: |
           set -euo pipefail
@@ -199,7 +202,10 @@ jobs:
           grep -Fqi 'cache-control: no-store' /tmp/admin-session.headers
           api_stack="$(aws cloudformation describe-stacks --stack-name "$API_STACK_NAME" --output json)"
           [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$api_stack")" == true ]]
-          [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")" == false ]]
+          billing_after="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
+          [[ "$billing_after" == "$EXPECTED_BILLING" ]] || { echo "Production billing configuration changed during Admin Gateway deployment." >&2; exit 1; }
+          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          jq -e --argjson expectedBilling "$EXPECTED_BILLING" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == $expectedBilling' <<<"$health" >/dev/null
           echo "gateway_base=$gateway_base" >> "$GITHUB_OUTPUT"
 
       - name: Restore previous gateway flag after post-deploy verification failure
@@ -233,7 +239,8 @@ jobs:
         if: ${{ success() }}
         env:
           GATEWAY_BASE: ${{ steps.verify.outputs.gateway_base }}
+          BILLING_ENABLED: ${{ steps.baseline.outputs.billing_enabled }}
         shell: bash
         run: |
-          printf '## SolveLang private Admin gateway production rollout\n\n- Commit: `%s`\n- Gateway stack: `%s`\n- Gateway origin: `%s`\n- Gateway API base: `%s`\n- Admin CRM backend preserved: **true**\n- Subscription billing enabled: **false**\n- Stripe/webhook used: **no**\n- Customer/CRM mutation by verification: **no**\n- Email sent: **no**\n- Charges performed: **no**\n- Termination protection: **enabled**\n\nStatic admin hosting and external ingress controls remain a separate deployment decision.\n' \
-            "$GITHUB_SHA" "$GATEWAY_STACK_NAME" "$ADMIN_ORIGIN" "$GATEWAY_BASE" >> "$GITHUB_STEP_SUMMARY"
+          printf '## SolveLang private Admin gateway production rollout\n\n- Commit: `%s`\n- Gateway stack: `%s`\n- Gateway origin: `%s`\n- Gateway API base: `%s`\n- Admin CRM backend preserved: **true**\n- Subscription billing flag preserved: **%s**\n- Stripe/webhook used: **no**\n- Customer/CRM mutation by verification: **no**\n- Email sent: **no**\n- Charges performed: **no**\n- Termination protection: **enabled**\n\nStatic admin hosting and external ingress controls remain a separate deployment decision.\n' \
+            "$GITHUB_SHA" "$GATEWAY_STACK_NAME" "$ADMIN_ORIGIN" "$GATEWAY_BASE" "$BILLING_ENABLED" >> "$GITHUB_STEP_SUMMARY"
