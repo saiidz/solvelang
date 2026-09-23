@@ -64,11 +64,11 @@ export function assertMaintenanceChanges(changes, {rollback = false} = {}) {
     const targetNames = details?.map(detail => detail.Target?.Name) ?? [];
     const lambdaCodeOnly = c.ResourceType === 'AWS::Lambda::Function' && functionIds.has(c.LogicalResourceId)
       && targetNames.length > 0 && targetNames.every(name => name === 'Code');
-    const acceptanceEnvironmentOnly = c.ResourceType === 'AWS::Lambda::Function' && c.LogicalResourceId === 'ApiAccessFunction'
-      && targetNames.length > 0 && targetNames.every(name => ['Environment', 'Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN'].includes(name));
+    const apiAccessFunctionOnly = c.ResourceType === 'AWS::Lambda::Function' && c.LogicalResourceId === 'ApiAccessFunction'
+      && targetNames.length > 0 && targetNames.every(name => ['Code', 'Environment', 'Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN'].includes(name));
     const apiBodyOnly = c.ResourceType === 'AWS::ApiGatewayV2::Api' && c.LogicalResourceId === 'ApiAccessHttpApi'
       && targetNames.length > 0 && targetNames.every(name => name === 'Body');
-    const permitted = lambdaCodeOnly || acceptanceEnvironmentOnly || apiBodyOnly;
+    const permitted = lambdaCodeOnly || apiAccessFunctionOnly || apiBodyOnly;
     if (!permitted || c.Action !== 'Modify' || !Array.isArray(c.Scope) || c.Scope.some(scope => scope !== 'Properties')
       || details.some(detail => detail.Target?.Attribute !== 'Properties' || detail.Target.RequiresRecreation !== 'Never')) {
       throw new Error(`Maintenance refuses ${c.Action} ${c.ResourceType} ${c.LogicalResourceId}.`);

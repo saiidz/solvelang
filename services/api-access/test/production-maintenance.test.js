@@ -26,6 +26,12 @@ test('every parameter including secrets and enabled billing uses previous value'
 test('code, route and bounded acceptance-environment updates pass; replacements, IAM, storage and deletions fail closed',()=>{
  assertMaintenanceChanges([change(),change('ApiAccessHttpApi','AWS::ApiGatewayV2::Api','Body')]);
  assertMaintenanceChanges([change('ApiAccessFunction','AWS::Lambda::Function','Environment')]);
+ for(const target of ['Environment','Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN']){
+  const combined=change();combined.ResourceChange.Details.push({Target:{Attribute:'Properties',Name:target,RequiresRecreation:'Never'}});
+  assertMaintenanceChanges([combined]);
+ }
+ const unrelatedEnvironment=change();unrelatedEnvironment.ResourceChange.Details.push({Target:{Attribute:'Properties',Name:'Environment.Variables.UNRELATED_SETTING',RequiresRecreation:'Never'}});
+ assert.throws(()=>assertMaintenanceChanges([unrelatedEnvironment]));
  for(const c of [change('ApiKeyAuthorizerFunction','AWS::Lambda::Function','Environment'),change('Table','AWS::DynamoDB::Table','BillingMode'),change('Role','AWS::IAM::Role','Policies'),{Type:'Resource',ResourceChange:{...change().ResourceChange,Replacement:'Conditional'}},{Type:'Resource',ResourceChange:{...change().ResourceChange,Action:'Remove'}}])assert.throws(()=>assertMaintenanceChanges([c]));
  assert.throws(()=>assertMaintenanceChanges([]));
 });
