@@ -103,37 +103,62 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
     };
     visit(body);
     if (matches.length !== 1) throw new Error(`Maintenance requires one API Gateway CORS definition in the ${label} API body (found ${matches.length}).`);
-    if (!matches[0].cors || !Object.hasOwn(matches[0].cors, 'allowOrigins')) {
-      const keys = matches[0].cors && typeof matches[0].cors === 'object' ? Object.keys(matches[0].cors).sort().join(', ') : 'none';
-      throw new Error(`Maintenance requires an explicit API Gateway CORS origin list in the ${label} API body (found keys: ${keys}).`);
-    }
+    if (!matches[0].cors || typeof matches[0].cors !== 'object') throw new Error(`Maintenance requires a structured API Gateway CORS definition in the ${label} API body.`);
     return matches[0];
   };
   const beforeCors = locateCors(beforeBody, 'deployed'), afterCors = locateCors(afterBody, 'proposed');
   if (canonical(beforeCors.path) !== canonical(afterCors.path)) throw new Error('Maintenance moved the API Gateway CORS configuration.');
-  const baselineOrigins = [[{ Ref: 'SiteOrigin' }]];
-  if (siteOrigin) baselineOrigins.push([siteOrigin, ...(currentStudioAcceptanceOrigin ? [currentStudioAcceptanceOrigin] : [])]);
-  if (!baselineOrigins.some(expected => canonical(beforeCors.cors.allowOrigins) === canonical(expected))) throw new Error('Maintenance changes the existing API Gateway origin.');
-  const withoutOrigins = body => {
+  const withoutCorsExtension = (body, path) => {
     const copy = structuredClone(body);
-    let removed = 0;
-    const visit = value => {
-      if (!value || typeof value !== 'object') return;
-      const cors = value['x-amazon-apigateway-cors'];
-      if (cors && Object.hasOwn(cors, 'allowOrigins')) { delete cors.allowOrigins; removed += 1; }
-      for (const child of Object.values(value)) visit(child);
-    };
-    visit(copy);
-    if (removed !== 1) throw new Error('Maintenance could not isolate the API Gateway CORS origin list.');
+    const parent = path.slice(0, -1).reduce((value, key) => value[key], copy);
+    delete parent[path.at(-1)];
     return copy;
   };
-  if (canonical(withoutOrigins(beforeBody)) !== canonical(withoutOrigins(afterBody))) throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
+  if (canonical(withoutCorsExtension(beforeBody, beforeCors.path)) !== canonical(withoutCorsExtension(afterBody, afterCors.path))) {
+    throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
+  }
+  const corsVariants = (cors, label) => {
+    if (Object.hasOwn(cors, 'allowOrigins')) return {condition: null, variants: [cors]};
+    const conditional = cors['Fn::If'];
+    if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
+      && conditional[1] && typeof conditional[1] === 'object' && !Array.isArray(conditional[1])
+      && conditional[2] && typeof conditional[2] === 'object' && !Array.isArray(conditional[2])
+      && conditional.slice(1).every(branch => Object.hasOwn(branch, 'allowOrigins'))) {
+      return {condition: conditional[0], variants: conditional.slice(1)};
+    }
+    const keys = Object.keys(cors).sort().join(', ') || 'none';
+    throw new Error(`Maintenance requires explicit API Gateway CORS origin lists in every ${label} branch (found keys: ${keys}).`);
+  };
+  const beforeVariants = corsVariants(beforeCors.cors, 'deployed');
+  const afterVariants = corsVariants(afterCors.cors, 'proposed');
+  const baselineOrigins = [[{ Ref: 'SiteOrigin' }]];
+  if (siteOrigin) baselineOrigins.push([siteOrigin, ...(currentStudioAcceptanceOrigin ? [currentStudioAcceptanceOrigin] : [])]);
+  const originsMatchBaseline = origins => baselineOrigins.some(expected => canonical(origins) === canonical(expected));
+  const baselineConditional = beforeVariants.condition === acceptanceCondition
+    && canonical(beforeVariants.variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
+    && canonical(beforeVariants.variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
+  if (!baselineConditional && !beforeVariants.variants.every(variant => originsMatchBaseline(variant.allowOrigins))) {
+    throw new Error('Maintenance changes the existing API Gateway origin.');
+  }
+  const withoutOrigins = variant => { const copy = structuredClone(variant); delete copy.allowOrigins; return copy; };
+  const beforeSettings = beforeVariants.variants.map(withoutOrigins);
+  if (!afterVariants.variants.every(variant => beforeSettings.some(settings => canonical(settings) === canonical(withoutOrigins(variant))))
+    || !beforeSettings.every(settings => afterVariants.variants.some(variant => canonical(settings) === canonical(withoutOrigins(variant))))) {
+    throw new Error('Maintenance changes API Gateway settings beyond the CORS origin list.');
+  }
   const expected = { 'Fn::If': [acceptanceCondition, [{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }], [{ Ref: 'SiteOrigin' }]] };
   const resolvedAcceptanceOrigin = studioAcceptanceOriginAction === 'enable' ? studioAcceptanceOrigin
     : studioAcceptanceOriginAction === 'disable' ? '' : currentStudioAcceptanceOrigin;
   const exactLiteralOrigins = siteOrigin ? [siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])] : undefined;
-  if (canonical(afterCors.cors.allowOrigins) !== canonical(expected)
-    && (!exactLiteralOrigins || canonical(afterCors.cors.allowOrigins) !== canonical(exactLiteralOrigins))) {
+  const symbolicBranches = afterVariants.condition === acceptanceCondition
+    && canonical(afterVariants.variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
+    && canonical(afterVariants.variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
+  const literalBranches = siteOrigin && afterVariants.condition === acceptanceCondition
+    && canonical(afterVariants.variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])])
+    && canonical(afterVariants.variants[1].allowOrigins) === canonical([siteOrigin]);
+  const directExpected = afterVariants.condition === null && (canonical(afterVariants.variants[0].allowOrigins) === canonical(expected)
+    || Boolean(exactLiteralOrigins && canonical(afterVariants.variants[0].allowOrigins) === canonical(exactLiteralOrigins)));
+  if (!symbolicBranches && !literalBranches && !directExpected) {
     throw new Error('Maintenance adds an unexpected API Gateway CORS origin.');
   }
 }
