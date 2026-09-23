@@ -94,7 +94,7 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   };
   beforeBody = parseBody(beforeBody);
   afterBody = parseBody(afterBody);
-  const locateCors = body => {
+  const locateCors = (body, label) => {
     const matches = [];
     const visit = (value, path = []) => {
       if (!value || typeof value !== 'object') return;
@@ -102,10 +102,14 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
       for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
     };
     visit(body);
-    if (matches.length !== 1 || !matches[0].cors || !Object.hasOwn(matches[0].cors, 'allowOrigins')) throw new Error('Maintenance requires one explicit API Gateway CORS origin list.');
+    if (matches.length !== 1) throw new Error(`Maintenance requires one API Gateway CORS definition in the ${label} API body (found ${matches.length}).`);
+    if (!matches[0].cors || !Object.hasOwn(matches[0].cors, 'allowOrigins')) {
+      const keys = matches[0].cors && typeof matches[0].cors === 'object' ? Object.keys(matches[0].cors).sort().join(', ') : 'none';
+      throw new Error(`Maintenance requires an explicit API Gateway CORS origin list in the ${label} API body (found keys: ${keys}).`);
+    }
     return matches[0];
   };
-  const beforeCors = locateCors(beforeBody), afterCors = locateCors(afterBody);
+  const beforeCors = locateCors(beforeBody, 'deployed'), afterCors = locateCors(afterBody, 'proposed');
   if (canonical(beforeCors.path) !== canonical(afterCors.path)) throw new Error('Maintenance moved the API Gateway CORS configuration.');
   const baselineOrigins = [[{ Ref: 'SiteOrigin' }]];
   if (siteOrigin) baselineOrigins.push([siteOrigin, ...(currentStudioAcceptanceOrigin ? [currentStudioAcceptanceOrigin] : [])]);
