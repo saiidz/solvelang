@@ -121,9 +121,10 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
     if (Object.hasOwn(cors, 'allowOrigins')) return {condition: null, variants: [cors]};
     const conditional = cors['Fn::If'];
     const shapeOf = (value, depth = 0) => {
-      if (Array.isArray(value)) return `array(${value.length})`;
+      if (Array.isArray(value)) return `array(${value.length})<${value.slice(0, 8).map(item => shapeOf(item, depth + 1)).join(',')}${value.length > 8 ? ',…' : ''}>`;
       if (!value || typeof value !== 'object') return value === null ? 'null' : typeof value;
       const keys = Object.keys(value).sort();
+      if (keys.length === 1 && keys[0] === 'Ref' && typeof value.Ref === 'string' && /^[A-Za-z][A-Za-z0-9]+$/.test(value.Ref)) return `Ref(${value.Ref})`;
       return depth >= 2 ? `object{${keys.join(',')}}` : `object{${keys.map(key => `${key}:${shapeOf(value[key], depth + 1)}`).join(',')}}`;
     };
     if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
