@@ -32,7 +32,7 @@ test('code, route and bounded acceptance-environment updates pass; replacements,
  }
  const unrelatedEnvironment=change();unrelatedEnvironment.ResourceChange.Details.push({Target:{Attribute:'Properties',Name:'Environment.Variables.UNRELATED_SETTING',RequiresRecreation:'Never'}});
  assert.throws(()=>assertMaintenanceChanges([unrelatedEnvironment]));
- for(const c of [change('ApiKeyAuthorizerFunction','AWS::Lambda::Function','Environment'),change('Table','AWS::DynamoDB::Table','BillingMode'),change('Role','AWS::IAM::Role','Policies'),{Type:'Resource',ResourceChange:{...change().ResourceChange,Replacement:'Conditional'}},{Type:'Resource',ResourceChange:{...change().ResourceChange,Action:'Remove'}}])assert.throws(()=>assertMaintenanceChanges([c]));
+ for(const c of [change('ApiKeyAuthorizerFunction','AWS::Lambda::Function','Environment'),change('ApiKeyAuthorizerFunction','AWS::Lambda::Function','Code'),change('Table','AWS::DynamoDB::Table','BillingMode'),change('Role','AWS::IAM::Role','Policies'),{Type:'Resource',ResourceChange:{...change().ResourceChange,Replacement:'Conditional'}},{Type:'Resource',ResourceChange:{...change().ResourceChange,Action:'Remove'}}])assert.throws(()=>assertMaintenanceChanges([c]));
  assert.throws(()=>assertMaintenanceChanges([]));
 });
 test('only the exact Studio invoke permissions can be added and removed on rollback',()=>{
@@ -54,9 +54,11 @@ test('parameter and health drift fails acceptance without revealing values',()=>
 });
 
 test('processed template comparison rejects invisible stack-level edits and preserves arbitrary key order',()=>{
- const original={Parameters:{Secret:{NoEcho:true,Type:'String'}},Outputs:{ApiAccessBaseUrl:{Value:'original'}},Rules:{rule:{Assertions:[]}},Resources:{ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{FEATURE:'true'}}}},ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{old:true}}}}};
- const candidate=structuredClone(original);candidate.Parameters.StudioAcceptanceOrigin=structuredClone(acceptanceParameter);candidate.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};candidate.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};candidate.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};candidate.Resources.ApiAccessHttpApi.Properties.Body={updated:true};
+ const corsBody=()=>({openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{allowOrigins:[{Ref:'SiteOrigin'}],allowMethods:['GET'],allowHeaders:['authorization']}});
+ const original={Parameters:{Secret:{NoEcho:true,Type:'String'}},Outputs:{ApiAccessBaseUrl:{Value:'original'}},Rules:{rule:{Assertions:[]}},Resources:{ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{FEATURE:'true'}}}},ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:corsBody()}}}};
+ const candidate=structuredClone(original);candidate.Parameters.StudioAcceptanceOrigin=structuredClone(acceptanceParameter);candidate.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};candidate.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};candidate.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};candidate.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
  assertTemplateBoundary(original,candidate);
+ const apiDrift=structuredClone(candidate);apiDrift.Resources.ApiAccessHttpApi.Properties.Body.paths['/unexpected']={};assert.throws(()=>assertTemplateBoundary(original,apiDrift),/API Gateway settings/);
  for(const mutate of [v=>{delete v.Outputs.ApiAccessBaseUrl;},v=>{v.Parameters.Secret.Default='new';},v=>{v.Parameters.StudioAcceptanceOrigin.AllowedPattern='.*';},v=>{v.Conditions.StudioAcceptanceOriginConfigured={'Fn::Equals':['1','1']};},v=>{delete v.Rules;},v=>{v.Resources.ApiAccessFunction.DeletionPolicy='Delete';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.FEATURE='false';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN=previewOrigin;}]){
    const bad=structuredClone(candidate);mutate(bad);assert.throws(()=>assertTemplateBoundary(original,bad),/Maintenance|Studio acceptance environment/);
  }
@@ -66,7 +68,7 @@ test('maintenance projection preserves deployed table and IAM settings despite s
  const deployed={Parameters:{},Outputs:{Base:{Value:'stable'}},Resources:{
   ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{BILLING:'true'}}}},
   ApiKeyAuthorizerFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'}}},
-  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{old:true},Name:'stable'}},
+  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{allowOrigins:[{Ref:'SiteOrigin'}],allowMethods:['GET'],allowHeaders:['authorization']}},Name:'stable'}},
   AdminCrmTable:{Type:'AWS::DynamoDB::Table',Properties:{PointInTimeRecoverySpecification:{PointInTimeRecoveryEnabled:true}}},
   Role:{Type:'AWS::IAM::Role',Properties:{Policies:['deployed-policy']}}
  }};
@@ -75,16 +77,18 @@ test('maintenance projection preserves deployed table and IAM settings despite s
  compiled.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};
  compiled.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};
  compiled.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};
- compiled.Resources.ApiAccessHttpApi.Properties.Body={newRoute:true};
+ compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
+ compiled.Resources.ApiKeyAuthorizerFunction.Properties.Code={S3Key:'unauthorized-change'};
  compiled.Resources.AdminCrmTable.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled=false;
  compiled.Resources.Role.Properties.Policies=['source-policy'];
  const result=projectMaintenanceTemplate(deployed,compiled);
+ assert.deepEqual(result.Resources.ApiKeyAuthorizerFunction,deployed.Resources.ApiKeyAuthorizerFunction);
  assert.deepEqual(result.Resources.AdminCrmTable,deployed.Resources.AdminCrmTable);
  assert.deepEqual(result.Resources.Role,deployed.Resources.Role);
  assert.deepEqual(result.Resources.ApiAccessFunction.Properties.Code,{S3Key:'new'});
  assert.deepEqual(result.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN,{Ref:'StudioAcceptanceOrigin'});
  assert.deepEqual(result.Parameters.StudioAcceptanceOrigin,acceptanceParameter);
- assert.deepEqual(result.Resources.ApiAccessHttpApi.Properties.Body,{newRoute:true});
+ assert.deepEqual(result.Resources.ApiAccessHttpApi.Properties.Body,compiled.Resources.ApiAccessHttpApi.Properties.Body);
  assertTemplateBoundary(deployed,result);
  compiled.Outputs.Base.Value='changed';assert.throws(()=>projectMaintenanceTemplate(deployed,compiled),/stack-level/);
 });
