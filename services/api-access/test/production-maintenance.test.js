@@ -80,6 +80,8 @@ test('processed template comparison rejects invisible stack-level edits and pres
  assert.throws(()=>assertTemplateBoundary(original,transformedCorsShape),/proposed branch .*allowCredentials/);
  const unknownConditionalCors=structuredClone(candidate);unknownConditionalCors.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['OtherCondition',{corsConfiguration:{}},{corsConfiguration:{}}]};
  assert.throws(()=>assertTemplateBoundary(original,unknownConditionalCors),/branch shapes: object\{corsConfiguration:object\{\}\}; object\{corsConfiguration:object\{\}\}/);
+ const arrayConditionalCors=structuredClone(candidate);arrayConditionalCors.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
+ assert.throws(()=>assertTemplateBoundary(original,arrayConditionalCors),/branch shapes: array\(2\)<Ref\(SiteOrigin\),Ref\(StudioAcceptanceOrigin\)>; array\(1\)<Ref\(SiteOrigin\)>/);
  for(const mutate of [v=>{delete v.Outputs.ApiAccessBaseUrl;},v=>{v.Parameters.Secret.Default='new';},v=>{v.Parameters.StudioAcceptanceOrigin.AllowedPattern='.*';},v=>{v.Conditions.StudioAcceptanceOriginConfigured={'Fn::Equals':['1','1']};},v=>{delete v.Rules;},v=>{v.Resources.ApiAccessFunction.DeletionPolicy='Delete';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.FEATURE='false';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN=previewOrigin;}]){
    const bad=structuredClone(candidate);mutate(bad);assert.throws(()=>assertTemplateBoundary(original,bad),/Maintenance|Studio acceptance environment/);
  }
