@@ -120,6 +120,12 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   const corsVariants = (cors, label) => {
     if (Object.hasOwn(cors, 'allowOrigins')) return {condition: null, variants: [cors]};
     const conditional = cors['Fn::If'];
+    const shapeOf = (value, depth = 0) => {
+      if (Array.isArray(value)) return `array(${value.length})`;
+      if (!value || typeof value !== 'object') return value === null ? 'null' : typeof value;
+      const keys = Object.keys(value).sort();
+      return depth >= 2 ? `object{${keys.join(',')}}` : `object{${keys.map(key => `${key}:${shapeOf(value[key], depth + 1)}`).join(',')}}`;
+    };
     if (Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3
       && conditional[1] && typeof conditional[1] === 'object' && !Array.isArray(conditional[1])
       && conditional[2] && typeof conditional[2] === 'object' && !Array.isArray(conditional[2])
@@ -127,7 +133,8 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
       return {condition: conditional[0], variants: conditional.slice(1)};
     }
     const keys = Object.keys(cors).sort().join(', ') || 'none';
-    throw new Error(`Maintenance requires explicit API Gateway CORS origin lists in every ${label} branch (found keys: ${keys}).`);
+    const branchShapes = Array.isArray(conditional) ? conditional.slice(1).map(shapeOf).join('; ') : 'unavailable';
+    throw new Error(`Maintenance requires explicit API Gateway CORS origin lists in every ${label} branch (found keys: ${keys}; branch shapes: ${branchShapes}).`);
   };
   const beforeVariants = corsVariants(beforeCors.cors, 'deployed');
   const afterVariants = corsVariants(afterCors.cors, 'proposed');

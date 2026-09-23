@@ -77,7 +77,9 @@ test('processed template comparison rejects invisible stack-level edits and pres
  const stringBody=structuredClone(candidate);stringBody.Resources.ApiAccessHttpApi.Properties.Body=JSON.stringify(stringBody.Resources.ApiAccessHttpApi.Properties.Body);assertTemplateBoundary(original,stringBody);
  const apiDrift=structuredClone(candidate);apiDrift.Resources.ApiAccessHttpApi.Properties.Body.paths['/unexpected']={};assert.throws(()=>assertTemplateBoundary(original,apiDrift),/API Gateway settings/);
  const transformedCorsShape=structuredClone(candidate);transformedCorsShape.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={allowCredentials:true};
- assert.throws(()=>assertTemplateBoundary(original,transformedCorsShape),/every proposed branch .*allowCredentials/);
+ assert.throws(()=>assertTemplateBoundary(original,transformedCorsShape),/proposed branch .*allowCredentials/);
+ const unknownConditionalCors=structuredClone(candidate);unknownConditionalCors.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['OtherCondition',{corsConfiguration:{}},{corsConfiguration:{}}]};
+ assert.throws(()=>assertTemplateBoundary(original,unknownConditionalCors),/branch shapes: object\{corsConfiguration:object\{\}\}; object\{corsConfiguration:object\{\}\}/);
  for(const mutate of [v=>{delete v.Outputs.ApiAccessBaseUrl;},v=>{v.Parameters.Secret.Default='new';},v=>{v.Parameters.StudioAcceptanceOrigin.AllowedPattern='.*';},v=>{v.Conditions.StudioAcceptanceOriginConfigured={'Fn::Equals':['1','1']};},v=>{delete v.Rules;},v=>{v.Resources.ApiAccessFunction.DeletionPolicy='Delete';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.FEATURE='false';},v=>{v.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN=previewOrigin;}]){
    const bad=structuredClone(candidate);mutate(bad);assert.throws(()=>assertTemplateBoundary(original,bad),/Maintenance|Studio acceptance environment/);
  }
