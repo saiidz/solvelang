@@ -16,7 +16,8 @@ test("private admin gateway rollout is manual, protected, serialized, and billin
   assert.match(source, /name: Deploy Admin Console Gateway Production/);
   assert.match(source, /workflow_dispatch:/);
   assert.match(source, /confirm_production_admin_gateway/);
-  assert.match(source, /confirm_billing_remains_disabled/);
+  assert.match(source, /confirm_billing_state_preserved/);
+  assert.doesNotMatch(source, /confirm_billing_remains_disabled/);
   assert.match(source, /environment: api-access-production/);
   assert.match(source, /GITHUB_REF.*refs\/heads\/main/);
   assert.match(source, /git rev-parse HEAD.*GITHUB_SHA/);
@@ -43,6 +44,21 @@ test("private admin gateway rollout is manual, protected, serialized, and billin
   assert.match(source, /Charges performed: \*\*no\*\*/);
   assert.doesNotMatch(source, /secrets\.STRIPE_|StripeSecretKey=|StripeSubscriptionWebhookSecret=/);
   assert.doesNotMatch(source, /send-email|sesv2 send/i);
+});
+
+test("admin gateway rollout captures and verifies the existing billing state", async () => {
+  const source = await text(workflowUrl);
+  assert.match(source, /confirm_billing_state_preserved/);
+  assert.doesNotMatch(source, /confirm_billing_remains_disabled/);
+  assert.match(source, /\[\[ "\$billing" == true \|\| "\$billing" == false \]\]/);
+  assert.match(source, /--argjson expectedBilling "\$billing"/);
+  assert.match(source, /billing_enabled=\$billing/);
+  assert.match(source, /EXPECTED_BILLING: \$\{\{ steps\.baseline\.outputs\.billing_enabled \}\}/);
+  assert.match(source, /billing_after=/);
+  assert.match(source, /\[\[ "\$billing_after" == "\$EXPECTED_BILLING" \]\]/);
+  assert.match(source, /subscriptionBillingEnabled == \$expectedBilling/);
+  assert.match(source, /Subscription billing flag preserved: \*\*%s\*\*/);
+  assert.doesNotMatch(source, /Subscription billing enabled: \*\*false\*\*/);
 });
 
 test("admin gateway preflight role can read the exact gateway stack without write authority", async () => {
