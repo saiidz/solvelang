@@ -131,6 +131,9 @@ jobs:
       - name: Verify Studio acceptance build remains preview-only
         run: npm run test:studio-acceptance-build
 
+      - name: Verify deterministic Studio acceptance harness contract
+        run: npm run test:studio-acceptance-harness
+
       - name: Run SEO and production-operations contract tests
         run: npm run test:seo
 

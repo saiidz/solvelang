@@ -55,6 +55,23 @@ switching does not transfer a pending save; offline errors preserve local work;
 export and account-snapshot removal work. No customer project should be used as
 test data. Test environment proof and production acceptance are separate records.
 
+### Deterministic acceptance harness
+
+`site/qa/studio-account-acceptance.mjs` launches two explicitly labeled,
+persistent Playwright profiles under `STUDIO_ACCEPTANCE_RUN_DIR` (or a temporary
+run directory): `Account A` and `Account B`. The process stays alive while each
+profile is authenticated, then privately compares one-way account digests and
+fails closed if either profile is unauthenticated, both resolve to the same
+account, or a configured `STUDIO_ACCEPTANCE_OWNER_ACCOUNT_DIGEST` matches.
+Magic-link navigation in another profile cannot satisfy the waiting context.
+
+The harness then runs the six checks and writes only sanitized outcomes to
+`STUDIO_QA_EVIDENCE_PATH` (defaulting to a temporary file outside the repository). It never
+reads or emits cookies, tokens, passwords, CSRF values, account IDs, or workspace
+contents. Supply `STUDIO_QA_NODE_MODULES` with an isolated Playwright install and
+run `node site/qa/studio-account-acceptance.mjs` only against the protected
+acceptance origin. Production account saving remains disabled.
+
 ## Isolated production acceptance surface
 
 The repository prepares a dedicated Amplify branch named `studio-acceptance`.
