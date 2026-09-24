@@ -5,7 +5,6 @@ export const primaryLinks = [
   { label: "Studio", href: "/studio/" },
   { label: "Docs", href: "/resources/" },
   { label: "Status", href: "/status/" },
-  { label: "Account", href: "/account/api-keys/" },
 ] as const;
 
 export const toolLinks = [

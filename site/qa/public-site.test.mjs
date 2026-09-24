@@ -11,8 +11,15 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 const now = Date.parse("2026-09-13T21:00:00Z");
 const healthy = { name: "Test", description: "Test fixture, not live evidence", state: "operational", checkedAt: new Date(now - 1000).toISOString(), validForMs: 60_000 };
 
-test("navigation uses implemented account entry and unique internal destinations", () => {
-  assert.equal(primaryLinks.find((link) => link.label === "Account").href, "/account/api-keys/");
+test("navigation uses the shared account menu and unique internal destinations", () => {
+  assert.equal(primaryLinks.some((link) => link.label === "Account"), false);
+  assert.match(read("app/components/SiteHeader.tsx"), /<SiteAccountMenu\s*\/>/);
+  const accountMenu = read("app/components/SiteAccountMenu.tsx");
+  assert.match(accountMenu, /\/customer\/account/);
+  assert.match(accountMenu, /\/customer\/auth\/logout/);
+  assert.match(accountMenu, /csrfToken: account\.csrfToken/);
+  assert.match(accountMenu, /Signed in as/);
+  assert.match(accountMenu, /Sign out/);
   const links = [...primaryLinks, ...toolLinks];
   assert.equal(new Set(links.map((link) => link.href)).size, links.length);
   for (const link of links) {

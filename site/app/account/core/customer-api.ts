@@ -38,6 +38,12 @@ export type CustomerDashboard = {
   keys: ApiKeySummary[];
 };
 
+export const customerSessionChangedEvent = "solvelang:customer-session-changed";
+
+export function notifyCustomerSessionChanged(): void {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(customerSessionChangedEvent));
+}
+
 export type AuthResult = {
   accountId?: string;
   email?: string;
