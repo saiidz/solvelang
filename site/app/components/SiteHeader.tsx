@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 import { LanguageSelector } from "./LanguageSelector";
+import { SiteAccountMenu } from "./SiteAccountMenu";
 import { defaultLocale } from "../i18n/locales";
 import { isCurrentLink, normalizePath, primaryLinks, toolLinks } from "./site-navigation";
 
@@ -61,6 +62,7 @@ export function SiteHeader() {
           ))}
         </div>
         <div className="flex min-w-0 items-center gap-2">
+          <SiteAccountMenu />
           <div className="hidden sm:block"><Suspense fallback={<span className="inline-block w-12" />}><LanguageSelector current={defaultLocale} /></Suspense></div>
           <details key={route} className="group relative" data-site-menu="true">
             <summary className="cursor-pointer list-none whitespace-nowrap rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">

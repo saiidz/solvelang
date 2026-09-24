@@ -8,6 +8,7 @@ import {
   type CustomerDashboard,
   type IssuedApiKey,
   customerApi,
+  notifyCustomerSessionChanged,
   magicTokenFromHash,
   newRequestId,
   normalizeApiBase,
@@ -54,6 +55,7 @@ export default function ApiKeysPage() {
     setDashboard(account);
     setCredentialUsername(account.auth.username ?? "");
     setScreen("dashboard");
+    notifyCustomerSessionChanged();
     return account;
   }
 
@@ -91,6 +93,7 @@ export default function ApiKeysPage() {
           setDashboard(account);
           setCredentialUsername(account.auth.username ?? "");
           setScreen("dashboard");
+          notifyCustomerSessionChanged();
         }
       } catch (caught) {
         if (!active) return;
@@ -343,28 +346,6 @@ export default function ApiKeysPage() {
     }
   }
 
-  async function signOut() {
-    if (!dashboard) return;
-    setBusy(true);
-    try {
-      await customerApi(API_BASE, "/customer/auth/logout", {
-        method: "POST",
-        csrfToken: dashboard.csrfToken,
-      });
-    } finally {
-      setDashboard(null);
-      setIssued(null);
-      setLoginPassword("");
-      setCredentialPassword("");
-      setMfaChallenge("");
-      setMfaCode("");
-      setTotpSetup(null);
-      setBackupCodes([]);
-      setScreen("signed-out");
-      setBusy(false);
-    }
-  }
-
   if (screen === "loading") {
     return <main className="grid min-h-screen place-items-center bg-slate-950 text-white">Loading your API account…</main>;
   }
@@ -450,7 +431,6 @@ export default function ApiKeysPage() {
           </div>
           <div className="flex gap-3">
             <Link href="/api-pricing/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Plans</Link>
-            <button onClick={signOut} disabled={busy} className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60">Sign out</button>
           </div>
         </header>
 
