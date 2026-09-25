@@ -1,12 +1,12 @@
 # SolveLang Roadmap
 
-## Current verification — 2026-09-22
+## Current verification — 2026-09-25
 
-Repository source status was re-audited on main
-`59ab9ff271850454a2029495c2faf34cb93a10c7` after #945. MCP v0.3.0 is published
-on npm and GitHub; main protection is enforced. PR #945 updates the manual Admin
-Gateway workflow to verify and preserve the existing billing state; it did not
-deploy production.
+Repository source status is current through main
+`ba9c84bbc84f191e3d13fbb8ea2a95dec6d9f1a7` after #957. MCP v0.3.0 is published
+on npm and GitHub; main protection is enforced. PR #957 adds the deterministic
+two-context Studio account acceptance harness without changing production
+authentication or enabling production Studio account saving.
 See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
 remaining live acceptance gates. Older checkpoints below are historical.
 
@@ -14,7 +14,7 @@ This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **
 
 ## Current evidence checkpoint
 
-Reconciled on **2026-09-22** from the source baseline on `main` after PR **#945** (`59ab9ff271850454a2029495c2faf34cb93a10c7`). Production evidence remains separately dated; live GitHub state always wins if this checkpoint becomes stale.
+Reconciled on **2026-09-25** from the source baseline on `main` after PR **#957** (`ba9c84bbc84f191e3d13fbb8ea2a95dec6d9f1a7`). Production evidence remains separately dated; live GitHub state always wins if this checkpoint becomes stale.
 
 The original repository-completion mission, #820, is closed. Current open project tracks are:
 
@@ -23,7 +23,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 | [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, pair-integrity hardening through #920, and published MCP v0.3.0 | Independent held-out evidence; actual Claude/Codex baseline-vs-context runs with provider-reported token/latency/cache/quality evidence; managed-workspace installation and public Plugin Directory listing |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; PR #945 makes the manual Admin Gateway workflow preserve that billing state; Studio account saving remains feature-gated; real-payment acceptance, priority and support activation remain gated | Six authenticated Studio production checks, bounded billing canary and customer/legal acceptance, live monitoring/recovery evidence for any activated feature, plus separate owner approvals for protected actions |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; Studio account saving remains feature-gated. PR #957 merged a deterministic two-context acceptance harness with isolated persistent Account A/B browser contexts, fail-closed account-identity checks, six sanitized acceptance checks, CI coverage and documentation. Production authentication/infrastructure were unchanged and production Studio account saving remains OFF. | Execute the live #957 harness with the two existing disposable accounts and obtain fresh 6/6 evidence; only then clean up the temporary acceptance surface/origin, enable normal production Studio account saving through the reviewed path, deploy and verify production. Real-payment acceptance, priority and support activation remain separately gated. |
 
 ## Working today
 
@@ -94,6 +94,7 @@ These are **priority projections, not delivery dates or completion percentages**
 
 ### Priority 1 — controlled product activation
 
+- Studio account saving: run the merged #957 deterministic two-context acceptance harness. The live six-check run is still outstanding; production account saving must remain OFF until all six checks pass with fresh sanitized evidence. After 6/6, clean up the temporary acceptance surface/origin, enable through the reviewed production path, deploy, verify auth/CSRF/CORS/isolation/signed-out/local-first behavior, and synchronize #113/readiness evidence.
 - Connected support: deploy default-off only under exact-scope approval, then prove one new-message task/reply and stop/recovery path.
 - PostHog: qualify the concrete credential/lifecycle backend and perform only the separately authorized bounded canary.
 - Billing: preserve the enabled controlled rollout and complete scoped real-payment/customer acceptance before broader launch. Paid priority/provider execution stays disabled until its own configuration, monitoring, recovery and authorization gates pass.
