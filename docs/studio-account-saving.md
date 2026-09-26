@@ -78,7 +78,10 @@ table's PITR window. Keep all such material intact. Production recovery requires
 separate owner authorization; restore to an isolated table first where possible.
 
 The repaired harness refuses to write if either account or browser profile
-contains non-acceptance projects. It saves private, mode-0600 pre-run workspace
+contains non-acceptance projects. A new persistent profile may contain the
+Studio-generated support-triage starter; a digest of its document, versions,
+and traces is recorded privately before authentication, and only that unchanged
+starter is permitted afterward. It saves private, mode-0600 pre-run workspace
 backups and a copy of the account export in the mode-0700 run directory, verifies the export against the
 exact prior snapshot, removes only a qualified disposable account snapshot,
 restores it even after a removal failure, and verifies that browser-local data

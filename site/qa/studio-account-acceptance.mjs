@@ -10,7 +10,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 export const TEST_NAMES = [
@@ -39,12 +39,16 @@ let runMarker = "";
 function uniqueName(label) { return `${runMarker} ${label}`; }
 
 const sameWorkspace = (left, right) => JSON.stringify(left) === JSON.stringify(right);
-const testOwned = (workspace) => workspace?.schemaVersion === 1 && Array.isArray(workspace.projects)
+const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value;
+const projectDigest = (project) => createHash("sha256").update(JSON.stringify(canonical(project))).digest("hex");
+const testOwned = (workspace, seedDigest = "") => workspace?.schemaVersion === 1 && Array.isArray(workspace.projects)
   && workspace.projects.every((project) => typeof project?.document?.name === "string"
-    && /^Studio acceptance (?:[0-9a-f]{8}-[0-9a-f-]{27} )?(?:A(?: newer| pending)?|B|offline)(?: [0-9]{14})?(?: \(account copy\))?$/.test(project.document.name));
+    && (/^Studio acceptance (?:[0-9a-f]{8}-[0-9a-f-]{27} )?(?:A(?: newer| pending)?|B|offline)(?: [0-9]{14})?(?: \(account copy\))?$/.test(project.document.name)
+      || (seedDigest && project.document.name === "Support triage workspace" && projectDigest(project) === seedDigest)));
 
-export function assertTestOwnedWorkspace(workspace) {
-  if (!testOwned(workspace)) throw new Error("Acceptance account contains non-test workspace data; no account write is allowed.");
+export function assertTestOwnedWorkspace(workspace, seedDigest = "") {
+  if (!testOwned(workspace, seedDigest)) throw new Error("Acceptance account contains non-test workspace data; no account write is allowed.");
 }
 
 export function assertAcceptanceTargets(origin, base) {
@@ -53,9 +57,9 @@ export function assertAcceptanceTargets(origin, base) {
   }
 }
 
-export async function reversibleRemoval({ read, exportBackup, remove, restore, localDigest }) {
+export async function reversibleRemoval({ read, exportBackup, remove, restore, localDigest, seedDigest = "" }) {
   const before = await read();
-  assertTestOwnedWorkspace(before.workspace);
+  assertTestOwnedWorkspace(before.workspace, seedDigest);
   const localBefore = await localDigest();
   let attempted = false;
   try {
@@ -93,10 +97,10 @@ async function readSnapshot(page) {
   }, apiBase);
 }
 
-async function restoreSnapshot(page, original) {
+async function restoreSnapshot(page, original, seedDigest = "") {
   const current = await readSnapshot(page);
   if (current.accountId !== original.accountId) throw new Error("Account changed before restoration; no account write is allowed.");
-  assertTestOwnedWorkspace(current.workspace);
+  assertTestOwnedWorkspace(current.workspace, seedDigest);
   if (sameWorkspace(current.workspace, original.workspace)) return;
   const status = await page.evaluate(async ({ base, expectedRevision, accountId, csrfToken, workspace: prior }) => {
     const response = await fetch(`${base}/customer/studio/workspace`, {
@@ -119,12 +123,41 @@ async function localWorkspaceDigest(page) {
   });
 }
 
-async function assertLocalTestOwned(page) {
+async function waitForSeedStorage(page) {
+  await page.waitForFunction(() => {
+    try {
+      const projects = JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]");
+      if (projects.length !== 1 || projects[0]?.name !== "Support triage workspace") return false;
+      const id = projects[0].id;
+      return localStorage.getItem(`solvelang.studio.versions.v1.${id}`) !== null
+        && localStorage.getItem(`solvelang.studio.traces.v1.${id}`) !== null;
+    } catch { return false; }
+  }, null, { timeout: 120_000 });
+}
+
+export async function qualifyLocalWorkspace(page, seedFile, freshProfile) {
   const workspace = await page.evaluate(() => ({
     schemaVersion: 1,
-    projects: JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]").map((document) => ({ document })),
+    projects: JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]").map((document) => ({
+      document,
+      versions: JSON.parse(localStorage.getItem(`solvelang.studio.versions.v1.${document.id}`) ?? "[]"),
+      traces: JSON.parse(localStorage.getItem(`solvelang.studio.traces.v1.${document.id}`) ?? "[]"),
+    })),
   }));
-  assertTestOwnedWorkspace(workspace);
+  const seeds = workspace.projects.filter((project) => project.document?.name === "Support triage workspace");
+  let seedDigest = "";
+  if (freshProfile) {
+    if (workspace.projects.length !== 1 || seeds.length !== 1) throw new Error("Fresh acceptance profile did not contain only the Studio starter project.");
+    seedDigest = projectDigest(seeds[0]);
+    await fs.writeFile(seedFile, seedDigest, { mode: 0o600, flag: "wx" });
+  } else if (seeds.length) {
+    seedDigest = (await fs.readFile(seedFile, "utf8")).trim();
+    if (!/^[0-9a-f]{64}$/.test(seedDigest) || seeds.length !== 1 || projectDigest(seeds[0]) !== seedDigest) {
+      throw new Error("Persistent profile starter project changed; no account write is allowed.");
+    }
+  }
+  assertTestOwnedWorkspace(workspace, seedDigest);
+  return seedDigest;
 }
 
 async function labelPage(page, label) {
@@ -260,7 +293,7 @@ async function testOffline(a) {
   if (text !== localName) throw new Error("Offline persistence did not preserve local work.");
 }
 
-async function testExportRemoval(a, runRoot) {
+async function testExportRemoval(a, runRoot, seedDigest) {
   await a.reload({ waitUntil: "networkidle" });
   await connect(a);
   await reversibleRemoval({
@@ -278,8 +311,9 @@ async function testExportRemoval(a, runRoot) {
       await clickAndAccept(a, a.getByRole("button", { name: "Remove account snapshot" }));
       await a.getByRole("status").filter({ hasText: "Account snapshot removed" }).waitFor({ state: "visible" });
     },
-    restore: (snapshot) => restoreSnapshot(a, snapshot),
+    restore: (snapshot) => restoreSnapshot(a, snapshot, seedDigest),
     localDigest: () => localWorkspaceDigest(a),
+    seedDigest,
   });
 }
 
@@ -317,8 +351,14 @@ async function main() {
     : await fs.mkdtemp(path.join(os.tmpdir(), "solvelang-studio-acceptance-"));
   await fs.mkdir(runRoot, { recursive: true, mode: 0o700 });
   if (((await fs.stat(runRoot)).mode & 0o077) !== 0) throw new Error("Acceptance run directory must be private.");
-  const a = await chromium.launchPersistentContext(path.join(runRoot, "account-a"), { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
-  const b = await chromium.launchPersistentContext(path.join(runRoot, "account-b"), { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
+  const profileA = path.join(runRoot, "account-a"), profileB = path.join(runRoot, "account-b");
+  const profileExists = async (location) => fs.stat(location).then(() => true, (error) => {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  });
+  const freshA = !await profileExists(profileA), freshB = !await profileExists(profileB);
+  const a = await chromium.launchPersistentContext(profileA, { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
+  const b = await chromium.launchPersistentContext(profileB, { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
   const pageA = a.pages()[0] ?? await a.newPage();
   const pageB = b.pages()[0] ?? await b.newPage();
   await Promise.all([labelPage(pageA, "Account A"), labelPage(pageB, "Account B")]);
@@ -333,15 +373,23 @@ async function main() {
       throw new Error(`${name} failed; private recovery backups remain in the run directory.`);
     }
   };
-  let originalA, originalB, failure;
+  let originalA, originalB, seedA = "", seedB = "", failure;
   try {
+    await Promise.all([freshA ? waitForSeedStorage(pageA) : undefined, freshB ? waitForSeedStorage(pageB) : undefined]);
+    [seedA, seedB] = await Promise.all([
+      qualifyLocalWorkspace(pageA, path.join(runRoot, "account-a-seed.sha256"), freshA),
+      qualifyLocalWorkspace(pageB, path.join(runRoot, "account-b-seed.sha256"), freshB),
+    ]);
     const digestA = await waitForAuthentication(pageA, "Account A");
     const digestB = await waitForAuthentication(pageB, "Account B");
     compareAccountDigests(digestA, digestB, accountDigests);
+    await Promise.all([
+      qualifyLocalWorkspace(pageA, path.join(runRoot, "account-a-seed.sha256"), false),
+      qualifyLocalWorkspace(pageB, path.join(runRoot, "account-b-seed.sha256"), false),
+    ]);
     [originalA, originalB] = await Promise.all([readSnapshot(pageA), readSnapshot(pageB)]);
-    assertTestOwnedWorkspace(originalA.workspace);
-    assertTestOwnedWorkspace(originalB.workspace);
-    await Promise.all([assertLocalTestOwned(pageA), assertLocalTestOwned(pageB)]);
+    assertTestOwnedWorkspace(originalA.workspace, seedA);
+    assertTestOwnedWorkspace(originalB.workspace, seedB);
     const runId = randomUUID();
     await fs.writeFile(path.join(runRoot, `account-a-before-${runId}.json`), JSON.stringify(originalA.workspace), { mode: 0o600, flag: "wx" });
     await fs.writeFile(path.join(runRoot, `account-b-before-${runId}.json`), JSON.stringify(originalB.workspace), { mode: 0o600, flag: "wx" });
@@ -352,14 +400,14 @@ async function main() {
     await run(TEST_NAMES[2], () => testStaleRevision(pageA));
     await run(TEST_NAMES[3], () => testSwitchProtection(pageA, pageB, names.name));
     await run(TEST_NAMES[4], () => testOffline(pageA));
-    await run(TEST_NAMES[5], () => testExportRemoval(pageA, runRoot));
+    await run(TEST_NAMES[5], () => testExportRemoval(pageA, runRoot, seedA));
   } catch {
     failure = new Error("Studio acceptance failed; inspect sanitized evidence and private recovery backups.");
     if (!results.length) results.push({ name: "qualification", pass: false });
   } finally {
     if (originalA && originalB && runMarker) {
       const restored = await Promise.allSettled([
-        restoreSnapshot(pageA, originalA), restoreSnapshot(pageB, originalB),
+        restoreSnapshot(pageA, originalA, seedA), restoreSnapshot(pageB, originalB, seedB),
       ]);
       if (restored.some((result) => result.status === "rejected")) {
         failure = new Error("Studio account restoration failed; preserve the private recovery backups and profiles.");

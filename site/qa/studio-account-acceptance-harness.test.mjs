@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertAcceptanceTargets, assertTestOwnedWorkspace, compareAccountDigests, reversibleRemoval, sanitizeEvidence, TEST_NAMES } from "./studio-account-acceptance.mjs";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { assertAcceptanceTargets, assertTestOwnedWorkspace, compareAccountDigests, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
 const expected = { owner: digest("c"), a: digest("a"), b: digest("b") };
@@ -21,6 +24,25 @@ test("non-test account content fails closed", () => {
   assert.doesNotThrow(() => assertTestOwnedWorkspace({ schemaVersion: 1, projects: [] }));
   assert.doesNotThrow(() => assertTestOwnedWorkspace(workspace));
   assert.throws(() => assertTestOwnedWorkspace({ schemaVersion: 1, projects: [{ document: { name: "Private workflow" } }] }), /non-test/);
+});
+
+test("a fresh profile's pristine starter is qualified once and later modifications fail closed", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "studio-seed-test-"));
+  const seedFile = path.join(directory, "seed.sha256");
+  const starter = { name: "Support triage workspace", id: "workflow-pristine", nodes: [{ id: "node-1" }] };
+  const project = { document: starter, versions: [], traces: [] };
+  const page = { evaluate: async () => ({ schemaVersion: 1, projects: [project] }) };
+  try {
+    const digest = await qualifyLocalWorkspace(page, seedFile, true);
+    assert.match(digest, /^[0-9a-f]{64}$/);
+    assert.doesNotThrow(() => assertTestOwnedWorkspace({ schemaVersion: 1, projects: [project] }, digest));
+    assert.equal(await qualifyLocalWorkspace(page, seedFile, false), digest);
+    const changed = { evaluate: async () => ({ schemaVersion: 1, projects: [{ ...project, traces: [{ private: true }] }] }) };
+    await assert.rejects(qualifyLocalWorkspace(changed, seedFile, false), /starter project changed/);
+    assert.throws(() => assertTestOwnedWorkspace({ schemaVersion: 1, projects: [project] }), /non-test/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("the harness cannot point at a different origin or API", () => {
