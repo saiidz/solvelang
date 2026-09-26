@@ -198,8 +198,9 @@ async function testSaveRestore(a) {
 
 async function testIsolation(a, b, nameA) {
   await b.reload({ waitUntil: "networkidle" });
-  const statusB = await connect(b);
-  if (statusB.includes(nameA)) throw new Error("Account B snapshot contains Account A workspace.");
+  await connect(b);
+  const bItemsBefore = await b.getByRole("listitem").allTextContents();
+  if (bItemsBefore.some((text) => text.includes(nameA))) throw new Error("Account B snapshot contains Account A workspace.");
   const bName = uniqueName("B");
   await createFreshWorkspace(b, bName);
   await connect(b);
