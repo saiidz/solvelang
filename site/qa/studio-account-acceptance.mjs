@@ -1,14 +1,16 @@
 /*
  * Deterministic, two-context Studio account acceptance.
  *
- * This runner never exports browser storage, cookies, tokens, account IDs, or
- * workspace contents. Each account has its own persistent Playwright profile;
+ * This runner keeps browser storage, cookies, tokens, account IDs, and workspace
+ * contents out of logs and evidence. Private recovery backups remain in the
+ * run directory. Each account has its own persistent Playwright profile;
  * the process remains alive while the operator authenticates each labeled
  * profile, so a magic link opened elsewhere can never qualify that context.
  */
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 export const TEST_NAMES = [
@@ -20,15 +22,59 @@ export const TEST_NAMES = [
   "export-removal",
 ];
 
-const acceptanceOrigin = process.env.STUDIO_QA_BASE_URL ?? "https://studio-acceptance.d3j3fgk4gcxxg2.amplifyapp.com";
-const apiBase = process.env.STUDIO_QA_API_BASE_URL ?? "https://3l3y008e94.execute-api.us-east-2.amazonaws.com";
-const ownerDigest = process.env.STUDIO_ACCEPTANCE_OWNER_ACCOUNT_DIGEST?.trim() || "";
+const expectedAcceptanceOrigin = "https://studio-acceptance.d3j3fgk4gcxxg2.amplifyapp.com";
+const expectedApiBase = "https://3l3y008e94.execute-api.us-east-2.amazonaws.com";
+const acceptanceOrigin = process.env.STUDIO_QA_BASE_URL ?? expectedAcceptanceOrigin;
+const apiBase = process.env.STUDIO_QA_API_BASE_URL ?? expectedApiBase;
+const accountDigests = {
+  owner: process.env.STUDIO_ACCEPTANCE_OWNER_ACCOUNT_DIGEST?.trim() || "",
+  a: process.env.STUDIO_ACCEPTANCE_DISPOSABLE_ACCOUNT_A_DIGEST?.trim() || "",
+  b: process.env.STUDIO_ACCEPTANCE_DISPOSABLE_ACCOUNT_B_DIGEST?.trim() || "",
+};
 const evidencePath = process.env.STUDIO_QA_EVIDENCE_PATH
   ? path.resolve(process.env.STUDIO_QA_EVIDENCE_PATH)
   : path.join(os.tmpdir(), "solvelang-studio-account-acceptance-evidence.json");
 
-function uniqueName(label) {
-  return `Studio acceptance ${label} ${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+let runMarker = "";
+function uniqueName(label) { return `${runMarker} ${label}`; }
+
+const sameWorkspace = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const canonical = (value) => Array.isArray(value) ? value.map(canonical)
+  : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value;
+const projectDigest = (project) => createHash("sha256").update(JSON.stringify(canonical(project))).digest("hex");
+const testOwned = (workspace, seedDigest = "") => workspace?.schemaVersion === 1 && Array.isArray(workspace.projects)
+  && workspace.projects.every((project) => typeof project?.document?.name === "string"
+    && (/^Studio acceptance (?:[0-9a-f]{8}-[0-9a-f-]{27} )?(?:A(?: newer| pending)?|B|offline)(?: [0-9]{14})?(?: \(account copy\))?$/.test(project.document.name)
+      || (seedDigest && project.document.name === "Support triage workspace" && projectDigest(project) === seedDigest)));
+
+export function assertTestOwnedWorkspace(workspace, seedDigest = "") {
+  if (!testOwned(workspace, seedDigest)) throw new Error("Acceptance account contains non-test workspace data; no account write is allowed.");
+}
+
+export function assertAcceptanceTargets(origin, base) {
+  if (origin !== expectedAcceptanceOrigin || base !== expectedApiBase) {
+    throw new Error("Studio acceptance requires the exact protected preview origin and production API base.");
+  }
+}
+
+export async function reversibleRemoval({ read, exportBackup, remove, restore, localDigest, seedDigest = "" }) {
+  const before = await read();
+  assertTestOwnedWorkspace(before.workspace, seedDigest);
+  const localBefore = await localDigest();
+  let attempted = false;
+  try {
+    const exported = await exportBackup();
+    if (!sameWorkspace(exported, before.workspace)) throw new Error("Account export does not match the prior snapshot.");
+    attempted = true;
+    await remove();
+    const cleared = await read();
+    if (!sameWorkspace(cleared.workspace, { schemaVersion: 1, projects: [] })) throw new Error("Removal did not leave an empty account snapshot.");
+  } finally {
+    if (attempted) await restore(before);
+  }
+  const after = await read();
+  if (!sameWorkspace(after.workspace, before.workspace)) throw new Error("Account snapshot was not restored exactly.");
+  if (await localDigest() !== localBefore) throw new Error("Browser-local projects changed during account removal.");
 }
 
 async function accountDigest(page) {
@@ -41,6 +87,77 @@ async function accountDigest(page) {
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
   }, apiBase);
+}
+
+async function readSnapshot(page) {
+  return page.evaluate(async (base) => {
+    const response = await fetch(`${base}/customer/studio/workspace`, { credentials: "include", cache: "no-store" });
+    if (!response.ok) throw new Error("Could not read the account snapshot.");
+    return response.json();
+  }, apiBase);
+}
+
+async function restoreSnapshot(page, original, seedDigest = "") {
+  const current = await readSnapshot(page);
+  if (current.accountId !== original.accountId) throw new Error("Account changed before restoration; no account write is allowed.");
+  assertTestOwnedWorkspace(current.workspace, seedDigest);
+  if (sameWorkspace(current.workspace, original.workspace)) return;
+  const status = await page.evaluate(async ({ base, expectedRevision, accountId, csrfToken, workspace: prior }) => {
+    const response = await fetch(`${base}/customer/studio/workspace`, {
+      method: "POST", credentials: "include", headers: { "content-type": "application/json", "x-solvelang-csrf": csrfToken },
+      body: JSON.stringify({ accountId, expectedRevision, workspace: prior }),
+    });
+    return response.status;
+  }, { base: apiBase, expectedRevision: current.revision, accountId: current.accountId, csrfToken: current.csrfToken, workspace: original.workspace });
+  if (status !== 200 || !sameWorkspace((await readSnapshot(page)).workspace, original.workspace)) {
+    throw new Error("Account snapshot restoration failed; use the private recovery backup.");
+  }
+}
+
+async function localWorkspaceDigest(page) {
+  return page.evaluate(async () => {
+    const keys = Object.keys(localStorage).filter((key) => key.startsWith("solvelang.studio.")).sort();
+    const bytes = new TextEncoder().encode(JSON.stringify(keys.map((key) => [key, localStorage.getItem(key)])));
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+  });
+}
+
+async function waitForSeedStorage(page) {
+  await page.waitForFunction(() => {
+    try {
+      const projects = JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]");
+      if (projects.length !== 1 || projects[0]?.name !== "Support triage workspace") return false;
+      const id = projects[0].id;
+      return localStorage.getItem(`solvelang.studio.versions.v1.${id}`) !== null
+        && localStorage.getItem(`solvelang.studio.traces.v1.${id}`) !== null;
+    } catch { return false; }
+  }, null, { timeout: 120_000 });
+}
+
+export async function qualifyLocalWorkspace(page, seedFile, freshProfile) {
+  const workspace = await page.evaluate(() => ({
+    schemaVersion: 1,
+    projects: JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]").map((document) => ({
+      document,
+      versions: JSON.parse(localStorage.getItem(`solvelang.studio.versions.v1.${document.id}`) ?? "[]"),
+      traces: JSON.parse(localStorage.getItem(`solvelang.studio.traces.v1.${document.id}`) ?? "[]"),
+    })),
+  }));
+  const seeds = workspace.projects.filter((project) => project.document?.name === "Support triage workspace");
+  let seedDigest = "";
+  if (freshProfile) {
+    if (workspace.projects.length !== 1 || seeds.length !== 1) throw new Error("Fresh acceptance profile did not contain only the Studio starter project.");
+    seedDigest = projectDigest(seeds[0]);
+    await fs.writeFile(seedFile, seedDigest, { mode: 0o600, flag: "wx" });
+  } else if (seeds.length) {
+    seedDigest = (await fs.readFile(seedFile, "utf8")).trim();
+    if (!/^[0-9a-f]{64}$/.test(seedDigest) || seeds.length !== 1 || projectDigest(seeds[0]) !== seedDigest) {
+      throw new Error("Persistent profile starter project changed; no account write is allowed.");
+    }
+  }
+  assertTestOwnedWorkspace(workspace, seedDigest);
+  return seedDigest;
 }
 
 async function labelPage(page, label) {
@@ -101,8 +218,7 @@ async function clickAndAccept(page, locator) {
 async function testSaveRestore(a) {
   const name = uniqueName("A");
   await createFreshWorkspace(a, name);
-  const before = await connect(a);
-  if (!/0 saved projects/.test(before)) throw new Error("Account A did not start with an empty snapshot.");
+  await connect(a);
   await clickAndAccept(a, a.getByRole("button", { name: "Save workspace and enable autosave" }));
   await a.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
   await a.reload({ waitUntil: "networkidle" });
@@ -115,8 +231,9 @@ async function testSaveRestore(a) {
 
 async function testIsolation(a, b, nameA) {
   await b.reload({ waitUntil: "networkidle" });
-  const statusB = await connect(b);
-  if (statusB.includes(nameA)) throw new Error("Account B snapshot contains Account A workspace.");
+  await connect(b);
+  const bItemsBefore = await b.getByRole("listitem").allTextContents();
+  if (bItemsBefore.some((text) => text.includes(nameA))) throw new Error("Account B snapshot contains Account A workspace.");
   const bName = uniqueName("B");
   await createFreshWorkspace(b, bName);
   await connect(b);
@@ -176,73 +293,136 @@ async function testOffline(a) {
   if (text !== localName) throw new Error("Offline persistence did not preserve local work.");
 }
 
-async function testExportRemoval(a) {
+async function testExportRemoval(a, runRoot, seedDigest) {
   await a.reload({ waitUntil: "networkidle" });
   await connect(a);
-  const download = a.waitForEvent("download", { timeoutMs: 10_000 });
-  await a.getByRole("button", { name: "Export account backup" }).click();
-  await download.catch(() => { throw new Error("Account export did not start."); });
-  await clickAndAccept(a, a.getByRole("button", { name: "Remove account snapshot" }));
-  await a.getByRole("status").filter({ hasText: "Account snapshot removed" }).waitFor({ state: "visible" });
-  const status = await connect(a);
-  if (!/0 saved projects/.test(status)) throw new Error("Account snapshot removal did not produce an empty snapshot.");
+  await reversibleRemoval({
+    read: () => readSnapshot(a),
+    exportBackup: async () => {
+      const download = a.waitForEvent("download", { timeoutMs: 10_000 });
+      await a.getByRole("button", { name: "Export account backup" }).click();
+      const file = await (await download).path();
+      if (!file) throw new Error("Account export was unavailable.");
+      const exported = await fs.readFile(file, "utf8");
+      await fs.writeFile(path.join(runRoot, `account-a-export-${randomUUID()}.json`), exported, { mode: 0o600, flag: "wx" });
+      return JSON.parse(exported);
+    },
+    remove: async () => {
+      await clickAndAccept(a, a.getByRole("button", { name: "Remove account snapshot" }));
+      await a.getByRole("status").filter({ hasText: "Account snapshot removed" }).waitFor({ state: "visible" });
+    },
+    restore: (snapshot) => restoreSnapshot(a, snapshot, seedDigest),
+    localDigest: () => localWorkspaceDigest(a),
+    seedDigest,
+  });
 }
 
-export function compareAccountDigests(digestA, digestB, expectedOwnerDigest = "") {
+function validateExpectedDigests(expected) {
+  if (![expected.owner, expected.a, expected.b].every((digest) => /^[0-9a-f]{64}$/.test(digest ?? ""))) {
+    throw new Error("Owner and both disposable account digests are required before account writes.");
+  }
+  if (new Set([expected.owner, expected.a, expected.b]).size !== 3) throw new Error("Owner and disposable accounts must be distinct.");
+}
+
+export function compareAccountDigests(digestA, digestB, expected = {}) {
   if (!digestA || !digestB) throw new Error("Both acceptance contexts must be authenticated.");
   if (digestA === digestB) throw new Error("Acceptance contexts resolved to the same backend account.");
-  if (expectedOwnerDigest && (digestA === expectedOwnerDigest || digestB === expectedOwnerDigest)) {
+  validateExpectedDigests(expected);
+  if (digestA === expected.owner || digestB === expected.owner) {
     throw new Error("An acceptance context resolved to the configured owner account.");
   }
+  if (digestA !== expected.a || digestB !== expected.b) throw new Error("A context is not the qualified disposable account.");
   return true;
 }
 
 export function sanitizeEvidence(results, commit = process.env.GITHUB_SHA ?? "unknown") {
-  return { generatedAt: new Date().toISOString(), testedCommit: commit, acceptanceOrigin, tests: results.map(({ name, pass, result }) => ({ name, pass, result })) };
+  return { generatedAt: new Date().toISOString(), testedCommit: /^[0-9a-f]{40}$/.test(commit) ? commit : "unknown", acceptanceOrigin,
+    tests: results.map(({ name, pass }) => ({ name: TEST_NAMES.includes(name) ? name : "qualification", pass: pass === true, result: pass === true ? "verified" : "failed" })) };
 }
 
 async function main() {
+  assertAcceptanceTargets(acceptanceOrigin, apiBase);
+  validateExpectedDigests(accountDigests);
   const moduleRoot = process.env.STUDIO_QA_NODE_MODULES;
   if (!moduleRoot) throw new Error("Set STUDIO_QA_NODE_MODULES to a separate node_modules directory containing playwright.");
   const { chromium } = await import(pathToFileURL(path.join(moduleRoot, "playwright/index.mjs")));
   const runRoot = process.env.STUDIO_ACCEPTANCE_RUN_DIR
     ? path.resolve(process.env.STUDIO_ACCEPTANCE_RUN_DIR)
     : await fs.mkdtemp(path.join(os.tmpdir(), "solvelang-studio-acceptance-"));
-  await fs.mkdir(runRoot, { recursive: true });
-  const a = await chromium.launchPersistentContext(path.join(runRoot, "account-a"), { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
-  const b = await chromium.launchPersistentContext(path.join(runRoot, "account-b"), { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
+  await fs.mkdir(runRoot, { recursive: true, mode: 0o700 });
+  if (((await fs.stat(runRoot)).mode & 0o077) !== 0) throw new Error("Acceptance run directory must be private.");
+  const profileA = path.join(runRoot, "account-a"), profileB = path.join(runRoot, "account-b");
+  const profileExists = async (location) => fs.stat(location).then(() => true, (error) => {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  });
+  const freshA = !await profileExists(profileA), freshB = !await profileExists(profileB);
+  const a = await chromium.launchPersistentContext(profileA, { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
+  const b = await chromium.launchPersistentContext(profileB, { headless: process.env.STUDIO_QA_HEADLESS === "1", viewport: { width: 1440, height: 1000 } });
   const pageA = a.pages()[0] ?? await a.newPage();
   const pageB = b.pages()[0] ?? await b.newPage();
   await Promise.all([labelPage(pageA, "Account A"), labelPage(pageB, "Account B")]);
   console.log("Two isolated persistent acceptance contexts are open: Account A and Account B.");
-  const digestA = await waitForAuthentication(pageA, "Account A");
-  const digestB = await waitForAuthentication(pageB, "Account B");
-  compareAccountDigests(digestA, digestB, ownerDigest);
   const results = [];
   const run = async (name, fn) => {
     try {
-      const result = await fn();
-      results.push({ name, pass: true, result: typeof result === "string" ? result : "verified" });
-    } catch (error) {
-      results.push({ name, pass: false, result: error instanceof Error ? error.message : "acceptance failed" });
-      throw error;
+      await fn();
+      results.push({ name, pass: true });
+    } catch {
+      results.push({ name, pass: false });
+      throw new Error(`${name} failed; private recovery backups remain in the run directory.`);
     }
   };
-  let names;
+  let originalA, originalB, seedA = "", seedB = "", failure;
   try {
-    names = await (async () => { let result; await run(TEST_NAMES[0], async () => { result = await testSaveRestore(pageA); return "persistence and restore verified"; }); return result; })();
+    await Promise.all([freshA ? waitForSeedStorage(pageA) : undefined, freshB ? waitForSeedStorage(pageB) : undefined]);
+    [seedA, seedB] = await Promise.all([
+      qualifyLocalWorkspace(pageA, path.join(runRoot, "account-a-seed.sha256"), freshA),
+      qualifyLocalWorkspace(pageB, path.join(runRoot, "account-b-seed.sha256"), freshB),
+    ]);
+    const digestA = await waitForAuthentication(pageA, "Account A");
+    const digestB = await waitForAuthentication(pageB, "Account B");
+    compareAccountDigests(digestA, digestB, accountDigests);
+    await Promise.all([
+      qualifyLocalWorkspace(pageA, path.join(runRoot, "account-a-seed.sha256"), false),
+      qualifyLocalWorkspace(pageB, path.join(runRoot, "account-b-seed.sha256"), false),
+    ]);
+    [originalA, originalB] = await Promise.all([readSnapshot(pageA), readSnapshot(pageB)]);
+    assertTestOwnedWorkspace(originalA.workspace, seedA);
+    assertTestOwnedWorkspace(originalB.workspace, seedB);
+    const runId = randomUUID();
+    await fs.writeFile(path.join(runRoot, `account-a-before-${runId}.json`), JSON.stringify(originalA.workspace), { mode: 0o600, flag: "wx" });
+    await fs.writeFile(path.join(runRoot, `account-b-before-${runId}.json`), JSON.stringify(originalB.workspace), { mode: 0o600, flag: "wx" });
+    runMarker = `Studio acceptance ${runId}`;
+    let names;
+    await run(TEST_NAMES[0], async () => { names = await testSaveRestore(pageA); });
     await run(TEST_NAMES[1], () => testIsolation(pageA, pageB, names.name));
     await run(TEST_NAMES[2], () => testStaleRevision(pageA));
     await run(TEST_NAMES[3], () => testSwitchProtection(pageA, pageB, names.name));
     await run(TEST_NAMES[4], () => testOffline(pageA));
-    await run(TEST_NAMES[5], () => testExportRemoval(pageA));
+    await run(TEST_NAMES[5], () => testExportRemoval(pageA, runRoot, seedA));
+  } catch {
+    failure = new Error("Studio acceptance failed; inspect sanitized evidence and private recovery backups.");
+    if (!results.length) results.push({ name: "qualification", pass: false });
   } finally {
+    if (originalA && originalB && runMarker) {
+      const restored = await Promise.allSettled([
+        restoreSnapshot(pageA, originalA, seedA), restoreSnapshot(pageB, originalB, seedB),
+      ]);
+      if (restored.some((result) => result.status === "rejected")) {
+        failure = new Error("Studio account restoration failed; preserve the private recovery backups and profiles.");
+        results.push({ name: "post-run-restoration", pass: false });
+      }
+    }
     await fs.mkdir(path.dirname(evidencePath), { recursive: true });
     await fs.writeFile(evidencePath, `${JSON.stringify(sanitizeEvidence(results), null, 2)}\n`, { mode: 0o600 });
     await a.close();
     await b.close();
   }
-  console.log(`All six Studio acceptance checks passed. Sanitized evidence: ${evidencePath}`);
+  if (failure) throw failure;
+  console.log("All six Studio acceptance checks passed; sanitized evidence was written.");
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) await main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  await main().catch(() => { console.error("Studio acceptance stopped; preserve the run directory and private recovery backups."); process.exitCode = 1; });
+}

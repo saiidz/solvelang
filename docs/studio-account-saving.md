@@ -52,7 +52,7 @@ account saving is available; site auto-deployment alone is insufficient. Keep
 Verify with two disposable test accounts: account A saves and restores in another
 browser; account B cannot read A; stale revisions return 409; sign-out/account
 switching does not transfer a pending save; offline errors preserve local work;
-export and account-snapshot removal work. No customer project should be used as
+export, account-snapshot removal, and exact restoration work. No customer project should be used as
 test data. Test environment proof and production acceptance are separate records.
 
 ### Deterministic acceptance harness
@@ -62,13 +62,37 @@ persistent Playwright profiles under `STUDIO_ACCEPTANCE_RUN_DIR` (or a temporary
 run directory): `Account A` and `Account B`. The process stays alive while each
 profile is authenticated, then privately compares one-way account digests and
 fails closed if either profile is unauthenticated, both resolve to the same
-account, or a configured `STUDIO_ACCEPTANCE_OWNER_ACCOUNT_DIGEST` matches.
+account, or the identities do not exactly match three required, distinct
+`STUDIO_ACCEPTANCE_OWNER_ACCOUNT_DIGEST`,
+`STUDIO_ACCEPTANCE_DISPOSABLE_ACCOUNT_A_DIGEST`, and
+`STUDIO_ACCEPTANCE_DISPOSABLE_ACCOUNT_B_DIGEST` values. Each value is the
+lowercase SHA-256 digest of the corresponding private account ID; never put
+raw IDs or credentials in command history or evidence.
 Magic-link navigation in another profile cannot satisfy the waiting context.
 
-The harness then runs the six checks and writes only sanitized outcomes to
+Do not run the harness from PR #957: its final check empties Account A's
+snapshot without restoring it. Before running the repaired harness, establish
+whether earlier acceptance removed any projects by checking preserved browser
+storage, persistent profiles, downloaded account backups, and the production
+table's PITR window. Keep all such material intact. Production recovery requires
+separate owner authorization; restore to an isolated table first where possible.
+
+The repaired harness refuses to write if either account or browser profile
+contains non-acceptance projects. A new persistent profile may contain the
+Studio-generated support-triage starter; a digest of its document, versions,
+and traces is recorded privately before authentication, and only that unchanged
+starter is permitted afterward. It saves private, mode-0600 pre-run workspace
+backups and a copy of the account export in the mode-0700 run directory, verifies the export against the
+exact prior snapshot, removes only a qualified disposable account snapshot,
+restores it even after a removal failure, and verifies that browser-local data
+did not change. It also restores both accounts to their pre-run snapshots after
+the six checks. Preserve the run directory and backups if restoration fails.
+
+The harness writes only sanitized outcomes to
 `STUDIO_QA_EVIDENCE_PATH` (defaulting to a temporary file outside the repository). It never
-reads or emits cookies, tokens, passwords, CSRF values, account IDs, or workspace
-contents. Supply `STUDIO_QA_NODE_MODULES` with an isolated Playwright install and
+emits cookies, tokens, passwords, CSRF values, account IDs, or workspace
+contents in logs or evidence. Private recovery backups are separate from sanitized
+evidence. Supply `STUDIO_QA_NODE_MODULES` with an isolated Playwright install and
 run `node site/qa/studio-account-acceptance.mjs` only against the protected
 acceptance origin. Production account saving remains disabled.
 

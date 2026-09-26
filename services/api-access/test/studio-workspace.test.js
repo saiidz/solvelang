@@ -40,6 +40,18 @@ test("concurrent devices cannot silently overwrite each other",async()=>{
  assert.equal(outcomes.find(x=>x.status==="rejected").reason.statusCode,409);
  await assert.rejects(f.store.write("A",0,empty),{statusCode:409});
 });
+test("stale HTTP writes return workspace_conflict and preserve account isolation",async()=>{
+ const f=fixture(),body={accountId:"account-A",expectedRevision:0,workspace:empty};
+ assert.equal((await f.request("POST",body)).statusCode,200);
+ const stale=await f.request("POST",body);
+ assert.equal(stale.statusCode,409);
+ assert.equal(JSON.parse(stale.body).code,"workspace_conflict");
+ f.switchAccount();
+ const other=JSON.parse((await f.request("GET")).body);
+ assert.equal(other.accountId,"account-B");
+ assert.equal(other.revision,0);
+ assert.deepEqual(other.workspace,empty);
+});
 test("session, CSRF, origin and account switching all fail before writes",async()=>{
  const f=fixture(),body={accountId:"account-A",expectedRevision:0,workspace:empty};
  assert.equal((await f.request("POST",body,{cookie:"bad"})).statusCode,401);
