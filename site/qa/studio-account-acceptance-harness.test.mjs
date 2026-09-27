@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
-import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
+import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, openAccountProjectCopy, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
 const expected = { owner: digest("c"), a: digest("a"), b: digest("b") };
@@ -51,6 +51,30 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
   assert.deepEqual(actions, ["create", "Projects", "Connect / refresh account"]);
   await (await showAccountWorkspace(page)).getByRole("button", { name: "Save workspace and enable autosave" }).click();
   assert.deepEqual(actions.slice(-2), ["Projects", "Save workspace and enable autosave"]);
+});
+
+test("opening an account copy scopes the button to its project row", async () => {
+  const actions = [];
+  const page = { getByRole(role) {
+    if (role === "navigation") return { getByRole: () => ({ click: async () => { actions.push("Projects"); } }) };
+    if (role === "region") return {
+      waitFor: async () => {},
+      getByRole: (itemRole) => {
+        assert.equal(itemRole, "listitem", "the project name belongs to the row, not the button");
+        return { filter: ({ hasText }) => {
+          assert.equal(hasText, "Studio acceptance test A");
+          return { getByRole: (buttonRole, { name }) => {
+            assert.equal(buttonRole, "button");
+            assert.equal(name, "Open as local copy");
+            return { click: async () => { actions.push("copy"); } };
+          } };
+        } };
+      },
+    };
+    throw new Error("Unexpected page lookup");
+  } };
+  await openAccountProjectCopy(page, "Studio acceptance test A");
+  assert.deepEqual(actions, ["Projects", "copy"]);
 });
 
 test("account connection waits for its refresh and new UI state before reading projects", async () => {

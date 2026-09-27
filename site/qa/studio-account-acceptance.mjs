@@ -241,6 +241,12 @@ export async function createFreshWorkspace(page, name) {
   await setProjectName(page, name);
 }
 
+export async function openAccountProjectCopy(page, name) {
+  const account = await showAccountWorkspace(page);
+  await account.getByRole("listitem").filter({ hasText: name })
+    .getByRole("button", { name: "Open as local copy" }).click();
+}
+
 export async function clickAndAccept(page, locator) {
   const confirmation = page.waitForEvent("dialog", { timeout: 5_000 }).then(async (dialog) => {
     if (dialog.type() !== "confirm") {
@@ -264,8 +270,7 @@ async function testSaveRestore(a) {
   account = await showAccountWorkspace(a);
   const listed = await account.getByRole("listitem").allTextContents();
   if (!listed.some((text) => text.includes(name))) throw new Error("Account A snapshot did not restore the fresh workspace.");
-  account = await showAccountWorkspace(a);
-  await account.getByRole("button", { name: new RegExp(`${name}.*Open as local copy`) }).click();
+  await openAccountProjectCopy(a, name);
   return { name };
 }
 
