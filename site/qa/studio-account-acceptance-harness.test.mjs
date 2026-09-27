@@ -20,7 +20,7 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
     async waitFor() { if (view !== "projects") throw new Error("Account workspace is hidden"); },
     getByRole(role, { name } = {}) {
       if (role === "button") return accountButton(name);
-      if (role === "status") return { waitFor: async () => {}, innerText: async () => "Connected to disposable account" };
+      if (role === "status") return { filter: () => ({ waitFor: async () => {} }), innerText: async () => "Connected to disposable account" };
       throw new Error("Unexpected account lookup");
     },
   };
@@ -38,6 +38,7 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
       throw new Error("Unexpected page lookup");
     },
     waitForTimeout: async () => {},
+    waitForResponse: async () => ({ ok: () => true }),
   };
 
   await createFreshWorkspace(page, "Studio acceptance A");
@@ -48,6 +49,38 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
   assert.deepEqual(actions, ["create", "Projects", "Connect / refresh account"]);
   await (await showAccountWorkspace(page)).getByRole("button", { name: "Save workspace and enable autosave" }).click();
   assert.deepEqual(actions.slice(-2), ["Projects", "Save workspace and enable autosave"]);
+});
+
+test("account connection waits for the refresh response before reading projects", async () => {
+  let releaseResponse, refreshed = false, settled = false;
+  const response = new Promise((resolve) => { releaseResponse = () => { refreshed = true; resolve({ ok: () => true }); }; });
+  const status = {
+    waitFor: async () => {},
+    filter: () => status,
+    innerText: async () => refreshed ? "Connected to disposable account" : "Local saving is active",
+  };
+  const account = {
+    waitFor: async () => {},
+    getByRole(role) { return role === "status" ? status : { click: async () => {} }; },
+  };
+  const page = {
+    getByRole(role) {
+      if (role === "navigation") return { getByRole: () => ({ click: async () => {} }) };
+      if (role === "region") return account;
+      throw new Error("Unexpected page lookup");
+    },
+    waitForResponse: (matches, options) => {
+      assert.equal(matches({ url: () => "https://3l3y008e94.execute-api.us-east-2.amazonaws.com/customer/studio/workspace", request: () => ({ method: () => "GET" }) }), true);
+      assert.equal(options.timeout, 20_000);
+      return response;
+    },
+  };
+  const pending = connect(page).then(() => { settled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "the initial visible status must not complete account refresh");
+  releaseResponse();
+  await pending;
+  assert.equal(settled, true);
 });
 
 test("confirmation is accepted while the click is still pending", async () => {

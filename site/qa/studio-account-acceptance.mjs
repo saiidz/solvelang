@@ -201,10 +201,14 @@ export async function showAccountWorkspace(page) {
 
 export async function connect(page) {
   const account = await showAccountWorkspace(page);
-  await account.getByRole("button", { name: "Connect / refresh account" }).click();
-  await account.getByRole("status").waitFor({ state: "visible" });
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => candidate.url() === `${apiBase}/customer/studio/workspace`
+      && candidate.request().method() === "GET", { timeout: 20_000 }),
+    account.getByRole("button", { name: "Connect / refresh account" }).click(),
+  ]);
+  if (!response.ok()) throw new Error("Studio account connection was not authenticated.");
+  await account.getByRole("status").filter({ hasText: /^Connected to account / }).waitFor({ state: "visible", timeout: 20_000 });
   const status = await account.getByRole("status").innerText();
-  if (/could not connect|sign in|unauthorized|401/i.test(status)) throw new Error("Studio account connection was not authenticated.");
   return status;
 }
 
