@@ -84,6 +84,8 @@ try {
     for (const route of routes) {
       await navigate(route);
       if (route === "/") {
+        assert.ok(await evaluate(`document.body.textContent.includes('Current public status') && Array.from(document.querySelectorAll('a[href="/status/"]')).some(a => a.textContent.includes('View system status'))`), "homepage uses canonical status summary");
+        assert.ok(await evaluate(`!document.body.textContent.includes('Operational — recent observation')`), "blocked health fetch cannot become green");
         assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), `homepage fits ${width}px`);
         assert.equal(await evaluate(`document.querySelector('[data-home-experience]')?.dataset.homeExperience`), "studio");
         const homepageScreenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
@@ -101,6 +103,10 @@ try {
             writeFileSync(join(output, `homepage-${section}-${width}.png`), Buffer.from(sectionScreenshot.data, "base64"));
           }
         }
+      }
+      if (route === "/status/") {
+        assert.ok(await evaluate(`document.querySelector('[data-health-state="not_monitored"]') !== null`), "status is unverified without the public feed");
+        assert.ok(await evaluate(`document.querySelector('[data-health-state="operational"]') === null`), "blocked health fetch cannot become green");
       }
       assert.equal(await evaluate(`document.querySelectorAll('[data-site-header]').length`), 1, `one header: ${route}`);
       assert.ok(await evaluate(`document.querySelector('#site-content')?.getAttribute('tabindex') === '-1'`));

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { billingAvailability } from "../../product-capabilities";
 import { InteractiveHero } from "./InteractiveHero";
+import { StatusSummary } from "../status/StatusHealth";
 import styles from "./landing.module.css";
 
 const contextStages = [
@@ -105,6 +106,7 @@ export default function Page() {
               <article><span className={styles.evidenceStatus}><i /> DEPLOYED</span><h3>Available with gates.</h3><p>The public site, production customer-account infrastructure, and Studio account saving are deployed. {billingAvailability} Paid priority and general managed execution remain separate gates.</p></article>
               <article><span className={styles.evidenceStatus}><i /> VERIFIED LIVE</span><h3>Bounded checks, named plainly.</h3><p>Studio passed six authenticated acceptance checks and a bounded production save/reload, isolation, and local-first smoke. The temporary acceptance-origin cleanup remains a separate follow-up.</p></article>
             </div>
+            <StatusSummary />
             <div className={styles.benchmarkBand}><div><span>NO PLACEHOLDER PERCENTAGES</span><h3>Benchmarks will come with receipts.</h3><p>Solve Context provider-token, latency, and quality comparisons will be published only when the independent #898 evaluation supports them.</p></div><Link href="https://github.com/saiidz/solvelang/blob/main/docs/project-completion-evidence-2026-09-20.md" target="_blank" rel="noreferrer" className={styles.lightInlineLink}>View technical evidence <span aria-hidden="true">↗</span></Link></div>
           </div>
         </section>

@@ -26,6 +26,15 @@ test("exported status retains the archive and does not SSR an unsupported health
   assert.match(html, /archived/);
   assert.doesNotMatch(html, /No recorded incidents\./);
   assert.doesNotMatch(html, /data-health-state="operational"/);
+  assert.match(html, /Reporting mode: live observations \+ manual incident history/);
+  assert.match(html, /Current health not fully verified/);
+});
+test("exported homepage links to canonical status and has no server-rendered green claim", () => {
+  const html = readFileSync(join(root, "index.html"), "utf8").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  assert.match(html, /Current public status/);
+  assert.match(html, /View system status/);
+  assert.match(html, /href="\/status\/"/);
+  assert.doesNotMatch(html, /data-health-state="operational"/);
 });
 test("exported homepage Evidence uses shared billing capability text", () => {
   const html = readFileSync(join(root, "index.html"), "utf8").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");

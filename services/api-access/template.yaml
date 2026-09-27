@@ -373,6 +373,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /health
             Method: GET
+        PublicStatusHealth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/health
+            Method: GET
         CustomerMagicLink:
           Type: HttpApi
           Properties:

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { statusPage, type StatusIncident } from "./status-data";
 import { isCurrentIncident } from "./status-health";
-import { StatusHealth } from "./StatusHealth";
+import { StatusDashboard } from "./StatusHealth";
 
-export const metadata: Metadata = { title: "System status", description: "Dated SolveLang configuration evidence, current monitoring limitations, and preserved incident history." };
+export const metadata: Metadata = { title: "System status", description: "Recent bounded public health observations, monitoring limits, and preserved incident history." };
 function formatUtc(value: string) { return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value)); }
 
 function Incident({ incident }: { incident: StatusIncident }) {
@@ -31,20 +31,14 @@ export default function StatusPage() {
         <div className="border-b border-slate-200 pb-8">
           <p className="text-sm font-semibold text-blue-700">SolveLang operations</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">System status</h1>
-          <p className="mt-5 max-w-3xl leading-7 text-slate-600">Configuration evidence and incident records are separate from live service health. This page is a manual report, not an uptime monitor.</p>
-          <div className="mt-5"><StatusHealth components={statusPage.components} /></div>
+          <p className="mt-5 max-w-3xl leading-7 text-slate-600">Recent public health observations, capability evidence, and manually curated incidents are separate. A page response does not verify customer-specific behavior.</p>
         </div>
         <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">Reporting mode: manual</h2>
-          <p className="mt-3 text-sm leading-7 text-slate-600">No independent uptime percentages or SLA history are published. A successful deployment or an enabled feature is not evidence of continuing availability. Missing, future-dated, or expired health observations are shown as unverified, never green.</p>
-          <p className="mt-3 text-sm text-slate-600">Report revised <time dateTime={statusPage.lastUpdated}>{formatUtc(statusPage.lastUpdated)} UTC</time>. This is not a last-seen heartbeat.</p>
+          <h2 className="text-lg font-semibold">Reporting mode: live observations + manual incident history</h2>
+          <p className="mt-3 text-sm leading-7 text-slate-600">Public read-only checks are bounded snapshots, not an SLA. They expire; missing, failed, future-dated, or expired observations become unverified. Incident history remains manually curated. No uptime percentage is inferred.</p>
+          <p className="mt-3 text-sm text-slate-600">Incident record last revised <time dateTime={statusPage.lastUpdated}>{formatUtc(statusPage.lastUpdated)} UTC</time>. This is not a last-seen heartbeat.</p>
         </section>
-        <section className="mt-10" aria-labelledby="components-heading">
-          <h2 id="components-heading" className="text-2xl font-semibold">Components and documented configuration</h2>
-          <div className="mt-5 divide-y divide-slate-200 overflow-hidden rounded-3xl border border-slate-200 bg-white">
-            {statusPage.components.map((component) => <article key={component.name} className="p-6"><h3 className="text-lg font-semibold">{component.name}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{component.description}</p><p className="mt-3 text-sm leading-7 text-slate-700">{component.note}</p><div className="mt-4"><StatusHealth component={component} /></div></article>)}
-          </div>
-        </section>
+        <StatusDashboard />
         <section className="mt-12" aria-labelledby="active-heading">
           <h2 id="active-heading" className="text-2xl font-semibold">Current incident reports</h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">This is a manual register, not an automatic detection service.</p>

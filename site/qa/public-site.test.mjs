@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks, normalizePath, isCurrentLink } = require("../.studio-test-dist/public-site/components/site-navigation.js");
 const { statusPage } = require("../.studio-test-dist/public-site/(english)/status/status-data.js");
 const { observedState, overallState, isCurrentIncident, MAX_HEALTH_AGE_MS } = require("../.studio-test-dist/public-site/(english)/status/status-health.js");
+const { parseStatusObservations, fetchStatusObservations } = require("../.studio-test-dist/public-site/(english)/status/status-live.js");
 const { capabilityGroups, billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const now = Date.parse("2026-09-13T21:00:00Z");
@@ -53,8 +54,10 @@ test("one global header has no route exclusions and a real skip target", () => {
   }
 });
 test("deployed configuration is not manufactured health evidence", () => {
-  for (const component of statusPage.components) assert.equal(observedState(component, now), "not_monitored");
-  assert.equal(overallState(statusPage.components, now), "not_monitored");
+  assert.equal(observedState(undefined, now), "not_monitored");
+  assert.equal(overallState(statusPage.components.map(() => undefined), now), "not_monitored");
+  assert.ok(statusPage.components.some((component) => component.monitored));
+  assert.ok(statusPage.components.some((component) => !component.monitored));
 });
 test("a single healthy component cannot hide unknown components", () => {
   assert.equal(overallState([healthy, { ...healthy, state: "not_monitored" }], now), "not_monitored");
@@ -63,6 +66,7 @@ test("a single healthy component cannot hide unknown components", () => {
 });
 test("recent outages take precedence without inventing healthy unmeasured components", () => {
   assert.equal(overallState([healthy, { ...healthy, state: "degraded" }], now), "degraded");
+  assert.equal(overallState([healthy, { ...healthy, state: "partial_outage" }], now), "partial_outage");
   assert.equal(overallState([{ ...healthy, state: "not_monitored" }, { ...healthy, state: "major_outage" }], now), "major_outage");
 });
 test("expired, missing, invalid and future evidence fail closed", () => {
@@ -71,6 +75,39 @@ test("expired, missing, invalid and future evidence fail closed", () => {
   }
   assert.equal(observedState(healthy, now + 60_000), "not_monitored");
   assert.equal(observedState({ ...healthy, validForMs: 86_400_000 }, now + MAX_HEALTH_AGE_MS), "not_monitored");
+});
+test("live payload parser requires every monitored observation and discards malformed values", () => {
+  const observations = Object.fromEntries(statusPage.components.filter((component) => component.monitored).map((component) => [component.id, healthy]));
+  const valid = parseStatusObservations({ observations });
+  assert.equal(Object.keys(valid).length, Object.keys(observations).length);
+  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "not_monitored", "unmonitored components prevent an all-green claim");
+  assert.deepEqual(parseStatusObservations({ observations: { ...observations, website: { ...healthy, state: "invented" } } }), {});
+  assert.deepEqual(parseStatusObservations({ observations: { website: healthy } }), {});
+  assert.deepEqual(parseStatusObservations({ observations: null }), {});
+  assert.deepEqual(parseStatusObservations({ observations: { ...observations, website: { ...healthy, checkedAt: "future?" } } }), {});
+});
+test("failed and malformed public status fetches become unverified without credentials", async () => {
+  const base = "https://api.example.test";
+  const failed = async () => { throw new Error("private backend detail"); };
+  assert.deepEqual(await fetchStatusObservations(base, failed), {});
+  assert.deepEqual(await fetchStatusObservations(base, async () => new Response("not json", { status: 200, headers: { "content-type": "application/json" } })), {});
+  assert.deepEqual(await fetchStatusObservations(base, async () => new Response("x".repeat(17_000), { headers: { "content-type": "application/json" } })), {});
+  assert.deepEqual(await fetchStatusObservations(undefined, failed), {});
+  const calls = [];
+  await fetchStatusObservations(base, async (url, options) => { calls.push([String(url), options]); return new Response("{}", { headers: { "content-type": "application/json" } }); });
+  assert.equal(calls[0][0], `${base}/public/status/health`);
+  assert.equal(calls[0][1].credentials, "omit");
+  assert.equal(calls[0][1].cache, "no-store");
+});
+test("homepage and status use the one public status source without turning capability copy into health", () => {
+  const view = read("app/(english)/status/StatusHealth.tsx");
+  assert.match(view, /fetchStatusObservations\(API_BASE\)/);
+  assert.match(view, /export function StatusDashboard\(\)/);
+  assert.match(view, /export function StatusSummary\(\)/);
+  assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
+  assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
+  assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
+  assert.equal(statusPage.components.find((component) => component.id === "billing").monitored, false);
 });
 test("incident history survives refresh without a fabricated resolution", () => {
   const history = statusPage.incidents.find((incident) => incident.id === "2026-08-06-github-actions");
