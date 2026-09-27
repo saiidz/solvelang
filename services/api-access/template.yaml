@@ -191,6 +191,19 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  PublicStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: snapshotKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: snapshotKey
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
   ApiSubscriptionEventsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -312,6 +325,7 @@ Resources:
           API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
+          PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
@@ -338,6 +352,11 @@ Resources:
             TableName: !Ref ApiSubscriptionEventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+            Resource: !GetAtt PublicStatusTable.Arn
         - !If
           - AdminCrmFeatureEnabled
           - DynamoDBCrudPolicy:
@@ -372,6 +391,12 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /health
+            Method: GET
+        PublicStatusHealth:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/health
             Method: GET
         CustomerMagicLink:
           Type: HttpApi
@@ -561,6 +586,34 @@ Resources:
             Method: GET
             Auth:
               Authorizer: SolveLangApiKeyAuthorizer
+
+  PublicStatusCollectorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/public-status-collector-handler.handler
+      CodeUri: .
+      MemorySize: 128
+      Timeout: 10
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          SITE_ORIGIN: !Ref SiteOrigin
+          PUBLIC_API_HEALTH_URL: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/health
+          PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:UpdateItem
+              - dynamodb:PutItem
+            Resource: !GetAtt PublicStatusTable.Arn
+      Events:
+        Refresh:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+            Enabled: true
 
   ApiKeyAuthorizerFunction:
     Type: AWS::Serverless::Function

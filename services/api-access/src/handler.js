@@ -15,6 +15,7 @@ import { createAdminCustomerHandler } from "./admin-customer-handler.js";
 import { createAdminCustomerService } from "./admin-customer-service.js";
 import { createDynamoAdminCrmStore } from "./admin-crm-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
+import { createDynamoPublicStatusStore } from "./public-status-store.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
 import { createAccessGuardedCustomerAuthService } from "./customer-auth-access-service.js";
@@ -40,6 +41,7 @@ import { createTotpSecretProtector } from "./totp-kms.js";
 
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const publicStatusStore = createDynamoPublicStatusStore(documentClient, process.env.PUBLIC_STATUS_TABLE);
 const store = createDynamoApiAccessStore(documentClient, environment);
 const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
 const service = createApiAccessService({ store, pepper: environment.pepper, mode: environment.mode });
@@ -140,6 +142,7 @@ const application = createApiAccessHandler({
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
+  publicStatusReader: () => publicStatusStore.readSnapshot(),
 });
 
 const studioWorkspaceApplication = createStudioWorkspaceHandler({

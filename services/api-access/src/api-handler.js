@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
+import { unverifiedPublicStatus } from "./public-status.js";
 
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -56,6 +57,7 @@ export function createApiAccessHandler({
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
+  publicStatusReader = async () => unverifiedPublicStatus(),
   logger = console,
 }) {
   if (!service) throw new Error("API access service is required.");
@@ -126,6 +128,10 @@ export function createApiAccessHandler({
       const method = event?.requestContext?.http?.method ?? "GET";
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
       if (method === "OPTIONS") return response(204, {});
+      if (method === "GET" && path.endsWith("/public/status/health")) {
+        try { return response(200, await publicStatusReader()); }
+        catch { return response(200, unverifiedPublicStatus()); }
+      }
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, {
           status: "ok",
