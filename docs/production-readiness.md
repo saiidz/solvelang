@@ -1,6 +1,6 @@
 # SolveLang production readiness
 
-Status: **customer-facing API/account infrastructure is live; API subscription billing is enabled for controlled rollout; paid-priority/provider processing, support-automation activation, the first real-payment canary evidence, and the first live PostHog canary remain disabled or not established as live.**
+Status: **customer-facing API/account infrastructure is live; authenticated Studio acceptance passed 6/6 but normal production Studio account saving remains off; API subscription billing is enabled for controlled rollout; paid-priority/provider processing, support-automation activation, the first real-payment canary evidence, and the first live PostHog canary remain disabled or not established as live.**
 
 This document is the current launch-control summary. Historical preparation and rollout runbooks remain useful procedures, but their original `prepared`, `not deployed`, or `disabled` status text is not authoritative evidence of current production state. Use Issue #113 and the dated production-status records for the evidence trail, and require fresh proof before any protected live action.
 
@@ -35,8 +35,8 @@ PRs #939–#942 deployed the Studio workspace backend without changing existing
 account, TOTP, billing, table or IAM settings. Plan run 35530924473 and execution
 run 35531150309 passed at main `632b6ff82f2f54babe46e4e11e672675e4ca838e`.
 The workflow verified unchanged parameters/health and a 401 response for an
-unauthenticated Studio GET. The frontend account-saving flag remains off until
-two-account/cross-device acceptance. This deployment is not payment or provider
+unauthenticated Studio GET. The frontend account-saving flag remains off pending
+the reviewed production rollout. This deployment is not payment or provider
 activation evidence.
 
 ## Studio acceptance-origin maintenance — 2026-09-23
@@ -54,11 +54,48 @@ stack at `UPDATE_COMPLETE`.
 Live checks returned 204 with credentialed CORS for the exact acceptance
 origin, no CORS allow headers for an unrelated origin, and 401 for an
 unauthenticated Studio workspace GET. An unauthenticated request to the
-acceptance hostname returned 401 with a Basic authentication challenge. The
-acceptance build has not been inspected past its password gate, and none of the
-six authenticated Studio checks has been completed. The canonical Studio
-account-saving UI remains gated; this maintenance does not establish account
-acceptance, payment outcome, or provider activation.
+acceptance hostname returned 401 with a Basic authentication challenge. These
+were the 2026-09-23 observations, before the authenticated run below. The
+canonical Studio account-saving UI remains gated; this maintenance alone does
+not establish account acceptance, payment outcome, or provider activation.
+
+## Studio acceptance and production preflight — 2026-09-27
+
+The repaired deterministic harness at merged main
+`62da3f46b05c0449dce071f04729cf6d8e561616` passed all six authenticated
+checks on the protected acceptance surface with two fresh, distinct, qualified
+disposable accounts: save/restore, A/B isolation, stale-revision conflict,
+sign-out/account switching, offline local preservation, and
+export/removal/restoration. Protected pre-run snapshots were restored to their
+empty state, and browser-local projects survived. Sanitized evidence is retained
+outside the repository; excluded accounts and real workspaces were not used.
+This is acceptance-surface proof, not post-enablement production proof.
+
+Read-only AWS preflight in the verified SolveLang production account found
+Amplify `main` job 800 successfully deployed that exact commit, while normal
+Studio account-saving controls remain off. The canonical origin is
+`https://www.solve-lang.com`. The production API stack is `UPDATE_COMPLETE`,
+with API/customer accounts/TOTP/subscription billing flags preserved as enabled;
+the Studio backend remains deployed. The acceptance branch remains password
+protected with its preview selector enabled, and its exact origin remains in
+the API Gateway CORS allowlist alongside the canonical origin. Credentials are
+allowed only for those explicit origins, with no wildcard; the Studio handler
+enforces origin, session, account identity, revision, and CSRF checks. Sessions
+use HttpOnly, Secure, SameSite=None, Partitioned cookies. A direct read-only
+health invocation returned HTTP 200 with expected enabled flags; an
+unauthenticated Studio GET returned 401. Local network DNS blocked an
+independent public HTTP probe, so end-to-end public health is still a
+post-deployment verification requirement.
+
+The API and authorizer duration/error/throttle alarms, subscription-webhook
+failure alarm, and priority DLQ alarms were `OK` with actions enabled and one
+confirmed SNS subscription. The API log group retains 90 days. Customer-auth
+DynamoDB PITR is enabled; no restore drill or table mutation was performed.
+Site rollback is to redeploy the last known-good feature-off site build and
+verify account pages and API capability. Acceptance-origin cleanup, if safe
+after production verification, uses the protected API maintenance workflow,
+which preserves unrelated stack parameters and has CloudFormation/previous
+template rollback. Neither rollback was executed in this preflight.
 
 ## Environment isolation
 
