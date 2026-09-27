@@ -6,6 +6,7 @@ applications:
         preBuild:
           commands:
             - npm ci
+            - rm -f .env.production
             - npm run test:studio-acceptance-build
         build:
           commands:

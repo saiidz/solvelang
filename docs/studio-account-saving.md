@@ -3,7 +3,10 @@
 Backend deployed on 2026-09-20 at main `632b6ff82f2f54babe46e4e11e672675e4ca838e`
 in [run 35531150309](https://github.com/saiidz/solvelang/actions/runs/35531150309).
 Parameter/health preservation and unauthenticated 401 acceptance passed.
-Authenticated two-account acceptance is still pending; frontend controls remain off.
+Authenticated two-account acceptance passed 6/6 on 2026-09-27 using the
+protected acceptance surface and harness at main
+`62da3f46b05c0449dce071f04729cf6d8e561616`. Canonical production
+account-saving controls remain off pending the reviewed rollout.
 
 On 2026-09-23, PR [#954](https://github.com/saiidz/solvelang/pull/954) merged
 as `e4273de61151f4e703b4ef15c736f334460b9759`; exact-head CI passed before
@@ -15,10 +18,9 @@ existing stack parameters. A production preflight returned 204 with that exact
 origin, credentials enabled and the configured methods/headers. An unrelated
 origin received no CORS allow headers, and an unauthenticated workspace GET
 still returned 401. The acceptance hostname returns 401 with Basic
-authentication when requested without credentials. The protected build has not
-been inspected past that password gate; none of the six authenticated
-acceptance checks has been performed. The canonical Studio account-saving
-controls remain gated.
+authentication when requested without credentials. Those 2026-09-23 checks
+preceded the authenticated 2026-09-27 acceptance run; the canonical Studio
+account-saving controls remain gated.
 
 Studio remains local-first. Sign-in alone never uploads existing local workflows.
 The Projects view lets a signed-in user connect, inspect the account snapshot,
@@ -47,7 +49,10 @@ Use a reviewed deployment that preserves existing account, TOTP and billing
 configuration. Do not use the legacy billing-off customer-account deployment for
 this maintenance change. Deploy the API code and both SAM routes before claiming
 account saving is available; site auto-deployment alone is insufficient. Keep
-`NEXT_PUBLIC_STUDIO_ACCOUNT_SAVING_ENABLED` unset on `main`.
+the production build selector unset on `main` until the reviewed enablement.
+The repository-root `amplify.yml` must be present in the merged commit so
+Amplify runs the guarded build script. The previously configured app-level
+build specification ran `npm run build` directly and cannot apply that selector.
 
 Verify with two disposable test accounts: account A saves and restores in another
 browser; account B cannot read A; stale revisions return 409; sign-out/account
@@ -99,12 +104,18 @@ acceptance origin. Production account saving remains disabled.
 ## Isolated production acceptance surface
 
 The repository prepares a dedicated Amplify branch named `studio-acceptance`.
+Once merged, the repository-root `amplify.yml` runs the same guarded build on
+new branch builds and removes any generated `.env.production` before building.
 Its build emits account-saving controls only when `AWS_BRANCH` is exactly
 `studio-acceptance` and the branch-only Amplify variable
-`STUDIO_ACCEPTANCE_PREVIEW_ENABLED=true` is set. The build wrapper removes both
-public Studio flags from every other branch, including `main`, even if an
-app-wide public flag was configured accidentally. The acceptance UI labels the
-surface as disposable-data-only.
+`STUDIO_ACCEPTANCE_PREVIEW_ENABLED=true` is set. The build wrapper strips both
+public Studio flags before evaluating its branch selectors, so an app-wide
+public flag cannot enable account saving. Normal production controls require
+`AWS_BRANCH=main`, the explicit branch-only
+`STUDIO_PRODUCTION_ACCOUNT_SAVING_ENABLED=true` selector, and the verified
+production API base URL. That selector is currently unset. It never enables
+the acceptance preview label on `main`; the acceptance UI remains labeled
+disposable-data-only.
 
 The public build variable is a build selector, not an access control. Before
 setting it, restrict the `studio-acceptance` branch with Amplify's per-branch
@@ -124,10 +135,13 @@ link returns to that branch so the partitioned session stays in the same browser
 site partition. Requests without an origin retain the canonical-site callback.
 
 Repository code does not create the branch, configure its password, or turn on
-its branch-only build variable. The current branch URL is protected by Basic
-authentication, but its build contents have not been verified past that gate.
-Complete the six real acceptance checks on that isolated surface before
-considering any broader release. The canonical site remains gated.
+its branch-only build variable. The protected branch completed all six real
+acceptance checks on 2026-09-27: save/restore, A/B isolation, stale-revision
+conflict, sign-out/account switching, offline local preservation, and
+export/removal/restoration. Two fresh qualified disposable accounts were used;
+their pre-run snapshots were restored and browser-local work survived. The
+sanitized evidence is retained outside the repository. The canonical site
+remains gated until the production rollout is approved and verified.
 
 ## Validation source
 

@@ -1,20 +1,20 @@
 # SolveLang Roadmap
 
-## Current verification — 2026-09-22
+## Current verification — 2026-09-27
 
-Repository source status was re-audited on main
-`59ab9ff271850454a2029495c2faf34cb93a10c7` after #945. MCP v0.3.0 is published
-on npm and GitHub; main protection is enforced. PR #945 updates the manual Admin
-Gateway workflow to verify and preserve the existing billing state; it did not
-deploy production.
-See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
-remaining live acceptance gates. Older checkpoints below are historical.
+Repository source and Studio acceptance status were reconciled at main
+`62da3f46b05c0449dce071f04729cf6d8e561616`. The protected Studio
+acceptance run passed 6/6 authenticated checks with disposable accounts.
+Normal production account saving remains off pending the reviewed enablement.
+MCP v0.3.0 is published on npm and GitHub; main protection remains enforced.
+See [current production readiness](docs/production-readiness.md) for dated live
+evidence and remaining gates. Older checkpoints below are historical.
 
 This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **implemented and repository-tested**, **published**, **deployed**, and **verified with a live provider/customer path**. A merge or green CI result proves only repository state unless a separate deployment/provider record says otherwise.
 
 ## Current evidence checkpoint
 
-Reconciled on **2026-09-22** from the source baseline on `main` after PR **#945** (`59ab9ff271850454a2029495c2faf34cb93a10c7`). Production evidence remains separately dated; live GitHub state always wins if this checkpoint becomes stale.
+Reconciled on **2026-09-27** from `main` (`62da3f46b05c0449dce071f04729cf6d8e561616`). Production evidence remains separately dated; live GitHub state always wins if this checkpoint becomes stale.
 
 The original repository-completion mission, #820, is closed. Current open project tracks are:
 
@@ -23,7 +23,7 @@ The original repository-completion mission, #820, is closed. Current open projec
 | [#898 — Solve Context](https://github.com/saiidz/solvelang/issues/898) | Deterministic plan/pack/retrieve/handoff tools, changed-path + bounded graph selection, reversible structured compaction, synthetic evals, pinned first-party/external source regression suites, strict agent-run measurement records, pair-integrity hardening through #920, and published MCP v0.3.0 | Independent held-out evidence; actual Claude/Codex baseline-vs-context runs with provider-reported token/latency/cache/quality evidence; managed-workspace installation and public Plugin Directory listing |
 | [#896 — connected support](https://github.com/saiidz/solvelang/issues/896) | Native IMAP/SMTP plus optional Gmail, durable claims/cursors, account controls, safe cutover/recovery and repository-qualified monitoring are implemented through #897/#903/#906/#908 | Separately approved default-off deployment, exact-scope credentials, one bounded new-message canary, actual task/reply outcome and stop/recovery proof |
 | [#833 — PostHog canary](https://github.com/saiidz/solvelang/issues/833) | Bounded transport, approval/single-use claim, credential-source, kill-switch and lifecycle boundaries exist through #834–#870 | Concrete external secret/lifecycle backend, current project/key scope, fresh owner authorization and one bounded read-only live canary |
-| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live; PR #945 makes the manual Admin Gateway workflow preserve that billing state; Studio account saving remains feature-gated; real-payment acceptance, priority and support activation remain gated | Six authenticated Studio production checks, bounded billing canary and customer/legal acceptance, live monitoring/recovery evidence for any activated feature, plus separate owner approvals for protected actions |
+| [#113 — production launch](https://github.com/saiidz/solvelang/issues/113) | API access, customer password accounts, private Admin/TOTP and controlled-rollout billing are live. The protected Studio acceptance surface passed all six authenticated checks at `62da3f46`; normal production Studio account saving remains feature-gated. Real-payment acceptance, priority and support activation remain gated. | Reviewed production Studio enablement, deployment and bounded production verification; then the separately authorized billing canary and customer/legal acceptance. Live monitoring/recovery evidence remains required for any activated feature. |
 
 ## Working today
 
@@ -94,6 +94,7 @@ These are **priority projections, not delivery dates or completion percentages**
 
 ### Priority 1 — controlled product activation
 
+- Studio account saving: after separate approval, enable the explicit `main` build selector, deploy and verify signed-out behavior, disposable account save/reload and isolation, and local-first/offline fallback. Remove the temporary acceptance origin/surface only when safe. Keep billing and other feature gates separate.
 - Connected support: deploy default-off only under exact-scope approval, then prove one new-message task/reply and stop/recovery path.
 - PostHog: qualify the concrete credential/lifecycle backend and perform only the separately authorized bounded canary.
 - Billing: preserve the enabled controlled rollout and complete scoped real-payment/customer acceptance before broader launch. Paid priority/provider execution stays disabled until its own configuration, monitoring, recovery and authorization gates pass.
