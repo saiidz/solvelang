@@ -5,10 +5,10 @@ import { alternatesForRoute } from "../i18n/seo";
 export const metadata: Metadata = {
   title: {
     absolute:
-      "SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes",
+      "SolveLang — Workflow Intelligence With Explicit Boundaries",
   },
   description:
-    "SolveLang is an open-source workflow language for making deterministic rules, AI-assisted decisions, approvals, tools, and failure paths readable and reviewable before managed automation.",
+    "Model workflows, inspect repository evidence, and run a browser-safe SolveLang preview. See what is repository-tested, deployed, and verified live before automating.",
   alternates: alternatesForRoute(""),
 };
 

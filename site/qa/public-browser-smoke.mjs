@@ -83,6 +83,25 @@ try {
     await command("Emulation.setDeviceMetricsOverride", { width, height: 900, deviceScaleFactor: 1, mobile: false });
     for (const route of routes) {
       await navigate(route);
+      if (route === "/") {
+        assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), `homepage fits ${width}px`);
+        assert.equal(await evaluate(`document.querySelector('[data-home-experience]')?.dataset.homeExperience`), "studio");
+        const homepageScreenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+        writeFileSync(join(output, `homepage-${width}.png`), Buffer.from(homepageScreenshot.data, "base64"));
+        await evaluate(`document.querySelectorAll('[aria-label="Choose a live Solve experience"] button')[1].click()`);
+        await waitFor(() => evaluate(`document.querySelector('[data-home-experience]')?.dataset.homeExperience === 'repository'`), "Repository experience did not open");
+        assert.equal(await evaluate(`document.querySelector('[data-home-experience] a')?.getAttribute('href')`), "/repository-audit/");
+        await evaluate(`document.querySelectorAll('[aria-label="Choose a live Solve experience"] button')[2].click()`);
+        await waitFor(() => evaluate(`document.querySelector('[data-home-experience]')?.dataset.homeExperience === 'preview'`), "Browser preview experience did not open");
+        assert.equal(await evaluate(`document.querySelector('[data-home-experience] a')?.getAttribute('href')`), "/run/");
+        if (width !== 320) {
+          for (const section of ["studio", "solve-context", "evidence", "quickstart"]) {
+            await evaluate(`document.getElementById(${JSON.stringify(section)}).scrollIntoView({ behavior: 'instant' })`);
+            const sectionScreenshot = await command("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+            writeFileSync(join(output, `homepage-${section}-${width}.png`), Buffer.from(sectionScreenshot.data, "base64"));
+          }
+        }
+      }
       assert.equal(await evaluate(`document.querySelectorAll('[data-site-header]').length`), 1, `one header: ${route}`);
       assert.ok(await evaluate(`document.querySelector('#site-content')?.getAttribute('tabindex') === '-1'`));
       assert.ok(await evaluate(`document.querySelector('[data-site-header]').scrollWidth <= innerWidth`), `header fits ${width}: ${route}`);

@@ -92,18 +92,20 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /api[_-]?key/i);
 });
 
-test("homepage restores product storytelling without weakening maturity boundaries", () => {
-  assert.match(landing, /See the system before you automate it\./);
-  assert.match(landing, /Map the real workflow/);
-  assert.match(landing, /Make every branch reviewable/);
-  assert.match(landing, /Automate with control/);
-  assert.match(landing, /Open Workflow Intelligence Studio/);
-  assert.match(landing, /Workflow X-Ray/);
-  assert.match(landing, /FAQPage/);
-  assert.match(landing, /Rust CLI is the canonical runtime/);
-  assert.match(landing, /Studio analysis is deterministic/);
-  assert.match(landing, /browser preview supports a smaller safe subset/i);
-  assert.match(landing, /Managed production execution is planned, not available today/);
+test("homepage follows the approved product order and preserves maturity boundaries", () => {
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  let previous = -1;
+  for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
+  assert.match(landing, /Real capability\./);
+  assert.match(landing, /Explicit boundaries\./);
+  assert.match(landing, /Repository-tested/);
+  assert.match(landing, /Deployed/);
+  assert.match(landing, /VERIFIED LIVE/);
+  assert.match(landing, /temporary acceptance-origin cleanup remains a separate follow-up/i);
+  assert.match(landing, /Real provider token and performance comparisons will be published only when the independent #898 evaluation supports them/);
+  assert.match(landing, /host side effects denied/);
+  assert.match(landing, /general managed execution remain separate gates/);
+  assert.doesNotMatch(landing, /FAQPage/);
   assert.match(landing, /\/terms\//);
   assert.match(landing, /\/refund-policy\//);
   assert.match(landing, /\/withdraw\//);
