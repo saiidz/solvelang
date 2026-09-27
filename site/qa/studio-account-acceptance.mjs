@@ -201,13 +201,24 @@ export async function showAccountWorkspace(page) {
 
 export async function connect(page) {
   const account = await showAccountWorkspace(page);
+  const refreshBusy = page.waitForFunction(() => {
+    const region = document.querySelector('[aria-label="Account workspace"]');
+    return [...(region?.querySelectorAll("button") ?? [])]
+      .some((button) => button.textContent?.trim() === "Connect / refresh account" && button.disabled);
+  }, null, { timeout: 20_000 });
   const [response] = await Promise.all([
     page.waitForResponse((candidate) => candidate.url() === `${apiBase}/customer/studio/workspace`
       && candidate.request().method() === "GET", { timeout: 20_000 }),
     account.getByRole("button", { name: "Connect / refresh account" }).click(),
+    refreshBusy,
   ]);
   if (!response.ok()) throw new Error("Studio account connection was not authenticated.");
-  await account.getByRole("status").filter({ hasText: /^Connected to account / }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.waitForFunction(() => {
+    const region = document.querySelector('[aria-label="Account workspace"]');
+    const button = [...(region?.querySelectorAll("button") ?? [])]
+      .find((candidate) => candidate.textContent?.trim() === "Connect / refresh account");
+    return button && !button.disabled && /^Connected to account /.test(region.querySelector('[role="status"]')?.textContent ?? "");
+  }, null, { timeout: 20_000 });
   const status = await account.getByRole("status").innerText();
   return status;
 }

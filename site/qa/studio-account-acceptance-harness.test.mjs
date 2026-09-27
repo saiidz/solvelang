@@ -39,6 +39,7 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
     },
     waitForTimeout: async () => {},
     waitForResponse: async () => ({ ok: () => true }),
+    waitForFunction: async () => {},
   };
 
   await createFreshWorkspace(page, "Studio acceptance A");
@@ -51,18 +52,19 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
   assert.deepEqual(actions.slice(-2), ["Projects", "Save workspace and enable autosave"]);
 });
 
-test("account connection waits for the refresh response before reading projects", async () => {
-  let releaseResponse, refreshed = false, settled = false;
-  const response = new Promise((resolve) => { releaseResponse = () => { refreshed = true; resolve({ ok: () => true }); }; });
+test("account connection waits for its refresh and new UI state before reading projects", async () => {
+  let releaseResponse, releaseBusy, releaseReady, settled = false;
+  const response = new Promise((resolve) => { releaseResponse = () => resolve({ ok: () => true }); });
+  const busy = new Promise((resolve) => { releaseBusy = resolve; });
+  const ready = new Promise((resolve) => { releaseReady = resolve; });
   const status = {
-    waitFor: async () => {},
-    filter: () => status,
-    innerText: async () => refreshed ? "Connected to disposable account" : "Local saving is active",
+    innerText: async () => "Connected to disposable account",
   };
   const account = {
     waitFor: async () => {},
-    getByRole(role) { return role === "status" ? status : { click: async () => {} }; },
+    getByRole(role) { return role === "status" ? status : { click: async () => { releaseBusy(); } }; },
   };
+  let stateWaits = 0;
   const page = {
     getByRole(role) {
       if (role === "navigation") return { getByRole: () => ({ click: async () => {} }) };
@@ -74,11 +76,18 @@ test("account connection waits for the refresh response before reading projects"
       assert.equal(options.timeout, 20_000);
       return response;
     },
+    waitForFunction: (_, __, options) => {
+      assert.equal(options.timeout, 20_000);
+      return ++stateWaits === 1 ? busy : ready;
+    },
   };
   const pending = connect(page).then(() => { settled = true; });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(settled, false, "the initial visible status must not complete account refresh");
   releaseResponse();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "a response must not complete refresh before the new UI state is ready");
+  releaseReady();
   await pending;
   assert.equal(settled, true);
 });
