@@ -201,24 +201,30 @@ export async function showAccountWorkspace(page) {
 
 export async function connect(page) {
   const account = await showAccountWorkspace(page);
-  const refreshBusy = page.waitForFunction(() => {
-    const region = document.querySelector('[aria-label="Account workspace"]');
-    return [...(region?.querySelectorAll("button") ?? [])]
-      .some((button) => button.textContent?.trim() === "Connect / refresh account" && button.disabled);
-  }, null, { timeout: 20_000 });
   const [response] = await Promise.all([
     page.waitForResponse((candidate) => candidate.url() === `${apiBase}/customer/studio/workspace`
       && candidate.request().method() === "GET", { timeout: 20_000 }),
     account.getByRole("button", { name: "Connect / refresh account" }).click(),
-    refreshBusy,
   ]);
   if (!response.ok()) throw new Error("Studio account connection was not authenticated.");
-  await page.waitForFunction(() => {
+  const snapshot = await response.json();
+  const projects = snapshot?.workspace?.projects;
+  if (typeof snapshot?.accountId !== "string" || !Array.isArray(projects)
+      || projects.some((project) => typeof project?.document?.name !== "string")) {
+    throw new Error("Studio account refresh returned an invalid snapshot.");
+  }
+  const expected = {
+    status: `Connected to account ${snapshot.accountId}. ${projects.length} saved projects. Nothing has been uploaded.`,
+    names: projects.map((project) => project.document.name),
+  };
+  await page.waitForFunction(({ status, names }) => {
     const region = document.querySelector('[aria-label="Account workspace"]');
     const button = [...(region?.querySelectorAll("button") ?? [])]
       .find((candidate) => candidate.textContent?.trim() === "Connect / refresh account");
-    return button && !button.disabled && /^Connected to account /.test(region.querySelector('[role="status"]')?.textContent ?? "");
-  }, null, { timeout: 20_000 });
+    const listed = [...(region?.querySelectorAll("li") ?? [])].map((item) => item.firstChild?.textContent?.trim());
+    return button && !button.disabled && region.querySelector('[role="status"]')?.textContent?.trim() === status
+      && listed.length === names.length && listed.every((name, index) => name === names[index]);
+  }, expected, { polling: 100, timeout: 20_000 });
   const status = await account.getByRole("status").innerText();
   return status;
 }

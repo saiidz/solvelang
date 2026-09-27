@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
@@ -38,7 +39,7 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
       throw new Error("Unexpected page lookup");
     },
     waitForTimeout: async () => {},
-    waitForResponse: async () => ({ ok: () => true }),
+    waitForResponse: async () => ({ ok: () => true, json: async () => ({ accountId: "disposable", workspace: { projects: [] } }) }),
     waitForFunction: async () => {},
   };
 
@@ -53,18 +54,25 @@ test("creating a workflow moves to Canvas, then account connection returns to Pr
 });
 
 test("account connection waits for its refresh and new UI state before reading projects", async () => {
-  let releaseResponse, releaseBusy, releaseReady, settled = false;
-  const response = new Promise((resolve) => { releaseResponse = () => resolve({ ok: () => true }); });
-  const busy = new Promise((resolve) => { releaseBusy = resolve; });
+  let releaseResponse, releaseReady, settled = false;
+  const response = new Promise((resolve) => { releaseResponse = () => resolve({
+    ok: () => true,
+    json: async () => ({ accountId: "disposable", workspace: { projects: [{ document: { name: "Test project" } }] } }),
+  }); });
   const ready = new Promise((resolve) => { releaseReady = resolve; });
   const status = {
     innerText: async () => "Connected to disposable account",
   };
   const account = {
     waitFor: async () => {},
-    getByRole(role) { return role === "status" ? status : { click: async () => { releaseBusy(); } }; },
+    getByRole(role) { return role === "status" ? status : { click: async () => {} }; },
   };
-  let stateWaits = 0;
+  const rendered = { status: "Connected to account disposable. 0 saved projects. Nothing has been uploaded.", names: [] };
+  const region = {
+    querySelectorAll: (selector) => selector === "button" ? [{ textContent: "Connect / refresh account", disabled: false }]
+      : rendered.names.map((name) => ({ firstChild: { textContent: name } })),
+    querySelector: () => ({ textContent: rendered.status }),
+  };
   const page = {
     getByRole(role) {
       if (role === "navigation") return { getByRole: () => ({ click: async () => {} }) };
@@ -76,9 +84,17 @@ test("account connection waits for its refresh and new UI state before reading p
       assert.equal(options.timeout, 20_000);
       return response;
     },
-    waitForFunction: (_, __, options) => {
+    waitForFunction: (predicate, expected, options) => {
       assert.equal(options.timeout, 20_000);
-      return ++stateWaits === 1 ? busy : ready;
+      assert.equal(options.polling, 100);
+      assert.deepEqual(expected, { status: "Connected to account disposable. 1 saved projects. Nothing has been uploaded.", names: ["Test project"] });
+      const matches = () => runInNewContext(`(${predicate.toString()})(expected)`, { document: { querySelector: () => region }, expected });
+      assert.equal(matches(), false, "the stale connected status and list must not qualify");
+      return ready.then(() => {
+        rendered.status = expected.status;
+        rendered.names = expected.names;
+        assert.equal(matches(), true, "the matching completed state must qualify without observing a transient disabled button");
+      });
     },
   };
   const pending = connect(page).then(() => { settled = true; });
