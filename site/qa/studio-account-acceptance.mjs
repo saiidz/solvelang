@@ -208,11 +208,15 @@ async function createFreshWorkspace(page, name) {
   await setProjectName(page, name);
 }
 
-async function clickAndAccept(page, locator) {
-  const dialogPromise = page.waitForEvent("dialog", { timeoutMs: 5_000 }).catch(() => null);
-  await locator.click();
-  const dialog = await dialogPromise;
-  if (dialog?.type === "confirm") await dialog.accept();
+export async function clickAndAccept(page, locator) {
+  const confirmation = page.waitForEvent("dialog", { timeout: 5_000 }).then(async (dialog) => {
+    if (dialog.type() !== "confirm") {
+      await dialog.dismiss();
+      throw new Error("Expected a confirm dialog for the destructive action.");
+    }
+    await dialog.accept();
+  });
+  await Promise.all([locator.click(), confirmation]);
 }
 
 async function testSaveRestore(a) {
