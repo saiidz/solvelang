@@ -294,27 +294,30 @@ async function testIsolation(a, b, nameA) {
   return { nameB: bName };
 }
 
-async function testStaleRevision(a) {
+export function prepareStaleWorkspaceWrite(snapshot, expectedRevision, expectedAccountId, seedDigest = "") {
+  if (snapshot.accountId !== expectedAccountId) throw new Error("Account changed before stale revision check; no account write is allowed.");
+  assertTestOwnedWorkspace(snapshot.workspace, seedDigest);
+  return { accountId: snapshot.accountId, expectedRevision, workspace: snapshot.workspace };
+}
+
+async function testStaleRevision(a, expectedAccountId, seedDigest) {
   await connect(a);
-  const staleRevision = await a.evaluate(async (base) => {
-    const response = await fetch(`${base}/customer/studio/workspace`, { credentials: "include", cache: "no-store" });
-    if (!response.ok) throw new Error("Could not establish the stale revision baseline.");
-    return (await response.json()).revision;
-  }, apiBase);
+  const baseline = await readSnapshot(a);
+  prepareStaleWorkspaceWrite(baseline, baseline.revision, expectedAccountId, seedDigest);
   await createFreshWorkspace(a, uniqueName("A newer"));
   const accountWorkspace = await showAccountWorkspace(a);
   await clickAndAccept(a, accountWorkspace.getByRole("button", { name: "Save workspace and enable autosave" }));
   await accountWorkspace.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
-  const staleResult = await a.evaluate(async ({ base, expectedRevision }) => {
-    const account = await fetch(`${base}/customer/studio/workspace`, { credentials: "include", cache: "no-store" }).then((response) => response.json());
-    const workspace = JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]");
+  const current = await readSnapshot(a);
+  const body = prepareStaleWorkspaceWrite(current, baseline.revision, expectedAccountId, seedDigest);
+  const staleResult = await a.evaluate(async ({ base, csrfToken, body }) => {
     const response = await fetch(`${base}/customer/studio/workspace`, {
-      method: "POST", credentials: "include", headers: { "content-type": "application/json", "x-solvelang-csrf": account.csrfToken },
-      body: JSON.stringify({ accountId: account.accountId, expectedRevision, workspace: { schemaVersion: 1, projects: workspace } }),
+      method: "POST", credentials: "include", headers: { "content-type": "application/json", "x-solvelang-csrf": csrfToken },
+      body: JSON.stringify(body),
     });
-    const body = await response.json().catch(() => ({}));
-    return { status: response.status, code: body.code };
-  }, { base: apiBase, expectedRevision: staleRevision });
+    const result = await response.json().catch(() => ({}));
+    return { status: response.status, code: result.code };
+  }, { base: apiBase, csrfToken: current.csrfToken, body });
   if (staleResult.status !== 409 || staleResult.code !== "workspace_conflict") throw new Error("Stale save did not return HTTP 409 workspace_conflict.");
   return { status: "409 workspace_conflict" };
 }
@@ -471,7 +474,7 @@ async function main() {
     let names;
     await run(TEST_NAMES[0], async () => { names = await testSaveRestore(pageA); });
     await run(TEST_NAMES[1], () => testIsolation(pageA, pageB, names.name));
-    await run(TEST_NAMES[2], () => testStaleRevision(pageA));
+    await run(TEST_NAMES[2], () => testStaleRevision(pageA, originalA.accountId, seedA));
     await run(TEST_NAMES[3], () => testSwitchProtection(pageA, pageB, names.name));
     await run(TEST_NAMES[4], () => testOffline(pageA));
     await run(TEST_NAMES[5], () => testExportRemoval(pageA, runRoot, seedA));
