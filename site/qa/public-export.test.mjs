@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks } = require("../.studio-test-dist/public-site/components/site-navigation.js");
+const { billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
 const root = fileURLToPath(new URL("../out/", import.meta.url));
 const routes = new Set(["/", "/landing/", "/privacy-policy/", "/terms/", ...primaryLinks.map(x => x.href), ...toolLinks.map(x => x.href)]);
 for (const route of routes) test(`static export has shared navigation and valid destinations: ${route}`, () => {
@@ -25,4 +26,10 @@ test("exported status retains the archive and does not SSR an unsupported health
   assert.match(html, /archived/);
   assert.doesNotMatch(html, /No recorded incidents\./);
   assert.doesNotMatch(html, /data-health-state="operational"/);
+});
+test("exported homepage Evidence uses shared billing capability text", () => {
+  const html = readFileSync(join(root, "index.html"), "utf8").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  const evidence = html.match(/<section[^>]*id="evidence"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(evidence, "homepage Evidence section is exported");
+  assert.ok(evidence.includes(billingAvailability), "Evidence billing status matches shared capability facts");
 });

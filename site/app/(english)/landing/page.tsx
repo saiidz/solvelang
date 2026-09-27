@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { billingAvailability } from "../../product-capabilities";
 import { InteractiveHero } from "./InteractiveHero";
 import styles from "./landing.module.css";
 
@@ -101,7 +102,7 @@ export default function Page() {
             <div className="mt-5 grid gap-12 lg:grid-cols-[1fr_0.75fr] lg:items-end lg:gap-20"><div><h2 id="evidence-title" className="text-balance text-5xl font-semibold tracking-[-0.06em] text-white sm:text-7xl">Claims should have a state — not just a headline.</h2><p className="mt-6 max-w-2xl text-xl leading-8 text-[#b8c9d9]">Solve separates what is implemented from what is actually proven.</p></div><p className="max-w-lg leading-8 text-[#93a9bd]">Deterministic behavior, traceable source evidence, explicit execution boundaries, and safety before side effects shape the product. Repository checks, browser acceptance, deployment verification, and live canaries are recorded separately.</p></div>
             <div className={styles.evidenceLedger}>
               <article><span className={styles.evidenceStatus}><i /> REPOSITORY-TESTED</span><h3>Repeatable by design.</h3><p>Core analysis and validation paths have deterministic tests. Findings, relationships, context selections, and handoffs retain source provenance. Repository-tested does not mean deployed.</p></article>
-              <article><span className={styles.evidenceStatus}><i /> DEPLOYED</span><h3>Available with gates.</h3><p>The public site, production customer-account infrastructure, and Studio account saving are deployed. Billing is enabled for controlled rollout; the first real-payment canary remains pending. Paid priority and general managed execution remain separate gates.</p></article>
+              <article><span className={styles.evidenceStatus}><i /> DEPLOYED</span><h3>Available with gates.</h3><p>The public site, production customer-account infrastructure, and Studio account saving are deployed. {billingAvailability} Paid priority and general managed execution remain separate gates.</p></article>
               <article><span className={styles.evidenceStatus}><i /> VERIFIED LIVE</span><h3>Bounded checks, named plainly.</h3><p>Studio passed six authenticated acceptance checks and a bounded production save/reload, isolation, and local-first smoke. The temporary acceptance-origin cleanup remains a separate follow-up.</p></article>
             </div>
             <div className={styles.benchmarkBand}><div><span>NO PLACEHOLDER PERCENTAGES</span><h3>Benchmarks will come with receipts.</h3><p>Solve Context provider-token, latency, and quality comparisons will be published only when the independent #898 evaluation supports them.</p></div><Link href="https://github.com/saiidz/solvelang/blob/main/docs/project-completion-evidence-2026-09-20.md" target="_blank" rel="noreferrer" className={styles.lightInlineLink}>View technical evidence <span aria-hidden="true">↗</span></Link></div>
