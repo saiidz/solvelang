@@ -3,11 +3,66 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { assertAcceptanceTargets, assertTestOwnedWorkspace, compareAccountDigests, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, TEST_NAMES } from "./studio-account-acceptance.mjs";
+import { assertAcceptanceTargets, assertTestOwnedWorkspace, clickAndAccept, compareAccountDigests, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
 const expected = { owner: digest("c"), a: digest("a"), b: digest("b") };
 const workspace = { schemaVersion: 1, projects: [{ document: { name: "Studio acceptance A 20260924123456" } }] };
+
+test("confirmation is accepted while the click is still pending", async () => {
+  const steps = [];
+  let showDialog, releaseClick;
+  const dialogShown = new Promise((resolve) => { showDialog = resolve; });
+  const clickReleased = new Promise((resolve) => { releaseClick = resolve; });
+  const page = {
+    waitForEvent(event) {
+      assert.equal(event, "dialog");
+      return dialogShown;
+    },
+  };
+  const locator = {
+    async click() {
+      steps.push("click started");
+      queueMicrotask(() => showDialog({
+        type: () => "confirm",
+        async accept() { steps.push("confirm accepted"); releaseClick(); },
+      }));
+      await clickReleased;
+      steps.push("click completed");
+    },
+  };
+  let timer;
+  try {
+    await Promise.race([
+      clickAndAccept(page, locator),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("click waited for an unhandled confirm")), 500); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+  assert.deepEqual(steps, ["click started", "confirm accepted", "click completed"]);
+});
+
+test("unexpected dialogs are dismissed and reject the destructive click", async () => {
+  let accepted = false, dismissed = false;
+  const page = { waitForEvent: async () => ({
+    type: () => "alert",
+    accept: async () => { accepted = true; },
+    dismiss: async () => { dismissed = true; },
+  }) };
+  await assert.rejects(clickAndAccept(page, { click: async () => {} }), /confirm/);
+  assert.equal(accepted, false);
+  assert.equal(dismissed, true);
+});
+
+test("a destructive click fails when no confirmation appears", async () => {
+  const page = { waitForEvent: async (event, options) => {
+    assert.equal(event, "dialog");
+    assert.equal(options.timeout, 5_000);
+    throw new Error("confirmation timeout");
+  } };
+  await assert.rejects(clickAndAccept(page, { click: async () => {} }), /confirmation timeout/);
+});
 
 test("owner and both exact disposable identities are mandatory before account writes", () => {
   assert.equal(compareAccountDigests(expected.a, expected.b, expected), true);
