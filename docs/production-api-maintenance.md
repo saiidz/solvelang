@@ -20,7 +20,9 @@ account-authentication, or API-key secrets.
    response without a customer session. Retain the Actions run as evidence.
 5. For acceptance only, protect the dedicated Amplify `studio-acceptance` branch
    with per-branch password access control before enabling its branch-only build
-   variable. The canonical `main` build remains feature-off.
+   variable. The canonical `main` build remained feature-off during the
+   acceptance run; see [production readiness](production-readiness.md) for its
+   subsequent enablement.
 
 Every existing parameter uses `UsePreviousValue`, including secrets and enabled
 billing/TOTP/CRM flags. The sole optional parameter transition is the exact

@@ -1,6 +1,6 @@
 # SolveLang production readiness
 
-Status: **customer-facing API/account infrastructure is live; authenticated Studio acceptance passed 6/6 but normal production Studio account saving remains off; API subscription billing is enabled for controlled rollout; paid-priority/provider processing, support-automation activation, the first real-payment canary evidence, and the first live PostHog canary remain disabled or not established as live.**
+Status: **customer-facing API/account infrastructure and production Studio account saving are live; authenticated Studio acceptance passed 6/6 and bounded production Studio smoke checks passed; API subscription billing is enabled for controlled rollout; paid-priority/provider processing, support-automation activation, the first real-payment canary evidence, and the first live PostHog canary remain disabled or not established as live.** The temporary password-protected Studio acceptance surface and its exact CORS origin remain configured because the protected cleanup plan failed before any stack update.
 
 This document is the current launch-control summary. Historical preparation and rollout runbooks remain useful procedures, but their original `prepared`, `not deployed`, or `disabled` status text is not authoritative evidence of current production state. Use Issue #113 and the dated production-status records for the evidence trail, and require fresh proof before any protected live action.
 
@@ -95,11 +95,54 @@ The API and authorizer duration/error/throttle alarms, subscription-webhook
 failure alarm, and priority DLQ alarms were `OK` with actions enabled and one
 confirmed SNS subscription. The API log group retains 90 days. Customer-auth
 DynamoDB PITR is enabled; no restore drill or table mutation was performed.
-Site rollback is to redeploy the last known-good feature-off site build and
+At this preflight checkpoint, site rollback was to redeploy the last known-good feature-off site build and
 verify account pages and API capability. Acceptance-origin cleanup, if safe
 after production verification, uses the protected API maintenance workflow,
 which preserves unrelated stack parameters and has CloudFormation/previous
 template rollback. Neither rollback was executed in this preflight.
+
+## Studio production enablement — 2026-09-27
+
+PR [#964](https://github.com/saiidz/solvelang/pull/964) merged at
+`1e8e3db46dfc504d61bd7b1c8a9427df0333a2e7` after the four required
+checks passed at its exact head. Amplify app `d3j3fgk4gcxxg2`, branch `main`,
+automatically built that commit in job 801 using the guarded repository-root
+`amplify.yml`; BUILD, DEPLOY, and VERIFY succeeded while the production selector
+was unset. The canonical Studio showed local-first controls without account
+connection controls. Only then was the branch-only
+`STUDIO_PRODUCTION_ACCOUNT_SAVING_ENABLED=true` selector set. Release job 802
+at the same commit completed BUILD, DEPLOY, and VERIFY successfully, and the
+canonical Studio displayed the account controls without the acceptance label.
+
+Production smoke checks used two new, distinct, empty disposable accounts on
+the canonical origin. Signed-out connection required sign-in; both disposable
+accounts connected; an explicit bounded save survived reload; the other account
+remained empty; an offline-created local workflow survived while the remote
+snapshot stayed unchanged. The saved test snapshot was restored to empty:
+Account A ended at zero projects, revision 2; Account B at zero projects,
+revision 0. Browser-local test work survived. No real account or excluded
+workspace was used. Sanitized evidence and private recovery material are kept
+outside the repository.
+
+Final public probes returned HTTP 200 for `/health`, HTTP 401 for an
+unauthenticated Studio workspace GET, credentialed CORS only for the canonical
+and configured acceptance origins, and no CORS allow headers for an unrelated
+origin. The API stack remained `UPDATE_COMPLETE`, and its existing API,
+customer-account, TOTP, and controlled-rollout subscription-billing flags were
+preserved. The Studio production launch gate is complete; this does not
+establish a real payment or authorize another feature activation.
+
+The prepared protected maintenance workflow was dispatched in plan-only mode
+to disable the temporary acceptance origin. After environment review, [run
+36336061193](https://github.com/saiidz/solvelang/actions/runs/36336061193)
+failed at its exact-origin CORS validator before executing any stack update.
+The exact acceptance origin therefore remains allowlisted and the acceptance
+branch remains password protected. Do not bypass the workflow or remove the
+origin until its validator is corrected and a new plan validates the bounded
+change. The approved feature-off rollback remains to clear only the production
+selector and rebuild; #964 itself can be reverted and the last known-good site
+build redeployed if the root build specification proves defective. Neither
+rollback was needed or executed.
 
 ## Environment isolation
 

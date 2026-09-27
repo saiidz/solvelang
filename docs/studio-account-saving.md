@@ -6,7 +6,10 @@ Parameter/health preservation and unauthenticated 401 acceptance passed.
 Authenticated two-account acceptance passed 6/6 on 2026-09-27 using the
 protected acceptance surface and harness at main
 `62da3f46b05c0449dce071f04729cf6d8e561616`. Canonical production
-account-saving controls remain off pending the reviewed rollout.
+account-saving controls were enabled from main commit
+`1e8e3db46dfc504d61bd7b1c8a9427df0333a2e7` after a guarded feature-off
+build and bounded production smoke checks. See
+[production readiness](production-readiness.md) for the rollout evidence.
 
 On 2026-09-23, PR [#954](https://github.com/saiidz/solvelang/pull/954) merged
 as `e4273de61151f4e703b4ef15c736f334460b9759`; exact-head CI passed before
@@ -19,8 +22,7 @@ origin, credentials enabled and the configured methods/headers. An unrelated
 origin received no CORS allow headers, and an unauthenticated workspace GET
 still returned 401. The acceptance hostname returns 401 with Basic
 authentication when requested without credentials. Those 2026-09-23 checks
-preceded the authenticated 2026-09-27 acceptance run; the canonical Studio
-account-saving controls remain gated.
+preceded the authenticated 2026-09-27 acceptance run and production rollout.
 
 Studio remains local-first. Sign-in alone never uploads existing local workflows.
 The Projects view lets a signed-in user connect, inspect the account snapshot,
@@ -48,8 +50,9 @@ This removes the current account copy, not retained infrastructure backups.
 Use a reviewed deployment that preserves existing account, TOTP and billing
 configuration. Do not use the legacy billing-off customer-account deployment for
 this maintenance change. Deploy the API code and both SAM routes before claiming
-account saving is available; site auto-deployment alone is insufficient. Keep
-the production build selector unset on `main` until the reviewed enablement.
+account saving is available; site auto-deployment alone is insufficient. The
+reviewed production build selector was enabled only after the guarded feature-off
+`main` build succeeded.
 The repository-root `amplify.yml` must be present in the merged commit so
 Amplify runs the guarded build script. The previously configured app-level
 build specification ran `npm run build` directly and cannot apply that selector.
@@ -99,7 +102,8 @@ emits cookies, tokens, passwords, CSRF values, account IDs, or workspace
 contents in logs or evidence. Private recovery backups are separate from sanitized
 evidence. Supply `STUDIO_QA_NODE_MODULES` with an isolated Playwright install and
 run `node site/qa/studio-account-acceptance.mjs` only against the protected
-acceptance origin. Production account saving remains disabled.
+acceptance origin. The 6/6 acceptance record predates production enablement;
+the bounded canonical-origin smoke result is recorded separately.
 
 ## Isolated production acceptance surface
 
@@ -113,7 +117,8 @@ public Studio flags before evaluating its branch selectors, so an app-wide
 public flag cannot enable account saving. Normal production controls require
 `AWS_BRANCH=main`, the explicit branch-only
 `STUDIO_PRODUCTION_ACCOUNT_SAVING_ENABLED=true` selector, and the verified
-production API base URL. That selector is currently unset. It never enables
+production API base URL. That selector is enabled on the production `main`
+branch. It never enables
 the acceptance preview label on `main`; the acceptance UI remains labeled
 disposable-data-only.
 
@@ -140,8 +145,11 @@ acceptance checks on 2026-09-27: save/restore, A/B isolation, stale-revision
 conflict, sign-out/account switching, offline local preservation, and
 export/removal/restoration. Two fresh qualified disposable accounts were used;
 their pre-run snapshots were restored and browser-local work survived. The
-sanitized evidence is retained outside the repository. The canonical site
-remains gated until the production rollout is approved and verified.
+sanitized evidence is retained outside the repository. The canonical site is
+enabled after guarded deployment and bounded production verification. The
+temporary acceptance origin and password-protected branch remain configured:
+the protected plan-only removal failed validation before any stack update.
+See [production readiness](production-readiness.md) before attempting cleanup.
 
 ## Validation source
 
