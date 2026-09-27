@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isStudioAcceptanceBuild, isStudioProductionBuild, PRODUCTION_API_BASE_URL, studioBuildEnvironment } from "../scripts/build-studio-acceptance.mjs";
 
@@ -9,6 +10,14 @@ const base = {
   NEXT_PUBLIC_STUDIO_ACCEPTANCE_PREVIEW: "true",
   NEXT_PUBLIC_API_ACCESS_BASE_URL: PRODUCTION_API_BASE_URL,
 };
+
+test("the repository-root Amplify build runs the guarded selector", () => {
+  const spec = readFileSync(new URL("../../amplify.yml", import.meta.url), "utf8");
+  assert.match(spec, /appRoot:\s*site/);
+  assert.match(spec, /rm -f \.env\.production/);
+  assert.match(spec, /npm run test:studio-acceptance-build/);
+  assert.match(spec, /npm run build:studio-acceptance/);
+});
 
 test("account-saving UI is compiled only for the explicitly opted-in acceptance branch", () => {
   assert.equal(isStudioAcceptanceBuild(base), true);

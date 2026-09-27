@@ -73,7 +73,11 @@ This is acceptance-surface proof, not post-enablement production proof.
 
 Read-only AWS preflight in the verified SolveLang production account found
 Amplify `main` job 800 successfully deployed that exact commit, while normal
-Studio account-saving controls remain off. The canonical origin is
+Studio account-saving controls remain off. The live `main` build still uses
+Amplify's app-level `npm run build` specification; the guarded script is not
+yet on that build path. The production-enable candidate moves `amplify.yml` to
+the repository root so the reviewed guarded build takes precedence after
+merge, while its production selector remains unset. The canonical origin is
 `https://www.solve-lang.com`. The production API stack is `UPDATE_COMPLETE`,
 with API/customer accounts/TOTP/subscription billing flags preserved as enabled;
 the Studio backend remains deployed. The acceptance branch remains password

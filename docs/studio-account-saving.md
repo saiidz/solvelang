@@ -50,6 +50,9 @@ configuration. Do not use the legacy billing-off customer-account deployment for
 this maintenance change. Deploy the API code and both SAM routes before claiming
 account saving is available; site auto-deployment alone is insufficient. Keep
 the production build selector unset on `main` until the reviewed enablement.
+The repository-root `amplify.yml` must be present in the merged commit so
+Amplify runs the guarded build script. The previously configured app-level
+build specification ran `npm run build` directly and cannot apply that selector.
 
 Verify with two disposable test accounts: account A saves and restores in another
 browser; account B cannot read A; stale revisions return 409; sign-out/account
@@ -101,6 +104,8 @@ acceptance origin. Production account saving remains disabled.
 ## Isolated production acceptance surface
 
 The repository prepares a dedicated Amplify branch named `studio-acceptance`.
+Once merged, the repository-root `amplify.yml` runs the same guarded build on
+new branch builds and removes any generated `.env.production` before building.
 Its build emits account-saving controls only when `AWS_BRANCH` is exactly
 `studio-acceptance` and the branch-only Amplify variable
 `STUDIO_ACCEPTANCE_PREVIEW_ENABLED=true` is set. The build wrapper strips both
