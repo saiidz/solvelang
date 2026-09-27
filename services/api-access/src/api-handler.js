@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
-import { createPublicStatusSource, publicApiHealthUrl } from "./public-status.js";
+import { unverifiedPublicStatus } from "./public-status.js";
 
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
@@ -57,7 +57,7 @@ export function createApiAccessHandler({
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
-  publicStatusFetch = fetch,
+  publicStatusReader = async () => unverifiedPublicStatus(),
   logger = console,
 }) {
   if (!service) throw new Error("API access service is required.");
@@ -73,7 +73,6 @@ export function createApiAccessHandler({
   if (subscriptionBillingEnabled && (!subscriptionCheckout || !subscriptionLifecycle || !stripeGateway)) {
     throw new Error("Stripe subscription services are required when billing is enabled.");
   }
-  const publicStatus = createPublicStatusSource({ siteOrigin, fetchImpl: publicStatusFetch });
 
   function response(statusCode, body, extraHeaders = {}, cookies = []) {
     return {
@@ -130,7 +129,8 @@ export function createApiAccessHandler({
       const path = (event?.rawPath ?? "/").replace(/\/$/, "") || "/";
       if (method === "OPTIONS") return response(204, {});
       if (method === "GET" && path.endsWith("/public/status/health")) {
-        return response(200, await publicStatus(publicApiHealthUrl(event)));
+        try { return response(200, await publicStatusReader()); }
+        catch { return response(200, unverifiedPublicStatus()); }
       }
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, {
