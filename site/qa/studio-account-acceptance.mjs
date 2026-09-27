@@ -188,11 +188,44 @@ async function waitForAuthentication(page, label) {
   throw new Error(`${label} authentication timeout; no session was qualified for this context.`);
 }
 
-async function connect(page) {
-  await page.getByRole("button", { name: "Connect / refresh account" }).click();
-  await page.getByRole("status").waitFor({ state: "visible" });
-  const status = await page.getByRole("status").innerText();
-  if (/could not connect|sign in|unauthorized|401/i.test(status)) throw new Error("Studio account connection was not authenticated.");
+export async function showAccountWorkspace(page) {
+  try {
+    await page.getByRole("navigation", { name: "Studio navigation" }).getByRole("button", { name: /Projects$/ }).click();
+    const account = page.getByRole("region", { name: "Account workspace" });
+    await account.waitFor({ state: "visible", timeout: 5_000 });
+    return account;
+  } catch {
+    throw new Error("projects_navigation_failed");
+  }
+}
+
+export async function connect(page) {
+  const account = await showAccountWorkspace(page);
+  const [response] = await Promise.all([
+    page.waitForResponse((candidate) => candidate.url() === `${apiBase}/customer/studio/workspace`
+      && candidate.request().method() === "GET", { timeout: 20_000 }),
+    account.getByRole("button", { name: "Connect / refresh account" }).click(),
+  ]);
+  if (!response.ok()) throw new Error("Studio account connection was not authenticated.");
+  const snapshot = await response.json();
+  const projects = snapshot?.workspace?.projects;
+  if (typeof snapshot?.accountId !== "string" || !Array.isArray(projects)
+      || projects.some((project) => typeof project?.document?.name !== "string")) {
+    throw new Error("Studio account refresh returned an invalid snapshot.");
+  }
+  const expected = {
+    status: `Connected to account ${snapshot.accountId}. ${projects.length} saved projects. Nothing has been uploaded.`,
+    names: projects.map((project) => project.document.name),
+  };
+  await page.waitForFunction(({ status, names }) => {
+    const region = document.querySelector('[aria-label="Account workspace"]');
+    const button = [...(region?.querySelectorAll("button") ?? [])]
+      .find((candidate) => candidate.textContent?.trim() === "Connect / refresh account");
+    const listed = [...(region?.querySelectorAll("li") ?? [])].map((item) => item.firstChild?.textContent?.trim());
+    return button && !button.disabled && region.querySelector('[role="status"]')?.textContent?.trim() === status
+      && listed.length === names.length && listed.every((name, index) => name === names[index]);
+  }, expected, { polling: 100, timeout: 20_000 });
+  const status = await account.getByRole("status").innerText();
   return status;
 }
 
@@ -203,7 +236,7 @@ async function setProjectName(page, name) {
   await page.waitForTimeout(500);
 }
 
-async function createFreshWorkspace(page, name) {
+export async function createFreshWorkspace(page, name) {
   await page.getByRole("button", { name: /Create blank workflow/ }).click();
   await setProjectName(page, name);
 }
@@ -223,29 +256,35 @@ async function testSaveRestore(a) {
   const name = uniqueName("A");
   await createFreshWorkspace(a, name);
   await connect(a);
-  await clickAndAccept(a, a.getByRole("button", { name: "Save workspace and enable autosave" }));
-  await a.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
+  let account = await showAccountWorkspace(a);
+  await clickAndAccept(a, account.getByRole("button", { name: "Save workspace and enable autosave" }));
+  await account.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
   await a.reload({ waitUntil: "networkidle" });
   await connect(a);
-  const listed = await a.getByRole("listitem").allTextContents();
+  account = await showAccountWorkspace(a);
+  const listed = await account.getByRole("listitem").allTextContents();
   if (!listed.some((text) => text.includes(name))) throw new Error("Account A snapshot did not restore the fresh workspace.");
-  await a.getByRole("button", { name: new RegExp(`${name}.*Open as local copy`) }).click();
+  account = await showAccountWorkspace(a);
+  await account.getByRole("button", { name: new RegExp(`${name}.*Open as local copy`) }).click();
   return { name };
 }
 
 async function testIsolation(a, b, nameA) {
   await b.reload({ waitUntil: "networkidle" });
   await connect(b);
-  const bItemsBefore = await b.getByRole("listitem").allTextContents();
+  let account = await showAccountWorkspace(b);
+  const bItemsBefore = await account.getByRole("listitem").allTextContents();
   if (bItemsBefore.some((text) => text.includes(nameA))) throw new Error("Account B snapshot contains Account A workspace.");
   const bName = uniqueName("B");
   await createFreshWorkspace(b, bName);
   await connect(b);
-  await clickAndAccept(b, b.getByRole("button", { name: "Save workspace and enable autosave" }));
-  await b.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
+  account = await showAccountWorkspace(b);
+  await clickAndAccept(b, account.getByRole("button", { name: "Save workspace and enable autosave" }));
+  await account.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
   await a.reload({ waitUntil: "networkidle" });
   await connect(a);
-  const aItems = await a.getByRole("listitem").allTextContents();
+  account = await showAccountWorkspace(a);
+  const aItems = await account.getByRole("listitem").allTextContents();
   if (aItems.some((text) => text.includes(bName))) throw new Error("Account A snapshot contains Account B workspace.");
   return { nameB: bName };
 }
@@ -258,8 +297,9 @@ async function testStaleRevision(a) {
     return (await response.json()).revision;
   }, apiBase);
   await createFreshWorkspace(a, uniqueName("A newer"));
-  await clickAndAccept(a, a.getByRole("button", { name: "Save workspace and enable autosave" }));
-  await a.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
+  const accountWorkspace = await showAccountWorkspace(a);
+  await clickAndAccept(a, accountWorkspace.getByRole("button", { name: "Save workspace and enable autosave" }));
+  await accountWorkspace.getByRole("status").filter({ hasText: "Saved to your account" }).waitFor({ state: "visible" });
   const staleResult = await a.evaluate(async ({ base, expectedRevision }) => {
     const account = await fetch(`${base}/customer/studio/workspace`, { credentials: "include", cache: "no-store" }).then((response) => response.json());
     const workspace = JSON.parse(localStorage.getItem("solvelang.studio.projects.v1") ?? "[]");
@@ -278,11 +318,12 @@ async function testSwitchProtection(a, b, nameA) {
   await a.reload({ waitUntil: "networkidle" });
   const pending = uniqueName("A pending");
   await createFreshWorkspace(a, pending);
-  await a.getByRole("button", { name: "Connect / refresh account" }).click();
-  await a.getByRole("button", { name: /Pause autosave/ }).click().catch(() => {});
+  await connect(a);
+  const account = await showAccountWorkspace(a);
+  await account.getByRole("button", { name: /Pause autosave/ }).click().catch(() => {});
   await b.reload({ waitUntil: "networkidle" });
   await connect(b);
-  const bItems = await b.getByRole("listitem").allTextContents();
+  const bItems = await (await showAccountWorkspace(b)).getByRole("listitem").allTextContents();
   if (bItems.some((text) => text.includes(pending) || text.includes(nameA))) throw new Error("Pending Account A state transferred into Account B.");
 }
 
@@ -290,9 +331,13 @@ async function testOffline(a) {
   await a.reload({ waitUntil: "networkidle" });
   const localName = uniqueName("offline");
   await createFreshWorkspace(a, localName);
+  const account = await showAccountWorkspace(a);
   await a.context().route(`${apiBase}/customer/studio/workspace`, (route) => route.abort());
-  await a.getByRole("button", { name: "Connect / refresh account" }).click().catch(() => {});
-  await a.context().unroute(`${apiBase}/customer/studio/workspace`);
+  try {
+    await account.getByRole("button", { name: "Connect / refresh account" }).click().catch(() => {});
+  } finally {
+    await a.context().unroute(`${apiBase}/customer/studio/workspace`);
+  }
   const text = await a.getByRole("textbox", { name: "Project name" }).inputValue();
   if (text !== localName) throw new Error("Offline persistence did not preserve local work.");
 }
@@ -304,7 +349,8 @@ async function testExportRemoval(a, runRoot, seedDigest) {
     read: () => readSnapshot(a),
     exportBackup: async () => {
       const download = a.waitForEvent("download", { timeoutMs: 10_000 });
-      await a.getByRole("button", { name: "Export account backup" }).click();
+      const account = await showAccountWorkspace(a);
+      await account.getByRole("button", { name: "Export account backup" }).click();
       const file = await (await download).path();
       if (!file) throw new Error("Account export was unavailable.");
       const exported = await fs.readFile(file, "utf8");
@@ -312,8 +358,9 @@ async function testExportRemoval(a, runRoot, seedDigest) {
       return JSON.parse(exported);
     },
     remove: async () => {
-      await clickAndAccept(a, a.getByRole("button", { name: "Remove account snapshot" }));
-      await a.getByRole("status").filter({ hasText: "Account snapshot removed" }).waitFor({ state: "visible" });
+      const account = await showAccountWorkspace(a);
+      await clickAndAccept(a, account.getByRole("button", { name: "Remove account snapshot" }));
+      await account.getByRole("status").filter({ hasText: "Account snapshot removed" }).waitFor({ state: "visible" });
     },
     restore: (snapshot) => restoreSnapshot(a, snapshot, seedDigest),
     localDigest: () => localWorkspaceDigest(a),
@@ -339,9 +386,27 @@ export function compareAccountDigests(digestA, digestB, expected = {}) {
   return true;
 }
 
+const failureCategories = new Set(["projects_navigation_failed", "ui_timeout", "dialog_mismatch", "disposable_guard", "session_or_identity", "snapshot_restoration", "operation_failed"]);
+
+export function classifyAcceptanceFailure(error) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "projects_navigation_failed") return "projects_navigation_failed";
+  if (message === "Expected a confirm dialog for the destructive action.") return "dialog_mismatch";
+  if (error?.name === "TimeoutError" || /Timeout \d+ms exceeded|confirmation timeout/i.test(message)) return "ui_timeout";
+  if (/non-test workspace data|starter project changed|Fresh acceptance profile/.test(message)) return "disposable_guard";
+  if (/authenticated|authentication timeout|qualified disposable account|same backend account/.test(message)) return "session_or_identity";
+  if (/restor(?:ation|ed)/i.test(message)) return "snapshot_restoration";
+  return "operation_failed";
+}
+
 export function sanitizeEvidence(results, commit = process.env.GITHUB_SHA ?? "unknown") {
   return { generatedAt: new Date().toISOString(), testedCommit: /^[0-9a-f]{40}$/.test(commit) ? commit : "unknown", acceptanceOrigin,
-    tests: results.map(({ name, pass }) => ({ name: TEST_NAMES.includes(name) ? name : "qualification", pass: pass === true, result: pass === true ? "verified" : "failed" })) };
+    tests: results.map(({ name, pass, category }) => ({
+      name: TEST_NAMES.includes(name) ? name : "qualification",
+      pass: pass === true,
+      result: pass === true ? "verified" : "failed",
+      ...(pass === true ? {} : { category: failureCategories.has(category) ? category : "operation_failed" }),
+    })) };
 }
 
 async function main() {
@@ -372,8 +437,8 @@ async function main() {
     try {
       await fn();
       results.push({ name, pass: true });
-    } catch {
-      results.push({ name, pass: false });
+    } catch (error) {
+      results.push({ name, pass: false, category: classifyAcceptanceFailure(error) });
       throw new Error(`${name} failed; private recovery backups remain in the run directory.`);
     }
   };
@@ -405,9 +470,9 @@ async function main() {
     await run(TEST_NAMES[3], () => testSwitchProtection(pageA, pageB, names.name));
     await run(TEST_NAMES[4], () => testOffline(pageA));
     await run(TEST_NAMES[5], () => testExportRemoval(pageA, runRoot, seedA));
-  } catch {
+  } catch (error) {
     failure = new Error("Studio acceptance failed; inspect sanitized evidence and private recovery backups.");
-    if (!results.length) results.push({ name: "qualification", pass: false });
+    if (!results.length) results.push({ name: "qualification", pass: false, category: classifyAcceptanceFailure(error) });
   } finally {
     if (originalA && originalB && runMarker) {
       const restored = await Promise.allSettled([
@@ -415,7 +480,7 @@ async function main() {
       ]);
       if (restored.some((result) => result.status === "rejected")) {
         failure = new Error("Studio account restoration failed; preserve the private recovery backups and profiles.");
-        results.push({ name: "post-run-restoration", pass: false });
+        results.push({ name: "post-run-restoration", pass: false, category: "snapshot_restoration" });
       }
     }
     await fs.mkdir(path.dirname(evidencePath), { recursive: true });

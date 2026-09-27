@@ -3,11 +3,110 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { assertAcceptanceTargets, assertTestOwnedWorkspace, clickAndAccept, compareAccountDigests, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, TEST_NAMES } from "./studio-account-acceptance.mjs";
+import { runInNewContext } from "node:vm";
+import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
 const expected = { owner: digest("c"), a: digest("a"), b: digest("b") };
 const workspace = { schemaVersion: 1, projects: [{ document: { name: "Studio acceptance A 20260924123456" } }] };
+
+test("creating a workflow moves to Canvas, then account connection returns to Projects", async () => {
+  let view = "projects";
+  const actions = [];
+  const accountButton = (name) => ({ async click() {
+    if (view !== "projects") throw new Error("Account controls are hidden on Canvas");
+    actions.push(name);
+  } });
+  const account = {
+    async waitFor() { if (view !== "projects") throw new Error("Account workspace is hidden"); },
+    getByRole(role, { name } = {}) {
+      if (role === "button") return accountButton(name);
+      if (role === "status") return { filter: () => ({ waitFor: async () => {} }), innerText: async () => "Connected to disposable account" };
+      throw new Error("Unexpected account lookup");
+    },
+  };
+  const page = {
+    getByRole(role, { name } = {}) {
+      if (role === "button" && name instanceof RegExp && name.test("Create blank workflow")) return { async click() { view = "canvas"; actions.push("create"); } };
+      if (role === "button" && name === "Connect / refresh account") return accountButton(name);
+      if (role === "textbox" && name === "Project name") return { fill: async () => {}, press: async () => {} };
+      if (role === "navigation" && name === "Studio navigation") return { getByRole(buttonRole, { name: buttonName }) {
+        assert.equal(buttonRole, "button");
+        assert.match("01Projects", buttonName);
+        return { async click() { view = "projects"; actions.push("Projects"); } };
+      } };
+      if (role === "region" && name === "Account workspace") return account;
+      throw new Error("Unexpected page lookup");
+    },
+    waitForTimeout: async () => {},
+    waitForResponse: async () => ({ ok: () => true, json: async () => ({ accountId: "disposable", workspace: { projects: [] } }) }),
+    waitForFunction: async () => {},
+  };
+
+  await createFreshWorkspace(page, "Studio acceptance A");
+  assert.equal(view, "canvas");
+  await assert.rejects(accountButton("Connect / refresh account").click(), /hidden on Canvas/);
+  await connect(page);
+  assert.equal(view, "projects");
+  assert.deepEqual(actions, ["create", "Projects", "Connect / refresh account"]);
+  await (await showAccountWorkspace(page)).getByRole("button", { name: "Save workspace and enable autosave" }).click();
+  assert.deepEqual(actions.slice(-2), ["Projects", "Save workspace and enable autosave"]);
+});
+
+test("account connection waits for its refresh and new UI state before reading projects", async () => {
+  let releaseResponse, releaseReady, settled = false;
+  const response = new Promise((resolve) => { releaseResponse = () => resolve({
+    ok: () => true,
+    json: async () => ({ accountId: "disposable", workspace: { projects: [{ document: { name: "Test project" } }] } }),
+  }); });
+  const ready = new Promise((resolve) => { releaseReady = resolve; });
+  const status = {
+    innerText: async () => "Connected to disposable account",
+  };
+  const account = {
+    waitFor: async () => {},
+    getByRole(role) { return role === "status" ? status : { click: async () => {} }; },
+  };
+  const rendered = { status: "Connected to account disposable. 0 saved projects. Nothing has been uploaded.", names: [] };
+  const region = {
+    querySelectorAll: (selector) => selector === "button" ? [{ textContent: "Connect / refresh account", disabled: false }]
+      : rendered.names.map((name) => ({ firstChild: { textContent: name } })),
+    querySelector: () => ({ textContent: rendered.status }),
+  };
+  const page = {
+    getByRole(role) {
+      if (role === "navigation") return { getByRole: () => ({ click: async () => {} }) };
+      if (role === "region") return account;
+      throw new Error("Unexpected page lookup");
+    },
+    waitForResponse: (matches, options) => {
+      assert.equal(matches({ url: () => "https://3l3y008e94.execute-api.us-east-2.amazonaws.com/customer/studio/workspace", request: () => ({ method: () => "GET" }) }), true);
+      assert.equal(options.timeout, 20_000);
+      return response;
+    },
+    waitForFunction: (predicate, expected, options) => {
+      assert.equal(options.timeout, 20_000);
+      assert.equal(options.polling, 100);
+      assert.deepEqual(expected, { status: "Connected to account disposable. 1 saved projects. Nothing has been uploaded.", names: ["Test project"] });
+      const matches = () => runInNewContext(`(${predicate.toString()})(expected)`, { document: { querySelector: () => region }, expected });
+      assert.equal(matches(), false, "the stale connected status and list must not qualify");
+      return ready.then(() => {
+        rendered.status = expected.status;
+        rendered.names = expected.names;
+        assert.equal(matches(), true, "the matching completed state must qualify without observing a transient disabled button");
+      });
+    },
+  };
+  const pending = connect(page).then(() => { settled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "the initial visible status must not complete account refresh");
+  releaseResponse();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "a response must not complete refresh before the new UI state is ready");
+  releaseReady();
+  await pending;
+  assert.equal(settled, true);
+});
 
 test("confirmation is accepted while the click is still pending", async () => {
   const steps = [];
@@ -157,8 +256,18 @@ test("unverified export and non-test content cannot execute removal", async () =
 });
 
 test("sanitized evidence excludes caller-controlled content", () => {
-  const evidence = sanitizeEvidence([{ name: TEST_NAMES[0], pass: true, result: "private workflow csrf cookie accountId" }, { name: "private project", pass: false, result: "secret" }], "commit");
+  const evidence = sanitizeEvidence([{ name: TEST_NAMES[0], pass: true, result: "private workflow csrf cookie accountId" }, { name: "private project", pass: false, category: "secret", result: "secret" }], "commit");
   assert.deepEqual(Object.keys(evidence).sort(), ["acceptanceOrigin", "generatedAt", "testedCommit", "tests"].sort());
-  assert.deepEqual(evidence.tests, [{ name: TEST_NAMES[0], pass: true, result: "verified" }, { name: "qualification", pass: false, result: "failed" }]);
+  assert.deepEqual(evidence.tests, [{ name: TEST_NAMES[0], pass: true, result: "verified" }, { name: "qualification", pass: false, result: "failed", category: "operation_failed" }]);
   assert.doesNotMatch(JSON.stringify(evidence), /private workflow|private project|secret|csrf|cookie|accountId/);
+});
+
+test("failure evidence retains only a bounded diagnostic category", () => {
+  const timeout = Object.assign(new Error("private email and project content"), { name: "TimeoutError" });
+  assert.equal(classifyAcceptanceFailure(new Error("projects_navigation_failed")), "projects_navigation_failed");
+  assert.equal(classifyAcceptanceFailure(timeout), "ui_timeout");
+  assert.equal(classifyAcceptanceFailure(new Error("private email and project content")), "operation_failed");
+  const evidence = sanitizeEvidence([{ name: TEST_NAMES[0], pass: false, category: classifyAcceptanceFailure(timeout) }]);
+  assert.deepEqual(evidence.tests, [{ name: TEST_NAMES[0], pass: false, result: "failed", category: "ui_timeout" }]);
+  assert.doesNotMatch(JSON.stringify(evidence), /private email|project content/);
 });
