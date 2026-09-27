@@ -82,8 +82,11 @@ test("incident history survives refresh without a fabricated resolution", () => 
   assert.equal(isCurrentIncident({ ...history, state: "monitoring" }), true);
   assert.doesNotMatch(read("app/(english)/status/page.tsx"), /No recorded incidents\./);
 });
-test("homepage, About, pricing, and status share the current controlled-rollout billing facts", () => {
-  for (const page of ["landing", "about"]) assert.match(read(`app/(english)/${page}/page.tsx`), /<ProductCapabilities\s*\/>/);
+test("homepage, About, pricing, and status preserve controlled-rollout billing boundaries", () => {
+  const landing = read("app/(english)/landing/page.tsx");
+  assert.match(landing, /Billing is enabled for controlled rollout; the first real-payment canary remains pending/);
+  assert.match(landing, /Paid priority and general managed execution remain separate gates/);
+  assert.match(read("app/(english)/about/page.tsx"), /<ProductCapabilities\s*\/>/);
   for (const page of ["api-pricing/page.tsx", "status/status-data.ts"]) assert.match(read(`app/(english)/${page}`), /billingAvailability/);
   assert.match(billingAvailability, /Production API subscription billing/);
   assert.match(billingAvailability, /real-payment canary is still pending/);
