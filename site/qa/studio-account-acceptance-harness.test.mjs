@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
-import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, openAccountProjectCopy, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
+import { assertAcceptanceTargets, assertTestOwnedWorkspace, classifyAcceptanceFailure, clickAndAccept, compareAccountDigests, connect, createFreshWorkspace, openAccountProjectCopy, prepareStaleWorkspaceWrite, qualifyLocalWorkspace, reversibleRemoval, sanitizeEvidence, showAccountWorkspace, TEST_NAMES } from "./studio-account-acceptance.mjs";
 
 const digest = (character) => character.repeat(64);
 const expected = { owner: digest("c"), a: digest("a"), b: digest("b") };
@@ -75,6 +75,16 @@ test("opening an account copy scopes the button to its project row", async () =>
   } };
   await openAccountProjectCopy(page, "Studio acceptance test A");
   assert.deepEqual(actions, ["Projects", "copy"]);
+});
+
+test("stale revision request preserves the authoritative cloud workspace and account identity", () => {
+  const cloudProject = { document: { name: "Studio acceptance A 20260924123456" }, versions: [], traces: [] };
+  const snapshot = { accountId: "disposable-a", workspace: { schemaVersion: 1, projects: [cloudProject] } };
+  assert.deepEqual(prepareStaleWorkspaceWrite(snapshot, 4, "disposable-a"), {
+    accountId: "disposable-a", expectedRevision: 4, workspace: snapshot.workspace,
+  });
+  assert.throws(() => prepareStaleWorkspaceWrite(snapshot, 4, "another-account"), /Account changed/);
+  assert.throws(() => prepareStaleWorkspaceWrite({ ...snapshot, workspace: { schemaVersion: 1, projects: [cloudProject.document] } }, 4, "disposable-a"), /non-test workspace data/);
 });
 
 test("account connection waits for its refresh and new UI state before reading projects", async () => {
