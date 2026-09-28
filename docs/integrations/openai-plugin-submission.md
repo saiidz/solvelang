@@ -108,7 +108,7 @@ Remote tools in the submission:
 
 **Prompt**
 
-`Use SolveLang to find nodes containing "checkout" in this canonical Solve Graph JSON: <review fixture supplied in the portal test input>.`
+`Use SolveLang to find nodes containing "src/" in this canonical Solve Graph JSON: <paste the exact contents of docs/integrations/openai-plugin-review-fixture.json>.`
 
 **Expected behavior**
 
@@ -116,13 +116,13 @@ Remote tools in the submission:
 - Returns only matches derived from the supplied graph.
 - Does not fetch repository or web data.
 
-For the portal, replace the fixture placeholder with one valid canonical graph produced by the repository's Solve Graph exporter so stable node IDs and integrity fields are valid.
+Use the checked-in `docs/integrations/openai-plugin-review-fixture.json` verbatim. It is a deterministic canonical graph with valid stable IDs and integrity metadata.
 
 ### Positive 5 — trace change impact
 
 **Prompt**
 
-`Using this canonical Solve Graph and these changed stable node IDs, trace the dependent impact and explain the most important affected nodes: <review fixture + changed node IDs>.`
+`Using this canonical Solve Graph, trace the dependent impact of changed node sgn_b498868aee5ba6ac17a45ecaa485e9ec and explain the most important affected nodes: <paste the exact contents of docs/integrations/openai-plugin-review-fixture.json>.`
 
 **Expected behavior**
 
@@ -131,7 +131,7 @@ For the portal, replace the fixture placeholder with one valid canonical graph p
 - Respects configured traversal/result limits.
 - Reports no external side effects.
 
-For the portal, use the same reviewed canonical graph fixture as Positive 4 and choose changed IDs that are known to have at least one dependent.
+Use the same checked-in fixture as Positive 4. The changed node is `src/store.ts`; it has an importing dependent `src/api.ts`, which in turn has the `test/api.test.ts` test dependent, so the impact case has a deterministic non-empty result.
 
 ## Three negative review test cases
 
