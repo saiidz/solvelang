@@ -13,6 +13,7 @@ import {
 import {
   type ApiPlanKey,
   resolveApiCheckoutStart,
+  persistApiCheckoutRequestId,
 } from "@/app/account/core/api-checkout";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
@@ -54,7 +55,6 @@ export function EmbeddedApiCheckout() {
     async function startCheckout() {
       try {
         const params = new URLSearchParams(window.location.search);
-        const requestId = params.get("request_id") || newRequestId();
         const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
         if (!active) return;
 
@@ -70,6 +70,7 @@ export function EmbeddedApiCheckout() {
         if (!PUBLISHABLE_KEY) throw new Error("Stripe checkout is not configured.");
 
         const selectedPlan = decision.plan;
+        const requestId = persistApiCheckoutRequestId(window.location, window.history, newRequestId);
         setPlan(selectedPlan);
         setEmail(account.email);
 
@@ -156,7 +157,7 @@ export function EmbeddedApiCheckout() {
               </div>
             ) : null}
             <p className="mt-8 text-xs leading-5 text-slate-400">
-              UPCOMINGSOUNDS S.R.L. is the operator and merchant; your statement may show that name. Stripe securely processes payment details, and SolveLang never receives your full card number. The plan renews monthly until canceled. Stripe shows the final total, including any applicable tax, before payment.
+              UPCOMINGSOUNDS S.R.L. is the operator and merchant; your statement may show that name. Stripe securely processes payment details, and SolveLang never receives your full card number. The plan renews monthly until canceled. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment.
             </p>
             <p className="mt-3 text-xs leading-5 text-slate-400">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
           </aside>

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 const items = [
   ["Who bills me?", "UPCOMINGSOUNDS S.R.L. is the SolveLang operator and merchant. Stripe processes subscription payments; your statement may show UPCOMINGSOUNDS S.R.L."],
-  ["Which API plans are offered?", "Developer is $49/month, Pro is $199/month, and Business is $699/month before any applicable tax or adjustments shown at checkout. Plan credits, key limits, and repository-audit scope are listed on API Pricing."],
+  ["Which API plans are offered?", "Developer is $49/month, Pro is $199/month, and Business is $699/month. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment. Plan credits, key limits, and repository-audit scope are listed on API Pricing."],
   ["When does a subscription renew or cancel?", "API subscriptions renew monthly until canceled. In your subscription account you can schedule cancellation for the end of the current billing period. Access until then remains subject to subscription status and entitlement gates. Scheduling cancellation does not automatically refund a paid period."],
   ["Does an API plan include paid priority or provider execution?", "No. Paid priority lanes, provider-backed execution, and general managed workflow execution have separate gates."],
   ["How are refunds reviewed?", "Contact hello@solve-lang.com about a duplicate or unauthorized charge, a service-delivery problem, or a statutory remedy. The Refund Policy explains the review route; mandatory consumer rights remain unaffected."],

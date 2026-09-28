@@ -77,7 +77,8 @@ test("API pricing and account copy preserve the shared billing boundary and curr
   assert.doesNotMatch(pricing, /API Starter|\$79|API Growth|Subscribe to Pro/);
   assert.match(billing, /Developer is \$49\/month, Pro is \$199\/month, and Business is \$699\/month/);
   assert.match(billing, /Scheduling cancellation does not automatically refund/);
-  assert.match(checkout, /Stripe shows the final total, including any applicable tax, before payment/);
+  assert.match(checkout, /any tax or other charge Stripe actually displays at checkout/);
+  assert.doesNotMatch(checkout, /including any applicable tax/);
   assert.match(checkout, /href="\/terms\/"/);
   assert.match(subscription, /Scheduling cancellation stops renewal at the current period end/);
   assert.doesNotMatch(subscription, /apply immediately in the sandbox/);

@@ -54,6 +54,7 @@ test("exported billing and legal pages keep current API terms and the shared rol
   assert.match(pricing, /href="\/api-pricing\/"/);
   assert.doesNotMatch(pricing, /API Starter|\$79|API Growth|Subscribe to Pro/);
   assert.match(apiPricing, /UPCOMINGSOUNDS S\.R\.L\./);
+  for (const html of [apiPricing, billing, terms]) assert.doesNotMatch(html, /including any applicable tax|any applicable taxes or adjustments are presented/);
   assert.match(billing, /renew monthly until canceled/);
   assert.match(terms, /API subscriptions/);
   assert.match(refund, /API subscription cancellation and refunds/);
