@@ -21,7 +21,7 @@ test("Terms and Refund Policy pages contain their required customer-facing headi
   ]);
   assert.equal(legalContent, canonicalLegalContent, "the build-local legal artifact must match the canonical entitlement contract exactly");
 
-  for (const heading of ["Terms of Use", "Automated outputs and customer review", "Payments and immediate digital performance", "Consumer remedies and business liability"]) {
+  for (const heading of ["Terms of Use", "Automated outputs and customer review", "Workflow Preflight payments and immediate digital performance", "Consumer remedies and business liability"]) {
     assert.match(`${terms}\n${legalContent}`, new RegExp(heading));
   }
   for (const heading of ["Refund Policy", "When refunds may be available", "When refunds are generally not available", "EU and EEA consumer information"]) {
@@ -30,6 +30,11 @@ test("Terms and Refund Policy pages contain their required customer-facing headi
   assert.match(terms, /legalContent/);
   assert.match(refundPolicy, /legalContent/);
   assert.match(legalContent, /UPCOMINGSOUNDS S\.R\.L\./);
+  assert.match(legalContent, /2026-09-27-v3/);
+  assert.match(legalContent, /API subscriptions renew monthly until canceled/);
+  assert.match(legalContent, /API subscription cancellation and refunds/);
+  assert.match(legalContent, /does not automatically refund/);
+  assert.doesNotMatch(legalContent, /Production checkout remains blocked/);
   assert.match(legalContent, /mandatory consumer rights remain unaffected/i);
 });
 
@@ -54,13 +59,28 @@ test("the public sitemap and legal navigation include the legal and withdrawal r
   assert.match(landing, /\/withdraw\//);
 });
 
-test("API pricing reflects enabled billing while the first real-payment canary remains pending", async () => {
-  const apiPricing = await source("app/(english)/api-pricing/page.tsx");
-  assert.match(apiPricing, /Production API subscription billing is enabled\./);
-  assert.match(apiPricing, /Developer, Pro, and Business checkout and recurring billing are enabled/);
-  assert.match(apiPricing, /Terms of Use, Privacy Policy, and Refund Policy/);
-  assert.match(apiPricing, />View \{plan\.name\}<\/Link>/);
-  assert.doesNotMatch(apiPricing, /API subscriptions are not available to purchase yet|Subscription checkout and recurring charges are disabled/);
+test("API pricing and account copy preserve the shared billing boundary and current subscription terms", async () => {
+  const [apiPricing, pricing, billing, checkout, subscription, capabilities] = await Promise.all([
+    source("app/(english)/api-pricing/page.tsx"),
+    source("app/(english)/pricing/page.tsx"),
+    source("app/(english)/billing/page.tsx"),
+    source("app/account/api-checkout/EmbeddedApiCheckout.tsx"),
+    source("app/account/api-subscription/SubscriptionManager.tsx"),
+    source("app/product-capabilities.ts"),
+  ]);
+  for (const page of [apiPricing, pricing, billing]) assert.match(page, /\{billingAvailability\}/);
+  assert.match(capabilities, /first real-payment canary is still pending/);
+  assert.match(apiPricing, /weighted credits per UTC calendar month/);
+  assert.match(apiPricing, /UPCOMINGSOUNDS S\.R\.L\./);
+  assert.match(apiPricing, /href="\/refund-policy\/"/);
+  assert.match(pricing, /href="\/api-pricing\/"/);
+  assert.doesNotMatch(pricing, /API Starter|\$79|API Growth|Subscribe to Pro/);
+  assert.match(billing, /Developer is \$49\/month, Pro is \$199\/month, and Business is \$699\/month/);
+  assert.match(billing, /Scheduling cancellation does not automatically refund/);
+  assert.match(checkout, /Stripe shows the final total, including any applicable tax, before payment/);
+  assert.match(checkout, /href="\/terms\/"/);
+  assert.match(subscription, /Scheduling cancellation stops renewal at the current period end/);
+  assert.doesNotMatch(subscription, /apply immediately in the sandbox/);
 });
 
 test("checkout requires both unchecked accessible clickwrap statements before loading verification", async () => {
@@ -84,7 +104,7 @@ test("checkout requires both unchecked accessible clickwrap statements before lo
   assert.match(checkout, /Pay \$49 and start Workflow Preflight/);
   assert.match(checkout, /VAT and final tax treatment require operator confirmation before production checkout is enabled\./);
   assert.match(checkout, /termsVersion: TERMS_VERSION/);
-  assert.match(checkoutTerms, /export const TERMS_VERSION = "2026-07-26-v2"/);
+  assert.match(checkoutTerms, /export const TERMS_VERSION = legalContent\.termsVersion/);
   assert.match(entitlementTerms, /legal-content\.json/);
 });
 

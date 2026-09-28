@@ -42,3 +42,20 @@ test("exported homepage Evidence uses shared billing capability text", () => {
   assert.ok(evidence, "homepage Evidence section is exported");
   assert.ok(evidence.includes(billingAvailability), "Evidence billing status matches shared capability facts");
 });
+
+test("exported billing and legal pages keep current API terms and the shared rollout boundary", () => {
+  const page = route => readFileSync(join(root, route, "index.html"), "utf8").replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  const pricing = page("pricing");
+  const apiPricing = page("api-pricing");
+  const billing = page("billing");
+  const terms = page("terms");
+  const refund = page("refund-policy");
+  for (const html of [pricing, apiPricing, billing]) assert.ok(html.includes(billingAvailability));
+  assert.match(pricing, /href="\/api-pricing\/"/);
+  assert.doesNotMatch(pricing, /API Starter|\$79|API Growth|Subscribe to Pro/);
+  assert.match(apiPricing, /UPCOMINGSOUNDS S\.R\.L\./);
+  assert.match(billing, /renew monthly until canceled/);
+  assert.match(terms, /API subscriptions/);
+  assert.match(refund, /API subscription cancellation and refunds/);
+  for (const html of [terms, billing, refund]) assert.doesNotMatch(html, /Production checkout remains blocked|Subscriptions are inactive/);
+});

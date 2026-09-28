@@ -1,4 +1,6 @@
-export const TERMS_VERSION = "2026-07-26-v2";
+import legalContent from "../legal-content.json";
+
+export const TERMS_VERSION = legalContent.termsVersion;
 
 export type CheckoutConsent = {
   customerEmail: string;

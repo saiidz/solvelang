@@ -151,13 +151,14 @@ export function EmbeddedApiCheckout() {
                   <li>✓ {details.credits}</li>
                   <li>✓ Up to {details.keys}</li>
                   <li>✓ Repository audit API scope</li>
-                  <li>✓ Cancel through your subscription account</li>
+                  <li>✓ Schedule cancellation in your subscription account; renewal stops at the current period end</li>
                 </ul>
               </div>
             ) : null}
             <p className="mt-8 text-xs leading-5 text-slate-400">
-              Stripe securely processes payment details. SolveLang never receives or stores your full card number.
+              UPCOMINGSOUNDS S.R.L. is the operator and merchant; your statement may show that name. Stripe securely processes payment details, and SolveLang never receives your full card number. The plan renews monthly until canceled. Stripe shows the final total, including any applicable tax, before payment.
             </p>
+            <p className="mt-3 text-xs leading-5 text-slate-400">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
           </aside>
 
           <section className="min-h-[620px] rounded-[2rem] bg-white p-4 text-slate-950 shadow-2xl sm:p-7">

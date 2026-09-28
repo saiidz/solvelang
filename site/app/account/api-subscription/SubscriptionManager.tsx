@@ -323,7 +323,7 @@ export function SubscriptionManager() {
                     <h2 className="mt-2 text-3xl font-bold capitalize">{management.subscription.plan}</h2>
                     <p className="mt-2 capitalize text-slate-300">{management.subscription.status}</p>
                     <p className="mt-3 text-sm text-slate-400">
-                      {management.subscription.cancelAtPeriodEnd ? "Access ends" : "Renews"} {readableDate(management.subscription.currentPeriodEnd)}
+                      {management.subscription.cancelAtPeriodEnd ? "Scheduled to end" : "Renews"} {readableDate(management.subscription.currentPeriodEnd)}
                     </p>
                   </div>
                   {management.subscription.cancelAtPeriodEnd ? (
@@ -333,9 +333,11 @@ export function SubscriptionManager() {
                   )}
                 </div>
 
+                <p className="mt-4 text-sm leading-6 text-slate-400">Scheduling cancellation stops renewal at the current period end. Access until then remains subject to subscription status and entitlement gates. Cancellation does not automatically refund a paid period; see the <Link className="underline" href="/refund-policy/">Refund Policy</Link>.</p>
+
                 <div className="mt-7 border-t border-white/10 pt-6">
                   <h3 className="text-lg font-bold">Change plan</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">Plan changes apply immediately in the sandbox. Stripe calculates prorations for the remaining billing period, and changing plans resumes renewal if cancellation was scheduled.</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">Plan changes apply immediately. Stripe calculates prorations for the remaining billing period, and changing plans resumes renewal if cancellation was scheduled.</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     {PLANS.map((plan) => {
                       const current = management.subscription.plan === plan.key;
