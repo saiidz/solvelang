@@ -7,7 +7,7 @@ const refundPolicySections = legalContent.refundPolicy as [string, string[]][];
 
 export const metadata: Metadata = {
   title: "Refund Policy",
-  description: "Refund Policy for SolveLang Workflow Preflight digital services.",
+  description: "Refund and cancellation information for SolveLang API subscriptions and Workflow Preflight.",
   alternates: alternatesForRoute("refund-policy"),
 };
 
@@ -35,8 +35,8 @@ export default function RefundPolicyPage() {
           ))}
           <section>
             <h2 className="text-2xl font-semibold tracking-tight">How to request a review</h2>
-            <p className="mt-4">Email <a className="font-semibold text-blue-700 underline" href="mailto:hello@solve-lang.com?subject=Refund%20request">hello@solve-lang.com</a> with the payment date, amount, Stripe PaymentIntent or receipt reference, and a short explanation. Do not send full card details, workflow JSON, credentials, or secrets.</p>
-            <p className="mt-4">You can submit a withdrawal statement at <Link className="font-semibold text-blue-700 underline" href="/withdraw/">the withdrawal form</Link>. Submission records a request for review and does not itself decide eligibility or promise a refund.</p>
+            <p className="mt-4">Email <a className="font-semibold text-blue-700 underline" href="mailto:hello@solve-lang.com?subject=Refund%20request">hello@solve-lang.com</a> with the payment date, amount, Stripe invoice, PaymentIntent, or receipt reference, and a short explanation. Do not send full card details, workflow JSON, credentials, or secrets.</p>
+            <p className="mt-4">For Workflow Preflight, you can submit a withdrawal statement at <Link className="font-semibold text-blue-700 underline" href="/withdraw/">the withdrawal form</Link>. Submission records a request for review and does not itself decide eligibility or promise a refund.</p>
           </section>
         </div>
       </section>

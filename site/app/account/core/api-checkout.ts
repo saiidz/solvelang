@@ -17,3 +17,18 @@ export function resolveApiCheckoutStart(
   if (!isApiPlan(requestedPlan)) return { kind: "choose-plan" };
   return { kind: "checkout", plan: requestedPlan };
 }
+
+export function persistApiCheckoutRequestId(
+  location: { pathname: string; search: string; hash: string },
+  history: { state: unknown; replaceState(state: unknown, title: string, url: string): void },
+  createRequestId: () => string,
+): string {
+  const params = new URLSearchParams(location.search);
+  const existing = params.get("request_id");
+  if (existing) return existing;
+
+  const requestId = createRequestId();
+  params.set("request_id", requestId);
+  history.replaceState(history.state, "", `${location.pathname}?${params.toString()}${location.hash}`);
+  return requestId;
+}

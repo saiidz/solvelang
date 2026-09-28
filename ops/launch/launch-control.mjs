@@ -314,6 +314,8 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const preflightClient = await readFile(path.join(root, "site/app/check/WorkflowPreflight.tsx"), "utf8");
   const paymentClient = await readFile(path.join(root, "site/app/checkout/PaymentElementClient.tsx"), "utf8");
   const checkoutTerms = await readFile(path.join(root, "site/app/checkout/checkoutGate.ts"), "utf8");
+  const siteLegalContent = await readFile(path.join(root, "site/app/legal-content.json"), "utf8");
+  const entitlementLegalContent = await readFile(path.join(root, "services/entitlements/src/legal-content.json"), "utf8");
   const entitlementTerms = await readFile(path.join(root, "services/entitlements/src/terms.ts"), "utf8");
   const termsPage = await readFile(path.join(root, "site/app/(english)/terms/page.tsx"), "utf8");
   const refundPolicyPage = await readFile(path.join(root, "site/app/(english)/refund-policy/page.tsx"), "utf8");
@@ -375,7 +377,9 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
     turnstileGateway.includes("expectedHostname") && turnstileGateway.includes("idempotency_key"),
     paymentClient.includes("NEXT_PUBLIC_TURNSTILE_SITE_KEY") && paymentClient.includes('action: "checkout"'),
     checkoutGateTest.includes("Turnstile expiry after a client secret mounts preserves the payment form state"),
-    checkoutTerms.includes('export const TERMS_VERSION = "2026-07-26-v2"'),
+    checkoutTerms.includes('import legalContent from "../legal-content.json"')
+      && checkoutTerms.includes("export const TERMS_VERSION = legalContent.termsVersion")
+      && siteLegalContent === entitlementLegalContent,
     entitlementTerms.includes('legal-content.json'),
     termsPage.includes("Terms of Use") && refundPolicyPage.includes("Refund Policy"),
     legalChecklist.includes("LEGAL_CHECKOUT_REVIEW_VERIFIED"),

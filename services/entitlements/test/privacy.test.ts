@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { createEntitlementService, type EntitlementStore, type StripeGateway } from "../src/service.js";
+import { TERMS_VERSION } from "../src/terms.js";
 
 const forbidden = [
   "Secret workflow name",
@@ -95,7 +96,7 @@ test("workflow and secret material never reaches client errors or structured log
         termsAccepted: true,
         immediatePerformanceRequested: true,
         withdrawalAcknowledged: true,
-        termsVersion: "2026-07-26-v2",
+        termsVersion: TERMS_VERSION,
       })),
       status: 503,
     },

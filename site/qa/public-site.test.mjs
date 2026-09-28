@@ -126,7 +126,7 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   assert.doesNotMatch(landing, /Billing is enabled for controlled rollout; the first real-payment canary remains pending/);
   assert.match(landing, /Paid priority and general managed execution remain separate gates/);
   assert.match(read("app/(english)/about/page.tsx"), /<ProductCapabilities\s*\/>/);
-  for (const page of ["api-pricing/page.tsx", "status/status-data.ts"]) assert.match(read(`app/(english)/${page}`), /billingAvailability/);
+  for (const page of ["api-pricing/page.tsx", "billing/page.tsx", "pricing/page.tsx", "status/status-data.ts"]) assert.match(read(`app/(english)/${page}`), /billingAvailability/);
   assert.match(billingAvailability, /Production API subscription billing/);
   assert.match(billingAvailability, /real-payment canary is still pending/);
   assert.match(read("app/brandFacts.ts"), /status: "production-canary"/);

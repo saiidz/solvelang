@@ -133,6 +133,18 @@ try {
     writeFileSync(join(output, `status-${width}.png`), Buffer.from(screenshot.data, "base64"));
     console.log(`PASS public navigation at ${width}px (${routes.length} routes, direct loads and client navigation)`);
   }
+  for (const [route, expected] of [
+    ["/pricing/", "View API pricing"],
+    ["/billing/", "UPCOMINGSOUNDS S.R.L."],
+    ["/terms/", "API subscriptions"],
+    ["/refund-policy/", "API subscription cancellation and refunds"],
+  ]) {
+    await navigate(route);
+    assert.ok(await evaluate(`document.body.innerText.includes(${JSON.stringify(expected)})`), `billing disclosure visible: ${route}`);
+    assert.ok(await evaluate(`!document.body.innerText.includes('Production checkout remains blocked')`), `no stale global checkout claim: ${route}`);
+    assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), `billing page fits 320px: ${route}`);
+  }
+  console.log("PASS billing and legal pages at 320px");
   // Exercise the actual preview components and the pinned canonical WASM runtime.
   async function fill(selector, value) {
     await evaluate(`(() => {
