@@ -88,7 +88,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     async createCheckoutSession({ accountId, requestId, email, plan, priceId, customerId, returnUrl }) {
       return stripe.checkout.sessions.create({
         mode: "subscription",
-        ui_mode: "embedded",
+        ui_mode: "embedded_page",
         redirect_on_completion: "if_required",
         client_reference_id: accountId,
         ...(customerId ? { customer: customerId } : { customer_email: email }),

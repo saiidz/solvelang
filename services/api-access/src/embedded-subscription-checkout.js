@@ -2,6 +2,35 @@ import { ApiAccessError } from "./service.js";
 import { getApiPlan } from "./plans.js";
 
 const REPLACEABLE_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid"]);
+const STRIPE_ERROR_TYPES = new Set([
+  "StripeInvalidRequestError", "StripeAuthenticationError", "StripePermissionError",
+  "StripeAPIError", "StripeConnectionError", "StripeRateLimitError", "StripeIdempotencyError", "StripeCardError",
+]);
+const STRIPE_ERROR_CODES = new Set([
+  "parameter_invalid_enum", "parameter_missing", "parameter_unknown", "parameters_exclusive",
+  "url_invalid", "resource_missing", "api_key_expired", "account_invalid", "secret_key_required",
+  "testmode_charges_only", "livemode_mismatch", "rate_limit", "idempotency_key_in_use",
+]);
+
+function logCheckoutFailure(logger, error) {
+  try {
+    const record = {
+      type: "stripe_checkout_error",
+      operation: "checkout_session_create",
+      stripeType: STRIPE_ERROR_TYPES.has(error?.type) ? error.type : "unknown",
+    };
+    if (STRIPE_ERROR_CODES.has(error?.code)) record.stripeCode = error.code;
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) {
+      record.statusCode = error.statusCode;
+    }
+    if (typeof error?.requestId === "string" && /^req_[A-Za-z0-9]{1,64}$/.test(error.requestId)) {
+      record.stripeRequestId = error.requestId;
+    }
+    logger.error(record);
+  } catch {
+    // Diagnostics must not replace the original failure or affect reservation cleanup.
+  }
+}
 
 function cleanText(value, label, maximum = 254) {
   if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_checkout", `${label} is invalid.`);
@@ -28,7 +57,7 @@ function cleanEmail(value) {
   return email;
 }
 
-export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessService, priceIds, siteOrigin, enabled = false }) {
+export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessService, priceIds, siteOrigin, enabled = false, logger = console }) {
   if (!gateway || typeof gateway.createCheckoutSession !== "function") throw new Error("Stripe subscription gateway is required.");
   if (!apiAccessService
     || typeof apiAccessService.getSubscriptionAccount !== "function"
@@ -69,6 +98,7 @@ export function createEmbeddedSubscriptionCheckoutService({ gateway, apiAccessSe
       });
       } catch (error) {
         await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});
+        logCheckoutFailure(logger, error);
         throw error;
       }
       if (!session?.id || typeof session.client_secret !== "string" || !session.client_secret) {
