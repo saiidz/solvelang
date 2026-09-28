@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createApiAccessHandler } from "../src/api-handler.js";
 import { ApiAccessError } from "../src/service.js";
+import { createEmbeddedSubscriptionCheckoutService } from "../src/embedded-subscription-checkout.js";
+import Stripe from "stripe";
 
 const adminSecret = "a".repeat(64);
 
@@ -355,4 +357,57 @@ test("invalid JSON and unknown routes return sanitized errors", async () => {
     "x-solvelang-admin-secret": adminSecret,
   }));
   assert.equal(missing.statusCode, 404);
+});
+
+
+test("customer checkout keeps Stripe errors private while releasing the reservation and logging safe diagnostics", async () => {
+  const logs = [];
+  const reservations = [];
+  const logger = { error: (record) => logs.push(record) };
+  const stripeError = new Stripe.errors.StripePermissionError({
+    type: "invalid_request_error",
+    message: "private@example.com sk_live_private whsec_private",
+    statusCode: 403,
+    requestId: "req_correlation123",
+    headers: { authorization: "sk_live_private", cookie: "private-cookie" },
+  });
+  const subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({
+    gateway: { createCheckoutSession: async () => { throw stripeError; } },
+    apiAccessService: {
+      ...service,
+      reserveSubscriptionCheckout: async () => { reservations.push("reserved"); },
+      releaseSubscriptionCheckout: async () => { reservations.push("released"); },
+    },
+    priceIds: { developer: "price_developer" },
+    siteOrigin: "https://www.solve-lang.com",
+    enabled: true,
+    logger,
+  });
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    customerAccountsEnabled: true,
+    customerAuth: {
+      authenticate: async () => ({ accountId: "acct_private", email: "private@example.com" }),
+      assertCsrf: () => {},
+    },
+    customerAccount: {},
+    subscriptionBillingEnabled: true,
+    subscriptionCheckout,
+    stripeGateway: {},
+    subscriptionLifecycle: {},
+    logger,
+  });
+  const result = await handler(event("POST", "/customer/subscriptions/checkout", {
+    plan: "developer", requestId: "checkout_private",
+  }));
+  assert.equal(result.statusCode, 500);
+  assert.deepEqual(JSON.parse(result.body), { error: "Request failed.", code: "request_failed" });
+  assert.deepEqual(reservations, ["reserved", "released"]);
+  assert.deepEqual(logs, [
+    { type: "stripe_checkout_error", operation: "checkout_session_create", stripeType: "StripePermissionError", statusCode: 403, stripeRequestId: "req_correlation123" },
+    { type: "api_access_error", code: "request_failed" },
+  ]);
 });

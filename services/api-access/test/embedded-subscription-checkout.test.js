@@ -111,3 +111,92 @@ test("releases the checkout reservation when Stripe session creation fails so re
   assert.deepEqual(calls.map(([kind]) => kind), ["reserve", "release"]);
   assert.equal(calls[1][1].requestId, "checkout_retry");
 });
+
+
+test("logs only allowlisted Stripe checkout diagnostics and preserves reservation release", async () => {
+  const logs = [];
+  const calls = [];
+  const error = Object.assign(new Error("private email@example.com sk_live_secret"), {
+    type: "StripeInvalidRequestError",
+    code: "parameter_invalid_enum",
+    statusCode: 400,
+    requestId: "req_safeCorrelation123",
+    raw: { email: "email@example.com", client_secret: "cs_live_secret", webhookSecret: "whsec_secret" },
+    headers: { cookie: "private-cookie", authorization: "sk_live_secret" },
+    accountId: "acct_private",
+    csrfToken: "private-csrf",
+    payment_method: { card: { number: "4242424242424242" } },
+  });
+  const service = createEmbeddedSubscriptionCheckoutService({
+    gateway: { createCheckoutSession: async () => { throw error; } },
+    apiAccessService: {
+      ...apiService(),
+      reserveSubscriptionCheckout: async () => { calls.push("reserve"); },
+      releaseSubscriptionCheckout: async () => { calls.push("release"); },
+    },
+    priceIds,
+    siteOrigin: "https://www.solve-lang.com",
+    enabled: true,
+    logger: { error: (record) => logs.push(record) },
+  });
+  await assert.rejects(
+    service.createCheckout({ accountId: "acct_private", requestId: "checkout_private", email: "email@example.com", plan: "developer" }),
+    (caught) => caught === error,
+  );
+  assert.deepEqual(calls, ["reserve", "release"]);
+  assert.deepEqual(logs, [{
+    type: "stripe_checkout_error",
+    operation: "checkout_session_create",
+    stripeType: "StripeInvalidRequestError",
+    stripeCode: "parameter_invalid_enum",
+    statusCode: 400,
+    stripeRequestId: "req_safeCorrelation123",
+  }]);
+});
+
+test("drops unrecognized or sensitive diagnostic field values", async () => {
+  for (const fields of [
+    { type: "email@example.com", code: "sk_live_secret", statusCode: "400", requestId: "cs_live_secret" },
+    { type: "StripePermissionError", code: "acct_private", statusCode: 200, requestId: "req_valid\nemail@example.com" },
+    { type: "StripeConnectionError", code: { secret: "whsec_secret" }, statusCode: 600, requestId: "req_" + "a".repeat(65) },
+    { type: "StripeAPIError", code: "unrecognized_code", statusCode: 499.5, requestId: null },
+  ]) {
+    const logs = [];
+    const error = Object.assign(new Error("private raw message"), fields);
+    const service = createEmbeddedSubscriptionCheckoutService({
+      gateway: { createCheckoutSession: async () => { throw error; } },
+      apiAccessService: apiService(),
+      priceIds,
+      siteOrigin: "https://www.solve-lang.com",
+      enabled: true,
+      logger: { error: (record) => logs.push(record) },
+    });
+    await assert.rejects(
+      service.createCheckout({ accountId: "acct_private", requestId: "checkout_private", email: "email@example.com", plan: "developer" }),
+      (caught) => caught === error,
+    );
+    assert.deepEqual(logs, [{
+      type: "stripe_checkout_error",
+      operation: "checkout_session_create",
+      stripeType: fields.type.startsWith("Stripe") ? fields.type : "unknown",
+    }]);
+  }
+});
+
+test("diagnostic logger failures do not replace the Stripe error or strand the reservation", async () => {
+  const calls = [];
+  const error = new Error("original failure");
+  const service = createEmbeddedSubscriptionCheckoutService({
+    gateway: { createCheckoutSession: async () => { throw error; } },
+    apiAccessService: { ...apiService(), releaseSubscriptionCheckout: async () => { calls.push("released"); } },
+    priceIds,
+    siteOrigin: "https://www.solve-lang.com",
+    enabled: true,
+    logger: { error: () => { throw new Error("logger unavailable"); } },
+  });
+  await assert.rejects(
+    service.createCheckout({ accountId: "acct_private", requestId: "checkout_private", email: "email@example.com", plan: "developer" }),
+    (caught) => caught === error,
+  );
+  assert.deepEqual(calls, ["released"]);
+});

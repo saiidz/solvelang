@@ -30,7 +30,7 @@ function stripeClient(overrides = {}) {
   };
 }
 
-test("creates embedded subscription Checkout with server-owned metadata and request idempotency", async () => {
+test("creates Dahlia embedded-page subscription Checkout with server-owned metadata and request idempotency", async () => {
   const calls = [];
   const stripe = stripeClient({
     checkout: {
@@ -55,7 +55,7 @@ test("creates embedded subscription Checkout with server-owned metadata and requ
   assert.deepEqual(calls[0], {
     params: {
       mode: "subscription",
-      ui_mode: "embedded",
+      ui_mode: "embedded_page",
       redirect_on_completion: "if_required",
       client_reference_id: "acct_1",
       customer_email: "dev@example.com",
