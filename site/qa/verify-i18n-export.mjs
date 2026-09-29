@@ -10,7 +10,7 @@ assert.match(english, /^<!DOCTYPE html><html lang="en" dir="ltr"/);
 assert.match(english, /<title>SolveLang — Workflow Intelligence With Explicit Boundaries<\/title>/);
 assert.doesNotMatch(english, /SolveLang \| SolveLang/);
 const support = await readFile(path.join(outRoot, "support", "index.html"), "utf8");
-assert.match(support, /<title>SolveLang Support \\| SolveLang<\\/title>| SolveLang<\/title>/);
+assert.match(support, /<title>SolveLang Support \| SolveLang<\/title>/);
 assert.doesNotMatch(support, /Support \| SolveLang \| SolveLang/);
 const sitemap = await readFile(path.join(outRoot, "sitemap.xml"), "utf8");
 assert.doesNotMatch(sitemap, /\/(?:ro|fr|de|es|it|pt-br|nl|pl|cs|tr|ar|he|ru|uk|zh-hans|zh-hant|ja|ko|hi|id|vi|th|sv|da|no|fi|el)\//);
