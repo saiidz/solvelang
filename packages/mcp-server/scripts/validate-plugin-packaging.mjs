@@ -36,6 +36,13 @@ assert.equal(codex.interface?.displayName, "SolveLang");
 assert.equal(codex.interface?.category, "Developer Tools");
 assert.deepEqual(codex.interface?.capabilities, ["Interactive", "Read"]);
 assert.ok(Array.isArray(codex.interface?.defaultPrompt) && codex.interface.defaultPrompt.length > 0);
+assert.ok(codex.interface.shortDescription.length <= 30, "Codex short description must fit public-directory limit");
+assert.equal(codex.interface.websiteURL, "https://www.solve-lang.com");
+assert.equal(codex.interface.privacyPolicyURL, "https://www.solve-lang.com/privacy-policy/");
+assert.equal(codex.interface.termsOfServiceURL, "https://www.solve-lang.com/terms/");
+assert.equal(codex.interface.supportURL, "https://www.solve-lang.com/support/");
+assert.equal(codex.interface.logo, "./assets/solvelang-mark.svg");
+assert.equal(codex.interface.composerIcon, "./assets/solvelang-mark.svg");
 
 assert.deepEqual(mcp, {
   mcpServers: {
@@ -63,6 +70,7 @@ for (const path of [
   "plugins/solvelang/README.md",
   "plugins/solvelang/LICENSE",
   "plugins/solvelang/skills/solvelang-workflow-review/SKILL.md",
+  "plugins/solvelang/assets/solvelang-mark.svg",
 ]) {
   const text = await readFile(resolve(root, path), "utf8");
   assert.ok(text.trim().length > 0, `${path} must not be empty`);

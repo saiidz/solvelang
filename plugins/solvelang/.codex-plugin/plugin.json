@@ -22,7 +22,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "SolveLang",
-    "shortDescription": "Deterministic workflow and repository graph analysis",
+    "shortDescription": "Workflow & graph analysis",
     "longDescription": "Use SolveLang from Codex to analyze n8n workflows and canonical Solve Graph documents, trace dependencies and impact, explain structural risk, and validate local .solve files through a bounded read-only MCP server.",
     "developerName": "SolveLang",
     "category": "Developer Tools",
@@ -30,11 +30,16 @@
       "Interactive",
       "Read"
     ],
-    "websiteURL": "https://solve-lang.com",
+    "websiteURL": "https://www.solve-lang.com",
     "defaultPrompt": [
       "Review this workflow with SolveLang",
       "Trace the impact of this change with Solve Graph",
       "Explain the riskiest dependencies in this repository graph"
-    ]
+    ],
+    "privacyPolicyURL": "https://www.solve-lang.com/privacy-policy/",
+    "termsOfServiceURL": "https://www.solve-lang.com/terms/",
+    "supportURL": "https://www.solve-lang.com/support/",
+    "logo": "./assets/solvelang-mark.svg",
+    "composerIcon": "./assets/solvelang-mark.svg"
   }
 }

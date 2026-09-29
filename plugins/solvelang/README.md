@@ -11,17 +11,9 @@ It packages one shared read-only MCP configuration and workflow-review skill for
 
 ## Distribution truth
 
-The checked-in plugin currently launches the published `@solvelang/mcp-server@0.2.0` package through `npx`. That is the latest published MCP release (2026-07-20), but it **predates substantial current-main MCP/Solve Context work through #920**.
+The checked-in plugin launches the published `@solvelang/mcp-server@0.3.0` package through `npx`. The package, Codex manifest, Claude manifest, and shared MCP pin are version-aligned at v0.3.0.
 
-Therefore:
-
-- installing this plugin with its current `.mcp.json` pin uses the historical published v0.2.0 package;
-- do not claim that the installed v0.2.0 plugin exposes every tool/capability present on current `main`;
-- call capabilities/list-tools to inspect what the installed package actually provides;
-- use a source checkout of `packages/mcp-server` when evaluating current-main Solve Context behavior;
-- a future versioned MCP/plugin release is required before current-main capabilities are publicly distributed through this pin.
-
-See [`../../docs/integrations/mcp-codex-claude.md`](../../docs/integrations/mcp-codex-claude.md) for published-vs-source usage instructions.
+For public OpenAI directory publication, the local `npx` transport is not sufficient by itself. The public listing must submit the separately deployed HTTPS remote MCP endpoint through OpenAI's **With MCP** review flow. The local bundle remains useful for Codex/Claude local development and package qualification.
 
 ## Authority boundary
 

@@ -18,6 +18,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - n8n workflow preflight: https://www.solve-lang.com/check/
 - Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
 - API pricing: https://www.solve-lang.com/api-pricing/
+- SolveLang MCP/plugin reference: https://www.solve-lang.com/mcp/
 - Public support: https://www.solve-lang.com/support/
 - Source repository: https://github.com/saiidz/solvelang
 - License: https://github.com/saiidz/solvelang/blob/main/LICENSE

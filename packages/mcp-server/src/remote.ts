@@ -20,6 +20,24 @@ export const REMOTE_MCP_HEALTH_PATH = "/healthz" as const;
 export const REMOTE_MCP_MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 export const REMOTE_MCP_MIN_TOKEN_BYTES = 32;
 export const REMOTE_MCP_MAX_TOKEN_BYTES = 1024;
+export const REMOTE_OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge" as const;
+
+export type RemoteAuthMode = "bearer" | "noauth";
+
+export function normalizeRemoteAuthMode(value: string | undefined): RemoteAuthMode {
+  const mode = (value ?? "bearer").trim().toLowerCase();
+  if (mode === "bearer" || mode === "noauth") return mode;
+  throw new Error("Remote MCP auth mode must be bearer or noauth.");
+}
+
+export function normalizeOpenAiAppsChallengeToken(value: string | undefined): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  const token = value.trim();
+  if (!token || Buffer.byteLength(token, "utf8") > 2_048 || /[\u0000-\u001f\u007f]/.test(token)) {
+    throw new Error("OpenAI apps challenge token must be 1-2048 UTF-8 bytes without control characters.");
+  }
+  return token;
+}
 
 const remoteToolNames = Object.freeze([
   "solvelang_analyze_n8n",
@@ -102,7 +120,8 @@ const remoteSolveGraphShortestPathInputSchema = z.object({
   maxVisited: z.number().int().min(1).max(10_000).optional(),
 });
 
-export function createRemoteSolveLangMcpServer(): McpServer {
+export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: RemoteAuthMode }> = {}): McpServer {
+  const authMode = options.authMode ?? "bearer";
   const server = new McpServer(
     { name: "solvelang-remote", version: "0.3.0" },
     {
@@ -111,6 +130,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
   );
 
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+  const security = authMode === "noauth" ? { securitySchemes: [{ type: "noauth" as const }] } : {};
 
   server.registerTool(
     "solvelang_analyze_n8n",
@@ -119,6 +139,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Analyze raw n8n workflow JSON in memory. Remote mode never accepts workspace paths and never executes the workflow.",
       inputSchema: remoteN8nInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson }) => textResult(analyzeN8nText(readBoundedRawN8n(rawJson))),
   );
@@ -130,6 +151,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Generate a deterministic Markdown or JSON preflight report from raw in-memory n8n JSON without writing files.",
       inputSchema: remoteN8nReportInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, format }) => {
       const report = analyzeN8nText(readBoundedRawN8n(rawJson));
@@ -146,6 +168,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Search raw canonical Solve Graph JSON by node kind, text, or evidence path.",
       inputSchema: remoteSolveGraphFindInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, kinds, text, evidencePath, limit }) => textResult(executeSolveGraphTool(
       readBoundedRawSolveGraph(rawJson),
@@ -160,6 +183,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Rank bounded deterministic node matches in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphRankedSearchInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, query, kinds, limit }) => textResult(searchSolveGraphNodesRanked(
       readBoundedRawSolveGraph(rawJson),
@@ -175,6 +199,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Traverse outbound dependency edges from stable node IDs in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphTraversalInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, rootIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
       readBoundedRawSolveGraph(rawJson),
@@ -189,6 +214,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Traverse inbound dependency edges from stable node IDs in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphTraversalInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, rootIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
       readBoundedRawSolveGraph(rawJson),
@@ -203,6 +229,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Find one deterministic bounded dependency or dependent path in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphShortestPathInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, sourceId, targetId, direction, edgeKinds, maxDepth, maxVisited }) => textResult(findSolveGraphShortestPath(
       readBoundedRawSolveGraph(rawJson),
@@ -219,6 +246,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Compute bounded transitive dependent impact from stable changed node IDs in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphImpactInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, changedNodeIds, edgeKinds, maxDepth, maxResults }) => textResult(executeSolveGraphTool(
       readBoundedRawSolveGraph(rawJson),
@@ -233,6 +261,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Explain bounded dependent impact from stable changed node IDs in raw canonical Solve Graph JSON.",
       inputSchema: remoteSolveGraphImpactExplanationInputSchema,
       annotations,
+      ...security,
     },
     async ({ rawJson, changedNodeIds, edgeKinds, maxDepth, maxResults, maxRows }) => textResult(explainSolveGraphImpact(
       readBoundedRawSolveGraph(rawJson),
@@ -248,6 +277,7 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       description: "Describe the remote read-only tool surface, privacy boundary, and limits.",
       inputSchema: z.object({}),
       annotations,
+      ...security,
     },
     async () => textResult({
       mode: "remote-read-only",
@@ -261,8 +291,11 @@ export function createRemoteSolveLangMcpServer(): McpServer {
       },
       tools: remoteToolNames,
       unavailableInRemoteMode: ["workspace path inputs", "solvelang_validate_solve", "local subprocess execution"],
+      authentication: authMode === "noauth" ? "anonymous" : "bearer",
       privacy: [
-        "Bearer authentication is required before MCP request parsing",
+        authMode === "noauth"
+          ? "Public plugin mode accepts anonymous requests; production deployments must enforce edge rate limits and abuse controls."
+          : "Bearer authentication is required before MCP request parsing.",
         "No workflow execution",
         "No workspace or filesystem reads",
         "No subprocess execution",
@@ -330,12 +363,16 @@ function sendJson(res: ServerResponse, statusCode: number, value: unknown, extra
 }
 
 export type RemoteHttpServerOptions = Readonly<{
-  bearerToken: string;
+  bearerToken?: string;
+  authMode?: RemoteAuthMode;
   mcpPath?: string;
+  openaiChallengeToken?: string;
 }>;
 
 export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions): HttpServer {
-  const bearerToken = normalizeRemoteBearerToken(options.bearerToken);
+  const authMode = options.authMode ?? "bearer";
+  const bearerToken = authMode === "bearer" ? normalizeRemoteBearerToken(options.bearerToken ?? "") : undefined;
+  const openaiChallengeToken = normalizeOpenAiAppsChallengeToken(options.openaiChallengeToken);
   const mcpPath = options.mcpPath ?? REMOTE_MCP_DEFAULT_PATH;
   if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/.test(mcpPath) || mcpPath.includes("?")) {
     throw new Error("Remote MCP path must be a safe absolute URL path.");
@@ -348,6 +385,15 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         sendJson(res, 200, { status: "ok", service: "solvelang-mcp", mode: "remote-read-only" });
         return;
       }
+      if (pathname === REMOTE_OPENAI_APPS_CHALLENGE_PATH && req.method === "GET" && openaiChallengeToken) {
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        res.end(openaiChallengeToken);
+        return;
+      }
       if (pathname !== mcpPath) {
         sendJson(res, 404, { error: "not_found" });
         return;
@@ -356,7 +402,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         sendJson(res, 405, { error: "method_not_allowed" }, { Allow: "POST" });
         return;
       }
-      if (!remoteBearerHeaderMatches(req.headers.authorization, bearerToken)) {
+      if (authMode === "bearer" && !remoteBearerHeaderMatches(req.headers.authorization, bearerToken!)) {
         sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
         return;
       }
@@ -372,7 +418,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         return;
       }
 
-      const mcpServer = createRemoteSolveLangMcpServer();
+      const mcpServer = createRemoteSolveLangMcpServer({ authMode });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -393,20 +439,24 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
 
 export type StartRemoteSolveLangServerOptions = Readonly<{
   bearerToken?: string;
+  authMode?: RemoteAuthMode;
   host?: string;
   port?: number;
   mcpPath?: string;
+  openaiChallengeToken?: string;
 }>;
 
 export async function startRemoteSolveLangServer(options: StartRemoteSolveLangServerOptions = {}): Promise<HttpServer> {
-  const bearerToken = options.bearerToken ?? process.env.SOLVELANG_REMOTE_BEARER_TOKEN ?? "";
+  const authMode = options.authMode ?? normalizeRemoteAuthMode(process.env.SOLVELANG_REMOTE_AUTH_MODE);
+  const bearerToken = options.bearerToken ?? process.env.SOLVELANG_REMOTE_BEARER_TOKEN;
+  const openaiChallengeToken = options.openaiChallengeToken ?? process.env.SOLVELANG_OPENAI_APPS_CHALLENGE_TOKEN;
   const host = options.host ?? process.env.SOLVELANG_REMOTE_HOST ?? "127.0.0.1";
   const configuredPort = options.port ?? Number(process.env.PORT ?? process.env.SOLVELANG_REMOTE_PORT ?? "8787");
   if (!Number.isSafeInteger(configuredPort) || configuredPort < 0 || configuredPort > 65_535) {
     throw new Error("Remote MCP port must be an integer from 0 through 65535.");
   }
   const mcpPath = options.mcpPath ?? process.env.SOLVELANG_REMOTE_PATH ?? REMOTE_MCP_DEFAULT_PATH;
-  const server = createRemoteSolveLangHttpServer({ bearerToken, mcpPath });
+  const server = createRemoteSolveLangHttpServer({ bearerToken, authMode, mcpPath, openaiChallengeToken });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
       server.off("listening", onListening);

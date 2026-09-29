@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createRemoteSolveLangHttpServer,
+  normalizeOpenAiAppsChallengeToken,
+  normalizeRemoteAuthMode,
   normalizeRemoteBearerToken,
   remoteBearerHeaderMatches,
 } from "../src/remote.js";
@@ -24,6 +26,50 @@ async function withServer(run: (baseUrl: string) => Promise<void>) {
     });
   }
 }
+
+async function withPublicServer(run: (baseUrl: string) => Promise<void>, challengeToken?: string) {
+  const server = createRemoteSolveLangHttpServer({ authMode: "noauth", openaiChallengeToken: challengeToken });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  try {
+    await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+    });
+  }
+}
+
+test("remote auth mode and OpenAI challenge token validation fail closed", () => {
+  assert.equal(normalizeRemoteAuthMode(undefined), "bearer");
+  assert.equal(normalizeRemoteAuthMode(" NOAUTH "), "noauth");
+  assert.throws(() => normalizeRemoteAuthMode("public"), /bearer or noauth/);
+  assert.equal(normalizeOpenAiAppsChallengeToken(undefined), undefined);
+  assert.equal(normalizeOpenAiAppsChallengeToken(" challenge-token "), "challenge-token");
+  assert.throws(() => normalizeOpenAiAppsChallengeToken("bad\nvalue"), /control characters/);
+});
+
+test("public remote mode exposes exact OpenAI domain challenge and accepts anonymous MCP ingress", async () => {
+  const challengeToken = "openai-apps-challenge-test-token";
+  await withPublicServer(async (baseUrl) => {
+    const challenge = await fetch(`${baseUrl}/.well-known/openai-apps-challenge`);
+    assert.equal(challenge.status, 200);
+    assert.equal(await challenge.text(), challengeToken);
+    assert.match(challenge.headers.get("content-type") ?? "", /^text\/plain/);
+    assert.equal(challenge.headers.get("cache-control"), "no-store");
+
+    const anonymousWrongType = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "{}",
+    });
+    assert.equal(anonymousWrongType.status, 415);
+  }, challengeToken);
+});
 
 test("remote bearer token validation is bounded and constant-time compatible", () => {
   assert.equal(normalizeRemoteBearerToken(`  ${TOKEN}  `), TOKEN);
