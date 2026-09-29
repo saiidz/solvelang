@@ -60,3 +60,21 @@ test("exported billing and legal pages keep current API terms and the shared rol
   assert.match(refund, /API subscription cancellation and refunds/);
   for (const html of [terms, billing, refund]) assert.doesNotMatch(html, /Production checkout remains blocked|Subscriptions are inactive/);
 });
+
+
+test("exported homepage social metadata points to the 1200x630 public image", () => {
+  const html = readFileSync(join(root, "index.html"), "utf8");
+  const meta = [...html.matchAll(/<meta\b[^>]*>/g)].map(([tag]) => tag);
+  const content = (attribute, value) => meta.find((tag) => tag.includes(`${attribute}="${value}"`))?.match(/content="([^"]*)"/)?.[1];
+  const url = "https://www.solve-lang.com/solvelang-social-preview.png";
+  assert.equal(content("property", "og:image"), url);
+  assert.equal(content("property", "og:image:width"), "1200");
+  assert.equal(content("property", "og:image:height"), "630");
+  assert.equal(content("name", "twitter:card"), "summary_large_image");
+  assert.equal(content("name", "twitter:image"), url);
+  const png = readFileSync(join(root, "solvelang-social-preview.png"));
+  assert.equal(png.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  assert.equal(png.readUInt32BE(16), 1200);
+  assert.equal(png.readUInt32BE(20), 630);
+  assert.ok(existsSync(join(root, "solvelang-social-preview.svg")));
+});
