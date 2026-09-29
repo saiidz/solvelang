@@ -11,12 +11,13 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const title = "SolveLang — Readable, Explainable Workflows for AI-Assisted Business Processes";
 const description = brandFacts.shortDefinition;
+const socialImagePath = "/solvelang-social-preview.png";
 export const metadata: Metadata = {
   metadataBase: new URL(brandFacts.canonicalDomain), applicationName: brandFacts.publicName,
   title: { default: title, template: "%s | SolveLang" }, description,
   keywords: ["workflow language", "workflow as code", "AI-assisted workflows", "business process automation", "human in the loop workflow", "workflow analysis", "workflow preflight"],
-  openGraph: { siteName: brandFacts.publicName, title, description, url: `${brandFacts.canonicalDomain}/`, type: "website" },
-  twitter: { card: "summary", title, description },
+  openGraph: { siteName: brandFacts.publicName, title, description, url: `${brandFacts.canonicalDomain}/`, type: "website", images: [{ url: socialImagePath, width: 1200, height: 630, alt: "SolveLang — Understand first. Automate second." }] },
+  twitter: { card: "summary_large_image", title, description, images: [socialImagePath] },
 };
 const organizationId = `${brandFacts.canonicalDomain}/#organization`;
 const websiteId = `${brandFacts.canonicalDomain}/#website`;

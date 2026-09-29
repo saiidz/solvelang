@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">SolveLang — Understand first. Automate second.</title>
+  <desc id="desc">SolveLang wordmark and an evidence flow on a dark technical canvas.</desc>
+  <defs>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" fill="none" stroke="#89B9F5" stroke-opacity=".075"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#071426"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <path d="M72 70H1128M72 560H1128" stroke="#53789E" stroke-opacity=".4"/>
+  <path d="M72 70V96M1128 70V96M72 534V560M1128 534V560" stroke="#5796EB" stroke-opacity=".65" stroke-width="2"/>
+
+  <!-- Approved SolveLang emblem geometry, embedded as vectors so the asset has no file dependency. -->
+  <g transform="translate(88 83) scale(.145)">
+    <path d="M260 219L204 220 101 400 233 400 233 368 162 368 161 365 224 254 279 254ZM300 143L458 423 457 426 354 426 352 422 352 393 319 393 318 460 518 460 340 144ZM418 399L379 333 260 333 260 422 258 426 61 425 190 194 246 193 229 159 208 158 224 119 193 119 0 460 293 460 294 367 360 367 380 400Z" fill="#EAF2FF" fill-rule="evenodd"/>
+    <path d="M255 107L236 143 246 144 315 278 236 279 201 343 231 343 251 307 362 307 277 147 277 140ZM259 0L193 118 225 119 257 62 260 61 295 119 325 119 322 110Z" fill="#3B8CFF" fill-rule="evenodd"/>
+  </g>
+  <text x="179" y="139" fill="#F5F9FF" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700" letter-spacing="-2">Solve<tspan fill="#83B7FF">Lang</tspan></text>
+
+  <path d="M88 181H710" stroke="#426180" stroke-opacity=".65"/>
+  <text x="88" y="224" fill="#8EBEFF" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="4">WORKFLOW INTELLIGENCE  /  EVIDENCE FIRST</text>
+  <text x="84" y="327" fill="#F7FAFF" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" letter-spacing="-3">Understand first.</text>
+  <text x="84" y="418" fill="#9AC4FF" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" letter-spacing="-3">Automate second.</text>
+  <path d="M88 470H468" stroke="#347AD1" stroke-width="3"/>
+
+  <g fill="none" stroke="#39618A" stroke-width="2">
+    <path d="M750 182V476" stroke-opacity=".75"/>
+    <path d="M789 202H1090V274H789Z" fill="#0D2138"/>
+    <path d="M789 310H1090V382H789Z" fill="#102A47" stroke="#5B91CB"/>
+    <path d="M789 418H1090V490H789Z" fill="#0D2138"/>
+    <path d="M940 274V310M940 382V418" stroke="#78AEEA"/>
+  </g>
+  <g fill="#70B0F7">
+    <circle cx="940" cy="292" r="4"/>
+    <circle cx="940" cy="400" r="4"/>
+    <circle cx="814" cy="238" r="5"/>
+    <circle cx="814" cy="346" r="5"/>
+    <circle cx="814" cy="454" r="5"/>
+  </g>
+  <g fill="#DCEAFF" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="1">
+    <text x="836" y="245">REPOSITORY / WORKFLOW</text>
+    <text x="836" y="353">SELECTED EVIDENCE</text>
+    <text x="836" y="461">STRUCTURED HANDOFF</text>
+  </g>
+</svg>

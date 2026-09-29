@@ -13,6 +13,8 @@ const robots = read("app/robots.ts");
 const routes = read("app/i18n/routes.ts");
 const llms = read("public/llms.txt");
 const landing = read("app/(english)/landing/page.tsx");
+const layout = read("app/(english)/layout.tsx");
+const socialSvg = read("public/solvelang-social-preview.svg");
 const prompts = JSON.parse(read("data/ai-search-prompts.json"));
 const publicPositioning = [
   brandFacts,
@@ -39,6 +41,15 @@ test("verified brand facts preserve SolveLang maturity boundaries", () => {
   assert.match(brandFacts, /deterministic, not AI analysis/i);
   assert.match(brandFacts, /experimental-test-mode/);
   assert.match(brandFacts, /Production-ready runtime/);
+});
+
+test("social preview uses the canonical static image without external SVG resources", () => {
+  assert.match(layout, /const socialImagePath = "\/solvelang-social-preview\.png"/);
+  assert.match(layout, /images: \[\{ url: socialImagePath, width: 1200, height: 630/);
+  assert.match(layout, /twitter: \{ card: "summary_large_image"[^\n]+images: \[socialImagePath\]/);
+  assert.match(socialSvg, /width="1200" height="630"/);
+  assert.match(socialSvg, /Understand first\. Automate second\./);
+  assert.doesNotMatch(socialSvg, /<image\b|<script\b|<foreignObject\b|@import|(?:href|src)="(?:https?:|\/\/|data:)/i);
 });
 
 test("AI-search prompt benchmark is large enough and duplicate-free", () => {
