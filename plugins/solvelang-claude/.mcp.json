@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "solvelang": {
+      "type": "http",
+      "url": "https://mcp.solve-lang.com/mcp"
+    }
+  }
+}
