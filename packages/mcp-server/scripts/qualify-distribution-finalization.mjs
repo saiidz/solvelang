@@ -59,6 +59,7 @@ try {
   const stagedRoot = path.join(temporaryRoot, "repository");
   const stagedPackageRoot = path.join(stagedRoot, "packages", "mcp-server");
   const stagedPluginRoot = path.join(stagedRoot, "plugins", "solvelang");
+  const stagedClaudeDirectoryRoot = path.join(stagedRoot, "plugins", "solvelang-claude");
 
   await mkdir(path.dirname(stagedPackageRoot), { recursive: true });
   await cp(packageRoot, stagedPackageRoot, {
@@ -72,6 +73,7 @@ try {
   });
   await mkdir(path.dirname(stagedPluginRoot), { recursive: true });
   await cp(path.join(repositoryRoot, "plugins", "solvelang"), stagedPluginRoot, { recursive: true });
+  await cp(path.join(repositoryRoot, "plugins", "solvelang-claude"), stagedClaudeDirectoryRoot, { recursive: true });
 
   await mkdir(path.join(stagedRoot, ".agents", "plugins"), { recursive: true });
   await cp(
@@ -129,10 +131,14 @@ try {
 
     const stagedClaudeMarketplacePath = path.join(stagedRoot, ".claude-plugin", "marketplace.json");
     const stagedClaudeMarketplace = await readJson(stagedClaudeMarketplacePath);
+    const stagedClaudeDirectoryManifest = await readJson(path.join(stagedClaudeDirectoryRoot, ".claude-plugin", "plugin.json"));
     assert.equal(stagedClaudeMarketplace.plugins?.length, 1, "Claude marketplace should contain one reviewed SolveLang plugin");
-    assert.equal(stagedClaudeMarketplace.plugins[0].version, candidate.publishedVersion, "Claude marketplace must start from the published line");
-    stagedClaudeMarketplace.plugins[0].version = candidate.candidateVersion;
-    await writeJson(stagedClaudeMarketplacePath, stagedClaudeMarketplace);
+    assert.equal(stagedClaudeMarketplace.plugins[0].source, "./plugins/solvelang-claude");
+    assert.equal(
+      stagedClaudeMarketplace.plugins[0].version,
+      stagedClaudeDirectoryManifest.version,
+      "Claude marketplace must track the independently versioned public directory bundle",
+    );
   } else {
     assert.equal(stagedPackageManifest.version, candidate.candidateVersion);
     assert.equal(stagedLock.version, candidate.candidateVersion);
@@ -168,14 +174,20 @@ try {
   const finalClaude = await readJson(path.join(stagedPluginRoot, ".claude-plugin", "plugin.json"));
   const finalMcp = await readJson(path.join(stagedPluginRoot, ".mcp.json"));
   const finalClaudeMarketplace = await readJson(path.join(stagedRoot, ".claude-plugin", "marketplace.json"));
+  const finalClaudeDirectory = await readJson(path.join(stagedClaudeDirectoryRoot, ".claude-plugin", "plugin.json"));
   for (const [label, value] of [
     ["package", finalPackage.version],
     ["Codex plugin", finalCodex.version],
     ["Claude plugin", finalClaude.version],
-    ["Claude marketplace", finalClaudeMarketplace.plugins?.[0]?.version],
   ]) {
     assert.equal(value, candidate.candidateVersion, `${label} must remain on the candidate version after roundtrip`);
   }
+  assert.equal(finalClaudeMarketplace.plugins?.[0]?.source, "./plugins/solvelang-claude");
+  assert.equal(
+    finalClaudeMarketplace.plugins?.[0]?.version,
+    finalClaudeDirectory.version,
+    "Claude marketplace must remain aligned to the public directory bundle",
+  );
   assert.equal(
     finalMcp.mcpServers?.solvelang?.args?.[1],
     `@solvelang/mcp-server@${candidate.candidateVersion}`,
@@ -183,7 +195,7 @@ try {
   );
 
   console.log(
-    `SolveLang full distribution ${releaseReady ? "release-ready validation" : `transition ${candidate.publishedVersion} -> ${candidate.candidateVersion}`} PASS: package, local/remote runtime, Codex plugin, Claude plugin, Claude marketplace, Codex marketplace, npx pin, clean package install, and MCP roundtrip agree; publication remains unauthorized.`,
+    `SolveLang full distribution ${releaseReady ? "release-ready validation" : `transition ${candidate.publishedVersion} -> ${candidate.candidateVersion}`} PASS: package, local/remote runtime, Codex plugin, local Claude plugin, independent Claude directory bundle, Claude marketplace, Codex marketplace, npx pin, clean package install, and MCP roundtrip agree; publication remains unauthorized.`,
   );
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });

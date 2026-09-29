@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "solvelang",
+  "displayName": "SolveLang",
+  "version": "0.3.1",
+  "description": "Deterministic read-only analysis for n8n workflows and canonical Solve Graph documents.",
+  "author": {
+    "name": "SolveLang",
+    "url": "https://www.solve-lang.com"
+  },
+  "homepage": "https://www.solve-lang.com/mcp/",
+  "repository": "https://github.com/saiidz/solvelang",
+  "license": "MIT",
+  "keywords": [
+    "solvelang",
+    "workflow-analysis",
+    "solve-graph",
+    "n8n",
+    "repository-analysis"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

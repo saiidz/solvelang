@@ -31,6 +31,7 @@ const packageManifest = await readJson("packages/mcp-server/package.json");
 const packageLock = await readJson("packages/mcp-server/package-lock.json");
 const codexPlugin = await readJson("plugins/solvelang/.codex-plugin/plugin.json");
 const claudePlugin = await readJson("plugins/solvelang/.claude-plugin/plugin.json");
+const claudeDirectoryPlugin = await readJson("plugins/solvelang-claude/.claude-plugin/plugin.json");
 const mcpManifest = await readJson("plugins/solvelang/.mcp.json");
 const claudeMarketplace = await readJson(".claude-plugin/marketplace.json");
 const releaseWorkflow = await readFile(resolve(repositoryRoot, ".github/workflows/npm-release.yml"), "utf8");
@@ -59,7 +60,13 @@ assert.equal(packageLock.packages?.[""]?.version, expectedDistributionVersion, "
 for (const [label, plugin] of [["Codex", codexPlugin], ["Claude", claudePlugin]]) {
   assert.equal(plugin.version, expectedDistributionVersion, `${label} plugin version drifted from the release state`);
 }
-assert.equal(claudeMarketplace.plugins?.[0]?.version, expectedDistributionVersion, "Claude marketplace version drifted from the release state");
+assert.equal(claudeMarketplace.plugins?.[0]?.source, "./plugins/solvelang-claude", "Claude marketplace must point at the public directory bundle");
+assert.equal(
+  claudeMarketplace.plugins?.[0]?.version,
+  claudeDirectoryPlugin.version,
+  "Claude marketplace version drifted from the public directory bundle",
+);
+semverTuple(claudeDirectoryPlugin.version);
 
 const pin = mcpManifest.mcpServers?.solvelang?.args?.[1];
 assert.equal(pin, `@solvelang/mcp-server@${expectedDistributionVersion}`, "canonical plugin MCP pin drifted from the release state");
