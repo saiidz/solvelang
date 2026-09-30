@@ -1,0 +1,71 @@
+name: Inspect API Access Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_inspection_only:
+        description: Inspect the existing test stack only; do not deploy or change permissions
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: api-access-test-deployment
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: api-access-test
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      CONFIRM_INSPECTION_ONLY: ${{ inputs.confirm_inspection_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require the existing main-only test boundary
+        id: boundary
+        env:
+          TEST_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$GITHUB_REPOSITORY" == saiidz/solvelang ]]
+          [[ "$AWS_REGION" == us-east-2 ]]
+          [[ "$STACK_NAME" == solvelang-api-access-test ]]
+          [[ "$CONFIRM_INSPECTION_ONLY" == true ]]
+          [[ "$TEST_ROLE_ARN" =~ ^arn:aws:iam::([0-9]{12}):role/[A-Za-z0-9+=,.@_/-]+$ ]]
+          account_id="${BASH_REMATCH[1]}"
+          echo "::add-mask::$account_id"
+          printf 'aws_account_id=%s\n' "$account_id" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run dependency-free inspection safety tests
+        run: node --test test/inspect-test-stack.test.js
+      - name: Assume existing test role with a read-only session
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: solvelang-test-inspection
+          role-duration-seconds: 900
+          aws-region: us-east-2
+          mask-aws-account-id: true
+          unset-current-credentials: true
+          inline-session-policy: >-
+            {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"sts:GetCallerIdentity","Resource":"*"},{"Effect":"Allow","Action":["cloudformation:DescribeStacks","cloudformation:GetTemplate","cloudformation:ListStackResources"],"Resource":"arn:aws:cloudformation:us-east-2:${{ steps.boundary.outputs.aws_account_id }}:stack/solvelang-api-access-test/*"}]}
+      - name: Inspect sanitized test-stack state
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ steps.boundary.outputs.aws_account_id }}
+        run: node scripts/inspect-test-stack.mjs
