@@ -18,6 +18,24 @@ The `Deploy API Access Test` workflow deploys only from `main` into the protecte
 
 Each stage runs tests, SAM lint, SAM build, CloudFormation deployment, and a deployed `/health` assertion.
 
+## Read-only inspection
+
+`Inspect API Access Test` is a separate manual workflow for inspecting the existing
+`solvelang-api-access-test` stack in `us-east-2`. It runs from `main` in the same
+protected `api-access-test` environment and reuses its existing `AWS_ROLE_ARN`.
+The short-lived role session is restricted to identity and CloudFormation reads
+on that exact stack; no persistent credential or permission grant is created.
+It does not load Stripe/application secrets or publish raw parameter values,
+outputs, physical resource IDs, Lambda environment values, or AWS error buffers.
+
+The sanitized summary reports declared test mode, feature flags, resource types,
+and whether the CloudFormation template declares the public-status-table setting
+required by current code. It does not inspect effective Lambda configuration or
+out-of-band drift. This is inspection only, not a changeset preview, deployment, or
+proof of payment/credit fulfillment. If existing IAM or environment protection
+blocks the read, stop and review that access separately; do not expand permissions.
+Deployment remains a separate explicitly approved action.
+
 ## Protected GitHub environment
 
 Create a GitHub environment named `api-access-test`. Restrict deployments to `main` and require approval if available.
