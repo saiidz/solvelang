@@ -129,7 +129,7 @@ Never overwrite a healthy production table during a drill.
 
 - retain the last known-good CloudFormation/SAM commit SHA;
 - prefer CloudFormation rollback/redeploy rather than ad-hoc console mutations;
-- verify `/health` and enabled feature flags after rollback;
+- verify `/health` and enabled feature flags (via admin-secret-authenticated `/admin/status`) after rollback;
 - do not delete account/billing tables as a rollback mechanism.
 
 ### Billing

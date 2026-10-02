@@ -92,7 +92,7 @@ jobs:
           [[ "$api_enabled" == true && "$customers" == true && "$crm" == true ]]
           [[ "$billing" == true || "$billing" == false ]] || { echo "Unable to determine the current subscription billing flag." >&2; exit 1; }
           test -n "$api_base"
-          health="$(curl --fail --silent --show-error "$api_base/health")"
+          health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e --argjson expectedBilling "$billing" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == $expectedBilling' <<<"$health" >/dev/null
 
           previous_enabled=false
@@ -204,7 +204,7 @@ jobs:
           [[ "$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "AdminCrmEnabled") | .ParameterValue] | first // "false"' <<<"$api_stack")" == true ]]
           billing_after="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "SubscriptionBillingEnabled") | .ParameterValue] | first // empty' <<<"$api_stack")"
           [[ "$billing_after" == "$EXPECTED_BILLING" ]] || { echo "Production billing configuration changed during Admin Gateway deployment." >&2; exit 1; }
-          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$API_BASE/admin/status")"
           jq -e --argjson expectedBilling "$EXPECTED_BILLING" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == $expectedBilling' <<<"$health" >/dev/null
           echo "gateway_base=$gateway_base" >> "$GITHUB_OUTPUT"
 

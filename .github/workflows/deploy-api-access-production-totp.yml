@@ -147,7 +147,7 @@ jobs:
           if [[ "$initial_customer_totp_enabled" == true ]]; then
             [[ "$initial_customer_totp_kms_key_arn" == "$TARGET_TOTP_KMS_ARN" ]] || { echo "Production authenticator is already enabled with a different KMS key; refusing key migration." >&2; exit 1; }
           fi
-          response="$(curl --fail --silent --show-error "$api_base/health")"
+          response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e --argjson customer_totp "$initial_customer_totp_enabled" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false and (((has("customerTotpEnabled") | not) and $customer_totp == false) or .customerTotpEnabled == $customer_totp)' <<<"$response" >/dev/null
           {
             echo "api_base=$api_base"
@@ -280,7 +280,7 @@ jobs:
           current_kms="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "CustomerTotpKmsKeyArn") | .ParameterValue] | first // empty' <<<"$stack")"
           [[ "$current_totp" == true ]]
           [[ "$current_kms" == "$CUSTOMER_TOTP_KMS_KEY_ARN" ]]
-          response="$(curl --fail --silent --show-error "$API_BASE/health")"
+          response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$API_BASE/admin/status")"
           jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == true and .subscriptionBillingEnabled == false' <<<"$response" >/dev/null
           webhook_status="$(curl --silent --output /tmp/solvelang-webhook-disabled.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
           [[ "$webhook_status" == 503 ]]

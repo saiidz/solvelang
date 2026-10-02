@@ -330,7 +330,8 @@ export function assertHealthPreserved(before, after) {
 
 async function main() {
   const {STACK_NAME, AWS_REGION, GITHUB_SHA, GITHUB_REF, RUNNER_TEMP, EXECUTE_MAINTENANCE,
-    STUDIO_ACCEPTANCE_ORIGIN_ACTION, STUDIO_ACCEPTANCE_ORIGIN} = process.env;
+    STUDIO_ACCEPTANCE_ORIGIN_ACTION, STUDIO_ACCEPTANCE_ORIGIN, API_ACCESS_ADMIN_SECRET} = process.env;
+  if (typeof API_ACCESS_ADMIN_SECRET !== 'string' || API_ACCESS_ADMIN_SECRET.length < 32) throw new Error('API access admin secret is unavailable.');
   if (GITHUB_REF !== 'refs/heads/main' || STACK_NAME !== 'solvelang-api-access-production' || !/^[a-z0-9-]+$/.test(AWS_REGION ?? '') || !/^[a-f0-9]{40}$/.test(GITHUB_SHA ?? '') || !RUNNER_TEMP) throw new Error('Invalid protected production context.');
   const acceptanceOptions = {
     studioAcceptanceOriginAction: STUDIO_ACCEPTANCE_ORIGIN_ACTION ?? 'preserve',
@@ -348,7 +349,7 @@ async function main() {
   const parameters = previousParameters(before, candidate, acceptanceOptions);
   const api = before.Outputs.find(o => o.OutputKey === 'ApiAccessBaseUrl')?.OutputValue;
   if (!/^https:\/\/[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com$/.test(api ?? '')) throw new Error('Invalid API endpoint.');
-  const health = async () => {const r = await fetch(`${api}/health`, {signal:AbortSignal.timeout(15000)}); if (!r.ok) throw new Error('API health request failed.'); return r.json();};
+  const health = async () => {const r = await fetch(`${api}/admin/status`, {headers:{'x-solvelang-admin-secret':API_ACCESS_ADMIN_SECRET}, signal:AbortSignal.timeout(15000)}); if (!r.ok) throw new Error('API health request failed.'); return r.json();};
   const initialHealth = await health();
   assertHealthPreserved(initialHealth, initialHealth);
   const previousResult = json('cloudformation','get-template','--stack-name',STACK_NAME,'--template-stage','Processed').TemplateBody;

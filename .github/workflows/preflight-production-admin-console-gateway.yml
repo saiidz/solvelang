@@ -67,7 +67,7 @@ jobs:
           [[ "$crm" == true ]]
           [[ "$billing" == false ]]
           test -n "$api_base"
-          health="$(curl --fail --silent --show-error "$api_base/health")"
+          health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
       - name: Run gateway unit tests

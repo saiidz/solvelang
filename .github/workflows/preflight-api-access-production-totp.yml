@@ -102,7 +102,7 @@ jobs:
           [[ "$totp" == false ]] || { echo "Production authenticator 2FA is already enabled; first-enable preflight is not applicable." >&2; exit 1; }
           [[ "$billing" == false ]]
           test -n "$api_base"
-          response="$(curl --fail --silent --show-error "$api_base/health")"
+          response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false and ((has("customerTotpEnabled") | not) or .customerTotpEnabled == false)' <<<"$response" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
 

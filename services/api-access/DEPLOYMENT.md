@@ -16,7 +16,7 @@ The `Deploy API Access Test` workflow deploys only from `main` into the protecte
    - Enables customer accounts and Stripe test-mode subscription Checkout/webhooks.
    - Requires three active monthly recurring Stripe test Prices and a signed webhook secret.
 
-Each stage runs tests, SAM lint, SAM build, CloudFormation deployment, and a deployed `/health` assertion.
+Each stage runs tests, SAM lint, SAM build, CloudFormation deployment, and a deployed `/admin/status` assertion (admin-secret authenticated).
 
 ## Read-only inspection
 

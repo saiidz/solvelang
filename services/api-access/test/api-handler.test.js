@@ -37,10 +37,6 @@ test("health remains available while all subscription mutations fail closed", as
   assert.deepEqual(JSON.parse(health.body), {
     status: "ok",
     service: "solvelang-api-access",
-    enabled: false,
-    customerAccountsEnabled: false,
-    customerTotpEnabled: false,
-    subscriptionBillingEnabled: false,
   });
 
   const denied = await handler(event("POST", "/internal/keys", { accountId: "acct_1" }, {
@@ -51,6 +47,45 @@ test("health remains available while all subscription mutations fail closed", as
   const webhook = await handler(event("POST", "/stripe/subscriptions/webhook", {}, { "stripe-signature": "test" }));
   assert.equal(webhook.statusCode, 503);
   assert.equal(JSON.parse(webhook.body).code, "subscription_billing_disabled");
+});
+
+test("public health never exposes feature flags; admin status requires the admin secret", async () => {
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    logger: { error() {} },
+  });
+
+  const health = await handler(event("GET", "/health"));
+  assert.equal(health.statusCode, 200);
+  assert.deepEqual(JSON.parse(health.body), {
+    status: "ok",
+    service: "solvelang-api-access",
+  });
+
+  const denied = await handler(event("GET", "/admin/status"));
+  assert.equal(denied.statusCode, 403);
+  assert.equal(JSON.parse(denied.body).code, "admin_denied");
+
+  const wrongSecret = await handler(event("GET", "/admin/status", undefined, {
+    "x-solvelang-admin-secret": "b".repeat(64),
+  }));
+  assert.equal(wrongSecret.statusCode, 403);
+
+  const status = await handler(event("GET", "/admin/status", undefined, {
+    "x-solvelang-admin-secret": adminSecret,
+  }));
+  assert.equal(status.statusCode, 200);
+  assert.deepEqual(JSON.parse(status.body), {
+    status: "ok",
+    service: "solvelang-api-access",
+    enabled: true,
+    customerAccountsEnabled: false,
+    customerTotpEnabled: false,
+    subscriptionBillingEnabled: false,
+  });
 });
 
 test("handler refuses an impossible authenticator-without-customer-accounts state", () => {

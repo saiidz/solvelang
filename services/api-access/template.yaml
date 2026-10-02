@@ -404,6 +404,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /health
             Method: GET
+        AdminStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /admin/status
+            Method: GET
         PublicStatusHealth:
           Type: HttpApi
           Properties:
@@ -605,6 +611,12 @@ Resources:
             Auth:
               Authorizer: SolveLangApiKeyAuthorizer
 
+  ApiAccessFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ApiAccessFunction}"
+      RetentionInDays: 90
+
   PublicStatusCollectorFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -632,6 +644,12 @@ Resources:
           Properties:
             Schedule: rate(1 minute)
             Enabled: true
+
+  PublicStatusCollectorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PublicStatusCollectorFunction}"
+      RetentionInDays: 90
 
   ApiKeyAuthorizerFunction:
     Type: AWS::Serverless::Function
@@ -679,6 +697,12 @@ Resources:
             Resource:
               - !GetAtt ApiUsageTable.Arn
               - !GetAtt ApiUsageIdempotencyTable.Arn
+
+  ApiKeyAuthorizerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ApiKeyAuthorizerFunction}"
+      RetentionInDays: 90
 
   ApiKeyAuthorizerInvokePermission:
     Type: AWS::Lambda::Permission
