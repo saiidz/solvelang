@@ -40,6 +40,8 @@ export default function ApiKeysPage() {
   const [mfaCode, setMfaCode] = useState("");
   const [credentialUsername, setCredentialUsername] = useState("");
   const [credentialPassword, setCredentialPassword] = useState("");
+  const [credentialCurrentPassword, setCredentialCurrentPassword] = useState("");
+  const [credentialCode, setCredentialCode] = useState("");
   const [totpSetup, setTotpSetup] = useState<TotpSetup | null>(null);
   const [totpPassword, setTotpPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
@@ -174,9 +176,20 @@ export default function ApiKeysPage() {
       const result = await customerApi<{ auth: CustomerDashboard["auth"] }>(API_BASE, "/customer/auth/credentials", {
         method: "POST",
         csrfToken: dashboard.csrfToken,
-        body: JSON.stringify({ username: credentialUsername, password: credentialPassword }),
+        body: JSON.stringify({
+          username: credentialUsername,
+          password: credentialPassword,
+          ...(dashboard.auth.passwordConfigured
+            ? {
+                currentPassword: credentialCurrentPassword,
+                ...(dashboard.auth.totpEnabled ? { code: credentialCode } : {}),
+              }
+            : {}),
+        }),
       });
       setCredentialPassword("");
+      setCredentialCurrentPassword("");
+      setCredentialCode("");
       setDashboard({ ...dashboard, auth: result.auth });
       setCredentialUsername(result.auth.username ?? credentialUsername);
       setNotice("Password sign-in is ready. Future sign-ins do not require an email unless you use recovery.");
@@ -464,21 +477,33 @@ export default function ApiKeysPage() {
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Account security</p>
               <h2 className="mt-2 text-2xl font-bold">{dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}</h2>
               <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Use this form after an email recovery link to replace your password.` : "Choose a username and password once. Future sign-ins will not need an email link."}
+                {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Changing your password asks for your current password${dashboard.auth.totpEnabled ? " and an authenticator code" : ""}. Right after an email recovery link, you can set a new password directly.` : "Choose a username and password once. Future sign-ins will not need an email link."}
               </p>
             </div>
             {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span> : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
           </div>
-          <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-2 md:items-end">
             <div>
               <label htmlFor="credential-username" className="block text-sm font-medium">Username</label>
               <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60" />
             </div>
+            {dashboard.auth.passwordConfigured ? (
+              <div>
+                <label htmlFor="credential-current-password" className="block text-sm font-medium">Current password</label>
+                <input id="credential-current-password" type="password" value={credentialCurrentPassword} onChange={(event) => setCredentialCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              </div>
+            ) : null}
             <div>
               <label htmlFor="credential-password" className="block text-sm font-medium">{dashboard.auth.passwordConfigured ? "New password" : "Password"}</label>
               <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
             </div>
-            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
+            {dashboard.auth.passwordConfigured && dashboard.auth.totpEnabled ? (
+              <div>
+                <label htmlFor="credential-code" className="block text-sm font-medium">Authenticator or backup code</label>
+                <input id="credential-code" type="text" value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              </div>
+            ) : null}
+            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40 md:justify-self-start">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
           </form>
 
           <div className="mt-8 border-t border-white/10 pt-6">
