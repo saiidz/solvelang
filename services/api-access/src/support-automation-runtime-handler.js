@@ -15,6 +15,8 @@ const RUNTIME_MODES = new Set(["api", "worker"]);
 const WORKER_FAILURE_STATES = new Set(["FAILED", "SOURCE_INITIALIZATION_FAILED", "SOURCE_IDENTITY_MISMATCH"]);
 const DEFAULT_MESSAGE_AGE_THRESHOLD_SECONDS = 15 * 60;
 function required(environment, name, minimum = 1) { const value = environment[name]; if (typeof value !== "string" || value.length < minimum) throw new Error(`${name} is required.`); return value; }
+// Optional previous pepper for dual-read rotation; blank means no window.
+function optionalPepper(environment, name) { const value = environment[name]; if (value === undefined || value === "") return undefined; if (typeof value !== "string" || value.length < 32) throw new Error(`${name} must contain at least 32 characters when set.`); return value; }
 function approvedMailHosts(value) {
   if (value === undefined || value === "") return [];
   if (typeof value !== "string" || value.length > 2048) throw new Error("API_SUPPORT_AUTOMATION_MAIL_HOSTS is invalid.");
@@ -102,6 +104,7 @@ export function parseSupportAutomationRuntimeEnvironment(environment = process.e
     supportAutomationTable: enabled ? required(environment, "API_SUPPORT_AUTOMATION_TABLE") : undefined,
     customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
     customerAuthPepper: enabled && runtimeMode === "api" ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
+    customerAuthPepperPrevious: enabled && runtimeMode === "api" ? optionalPepper(environment, "API_CUSTOMER_AUTH_PEPPER_PREVIOUS") : undefined,
     approvedMailHosts: enabled ? approvedMailHosts(environment.API_SUPPORT_AUTOMATION_MAIL_HOSTS) : [],
     approvedReplyRecipients: enabled ? approvedReplyRecipients(environment.API_SUPPORT_AUTOMATION_REPLY_RECIPIENTS) : [],
     mailSendEnabled: enabled && environment.API_SUPPORT_AUTOMATION_MAIL_SEND_ENABLED === "true",
@@ -140,7 +143,7 @@ export function createSupportAutomationRuntime({ environment = process.env, docu
   let application = createSupportAutomationApiHandler({ enabled: false, siteOrigin: parsed.siteOrigin, logger });
   if (parsed.runtimeMode === "api") {
     const rawAuthStore = createDynamoCustomerAuthStore(dynamo, parsed.customerAuthTable); const guardedAuthStore = createAccessGuardedCustomerAuthStore(rawAuthStore, accessReader);
-    const customerAuth = createCustomerAuthService({ store: guardedAuthStore, emailGateway: { async sendMagicLink() { throw new Error("The support-automation runtime cannot send authentication emails."); } }, pepper: parsed.customerAuthPepper, siteOrigin: parsed.siteOrigin });
+    const customerAuth = createCustomerAuthService({ store: guardedAuthStore, emailGateway: { async sendMagicLink() { throw new Error("The support-automation runtime cannot send authentication emails."); } }, pepper: parsed.customerAuthPepper, previousPepper: parsed.customerAuthPepperPrevious, siteOrigin: parsed.siteOrigin });
     application = createSupportAutomationApiHandler({ enabled: true, supportAutomation, customerAuth, siteOrigin: parsed.siteOrigin, logger });
   }
   return {

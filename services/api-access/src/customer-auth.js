@@ -194,6 +194,7 @@ export function createCustomerAuthService({
   store,
   emailGateway,
   pepper,
+  previousPepper,
   siteOrigin,
   studioAcceptanceOrigin,
   totpFeatureEnabled = false,
@@ -204,6 +205,26 @@ export function createCustomerAuthService({
   if (!store || typeof store !== "object") throw new Error("Customer authentication store is required.");
   if (!emailGateway || typeof emailGateway.sendMagicLink !== "function") throw new Error("Customer email gateway is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
+  if (previousPepper !== undefined && (typeof previousPepper !== "string" || previousPepper.length < 32)) {
+    throw new Error("Previous customer authentication pepper must contain at least 32 characters.");
+  }
+  // Dual-read rotation window: fingerprint VERIFICATION accepts the current
+  // pepper and (when configured) the previous pepper, so sessions, magic
+  // links, MFA challenges, and backup codes minted before a rotation keep
+  // working until they expire. Everything minted here — sessions, magic
+  // links, challenges, backup codes, account IDs — always uses the current
+  // pepper. Ephemeral throttle keys and the password timing-equalization
+  // salt intentionally stay current-pepper-only: they are recomputed every
+  // request and hold no stored state across a rotation.
+  const pepperCandidates = [...new Set([pepper, previousPepper].filter((candidate) => typeof candidate === "string"))];
+
+  function candidateDigests(purpose, value) {
+    return pepperCandidates.map((candidate) => digest(candidate, purpose, value));
+  }
+
+  function digestMatchesAny(purpose, value, expected) {
+    return pepperCandidates.some((candidate) => secureEqual(digest(candidate, purpose, value), expected));
+  }
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
   studioAcceptanceOrigin = parseStudioAcceptanceOrigin(studioAcceptanceOrigin, siteOrigin);
   if (totpFeatureEnabled && (!totpProtector || typeof totpProtector.encrypt !== "function" || typeof totpProtector.decrypt !== "function")) {
@@ -310,9 +331,15 @@ export function createCustomerAuthService({
     }
     const backup = normalizeBackupCode(code);
     if (!backup || !Array.isArray(account.backupCodeFingerprints)) return undefined;
-    const fingerprint = backupCodeFingerprint(account.accountId, backup);
-    const backupIndex = account.backupCodeFingerprints.findIndex((stored) => secureEqual(stored, fingerprint));
-    return backupIndex >= 0 ? { backupIndex, backupCodeFingerprint: fingerprint } : undefined;
+    // Dual-read: backup codes minted under the previous pepper stay valid
+    // during a rotation window; the returned fingerprint is the stored one,
+    // so consume paths remove exactly the entry that matched.
+    for (const candidate of pepperCandidates) {
+      const fingerprint = digest(candidate, "totp-backup", `${account.accountId}:${backup}`);
+      const backupIndex = account.backupCodeFingerprints.findIndex((stored) => secureEqual(stored, fingerprint));
+      if (backupIndex >= 0) return { backupIndex, backupCodeFingerprint: fingerprint };
+    }
+    return undefined;
   }
 
   async function requestMagicLink(input, context = {}) {
@@ -331,7 +358,10 @@ export function createCustomerAuthService({
     });
     if (sourceThrottle === "limited") return { accepted: true };
 
-    const accountId = accountIdForEmail(email, pepper);
+    // During a rotation window, an existing account may still be keyed by
+    // its previous-pepper account ID. Fall back so the link binds to the
+    // real account instead of spawning a duplicate under the new ID.
+    let accountId = accountIdForEmail(email, pepper);
     const throttleKey = digest(pepper, "email-throttle", email);
     const throttle = await store.reserveEmailRequest({
       throttleKey,
@@ -340,7 +370,15 @@ export function createCustomerAuthService({
     });
     if (throttle === "limited") return { accepted: true };
 
-    const account = await store.getAccount(accountId);
+    let account = await store.getAccount(accountId);
+    if (!account && previousPepper) {
+      const previousAccountId = accountIdForEmail(email, previousPepper);
+      const previousAccount = previousAccountId === accountId ? undefined : await store.getAccount(previousAccountId);
+      if (previousAccount) {
+        accountId = previousAccountId;
+        account = previousAccount;
+      }
+    }
     const authVersion = authVersionOf(account?.authVersion);
     if (!authVersion) throw new Error("Customer authentication version is invalid.");
 
@@ -364,20 +402,27 @@ export function createCustomerAuthService({
     const timestamp = now();
     const session = createSession(timestamp);
     const challenge = createMfaChallenge(timestamp, 1, "magic-link");
-    const result = typeof store.consumeMagicLinkForAuth === "function"
-      ? await store.consumeMagicLinkForAuth({
-          tokenId: parsed.id,
-          presentedFingerprint: digest(pepper, "magic-link", parsed.token),
-          now: Math.floor(timestamp / 1_000),
-          session: session.record,
-          mfaChallenge: challenge.record,
-        })
-      : await store.consumeMagicLinkAndCreateSession({
-          tokenId: parsed.id,
-          presentedFingerprint: digest(pepper, "magic-link", parsed.token),
-          now: Math.floor(timestamp / 1_000),
-          session: session.record,
-        });
+    // Dual-read: try fingerprints under each candidate pepper. A failed
+    // conditional consume changes nothing, so falling back is safe; the
+    // first candidate that matches performs the single-use consume.
+    let result;
+    for (const presentedFingerprint of candidateDigests("magic-link", parsed.token)) {
+      result = typeof store.consumeMagicLinkForAuth === "function"
+        ? await store.consumeMagicLinkForAuth({
+            tokenId: parsed.id,
+            presentedFingerprint,
+            now: Math.floor(timestamp / 1_000),
+            session: session.record,
+            mfaChallenge: challenge.record,
+          })
+        : await store.consumeMagicLinkAndCreateSession({
+            tokenId: parsed.id,
+            presentedFingerprint,
+            now: Math.floor(timestamp / 1_000),
+            session: session.record,
+          });
+      if (result?.accountId && result?.email) break;
+    }
     if (!result?.accountId || !result?.email) {
       throw new ApiAccessError(401, "invalid_magic_link", "This sign-in link is invalid or expired.");
     }
@@ -416,6 +461,11 @@ export function createCustomerAuthService({
     let account;
     if (identifier?.kind === "email") {
       account = await store.getAccount(accountIdForEmail(identifier.value, pepper));
+      if (!account && previousPepper) {
+        // Rotation window: the account may still live under its
+        // previous-pepper ID.
+        account = await store.getAccount(accountIdForEmail(identifier.value, previousPepper));
+      }
     } else if (identifier?.kind === "username") {
       const username = await store.getUsername(identifier.value);
       if (username?.accountId) account = await store.getAccount(username.accountId);
@@ -456,13 +506,23 @@ export function createCustomerAuthService({
     if (sourceThrottle === "limited") {
       throw new ApiAccessError(429, "mfa_rate_limited", "Authenticator verification is temporarily unavailable. Try again shortly.");
     }
-    const presentedFingerprint = digest(pepper, "mfa-challenge", parsed.token);
-    const challenge = await store.reserveMfaAttempt({
-      challengeId: parsed.id,
-      presentedFingerprint,
-      now: Math.floor(timestamp / 1_000),
-      limit: MFA_ATTEMPT_LIMIT,
-    });
+    // Dual-read: reserve the attempt under whichever candidate pepper
+    // minted the challenge fingerprint. A fingerprint mismatch increments
+    // nothing, so trying the next candidate is free.
+    let presentedFingerprint;
+    let challenge;
+    for (const candidateFingerprint of candidateDigests("mfa-challenge", parsed.token)) {
+      challenge = await store.reserveMfaAttempt({
+        challengeId: parsed.id,
+        presentedFingerprint: candidateFingerprint,
+        now: Math.floor(timestamp / 1_000),
+        limit: MFA_ATTEMPT_LIMIT,
+      });
+      if (challenge) {
+        presentedFingerprint = candidateFingerprint;
+        break;
+      }
+    }
     if (!challenge) {
       throw new ApiAccessError(401, "invalid_mfa_challenge", "Authenticator verification is invalid or expired.");
     }
@@ -676,8 +736,9 @@ export function createCustomerAuthService({
     const parsed = parseOpaqueToken(raw, "sess");
     const record = await store.getSession(parsed.id);
     const timestamp = Math.floor(now() / 1_000);
-    const presented = digest(pepper, "session", parsed.token);
-    if (!record || record.expiresAt <= timestamp || !secureEqual(presented, record.secretFingerprint)) {
+    // Dual-read: a session minted under the previous pepper still verifies
+    // during a rotation window (it keeps its original expiry).
+    if (!record || record.expiresAt <= timestamp || !digestMatchesAny("session", parsed.token, record.secretFingerprint)) {
       throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
     }
 

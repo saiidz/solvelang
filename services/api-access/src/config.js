@@ -6,6 +6,17 @@ function required(environment, name, minimum = 1) {
   return value;
 }
 
+// Optional previous pepper for dual-read rotation (see
+// docs/production-operations.md). Unset or blank means "no rotation window
+// open" and behavior is exactly the pre-rotation behavior. A non-blank value
+// shorter than the pepper minimum is a configuration error, not a window.
+function optionalPepper(environment, name) {
+  const value = environment[name];
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || value.length < 32) throw new Error(`${name} must contain at least 32 characters when set.`);
+  return value;
+}
+
 function shared(environment) {
   const mode = environment.API_ACCESS_MODE ?? "test";
   if (mode !== "test" && mode !== "live") throw new Error("API_ACCESS_MODE must be test or live.");
@@ -13,6 +24,7 @@ function shared(environment) {
     enabled: environment.API_ACCESS_ENABLED === "true",
     mode,
     pepper: required(environment, "API_KEY_PEPPER", 32),
+    previousPepper: optionalPepper(environment, "API_KEY_PEPPER_PREVIOUS"),
     accountsTable: required(environment, "API_ACCOUNTS_TABLE"),
     keysTable: required(environment, "API_KEYS_TABLE"),
     keysAccountIndex: environment.API_KEYS_ACCOUNT_INDEX ?? "AccountIdIndex",
@@ -52,6 +64,7 @@ function customerAccounts(environment) {
   return {
     ...access,
     customerAuthPepper: access.customerAccountsEnabled ? required(environment, "API_CUSTOMER_AUTH_PEPPER", 32) : undefined,
+    customerAuthPreviousPepper: access.customerAccountsEnabled ? optionalPepper(environment, "API_CUSTOMER_AUTH_PEPPER_PREVIOUS") : undefined,
     customerAuthEmailSender: access.customerAccountsEnabled ? required(environment, "API_CUSTOMER_AUTH_EMAIL_SENDER") : undefined,
     customerAuthEmailReplyTo: environment.API_CUSTOMER_AUTH_EMAIL_REPLY_TO || undefined,
     customerTotpEnabled: totpEnabled,

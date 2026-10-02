@@ -15,12 +15,15 @@ function normalizedUsername(value) {
   return username;
 }
 
-export function createAccountIdentityResolver({ store, pepper }) {
+export function createAccountIdentityResolver({ store, pepper, previousPepper }) {
   if (!store || typeof store.getUsername !== "function") {
     throw new Error("Customer authentication identity store is required.");
   }
   if (typeof pepper !== "string" || pepper.length < 32) {
     throw new Error("Customer authentication pepper is required.");
+  }
+  if (previousPepper !== undefined && (typeof previousPepper !== "string" || previousPepper.length < 32)) {
+    throw new Error("Previous customer authentication pepper must contain at least 32 characters.");
   }
 
   return {
@@ -42,10 +45,18 @@ export function createAccountIdentityResolver({ store, pepper }) {
       }
 
       if (matchedBy === "email") {
-        return {
-          accountId: accountIdForEmail(value, pepper),
-          matchedBy,
-        };
+        const accountId = accountIdForEmail(value, pepper);
+        // Dual-read rotation window: an account may still be keyed by its
+        // previous-pepper ID. When the store can be probed, prefer the ID
+        // that actually exists; otherwise fall back to the current-pepper
+        // ID, matching pre-rotation behavior for new accounts.
+        if (previousPepper && typeof store.getAccount === "function") {
+          const previousAccountId = accountIdForEmail(value, previousPepper);
+          if (previousAccountId !== accountId && !(await store.getAccount(accountId)) && (await store.getAccount(previousAccountId))) {
+            return { accountId: previousAccountId, matchedBy };
+          }
+        }
+        return { accountId, matchedBy };
       }
 
       const username = normalizedUsername(value);

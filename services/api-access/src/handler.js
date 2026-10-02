@@ -44,7 +44,7 @@ const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const publicStatusStore = createDynamoPublicStatusStore(documentClient, process.env.PUBLIC_STATUS_TABLE);
 const store = createDynamoApiAccessStore(documentClient, environment);
 const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
-const service = createApiAccessService({ store, pepper: environment.pepper, mode: environment.mode });
+const service = createApiAccessService({ store, pepper: environment.pepper, previousPepper: environment.previousPepper, mode: environment.mode });
 
 let accountAccess;
 let accountIdentityResolver;
@@ -57,7 +57,7 @@ if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn) : undefined;
   const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   customerAuthStoreForAdmin = customerAuthStore;
-  accountIdentityResolver = createAccountIdentityResolver({ store: customerAuthStore, pepper: environment.customerAuthPepper });
+  accountIdentityResolver = createAccountIdentityResolver({ store: customerAuthStore, pepper: environment.customerAuthPepper, previousPepper: environment.customerAuthPreviousPepper });
   const guardedAuthStore = createAccessGuardedCustomerAuthStore(
     customerAuthStore,
     accountAccessReader,
@@ -66,6 +66,7 @@ if (environment.customerAccountsEnabled) {
     store: guardedAuthStore,
     emailGateway: createCustomerEmailGateway(new SESv2Client({}), { sender: environment.customerAuthEmailSender, replyTo: environment.customerAuthEmailReplyTo }),
     pepper: environment.customerAuthPepper,
+    previousPepper: environment.customerAuthPreviousPepper,
     siteOrigin: environment.siteOrigin,
     studioAcceptanceOrigin: environment.studioAcceptanceOrigin,
     totpFeatureEnabled: environment.customerTotpEnabled,

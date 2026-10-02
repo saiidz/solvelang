@@ -29,6 +29,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+  CustomerAuthPepperPrevious:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Previous customer-auth pepper for dual-read rotation; blank means no rotation window.
   AccountsTableName:
     Type: String
     Default: disabled
@@ -101,6 +106,7 @@ Resources:
           PRIORITY_PROVIDER_EXECUTION_ENABLED: !Ref ProviderExecutionEnabled
           SITE_ORIGIN: !Ref SiteOrigin
           CUSTOMER_AUTH_PEPPER: !If [CustomerPriorityFeatureEnabled, !Ref CustomerAuthPepper, disabled]
+          CUSTOMER_AUTH_PEPPER_PREVIOUS: !If [CustomerPriorityFeatureEnabled, !Ref CustomerAuthPepperPrevious, ""]
           API_ACCOUNTS_TABLE: !Ref AccountsTableName
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           API_USAGE_TABLE: !Ref UsageTableName

@@ -43,6 +43,11 @@ Parameters:
     Type: String
     NoEcho: true
     MinLength: 32
+  ApiKeyPepperPrevious:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Previous API key pepper for dual-read rotation; blank means no rotation window.
   ApiAccessAdminSecret:
     Type: String
     NoEcho: true
@@ -51,6 +56,11 @@ Parameters:
     Type: String
     NoEcho: true
     Default: ""
+  CustomerAuthPepperPrevious:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Previous customer-auth pepper for dual-read rotation; blank means no rotation window.
   CustomerAuthEmailSender:
     Type: String
     Default: ""
@@ -320,8 +330,10 @@ Resources:
           API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
           API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_KEY_PEPPER_PREVIOUS: !Ref ApiKeyPepperPrevious
           API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
           API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_PEPPER_PREVIOUS: !Ref CustomerAuthPepperPrevious
           API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
@@ -636,6 +648,7 @@ Resources:
           API_ACCESS_MODE: !Ref ApiAccessMode
           API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
           API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_KEY_PEPPER_PREVIOUS: !Ref ApiKeyPepperPrevious
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex
