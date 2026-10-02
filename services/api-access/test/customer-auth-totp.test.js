@@ -32,6 +32,7 @@ function fixture({ featureEnabled = true } = {}) {
   let challenge;
   let session;
   let magic;
+  const setCredentialsCalls = [];
   const sent = [];
   const store = {
     sessionsCreated: 0,
@@ -78,8 +79,9 @@ function fixture({ featureEnabled = true } = {}) {
         account.backupCodeFingerprints.splice(backupIndex, 1);
         account.backupCodeCount -= 1;
       } else return "conflict";
+      const consumedChallenge = challenge;
       challenge = undefined;
-      session = created;
+      session = { ...created, accountId: consumedChallenge.accountId, email: consumedChallenge.email, authVersion: consumedChallenge.authVersion };
       this.sessionsCreated += 1;
       return "consumed";
     },
@@ -115,7 +117,7 @@ function fixture({ featureEnabled = true } = {}) {
     },
     async getSession() { return session; },
     async revokeSession() {},
-    async setCredentials() { return "updated"; },
+    async setCredentials(record) { setCredentialsCalls.push(record); return "updated"; },
   };
   const protector = {
     async encrypt(accountId, secret) { return `${accountId}:${secret}`; },
@@ -142,6 +144,7 @@ function fixture({ featureEnabled = true } = {}) {
     account,
     sent,
     authenticatedSession,
+    setCredentialsCalls,
     advance(milliseconds) { clock += milliseconds; },
     now() { return clock; },
   };
@@ -282,4 +285,70 @@ test("TOTP-enabled accounts fail closed when the authenticator feature is unavai
     (error) => error.statusCode === 503 && error.code === "authenticator_unavailable",
   );
   assert.equal(f.store.sessionsCreated, 0);
+});
+
+test("changing the password on a TOTP account requires the current password plus a fresh proof", async () => {
+  const f = fixture();
+  const { setup, enrolled } = await enroll(f);
+  f.advance(31_000);
+  const change = { username: "owner", password: "a replacement password" };
+  await assert.rejects(
+    () => f.service.setCredentials(f.authenticatedSession, change),
+    (error) => error.code === "invalid_security_proof",
+  );
+  await assert.rejects(
+    () => f.service.setCredentials(f.authenticatedSession, { ...change, currentPassword: "wrong password" }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  await assert.rejects(
+    () => f.service.setCredentials(f.authenticatedSession, { ...change, currentPassword: password }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  // The step used to enroll is spent: replaying it is not a fresh proof.
+  await assert.rejects(
+    () => f.service.setCredentials(f.authenticatedSession, {
+      ...change,
+      currentPassword: password,
+      code: generateTotpCode(setup.secret, totpStep(f.now()) - 1),
+    }),
+    (error) => error.code === "invalid_security_proof",
+  );
+  assert.equal(f.setCredentialsCalls.length, 0);
+
+  const updated = await f.service.setCredentials(f.authenticatedSession, {
+    ...change,
+    currentPassword: password,
+    code: generateTotpCode(setup.secret, totpStep(f.now())),
+  });
+  assert.equal(updated.passwordConfigured, true);
+  assert.equal(updated.totpEnabled, true);
+  assert.equal(f.setCredentialsCalls.length, 1);
+
+  // An unused backup code is also a valid fresh proof.
+  f.advance(31_000);
+  await f.service.setCredentials(f.authenticatedSession, {
+    ...change,
+    currentPassword: password,
+    code: enrolled.backupCodes[0],
+  });
+  assert.equal(f.setCredentialsCalls.length, 2);
+});
+
+test("a fresh email-recovery session on a TOTP account is already proven for a password change", async () => {
+  const f = fixture();
+  const { setup } = await enroll(f);
+  f.advance(31_000);
+  await f.service.requestMagicLink({ email: f.account.email }, { sourceIp: "203.0.113.25" });
+  const first = await f.service.verifyMagicLink({ token: tokenFromUrl(f.sent[0].url) });
+  assert.equal(first.mfaRequired, true);
+  const verified = await f.service.verifyMfaChallenge({
+    challengeToken: first.challengeToken,
+    code: generateTotpCode(setup.secret, totpStep(f.now())),
+  }, { sourceIp: "203.0.113.25" });
+
+  const session = await f.service.authenticate(`sl_api_session=${encodeURIComponent(verified.cookie.split(";")[0].split("=")[1])}`);
+  assert.equal(typeof session.emailVerifiedAt, "string");
+  const updated = await f.service.setCredentials(session, { username: "owner", password: "recovered secure password" });
+  assert.equal(updated.passwordConfigured, true);
+  assert.equal(f.setCredentialsCalls.length, 1);
 });

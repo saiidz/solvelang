@@ -380,3 +380,108 @@ test("malformed percent-encoded session cookies fail closed as invalid sessions"
     (error) => error instanceof ApiAccessError && error.code === "invalid_session",
   );
 });
+
+test("changing a configured password from a password session requires the current password", async () => {
+  const { sent, service } = setup();
+  const verified = await verifiedSession(service, sent);
+  const session = await authenticatedSession(service, verified);
+  await service.setCredentials(session, { username: "devuser", password: "original secure password" });
+
+  const login = await service.loginWithPassword(
+    { identifier: "devuser", password: "original secure password" },
+    { sourceIp: "203.0.113.41" },
+  );
+  const passwordSession = await service.authenticate(cookieHeader(login.cookie));
+  assert.equal(passwordSession.emailVerifiedAt, null);
+
+  for (const input of [
+    { username: "devuser", password: "replacement secure password" },
+    { username: "devuser", password: "replacement secure password", currentPassword: "not the password" },
+  ]) {
+    await assert.rejects(
+      () => service.setCredentials(passwordSession, input),
+      (error) => error instanceof ApiAccessError && error.statusCode === 401 && error.code === "invalid_security_proof",
+    );
+  }
+
+  const updated = await service.setCredentials(passwordSession, {
+    username: "devuser",
+    password: "replacement secure password",
+    currentPassword: "original secure password",
+  });
+  assert.equal(updated.passwordConfigured, true);
+  const relogin = await service.loginWithPassword(
+    { identifier: "devuser", password: "replacement secure password" },
+    { sourceIp: "203.0.113.42" },
+  );
+  assert.equal(relogin.accountId, verified.accountId);
+});
+
+test("an email-link session can replace a forgotten password only while its proof is fresh", async () => {
+  const store = new MemoryAuthStore();
+  const links = [];
+  const notices = [];
+  let clock = fixedNow;
+  const service = createCustomerAuthService({
+    store,
+    emailGateway: {
+      sendMagicLink: async (message) => links.push(message),
+      sendSecurityNotice: async (message) => notices.push(message),
+    },
+    pepper,
+    siteOrigin: "https://www.solve-lang.com",
+    now: () => clock,
+    randomBytes: deterministicRandom,
+  });
+
+  await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.50" });
+  const verified = await service.verifyMagicLink({ token: tokenFromUrl(links.at(-1).url) });
+  let session = await service.authenticate(cookieHeader(verified.cookie));
+  assert.equal(typeof session.emailVerifiedAt, "string");
+  await service.setCredentials(session, { username: "devuser", password: "original secure password" });
+  assert.deepEqual(notices, [{ email: "dev@example.com", change: "password_changed" }]);
+
+  // Twenty-nine minutes after the recovery link, its proof is still
+  // fresh: the owner can replace the password without knowing it.
+  clock += 29 * 60_000;
+  session = await service.authenticate(cookieHeader(verified.cookie));
+  await service.setCredentials(session, { username: "devuser", password: "second secure password" });
+  assert.equal(notices.length, 2);
+
+  // Thirty-one minutes later the same session must re-prove.
+  clock += 31 * 60_000;
+  session = await service.authenticate(cookieHeader(verified.cookie));
+  await assert.rejects(
+    () => service.setCredentials(session, { username: "devuser", password: "third secure password" }),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_security_proof",
+  );
+  await service.setCredentials(session, {
+    username: "devuser",
+    password: "third secure password",
+    currentPassword: "second secure password",
+  });
+  assert.equal(notices.length, 3);
+  assert.ok(notices.every((notice) => notice.email === "dev@example.com" && notice.change === "password_changed"));
+});
+
+test("a failing security notice never fails the credential change", async () => {
+  const store = new MemoryAuthStore();
+  const links = [];
+  const service = createCustomerAuthService({
+    store,
+    emailGateway: {
+      sendMagicLink: async (message) => links.push(message),
+      sendSecurityNotice: async () => { throw new Error("SES unavailable"); },
+    },
+    pepper,
+    siteOrigin: "https://www.solve-lang.com",
+    now: () => fixedNow,
+    randomBytes: deterministicRandom,
+  });
+
+  await service.requestMagicLink({ email: "dev@example.com" }, { sourceIp: "203.0.113.60" });
+  const verified = await service.verifyMagicLink({ token: tokenFromUrl(links.at(-1).url) });
+  const session = await service.authenticate(cookieHeader(verified.cookie));
+  const result = await service.setCredentials(session, { username: "devuser", password: "original secure password" });
+  assert.equal(result.passwordConfigured, true);
+});

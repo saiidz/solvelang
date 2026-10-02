@@ -107,6 +107,19 @@ export function createApiAccessHandler({
     return session;
   }
 
+  // Session-establishing routes set the SameSite=None session cookie, so a
+  // cross-origin form POST could otherwise sign a victim into someone else's
+  // account (login CSRF). Browsers always send Origin on such POSTs; clients
+  // that omit it (non-browser tooling) are unaffected. This is the exact
+  // allowlist the magic-link flow has always used.
+  function assertAllowedOrigin(event) {
+    const origin = header(event, "origin");
+    if (origin !== undefined && !isAllowedStudioOrigin(origin, siteOrigin, studioAcceptanceOrigin)) {
+      throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
+    }
+    return origin;
+  }
+
   function authResponse(verified) {
     if (verified?.mfaRequired) {
       return response(200, {
@@ -152,10 +165,7 @@ export function createApiAccessHandler({
 
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
-        const origin = header(event, "origin");
-        if (origin !== undefined && !isAllowedStudioOrigin(origin, siteOrigin, studioAcceptanceOrigin)) {
-          throw new ApiAccessError(403, "invalid_origin", "Request origin is not allowed.");
-        }
+        const origin = assertAllowedOrigin(event);
         await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
         return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
       }
@@ -165,6 +175,7 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/password")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        assertAllowedOrigin(event);
         return authResponse(await customerAuth.loginWithPassword(
           parseJson(event),
           { sourceIp: event?.requestContext?.http?.sourceIp },
@@ -172,6 +183,7 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/totp/verify")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        assertAllowedOrigin(event);
         return authResponse(await customerAuth.verifyMfaChallenge(
           parseJson(event),
           { sourceIp: event?.requestContext?.http?.sourceIp },
@@ -181,6 +193,15 @@ export function createApiAccessHandler({
         const session = await customerSession(event, true);
         const cookie = await customerAuth.logout(cookieHeader(event));
         return response(200, { signedOut: true, accountId: session.accountId }, {}, [cookie]);
+      }
+      if (method === "POST" && path.endsWith("/customer/auth/sessions/revoke-all")) {
+        const session = await customerSession(event, true);
+        const revoked = await customerAuth.revokeAllSessions(session);
+        return response(200, {
+          signedOutEverywhere: true,
+          currentSessionRevoked: true,
+          accountId: session.accountId,
+        }, {}, [revoked.cookie]);
       }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");

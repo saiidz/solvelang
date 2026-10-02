@@ -12,6 +12,13 @@ import { authenticatorUri, encodeBase32, matchingTotpStep } from "./totp.js";
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
+// A session minted by consuming an email sign-in link (plus the
+// authenticator challenge, when one is enabled) has just proven mailbox
+// control, so it counts as step-up proof for a credential change this
+// long. That keeps email recovery working — the owner can replace a
+// forgotten password right after a recovery link — while a session of
+// any other origin or age must re-prove before changing credentials.
+const RECENT_EMAIL_PROOF_MS = 30 * 60 * 1_000;
 const TOTP_SETUP_TTL_MS = 10 * 60 * 1_000;
 const EMAIL_THROTTLE_MS = 60 * 1_000;
 const SOURCE_THROTTLE_WINDOW_MS = 60 * 1_000;
@@ -194,6 +201,7 @@ export function createCustomerAuthService({
   store,
   emailGateway,
   pepper,
+  previousPepper,
   siteOrigin,
   studioAcceptanceOrigin,
   totpFeatureEnabled = false,
@@ -204,6 +212,26 @@ export function createCustomerAuthService({
   if (!store || typeof store !== "object") throw new Error("Customer authentication store is required.");
   if (!emailGateway || typeof emailGateway.sendMagicLink !== "function") throw new Error("Customer email gateway is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer authentication pepper must contain at least 32 characters.");
+  if (previousPepper !== undefined && (typeof previousPepper !== "string" || previousPepper.length < 32)) {
+    throw new Error("Previous customer authentication pepper must contain at least 32 characters.");
+  }
+  // Dual-read rotation window: fingerprint VERIFICATION accepts the current
+  // pepper and (when configured) the previous pepper, so sessions, magic
+  // links, MFA challenges, and backup codes minted before a rotation keep
+  // working until they expire. Everything minted here — sessions, magic
+  // links, challenges, backup codes, account IDs — always uses the current
+  // pepper. Ephemeral throttle keys and the password timing-equalization
+  // salt intentionally stay current-pepper-only: they are recomputed every
+  // request and hold no stored state across a rotation.
+  const pepperCandidates = [...new Set([pepper, previousPepper].filter((candidate) => typeof candidate === "string"))];
+
+  function candidateDigests(purpose, value) {
+    return pepperCandidates.map((candidate) => digest(candidate, purpose, value));
+  }
+
+  function digestMatchesAny(purpose, value, expected) {
+    return pepperCandidates.some((candidate) => secureEqual(digest(candidate, purpose, value), expected));
+  }
   if (typeof siteOrigin !== "string" || !/^https:\/\//.test(siteOrigin)) throw new Error("HTTPS site origin is required.");
   studioAcceptanceOrigin = parseStudioAcceptanceOrigin(studioAcceptanceOrigin, siteOrigin);
   if (totpFeatureEnabled && (!totpProtector || typeof totpProtector.encrypt !== "function" || typeof totpProtector.decrypt !== "function")) {
@@ -216,7 +244,7 @@ export function createCustomerAuthService({
     }
   }
 
-  function createSession(timestamp, authVersion = 1) {
+  function createSession(timestamp, authVersion = 1, { emailVerifiedAt } = {}) {
     if (!Number.isSafeInteger(authVersion) || authVersion < 1) throw new Error("Customer authentication version is invalid.");
     const session = createOpaqueToken("sess", randomBytes);
     return {
@@ -227,6 +255,7 @@ export function createCustomerAuthService({
         authVersion,
         createdAt: new Date(timestamp).toISOString(),
         expiresAt: Math.floor((timestamp + SESSION_TTL_MS) / 1_000),
+        ...(emailVerifiedAt ? { emailVerifiedAt } : {}),
       },
     };
   }
@@ -283,6 +312,27 @@ export function createCustomerAuthService({
     return { codes, fingerprints };
   }
 
+  // True when the session itself is fresh proof of mailbox control: it
+  // was minted by an email sign-in link (with the authenticator step,
+  // when enabled) within RECENT_EMAIL_PROOF_MS. See the constant.
+  function hasRecentEmailProof(session) {
+    const verifiedMs = Date.parse(session?.emailVerifiedAt ?? "");
+    const nowMs = now();
+    return Number.isFinite(verifiedMs) && verifiedMs <= nowMs && nowMs - verifiedMs <= RECENT_EMAIL_PROOF_MS;
+  }
+
+  // Security notices are best-effort: the credential change has already
+  // committed, so a mail failure must never surface as its failure.
+  // Gateways wired without the capability are skipped, not required.
+  async function sendSecurityNotice(email, change) {
+    if (!email || typeof emailGateway.sendSecurityNotice !== "function") return;
+    try {
+      await emailGateway.sendSecurityNotice({ email, change });
+    } catch {
+      // The change stands; the notice is a detection aid, not a gate.
+    }
+  }
+
   async function passwordMatches(account, password) {
     const fakeSalt = Buffer.from(digest(pepper, "password-dummy-salt", "constant").slice(0, 32), "hex").toString("base64url");
     const salt = account?.passwordScheme === PASSWORD_SCHEME && account?.passwordSalt ? account.passwordSalt : fakeSalt;
@@ -310,9 +360,15 @@ export function createCustomerAuthService({
     }
     const backup = normalizeBackupCode(code);
     if (!backup || !Array.isArray(account.backupCodeFingerprints)) return undefined;
-    const fingerprint = backupCodeFingerprint(account.accountId, backup);
-    const backupIndex = account.backupCodeFingerprints.findIndex((stored) => secureEqual(stored, fingerprint));
-    return backupIndex >= 0 ? { backupIndex, backupCodeFingerprint: fingerprint } : undefined;
+    // Dual-read: backup codes minted under the previous pepper stay valid
+    // during a rotation window; the returned fingerprint is the stored one,
+    // so consume paths remove exactly the entry that matched.
+    for (const candidate of pepperCandidates) {
+      const fingerprint = digest(candidate, "totp-backup", `${account.accountId}:${backup}`);
+      const backupIndex = account.backupCodeFingerprints.findIndex((stored) => secureEqual(stored, fingerprint));
+      if (backupIndex >= 0) return { backupIndex, backupCodeFingerprint: fingerprint };
+    }
+    return undefined;
   }
 
   async function requestMagicLink(input, context = {}) {
@@ -331,7 +387,10 @@ export function createCustomerAuthService({
     });
     if (sourceThrottle === "limited") return { accepted: true };
 
-    const accountId = accountIdForEmail(email, pepper);
+    // During a rotation window, an existing account may still be keyed by
+    // its previous-pepper account ID. Fall back so the link binds to the
+    // real account instead of spawning a duplicate under the new ID.
+    let accountId = accountIdForEmail(email, pepper);
     const throttleKey = digest(pepper, "email-throttle", email);
     const throttle = await store.reserveEmailRequest({
       throttleKey,
@@ -340,7 +399,15 @@ export function createCustomerAuthService({
     });
     if (throttle === "limited") return { accepted: true };
 
-    const account = await store.getAccount(accountId);
+    let account = await store.getAccount(accountId);
+    if (!account && previousPepper) {
+      const previousAccountId = accountIdForEmail(email, previousPepper);
+      const previousAccount = previousAccountId === accountId ? undefined : await store.getAccount(previousAccountId);
+      if (previousAccount) {
+        accountId = previousAccountId;
+        account = previousAccount;
+      }
+    }
     const authVersion = authVersionOf(account?.authVersion);
     if (!authVersion) throw new Error("Customer authentication version is invalid.");
 
@@ -362,22 +429,29 @@ export function createCustomerAuthService({
   async function verifyMagicLink(input) {
     const parsed = parseOpaqueToken(input?.token, "ml", "invalid_magic_link", "This sign-in link is invalid or expired.");
     const timestamp = now();
-    const session = createSession(timestamp);
+    const session = createSession(timestamp, 1, { emailVerifiedAt: new Date(timestamp).toISOString() });
     const challenge = createMfaChallenge(timestamp, 1, "magic-link");
-    const result = typeof store.consumeMagicLinkForAuth === "function"
-      ? await store.consumeMagicLinkForAuth({
-          tokenId: parsed.id,
-          presentedFingerprint: digest(pepper, "magic-link", parsed.token),
-          now: Math.floor(timestamp / 1_000),
-          session: session.record,
-          mfaChallenge: challenge.record,
-        })
-      : await store.consumeMagicLinkAndCreateSession({
-          tokenId: parsed.id,
-          presentedFingerprint: digest(pepper, "magic-link", parsed.token),
-          now: Math.floor(timestamp / 1_000),
-          session: session.record,
-        });
+    // Dual-read: try fingerprints under each candidate pepper. A failed
+    // conditional consume changes nothing, so falling back is safe; the
+    // first candidate that matches performs the single-use consume.
+    let result;
+    for (const presentedFingerprint of candidateDigests("magic-link", parsed.token)) {
+      result = typeof store.consumeMagicLinkForAuth === "function"
+        ? await store.consumeMagicLinkForAuth({
+            tokenId: parsed.id,
+            presentedFingerprint,
+            now: Math.floor(timestamp / 1_000),
+            session: session.record,
+            mfaChallenge: challenge.record,
+          })
+        : await store.consumeMagicLinkAndCreateSession({
+            tokenId: parsed.id,
+            presentedFingerprint,
+            now: Math.floor(timestamp / 1_000),
+            session: session.record,
+          });
+      if (result?.accountId && result?.email) break;
+    }
     if (!result?.accountId || !result?.email) {
       throw new ApiAccessError(401, "invalid_magic_link", "This sign-in link is invalid or expired.");
     }
@@ -416,6 +490,11 @@ export function createCustomerAuthService({
     let account;
     if (identifier?.kind === "email") {
       account = await store.getAccount(accountIdForEmail(identifier.value, pepper));
+      if (!account && previousPepper) {
+        // Rotation window: the account may still live under its
+        // previous-pepper ID.
+        account = await store.getAccount(accountIdForEmail(identifier.value, previousPepper));
+      }
     } else if (identifier?.kind === "username") {
       const username = await store.getUsername(identifier.value);
       if (username?.accountId) account = await store.getAccount(username.accountId);
@@ -456,13 +535,23 @@ export function createCustomerAuthService({
     if (sourceThrottle === "limited") {
       throw new ApiAccessError(429, "mfa_rate_limited", "Authenticator verification is temporarily unavailable. Try again shortly.");
     }
-    const presentedFingerprint = digest(pepper, "mfa-challenge", parsed.token);
-    const challenge = await store.reserveMfaAttempt({
-      challengeId: parsed.id,
-      presentedFingerprint,
-      now: Math.floor(timestamp / 1_000),
-      limit: MFA_ATTEMPT_LIMIT,
-    });
+    // Dual-read: reserve the attempt under whichever candidate pepper
+    // minted the challenge fingerprint. A fingerprint mismatch increments
+    // nothing, so trying the next candidate is free.
+    let presentedFingerprint;
+    let challenge;
+    for (const candidateFingerprint of candidateDigests("mfa-challenge", parsed.token)) {
+      challenge = await store.reserveMfaAttempt({
+        challengeId: parsed.id,
+        presentedFingerprint: candidateFingerprint,
+        now: Math.floor(timestamp / 1_000),
+        limit: MFA_ATTEMPT_LIMIT,
+      });
+      if (challenge) {
+        presentedFingerprint = candidateFingerprint;
+        break;
+      }
+    }
     if (!challenge) {
       throw new ApiAccessError(401, "invalid_mfa_challenge", "Authenticator verification is invalid or expired.");
     }
@@ -474,7 +563,11 @@ export function createCustomerAuthService({
     const proof = await mfaProof(account, input?.code, { requireFreshTotp: true });
     if (!proof) throw new ApiAccessError(401, "invalid_mfa", "Authenticator or backup code is incorrect.");
 
-    const session = createSession(timestamp, version);
+    const session = createSession(
+      timestamp,
+      version,
+      challenge.purpose === "magic-link" ? { emailVerifiedAt: new Date(timestamp).toISOString() } : {},
+    );
     const consumed = await store.consumeMfaChallengeAndCreateSession({
       challenge,
       presentedFingerprint,
@@ -508,6 +601,25 @@ export function createCustomerAuthService({
     const timestamp = new Date(now()).toISOString();
     await store.ensureAccount({ accountId: session.accountId, email: session.email, createdAt: timestamp });
 
+    // Step-up proof: replacing existing credentials must be proven, or
+    // a stolen session cookie becomes silent, persistent takeover. This
+    // mirrors the authenticator-change flows — current password, plus a
+    // fresh authenticator proof when one is enabled. Proof is excused
+    // only when there is nothing to prove against (first-time setup)
+    // or the session just proved mailbox control via an email link.
+    const existing = await store.getAccount(session.accountId);
+    if (passwordConfigured(existing) && !hasRecentEmailProof(session)) {
+      if (!(await passwordMatches(existing, passwordForLogin(input?.currentPassword)))) {
+        throw new ApiAccessError(401, "invalid_security_proof", "Current password or authenticator code is incorrect.");
+      }
+      if (accountTotpEnabled(existing)) {
+        const proof = await mfaProof(existing, input?.code, { requireFreshTotp: true });
+        if (!proof) {
+          throw new ApiAccessError(401, "invalid_security_proof", "Current password or authenticator code is incorrect.");
+        }
+      }
+    }
+
     const salt = randomBase64Url(16, randomBytes);
     const passwordHash = await derivePassword(password, salt);
     const result = await store.setCredentials({
@@ -526,6 +638,7 @@ export function createCustomerAuthService({
       throw new ApiAccessError(409, "username_unavailable", "That username is unavailable or account security changed. Sign in again and try again.");
     }
     const account = await store.getAccount(session.accountId);
+    await sendSecurityNotice(account?.email ?? session.email, "password_changed");
     return {
       username,
       passwordConfigured: true,
@@ -585,6 +698,7 @@ export function createCustomerAuthService({
       totpStep: step,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "authenticator_enabled");
     return {
       auth: {
         username: account.username ?? null,
@@ -617,6 +731,7 @@ export function createCustomerAuthService({
       proofBackupFingerprint: proof.backupCodeFingerprint,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "backup_codes_regenerated");
     return { backupCodes: backup.codes, backupCodesRemaining: backup.codes.length };
   }
 
@@ -638,6 +753,7 @@ export function createCustomerAuthService({
       proofBackupFingerprint: proof.backupCodeFingerprint,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "authenticator_disabled");
     return {
       username: account.username ?? null,
       passwordConfigured: passwordConfigured(account),
@@ -647,13 +763,38 @@ export function createCustomerAuthService({
     };
   }
 
+  // Sign out everywhere: invalidate every session for the account,
+  // including the session making the request. Deliberately requires no
+  // password/authenticator proof beyond the authenticated, CSRF-checked
+  // session — this is the recovery action for a stolen or lost session, and
+  // it grants an attacker holding a session nothing they do not already have.
+  async function revokeAllSessions(session) {
+    if (!session?.sessionId || !session?.accountId) {
+      throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+    }
+    const result = await store.revokeAllSessions({
+      accountId: session.accountId,
+      sessionId: session.sessionId,
+      updatedAt: new Date(now()).toISOString(),
+    });
+    if (result !== "updated") {
+      throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    }
+    return {
+      accountId: session.accountId,
+      currentSessionRevoked: true,
+      cookie: sessionCookie("", 0),
+    };
+  }
+
   async function authenticate(cookieHeader) {
     const raw = cookieValue(cookieHeader, SESSION_COOKIE);
     const parsed = parseOpaqueToken(raw, "sess");
     const record = await store.getSession(parsed.id);
     const timestamp = Math.floor(now() / 1_000);
-    const presented = digest(pepper, "session", parsed.token);
-    if (!record || record.expiresAt <= timestamp || !secureEqual(presented, record.secretFingerprint)) {
+    // Dual-read: a session minted under the previous pepper still verifies
+    // during a rotation window (it keeps its original expiry).
+    if (!record || record.expiresAt <= timestamp || !digestMatchesAny("session", parsed.token, record.secretFingerprint)) {
       throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
     }
 
@@ -683,6 +824,7 @@ export function createCustomerAuthService({
       email: record.email,
       authVersion: accountAuthVersion,
       csrfToken: digest(pepper, "csrf", parsed.token),
+      emailVerifiedAt: typeof record.emailVerifiedAt === "string" ? record.emailVerifiedAt : null,
     };
   }
 
@@ -714,6 +856,7 @@ export function createCustomerAuthService({
     confirmTotpSetup,
     regenerateBackupCodes,
     disableTotp,
+    revokeAllSessions,
     authenticate,
     assertCsrf,
     logout,
