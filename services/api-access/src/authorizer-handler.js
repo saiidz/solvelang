@@ -13,6 +13,7 @@ const store = createDynamoApiKeyAuthorizerStore(documentClient, environment);
 const service = createApiAccessService({
   store,
   pepper: environment.pepper,
+  previousPepper: environment.previousPepper,
   mode: environment.mode,
 });
 const accountAccess = environment.customerAccountsEnabled

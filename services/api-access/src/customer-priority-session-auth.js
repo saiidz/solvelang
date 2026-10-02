@@ -35,6 +35,7 @@ export function createPriorityCustomerSessionAuth({
   documentClient,
   tableName,
   pepper,
+  previousPepper,
   accountAccess,
   now = Date.now,
   cookieName = "sl_api_session",
@@ -42,6 +43,12 @@ export function createPriorityCustomerSessionAuth({
   if (!documentClient || typeof documentClient.send !== "function") throw new Error("DynamoDB document client is required.");
   if (typeof tableName !== "string" || !tableName) throw new Error("Customer auth table is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("Customer auth pepper must contain at least 32 characters.");
+  if (previousPepper !== undefined && (typeof previousPepper !== "string" || previousPepper.length < 32)) {
+    throw new Error("Previous customer auth pepper must contain at least 32 characters.");
+  }
+  // Dual-read rotation window: session and CSRF fingerprints minted under
+  // the previous pepper keep verifying until the session expires.
+  const pepperCandidates = [...new Set([pepper, previousPepper].filter((candidate) => typeof candidate === "string"))];
   if (!accountAccess || typeof accountAccess.assertActive !== "function") throw new Error("Account access verifier is required.");
 
   async function get(authKey) {
@@ -67,7 +74,7 @@ export function createPriorityCustomerSessionAuth({
         || typeof session.email !== "string"
         || !Number.isSafeInteger(session.expiresAt)
         || session.expiresAt <= timestamp
-        || !secureEqual(session.secretFingerprint, digest(pepper, "session", token))
+        || !pepperCandidates.some((candidate) => secureEqual(session.secretFingerprint, digest(candidate, "session", token)))
       ) {
         throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
       }
@@ -100,7 +107,7 @@ export function createPriorityCustomerSessionAuth({
         !session
         || typeof presented !== "string"
         || !presented
-        || !secureEqual(session.csrfFingerprint, digest(pepper, "csrf", presented))
+        || !pepperCandidates.some((candidate) => secureEqual(session.csrfFingerprint, digest(candidate, "csrf", presented)))
       ) {
         throw new ApiAccessError(403, "csrf_failed", "Request verification failed.");
       }

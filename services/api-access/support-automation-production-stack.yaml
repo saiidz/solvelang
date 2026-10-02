@@ -47,6 +47,11 @@ Parameters:
     NoEcho: true
     Default: "00000000000000000000000000000000"
     MinLength: 32
+  CustomerAuthPepperPrevious:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Previous customer-auth pepper for dual-read rotation; blank means no rotation window.
 
 Rules:
   SupportAutomationRequirements:
@@ -147,6 +152,7 @@ Resources:
           API_SUPPORT_AUTOMATION_MAX_MESSAGE_AGE_SECONDS: !Ref SupportAutomationMaxMessageAgeSeconds
           API_CUSTOMER_AUTH_TABLE: !Ref CustomerAuthTableName
           API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_PEPPER_PREVIOUS: !Ref CustomerAuthPepperPrevious
           SITE_ORIGIN: !Ref SiteOrigin
       Policies:
         - DynamoDBCrudPolicy:

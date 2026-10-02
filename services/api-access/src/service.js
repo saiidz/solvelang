@@ -1,5 +1,5 @@
 import { calculateCreditCharge } from "./credits.js";
-import { bearerToken, fingerprintApiKey, generateApiKey, parseApiKey, verifyApiKeyFingerprint } from "./keys.js";
+import { bearerToken, fingerprintApiKey, fingerprintMatchesAnyPepper, generateApiKey, parseApiKey } from "./keys.js";
 import { getApiPlan, usagePeriod } from "./plans.js";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["trialing", "active"]);
@@ -104,9 +104,16 @@ function creditCharge(input) {
   }
 }
 
-export function createApiAccessService({ store, pepper, mode = "test", now = Date.now, randomBytes }) {
+export function createApiAccessService({ store, pepper, previousPepper, mode = "test", now = Date.now, randomBytes }) {
   if (!store || typeof store !== "object") throw new Error("API access store is required.");
   if (typeof pepper !== "string" || pepper.length < 32) throw new Error("API key pepper must contain at least 32 characters.");
+  if (previousPepper !== undefined && (typeof previousPepper !== "string" || previousPepper.length < 32)) {
+    throw new Error("Previous API key pepper must contain at least 32 characters.");
+  }
+  // Dual-read rotation window: verification accepts fingerprints minted
+  // under the current pepper or (when configured) the previous pepper.
+  // Issuance below always fingerprints under the current pepper only.
+  const pepperCandidates = [...new Set([pepper, previousPepper].filter((candidate) => typeof candidate === "string"))];
   if (mode !== "test" && mode !== "live") throw new Error("API access mode must be test or live.");
 
   async function getSubscriptionAccount(input) {
@@ -180,6 +187,8 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
         accountId,
         name,
         mode,
+        // New keys always fingerprint under the current pepper, even while
+        // a rotation window keeps previous-pepper keys verifiable.
         secretFingerprint: fingerprintApiKey({ ...generated, pepper }),
         prefix: generated.prefix,
         lastFour: generated.lastFour,
@@ -217,8 +226,7 @@ export function createApiAccessService({ store, pepper, mode = "test", now = Dat
     if (parsed.mode !== mode) throw new ApiAccessError(401, "key_mode_mismatch", "API key is not valid for this environment.");
     const key = await store.getKey(parsed.keyId);
     if (!key || key.mode !== mode || key.revokedAt) throw new ApiAccessError(401, "invalid_api_key", "API key is invalid.");
-    const presented = fingerprintApiKey({ ...parsed, pepper });
-    if (!verifyApiKeyFingerprint({ presented, expectedHex: key.secretFingerprint })) {
+    if (!fingerprintMatchesAnyPepper({ ...parsed, expectedHex: key.secretFingerprint, peppers: pepperCandidates })) {
       throw new ApiAccessError(401, "invalid_api_key", "API key is invalid.");
     }
     const timestamp = now();
