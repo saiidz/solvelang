@@ -247,6 +247,66 @@ test("magic-link requests accept only the canonical or configured acceptance ori
   assert.equal(requested.length, 1);
 });
 
+test("password login and TOTP verify reject disallowed origins and accept allowed ones", async () => {
+  const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const calls = [];
+  const verified = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", mfaRequired: false, cookie: sessionCookie };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    studioAcceptanceOrigin: previewOrigin,
+    customerAccountsEnabled: true,
+    customerAuth: {
+      loginWithPassword: async () => { calls.push("password"); return verified; },
+      verifyMfaChallenge: async () => { calls.push("totp"); return verified; },
+    },
+    customerAccount: {},
+    logger: { error() {} },
+  });
+
+  const passwordDenied = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: "https://evil.example" }));
+  assert.equal(passwordDenied.statusCode, 403);
+  assert.equal(JSON.parse(passwordDenied.body).code, "invalid_origin");
+  assert.deepEqual(JSON.parse(passwordDenied.body), { error: "Request origin is not allowed.", code: "invalid_origin" });
+  assert.equal(passwordDenied.cookies, undefined);
+
+  const passwordSite = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: "https://www.solve-lang.com" }));
+  assert.equal(passwordSite.statusCode, 200);
+  assert.deepEqual(passwordSite.cookies, [sessionCookie]);
+
+  const passwordPreview = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: previewOrigin }));
+  assert.equal(passwordPreview.statusCode, 200);
+
+  // No Origin header: non-browser clients keep the pre-existing behavior.
+  const passwordNoOrigin = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" }));
+  assert.equal(passwordNoOrigin.statusCode, 200);
+
+  const totpDenied = await handler(event("POST", "/customer/auth/totp/verify",
+    { challengeToken: "challenge_1", code: "123456" },
+    { origin: "https://evil.example" }));
+  assert.equal(totpDenied.statusCode, 403);
+  assert.equal(JSON.parse(totpDenied.body).code, "invalid_origin");
+  assert.equal(totpDenied.cookies, undefined);
+
+  const totpSite = await handler(event("POST", "/customer/auth/totp/verify",
+    { challengeToken: "challenge_1", code: "123456" },
+    { origin: "https://www.solve-lang.com" }));
+  assert.equal(totpSite.statusCode, 200);
+  assert.deepEqual(totpSite.cookies, [sessionCookie]);
+
+  assert.deepEqual(calls, ["password", "password", "password", "totp"]);
+});
+
 test("signed Stripe webhooks bypass admin auth but require signature verification", async () => {
   const seen = [];
   const handler = createApiAccessHandler({
@@ -357,6 +417,70 @@ test("invalid JSON and unknown routes return sanitized errors", async () => {
     "x-solvelang-admin-secret": adminSecret,
   }));
   assert.equal(missing.statusCode, 404);
+});
+
+test("sign out everywhere revokes all sessions, clears the cookie, and enforces session plus CSRF", async () => {
+  const seen = [];
+  const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", sessionId: "sess_test" };
+  const clearedCookie = "sl_api_session=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
+  const customerAuth = {
+    authenticate: async (cookie) => {
+      seen.push(["cookie", cookie]);
+      if (!cookie?.includes("sess_test")) {
+        throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+      }
+      return session;
+    },
+    assertCsrf: (_session, presented) => {
+      if (presented !== session.csrfToken) {
+        throw new ApiAccessError(403, "invalid_csrf", "The request could not be verified.");
+      }
+    },
+    revokeAllSessions: async (authenticated) => {
+      seen.push(["revoke-all", authenticated.accountId, authenticated.sessionId]);
+      return { accountId: authenticated.accountId, currentSessionRevoked: true, cookie: clearedCookie };
+    },
+  };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: false,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    customerAccountsEnabled: true,
+    customerAuth,
+    customerAccount: {},
+    logger: { error() {} },
+  });
+
+  // like logout, the safety control stays available while API access is disabled
+  const revokeEvent = event("POST", "/customer/auth/sessions/revoke-all", undefined, {
+    "x-solvelang-csrf": "csrf_ok",
+  });
+  revokeEvent.cookies = ["sl_api_session=sess_test"];
+  const revoked = await handler(revokeEvent);
+  assert.equal(revoked.statusCode, 200);
+  assert.deepEqual(JSON.parse(revoked.body), {
+    signedOutEverywhere: true,
+    currentSessionRevoked: true,
+    accountId: "acct_session",
+  });
+  assert.deepEqual(revoked.cookies, [clearedCookie]);
+  assert.deepEqual(
+    seen.find((entry) => entry[0] === "revoke-all"),
+    ["revoke-all", "acct_session", "sess_test"],
+  );
+
+  const csrfEvent = event("POST", "/customer/auth/sessions/revoke-all");
+  csrfEvent.cookies = ["sl_api_session=sess_test"];
+  const csrfDenied = await handler(csrfEvent);
+  assert.equal(csrfDenied.statusCode, 403);
+  assert.equal(JSON.parse(csrfDenied.body).code, "invalid_csrf");
+
+  const anonymous = await handler(event("POST", "/customer/auth/sessions/revoke-all", undefined, {
+    "x-solvelang-csrf": "csrf_ok",
+  }));
+  assert.equal(anonymous.statusCode, 401);
+  assert.equal(JSON.parse(anonymous.body).code, "invalid_session");
 });
 
 

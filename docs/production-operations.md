@@ -147,7 +147,18 @@ Production secrets must be independent from test and rotated one class at a time
 
 ### API key pepper
 
-Changing the API-key fingerprint pepper can invalidate existing key lookup/verification behavior. Do not rotate it casually. A migration/dual-read strategy must be designed before rotation if existing keys are to survive.
+Both fingerprint peppers support **dual-read rotation**: verification accepts fingerprints minted under the current pepper or, while it is configured, the previous pepper (`API_KEY_PEPPER_PREVIOUS`). Issuance always uses the current pepper. Rotating without the previous-pepper window still instantly invalidates every existing key, so use the window:
+
+1. Set `API_KEY_PEPPER_PREVIOUS` to the **current** pepper value and deploy. Nothing changes behaviorally; the window is open.
+2. Set `API_KEY_PEPPER` to the **new** value and deploy. Existing keys keep verifying (via the previous pepper); newly issued keys fingerprint under the new pepper.
+3. Hold the window until every active key has been reissued (revoke + issue under the new pepper). API keys do not self-expire, so clearing the previous pepper early hard-invalidates any stragglers — do that only as an explicit, recorded decision.
+4. Clear `API_KEY_PEPPER_PREVIOUS` and deploy. Confirm a pre-rotation key is now rejected before retiring the old value.
+
+Rollback at any point before step 4: restore `API_KEY_PEPPER` to the prior value (or clear `API_KEY_PEPPER_PREVIOUS` to return to single-pepper state).
+
+### Customer-auth pepper
+
+Dual-read rotation works the same way with `API_CUSTOMER_AUTH_PEPPER_PREVIOUS`: sessions, magic links, MFA challenges, and backup-code fingerprints minted under the previous pepper keep verifying, while everything newly minted uses the current pepper. Set the previous value, deploy, rotate the current value, deploy, then hold the window until pre-rotation artifacts expire — sessions live at most 7 days, magic links 15 minutes, MFA challenges 5 minutes. Backup codes are the exception: codes minted under the old pepper stop working when the window closes, so closing it is a per-user recovery event (regenerate codes after signing in again) — schedule and communicate it accordingly. Clear `API_CUSTOMER_AUTH_PEPPER_PREVIOUS` and deploy to end the rotation. Every deployment that verifies customer sessions must open and close the window together (the API stack, the support-automation runtime, and the customer-priority runtime each load the pepper independently).
 
 ## Suspected API-key exposure
 
@@ -156,10 +167,6 @@ For a suspected API-key leak, open the owner-controlled incident record before a
 Until a separately authorized operator has verified the scoped outcome, treat the key as untrusted and do not use it for investigation or customer work. The accountable owner must record the decision to revoke the identified key, suspend the affected account where scope cannot be bounded, or explicitly hand off the unresolved risk; do not infer the affected account from unverified reports.
 
 If a separately authorized revoke occurs, retain only the sanitized key identifier, decision owner, timestamp, and verification that the revoked key is denied. Issue any replacement through the normal authenticated, audited path; do not rotate the API-key pepper as an incident shortcut.
-
-### Customer-auth pepper
-
-Rotation can invalidate active session/magic-token fingerprints. Plan a controlled session reset or a versioned/dual-pepper transition.
 
 ### Admin secret
 

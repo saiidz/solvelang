@@ -50,6 +50,19 @@ export function verifyApiKeyFingerprint({ presented, expectedHex }) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+// Dual-read verification for pepper rotation: a stored fingerprint matches
+// when it verifies under ANY candidate pepper (current first, then the
+// optional previous pepper during a rotation window). Issuance always uses
+// the current pepper only — see fingerprintApiKey callers.
+export function fingerprintMatchesAnyPepper({ mode, keyId, secret, expectedHex, peppers }) {
+  const candidates = [...new Set(Array.isArray(peppers) ? peppers : [])]
+    .filter((candidate) => typeof candidate === "string" && candidate.length >= 32);
+  return candidates.some((candidate) => verifyApiKeyFingerprint({
+    presented: fingerprintApiKey({ mode, keyId, secret, pepper: candidate }),
+    expectedHex,
+  }));
+}
+
 export function bearerToken(header) {
   if (typeof header !== "string") throw new Error("Authorization header is missing.");
   const match = /^Bearer\s+([^\s]+)$/i.exec(header.trim());

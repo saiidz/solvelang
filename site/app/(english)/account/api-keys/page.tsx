@@ -297,6 +297,27 @@ export default function ApiKeysPage() {
     }
   }
 
+  async function revokeAllSessions() {
+    if (!dashboard || !window.confirm("Sign out of every device, including this browser? You will need to sign in again.")) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await customerApi(API_BASE, "/customer/auth/sessions/revoke-all", {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+      });
+      window.location.reload();
+    } catch (caught) {
+      if (caught instanceof CustomerApiError && caught.status === 401) {
+        window.location.reload();
+        return;
+      }
+      setError(caught instanceof Error ? caught.message : "Sessions could not be signed out.");
+      setBusy(false);
+    }
+  }
+
   async function issueKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!dashboard) return;
@@ -558,6 +579,15 @@ export default function ApiKeysPage() {
                 <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy backup codes</button>
               </div>
             ) : null}
+          </div>
+
+          <div className="mt-8 border-t border-white/10 pt-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Sessions</p>
+            <h3 className="mt-2 text-xl font-bold">Sign out everywhere</h3>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              Ends every signed-in session for this account on all devices, including this browser. Use this if a device is lost or you think someone else may have access. You will need to sign in again afterwards.
+            </p>
+            <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Sign out of all devices</button>
           </div>
         </section>
 

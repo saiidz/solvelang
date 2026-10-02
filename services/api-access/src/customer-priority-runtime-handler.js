@@ -17,6 +17,14 @@ function required(environment, name, minimum = 1) {
   return value;
 }
 
+// Optional previous pepper for dual-read rotation; blank means no window.
+function optionalPepper(environment, name) {
+  const value = environment[name];
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || value.length < 32) throw new Error(`${name} must contain at least 32 characters when set.`);
+  return value;
+}
+
 function boolean(environment, name) {
   const value = environment[name] ?? "false";
   if (value !== "true" && value !== "false") throw new Error(`${name} must be true or false.`);
@@ -41,6 +49,7 @@ export function parseCustomerPriorityRuntimeEnvironment(environment = process.en
     providerExecutionEnabled,
     siteOrigin: required(environment, "SITE_ORIGIN"),
     customerAuthPepper: customerPriorityEnabled ? required(environment, "CUSTOMER_AUTH_PEPPER", 32) : undefined,
+    customerAuthPepperPrevious: customerPriorityEnabled ? optionalPepper(environment, "CUSTOMER_AUTH_PEPPER_PREVIOUS") : undefined,
     accountsTable: customerPriorityEnabled ? required(environment, "API_ACCOUNTS_TABLE") : undefined,
     customerAuthTable: customerPriorityEnabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined,
     usageTable: customerPriorityEnabled ? required(environment, "API_USAGE_TABLE") : undefined,
@@ -86,6 +95,7 @@ export function createCustomerPriorityRuntime({ environment = process.env, docum
     documentClient: dynamo,
     tableName: config.customerAuthTable,
     pepper: config.customerAuthPepper,
+    previousPepper: config.customerAuthPepperPrevious,
     accountAccess,
   });
   const usageStore = createDynamoApiAccessStore(dynamo, {
