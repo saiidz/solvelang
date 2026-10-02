@@ -103,6 +103,19 @@ class MemoryAuthStore {
     const session = this.sessions.get(sessionId);
     if (session) session.revokedAt = revokedAt;
   }
+
+  async revokeAllSessions(record) {
+    const account = this.accounts.get(record.accountId);
+    if (!account) return "missing";
+    const session = this.sessions.get(record.sessionId);
+    const currentAuthVersion = account.authVersion ?? 1;
+    const sessionAuthVersion = session?.authVersion ?? 1;
+    if (!session || session.accountId !== record.accountId || sessionAuthVersion !== currentAuthVersion) return "conflict";
+    account.authVersion = currentAuthVersion + 1;
+    account.updatedAt = record.updatedAt;
+    session.revokedAt = record.updatedAt;
+    return "updated";
+  }
 }
 
 const pepper = "p".repeat(64);
@@ -378,5 +391,59 @@ test("malformed percent-encoded session cookies fail closed as invalid sessions"
   await assert.rejects(
     () => service.authenticate("sl_api_session=%"),
     (error) => error instanceof ApiAccessError && error.code === "invalid_session",
+  );
+});
+
+test("sign out everywhere revokes the current and every other session while leaving other accounts untouched", async () => {
+  const { store, sent, service } = setup();
+  const verified = await verifiedSession(service, sent);
+  let session = await authenticatedSession(service, verified);
+  await service.setCredentials(session, { username: "devuser", password: "correct horse battery staple" });
+  session = await authenticatedSession(service, verified);
+
+  const secondLogin = await service.loginWithPassword(
+    { identifier: "devuser", password: "correct horse battery staple" },
+    { sourceIp: "203.0.113.41" },
+  );
+  const secondCookie = cookieHeader(secondLogin.cookie);
+  await service.authenticate(secondCookie);
+
+  store.throttle.clear();
+  const otherVerified = await verifiedSession(service, sent, "other@example.com");
+  const otherCookie = cookieHeader(otherVerified.cookie);
+  await service.authenticate(otherCookie);
+
+  const result = await service.revokeAllSessions(session);
+  assert.equal(result.accountId, verified.accountId);
+  assert.equal(result.currentSessionRevoked, true);
+  assert.match(result.cookie, /Max-Age=0/);
+  assert.match(result.cookie, /Partitioned/);
+
+  // the session that made the request is revoked too, not migrated
+  await assert.rejects(
+    () => service.authenticate(cookieHeader(verified.cookie)),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_session",
+  );
+  // and so is the second session on the same account
+  await assert.rejects(
+    () => service.authenticate(secondCookie),
+    (error) => error instanceof ApiAccessError && error.code === "invalid_session",
+  );
+  // the other account is unaffected
+  const otherSession = await service.authenticate(otherCookie);
+  assert.equal(otherSession.email, "other@example.com");
+
+  // the account can still sign in again, and the fresh session works
+  const relogin = await service.loginWithPassword(
+    { identifier: "devuser", password: "correct horse battery staple" },
+    { sourceIp: "203.0.113.42" },
+  );
+  assert.equal(relogin.accountId, verified.accountId);
+  await service.authenticate(cookieHeader(relogin.cookie));
+
+  // a stale pre-revoke session object cannot replay the action
+  await assert.rejects(
+    () => service.revokeAllSessions(session),
+    (error) => error instanceof ApiAccessError && error.code === "security_state_changed",
   );
 });

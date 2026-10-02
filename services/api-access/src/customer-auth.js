@@ -707,6 +707,30 @@ export function createCustomerAuthService({
     };
   }
 
+  // Sign out everywhere: invalidate every session for the account,
+  // including the session making the request. Deliberately requires no
+  // password/authenticator proof beyond the authenticated, CSRF-checked
+  // session — this is the recovery action for a stolen or lost session, and
+  // it grants an attacker holding a session nothing they do not already have.
+  async function revokeAllSessions(session) {
+    if (!session?.sessionId || !session?.accountId) {
+      throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+    }
+    const result = await store.revokeAllSessions({
+      accountId: session.accountId,
+      sessionId: session.sessionId,
+      updatedAt: new Date(now()).toISOString(),
+    });
+    if (result !== "updated") {
+      throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    }
+    return {
+      accountId: session.accountId,
+      currentSessionRevoked: true,
+      cookie: sessionCookie("", 0),
+    };
+  }
+
   async function authenticate(cookieHeader) {
     const raw = cookieValue(cookieHeader, SESSION_COOKIE);
     const parsed = parseOpaqueToken(raw, "sess");
@@ -775,6 +799,7 @@ export function createCustomerAuthService({
     confirmTotpSetup,
     regenerateBackupCodes,
     disableTotp,
+    revokeAllSessions,
     authenticate,
     assertCsrf,
     logout,

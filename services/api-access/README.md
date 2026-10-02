@@ -67,6 +67,7 @@ Customer and public routes:
 - `POST /customer/auth/magic-link`
 - `POST /customer/auth/verify`
 - `POST /customer/auth/logout`
+- `POST /customer/auth/sessions/revoke-all`
 - `GET /customer/account`
 - `POST /customer/keys`
 - `POST /customer/keys/revoke`
