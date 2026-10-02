@@ -419,6 +419,70 @@ test("invalid JSON and unknown routes return sanitized errors", async () => {
   assert.equal(missing.statusCode, 404);
 });
 
+test("sign out everywhere revokes all sessions, clears the cookie, and enforces session plus CSRF", async () => {
+  const seen = [];
+  const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", sessionId: "sess_test" };
+  const clearedCookie = "sl_api_session=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
+  const customerAuth = {
+    authenticate: async (cookie) => {
+      seen.push(["cookie", cookie]);
+      if (!cookie?.includes("sess_test")) {
+        throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+      }
+      return session;
+    },
+    assertCsrf: (_session, presented) => {
+      if (presented !== session.csrfToken) {
+        throw new ApiAccessError(403, "invalid_csrf", "The request could not be verified.");
+      }
+    },
+    revokeAllSessions: async (authenticated) => {
+      seen.push(["revoke-all", authenticated.accountId, authenticated.sessionId]);
+      return { accountId: authenticated.accountId, currentSessionRevoked: true, cookie: clearedCookie };
+    },
+  };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: false,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    customerAccountsEnabled: true,
+    customerAuth,
+    customerAccount: {},
+    logger: { error() {} },
+  });
+
+  // like logout, the safety control stays available while API access is disabled
+  const revokeEvent = event("POST", "/customer/auth/sessions/revoke-all", undefined, {
+    "x-solvelang-csrf": "csrf_ok",
+  });
+  revokeEvent.cookies = ["sl_api_session=sess_test"];
+  const revoked = await handler(revokeEvent);
+  assert.equal(revoked.statusCode, 200);
+  assert.deepEqual(JSON.parse(revoked.body), {
+    signedOutEverywhere: true,
+    currentSessionRevoked: true,
+    accountId: "acct_session",
+  });
+  assert.deepEqual(revoked.cookies, [clearedCookie]);
+  assert.deepEqual(
+    seen.find((entry) => entry[0] === "revoke-all"),
+    ["revoke-all", "acct_session", "sess_test"],
+  );
+
+  const csrfEvent = event("POST", "/customer/auth/sessions/revoke-all");
+  csrfEvent.cookies = ["sl_api_session=sess_test"];
+  const csrfDenied = await handler(csrfEvent);
+  assert.equal(csrfDenied.statusCode, 403);
+  assert.equal(JSON.parse(csrfDenied.body).code, "invalid_csrf");
+
+  const anonymous = await handler(event("POST", "/customer/auth/sessions/revoke-all", undefined, {
+    "x-solvelang-csrf": "csrf_ok",
+  }));
+  assert.equal(anonymous.statusCode, 401);
+  assert.equal(JSON.parse(anonymous.body).code, "invalid_session");
+});
+
 
 test("customer checkout keeps Stripe errors private while releasing the reservation and logging safe diagnostics", async () => {
   const logs = [];

@@ -284,3 +284,68 @@ test("session revocation uses the supplied clock value", async () => {
     Date.parse("2026-07-29T20:00:00.000Z") / 1_000,
   );
 });
+
+test("revoke-all bumps the account version and revokes the initiating session in one transaction", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (command.input.Key?.authKey === "account#acct_1") {
+      return {
+        Item: {
+          authKey: "account#acct_1",
+          kind: "account",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          authVersion: 2,
+        },
+      };
+    }
+    return {};
+  }), "auth-table");
+
+  assert.equal(
+    await store.revokeAllSessions({ accountId: "acct_1", sessionId: "sess_1", updatedAt: "2026-07-29T16:00:00.000Z" }),
+    "updated",
+  );
+  assert.equal(commands.length, 2);
+  const [accountUpdate, sessionUpdate] = commands[1].TransactItems.map((item) => item.Update);
+  assert.deepEqual(accountUpdate.Key, { authKey: "account#acct_1" });
+  assert.match(accountUpdate.ConditionExpression, /authVersion = :currentAuthVersion/);
+  assert.equal(accountUpdate.ExpressionAttributeValues[":nextAuthVersion"], 3);
+  assert.deepEqual(sessionUpdate.Key, { authKey: "session#sess_1" });
+  assert.match(sessionUpdate.UpdateExpression, /revokedAt = :revokedAt/);
+  assert.equal(sessionUpdate.ExpressionAttributeValues[":revokedAt"], "2026-07-29T16:00:00.000Z");
+  assert.equal(
+    sessionUpdate.ExpressionAttributeValues[":expiresAt"],
+    Math.floor(Date.parse("2026-07-29T16:00:00.000Z") / 1_000),
+  );
+});
+
+test("revoke-all reports canceled transactions as conflicts and unknown accounts as missing", async () => {
+  const canceled = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    if (command.input.Key?.authKey === "account#acct_1") {
+      return {
+        Item: {
+          authKey: "account#acct_1",
+          kind: "account",
+          accountId: "acct_1",
+          email: "dev@example.com",
+          authVersion: 1,
+        },
+      };
+    }
+    const error = new Error("transaction canceled");
+    error.name = "TransactionCanceledException";
+    throw error;
+  }), "auth-table");
+  assert.equal(
+    await canceled.revokeAllSessions({ accountId: "acct_1", sessionId: "sess_1", updatedAt: "2026-07-29T16:00:00.000Z" }),
+    "conflict",
+  );
+
+  const missing = createDynamoCustomerAuthStore(clientWith(async () => ({})), "auth-table");
+  assert.equal(
+    await missing.revokeAllSessions({ accountId: "acct_missing", sessionId: "sess_1", updatedAt: "2026-07-29T16:00:00.000Z" }),
+    "missing",
+  );
+});

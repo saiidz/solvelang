@@ -201,6 +201,15 @@ export function createApiAccessHandler({
         const cookie = await customerAuth.logout(cookieHeader(event));
         return response(200, { signedOut: true, accountId: session.accountId }, {}, [cookie]);
       }
+      if (method === "POST" && path.endsWith("/customer/auth/sessions/revoke-all")) {
+        const session = await customerSession(event, true);
+        const revoked = await customerAuth.revokeAllSessions(session);
+        return response(200, {
+          signedOutEverywhere: true,
+          currentSessionRevoked: true,
+          accountId: session.accountId,
+        }, {}, [revoked.cookie]);
+      }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
 
