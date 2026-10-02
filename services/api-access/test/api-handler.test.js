@@ -247,6 +247,66 @@ test("magic-link requests accept only the canonical or configured acceptance ori
   assert.equal(requested.length, 1);
 });
 
+test("password login and TOTP verify reject disallowed origins and accept allowed ones", async () => {
+  const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const calls = [];
+  const verified = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", mfaRequired: false, cookie: sessionCookie };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    studioAcceptanceOrigin: previewOrigin,
+    customerAccountsEnabled: true,
+    customerAuth: {
+      loginWithPassword: async () => { calls.push("password"); return verified; },
+      verifyMfaChallenge: async () => { calls.push("totp"); return verified; },
+    },
+    customerAccount: {},
+    logger: { error() {} },
+  });
+
+  const passwordDenied = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: "https://evil.example" }));
+  assert.equal(passwordDenied.statusCode, 403);
+  assert.equal(JSON.parse(passwordDenied.body).code, "invalid_origin");
+  assert.deepEqual(JSON.parse(passwordDenied.body), { error: "Request origin is not allowed.", code: "invalid_origin" });
+  assert.equal(passwordDenied.cookies, undefined);
+
+  const passwordSite = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: "https://www.solve-lang.com" }));
+  assert.equal(passwordSite.statusCode, 200);
+  assert.deepEqual(passwordSite.cookies, [sessionCookie]);
+
+  const passwordPreview = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" },
+    { origin: previewOrigin }));
+  assert.equal(passwordPreview.statusCode, 200);
+
+  // No Origin header: non-browser clients keep the pre-existing behavior.
+  const passwordNoOrigin = await handler(event("POST", "/customer/auth/password",
+    { identifier: "devuser", password: "secret-value" }));
+  assert.equal(passwordNoOrigin.statusCode, 200);
+
+  const totpDenied = await handler(event("POST", "/customer/auth/totp/verify",
+    { challengeToken: "challenge_1", code: "123456" },
+    { origin: "https://evil.example" }));
+  assert.equal(totpDenied.statusCode, 403);
+  assert.equal(JSON.parse(totpDenied.body).code, "invalid_origin");
+  assert.equal(totpDenied.cookies, undefined);
+
+  const totpSite = await handler(event("POST", "/customer/auth/totp/verify",
+    { challengeToken: "challenge_1", code: "123456" },
+    { origin: "https://www.solve-lang.com" }));
+  assert.equal(totpSite.statusCode, 200);
+  assert.deepEqual(totpSite.cookies, [sessionCookie]);
+
+  assert.deepEqual(calls, ["password", "password", "password", "totp"]);
+});
+
 test("signed Stripe webhooks bypass admin auth but require signature verification", async () => {
   const seen = [];
   const handler = createApiAccessHandler({
