@@ -39,6 +39,7 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       EXECUTE_MAINTENANCE: ${{ inputs.execute_maintenance }}
       STUDIO_ACCEPTANCE_ORIGIN_ACTION: ${{ inputs.studio_acceptance_origin_action }}
       STUDIO_ACCEPTANCE_ORIGIN: ${{ inputs.studio_acceptance_origin }}

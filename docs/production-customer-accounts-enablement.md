@@ -43,7 +43,7 @@ The deployment passes only the API-access, customer-auth, site-origin, and core 
 
 ## Post-deploy verification
 
-The workflow requires `/health` to report:
+The workflow requires `GET /admin/status` (admin-secret authenticated) to report:
 
 ```json
 {

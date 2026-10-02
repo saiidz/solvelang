@@ -57,7 +57,7 @@ test("customer and billing deployment verify external prerequisites", async () =
 test("deployment verifies the CloudFormation output and exact feature flags", async () => {
   const source = await workflow();
   assert.match(source, /ApiAccessBaseUrl/);
-  assert.match(source, /curl --fail --silent --show-error "\$api_base\/health"/);
+  assert.match(source, /curl --fail --silent --show-error -H "x-solvelang-admin-secret: \$API_ACCESS_ADMIN_SECRET" "\$api_base\/admin\/status"/);
   assert.match(source, /\.enabled == true/);
   assert.match(source, /\.customerAccountsEnabled == \$customer/);
   assert.match(source, /\.subscriptionBillingEnabled == \$billing/);

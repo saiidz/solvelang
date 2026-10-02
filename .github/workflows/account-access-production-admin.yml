@@ -141,7 +141,7 @@ jobs:
 
           api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack_description")"
           [[ "$api_base" == https://* ]] || { echo "Production API base is invalid." >&2; exit 1; }
-          health="$(curl --proto '=https' --tlsv1.2 --fail --silent --show-error --connect-timeout 10 --max-time 30 "$api_base/health")"
+          health="$(curl --proto '=https' --tlsv1.2 --fail --silent --show-error --connect-timeout 10 --max-time 30 -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
 

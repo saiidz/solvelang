@@ -199,7 +199,7 @@ jobs:
           set -euo pipefail
           api_base="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query 'Stacks[0].Outputs[?OutputKey==`ApiAccessBaseUrl`].OutputValue' --output text)"
           test -n "$api_base"
-          response="$(curl --fail --silent --show-error "$api_base/health")"
+          response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e --argjson customer "$CUSTOMER_ACCOUNTS_ENABLED" --argjson billing "$SUBSCRIPTION_BILLING_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == $customer and .subscriptionBillingEnabled == $billing' <<<"$response" >/dev/null
           echo "api_base=$api_base" >> "$GITHUB_OUTPUT"
 

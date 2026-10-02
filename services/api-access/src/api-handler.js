@@ -133,14 +133,7 @@ export function createApiAccessHandler({
         catch { return response(200, unverifiedPublicStatus()); }
       }
       if (method === "GET" && path.endsWith("/health")) {
-        return response(200, {
-          status: "ok",
-          service: "solvelang-api-access",
-          enabled,
-          customerAccountsEnabled,
-          customerTotpEnabled,
-          subscriptionBillingEnabled,
-        });
+        return response(200, { status: "ok", service: "solvelang-api-access" });
       }
 
       if (method === "POST" && path.endsWith("/stripe/subscriptions/webhook")) {
@@ -262,6 +255,16 @@ export function createApiAccessHandler({
       }
 
       requireAdmin(event);
+      if (method === "GET" && path.endsWith("/admin/status")) {
+        return response(200, {
+          status: "ok",
+          service: "solvelang-api-access",
+          enabled,
+          customerAccountsEnabled,
+          customerTotpEnabled,
+          subscriptionBillingEnabled,
+        });
+      }
       const body = parseJson(event);
       if (method === "POST" && path.endsWith("/internal/subscriptions/checkout")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");

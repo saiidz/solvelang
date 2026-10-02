@@ -70,7 +70,7 @@ current_admin_crm="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == 
   exit 1
 }
 
-response="$(curl --fail --silent --show-error "$API_BASE/health")"
+response="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$API_BASE/admin/status")"
 jq -e \
   --argjson api_access "$INITIAL_API_ACCESS_ENABLED" \
   --argjson customer_accounts "$INITIAL_CUSTOMER_ACCOUNTS_ENABLED" \

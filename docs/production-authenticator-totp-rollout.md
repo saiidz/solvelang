@@ -204,7 +204,7 @@ The deployment must never inject Stripe secrets.
 
 Post-deploy verification requires:
 
-- API health `enabled=true`;
+- API admin status (`GET /admin/status`, admin-secret authenticated) `enabled=true`;
 - `customerAccountsEnabled=true`;
 - `customerTotpEnabled=true`;
 - `subscriptionBillingEnabled=false`;

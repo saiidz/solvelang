@@ -139,7 +139,7 @@ jobs:
             aws kms get-key-rotation-status --key-id "$totp_kms" --query KeyRotationEnabled --output text | grep -qx True
           fi
 
-          health="$(curl --fail --silent --show-error "$api_base/health")"
+          health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$api_base/admin/status")"
           jq -e --argjson totp "$totp_enabled" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == false' <<<"$health" >/dev/null
 
           {
@@ -261,7 +261,7 @@ jobs:
           [[ "$billing_enabled" == true ]]
           [[ "$crm_enabled" == "$PRESERVED_CRM_ENABLED" ]]
 
-          health="$(curl --fail --silent --show-error "$API_BASE/health")"
+          health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$API_BASE/admin/status")"
           jq -e --argjson totp "$PRESERVED_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == true' <<<"$health" >/dev/null
 
           function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id ApiAccessFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)"

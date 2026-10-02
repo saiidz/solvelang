@@ -62,7 +62,7 @@ The complete key must not be emailed, logged, placed in a URL, stored in Stripe 
 
 Customer and public routes:
 
-- `GET /health`
+- `GET /health` (liveness only — returns `{ status, service }`, never feature flags)
 - `GET /v1/whoami`
 - `POST /customer/auth/magic-link`
 - `POST /customer/auth/verify`
@@ -73,7 +73,7 @@ Customer and public routes:
 - `POST /customer/subscriptions/checkout`
 - `POST /stripe/subscriptions/webhook`
 
-Internal routes remain admin-secret protected. The browser never receives the administrative secret, and customer ownership is derived from the authenticated server-side session.
+Internal routes remain admin-secret protected. Feature-flag state is reported only by `GET /admin/status`, which requires the admin secret; the public `/health` response never includes it. The browser never receives the administrative secret, and customer ownership is derived from the authenticated server-side session.
 
 The standalone priority canary stack exposes a separate server-only admin API. It is not connected to customer sessions, API keys, Stripe, or the credit ledger.
 
