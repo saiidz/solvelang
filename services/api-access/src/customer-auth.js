@@ -12,6 +12,13 @@ import { authenticatorUri, encodeBase32, matchingTotpStep } from "./totp.js";
 const MAGIC_LINK_TTL_MS = 15 * 60 * 1_000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
+// A session minted by consuming an email sign-in link (plus the
+// authenticator challenge, when one is enabled) has just proven mailbox
+// control, so it counts as step-up proof for a credential change this
+// long. That keeps email recovery working — the owner can replace a
+// forgotten password right after a recovery link — while a session of
+// any other origin or age must re-prove before changing credentials.
+const RECENT_EMAIL_PROOF_MS = 30 * 60 * 1_000;
 const TOTP_SETUP_TTL_MS = 10 * 60 * 1_000;
 const EMAIL_THROTTLE_MS = 60 * 1_000;
 const SOURCE_THROTTLE_WINDOW_MS = 60 * 1_000;
@@ -216,7 +223,7 @@ export function createCustomerAuthService({
     }
   }
 
-  function createSession(timestamp, authVersion = 1) {
+  function createSession(timestamp, authVersion = 1, { emailVerifiedAt } = {}) {
     if (!Number.isSafeInteger(authVersion) || authVersion < 1) throw new Error("Customer authentication version is invalid.");
     const session = createOpaqueToken("sess", randomBytes);
     return {
@@ -227,6 +234,7 @@ export function createCustomerAuthService({
         authVersion,
         createdAt: new Date(timestamp).toISOString(),
         expiresAt: Math.floor((timestamp + SESSION_TTL_MS) / 1_000),
+        ...(emailVerifiedAt ? { emailVerifiedAt } : {}),
       },
     };
   }
@@ -281,6 +289,27 @@ export function createCustomerAuthService({
       fingerprints.push(backupCodeFingerprint(accountId, normalized));
     }
     return { codes, fingerprints };
+  }
+
+  // True when the session itself is fresh proof of mailbox control: it
+  // was minted by an email sign-in link (with the authenticator step,
+  // when enabled) within RECENT_EMAIL_PROOF_MS. See the constant.
+  function hasRecentEmailProof(session) {
+    const verifiedMs = Date.parse(session?.emailVerifiedAt ?? "");
+    const nowMs = now();
+    return Number.isFinite(verifiedMs) && verifiedMs <= nowMs && nowMs - verifiedMs <= RECENT_EMAIL_PROOF_MS;
+  }
+
+  // Security notices are best-effort: the credential change has already
+  // committed, so a mail failure must never surface as its failure.
+  // Gateways wired without the capability are skipped, not required.
+  async function sendSecurityNotice(email, change) {
+    if (!email || typeof emailGateway.sendSecurityNotice !== "function") return;
+    try {
+      await emailGateway.sendSecurityNotice({ email, change });
+    } catch {
+      // The change stands; the notice is a detection aid, not a gate.
+    }
   }
 
   async function passwordMatches(account, password) {
@@ -362,7 +391,7 @@ export function createCustomerAuthService({
   async function verifyMagicLink(input) {
     const parsed = parseOpaqueToken(input?.token, "ml", "invalid_magic_link", "This sign-in link is invalid or expired.");
     const timestamp = now();
-    const session = createSession(timestamp);
+    const session = createSession(timestamp, 1, { emailVerifiedAt: new Date(timestamp).toISOString() });
     const challenge = createMfaChallenge(timestamp, 1, "magic-link");
     const result = typeof store.consumeMagicLinkForAuth === "function"
       ? await store.consumeMagicLinkForAuth({
@@ -474,7 +503,11 @@ export function createCustomerAuthService({
     const proof = await mfaProof(account, input?.code, { requireFreshTotp: true });
     if (!proof) throw new ApiAccessError(401, "invalid_mfa", "Authenticator or backup code is incorrect.");
 
-    const session = createSession(timestamp, version);
+    const session = createSession(
+      timestamp,
+      version,
+      challenge.purpose === "magic-link" ? { emailVerifiedAt: new Date(timestamp).toISOString() } : {},
+    );
     const consumed = await store.consumeMfaChallengeAndCreateSession({
       challenge,
       presentedFingerprint,
@@ -508,6 +541,25 @@ export function createCustomerAuthService({
     const timestamp = new Date(now()).toISOString();
     await store.ensureAccount({ accountId: session.accountId, email: session.email, createdAt: timestamp });
 
+    // Step-up proof: replacing existing credentials must be proven, or
+    // a stolen session cookie becomes silent, persistent takeover. This
+    // mirrors the authenticator-change flows — current password, plus a
+    // fresh authenticator proof when one is enabled. Proof is excused
+    // only when there is nothing to prove against (first-time setup)
+    // or the session just proved mailbox control via an email link.
+    const existing = await store.getAccount(session.accountId);
+    if (passwordConfigured(existing) && !hasRecentEmailProof(session)) {
+      if (!(await passwordMatches(existing, passwordForLogin(input?.currentPassword)))) {
+        throw new ApiAccessError(401, "invalid_security_proof", "Current password or authenticator code is incorrect.");
+      }
+      if (accountTotpEnabled(existing)) {
+        const proof = await mfaProof(existing, input?.code, { requireFreshTotp: true });
+        if (!proof) {
+          throw new ApiAccessError(401, "invalid_security_proof", "Current password or authenticator code is incorrect.");
+        }
+      }
+    }
+
     const salt = randomBase64Url(16, randomBytes);
     const passwordHash = await derivePassword(password, salt);
     const result = await store.setCredentials({
@@ -526,6 +578,7 @@ export function createCustomerAuthService({
       throw new ApiAccessError(409, "username_unavailable", "That username is unavailable or account security changed. Sign in again and try again.");
     }
     const account = await store.getAccount(session.accountId);
+    await sendSecurityNotice(account?.email ?? session.email, "password_changed");
     return {
       username,
       passwordConfigured: true,
@@ -585,6 +638,7 @@ export function createCustomerAuthService({
       totpStep: step,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "authenticator_enabled");
     return {
       auth: {
         username: account.username ?? null,
@@ -617,6 +671,7 @@ export function createCustomerAuthService({
       proofBackupFingerprint: proof.backupCodeFingerprint,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "backup_codes_regenerated");
     return { backupCodes: backup.codes, backupCodesRemaining: backup.codes.length };
   }
 
@@ -638,6 +693,7 @@ export function createCustomerAuthService({
       proofBackupFingerprint: proof.backupCodeFingerprint,
     });
     if (result !== "updated") throw new ApiAccessError(409, "security_state_changed", "Account security changed. Sign in again and retry.");
+    await sendSecurityNotice(account?.email ?? session.email, "authenticator_disabled");
     return {
       username: account.username ?? null,
       passwordConfigured: passwordConfigured(account),
@@ -683,6 +739,7 @@ export function createCustomerAuthService({
       email: record.email,
       authVersion: accountAuthVersion,
       csrfToken: digest(pepper, "csrf", parsed.token),
+      emailVerifiedAt: typeof record.emailVerifiedAt === "string" ? record.emailVerifiedAt : null,
     };
   }
 
