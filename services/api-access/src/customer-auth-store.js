@@ -693,5 +693,58 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
         throw error;
       }
     },
+
+    // Sign out everywhere: bump the account authVersion so every session
+    // fails authenticate()'s version check, and revoke the initiating
+    // session itself instead of migrating it (unlike the security changes
+    // above, which preserve the session that made the change).
+    async revokeAllSessions({ accountId, sessionId, updatedAt }) {
+      const existing = await account(accountId);
+      if (!existing) return "missing";
+      const currentAuthVersion = authVersionOf(existing.authVersion);
+      const nextAuthVersion = currentAuthVersion + 1;
+      if (!Number.isSafeInteger(nextAuthVersion)) throw new Error("Customer authentication version overflowed.");
+      const expiresAt = Math.floor(Date.parse(updatedAt) / 1_000);
+      if (!Number.isSafeInteger(expiresAt)) throw new Error("Session revocation timestamp is invalid.");
+      try {
+        await documentClient.send(new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: tableName,
+                Key: { authKey: `account#${accountId}` },
+                UpdateExpression: "SET updatedAt = :updatedAt, authVersion = :nextAuthVersion",
+                ConditionExpression: `kind = :accountKind AND ${accountVersionCondition(existing)}`,
+                ExpressionAttributeValues: {
+                  ...accountVersionValues(existing, nextAuthVersion),
+                  ":updatedAt": updatedAt,
+                },
+              },
+            },
+            {
+              Update: {
+                TableName: tableName,
+                Key: { authKey: `session#${sessionId}` },
+                UpdateExpression: "SET revokedAt = :revokedAt, expiresAt = :expiresAt",
+                ConditionExpression: "kind = :sessionKind AND accountId = :accountId AND ((attribute_not_exists(authVersion) AND :currentAuthVersion = :one) OR authVersion = :currentAuthVersion)",
+                ExpressionAttributeValues: {
+                  ":sessionKind": "session",
+                  ":accountId": accountId,
+                  ":currentAuthVersion": currentAuthVersion,
+                  ":nextAuthVersion": nextAuthVersion,
+                  ":one": 1,
+                  ":revokedAt": updatedAt,
+                  ":expiresAt": expiresAt,
+                },
+              },
+            },
+          ],
+        }));
+        return "updated";
+      } catch (error) {
+        if (error?.name === "TransactionCanceledException") return "conflict";
+        throw error;
+      }
+    },
   };
 }
