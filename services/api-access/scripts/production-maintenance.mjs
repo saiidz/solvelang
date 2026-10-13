@@ -136,8 +136,16 @@ function compiledOriginRequestMatches(variants, condition, options) {
   const symbolicBranches = condition === acceptanceCondition
     && canonical(variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
     && canonical(variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
+  // The compiled true branch always carries the acceptance parameter as its second
+  // element: the exact origin when one is (or stays) configured, or the empty string
+  // when the request disables it (or none was configured). That branch is guarded by
+  // StudioAcceptanceOriginConfigured, so the empty element can never take effect;
+  // any other non-empty origin in either branch must still fail closed.
+  const literalTrueBranches = resolvedAcceptanceOrigin
+    ? [[siteOrigin, resolvedAcceptanceOrigin]]
+    : [[siteOrigin], [siteOrigin, '']];
   const literalBranches = siteOrigin && condition === acceptanceCondition
-    && canonical(variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])])
+    && literalTrueBranches.some(expected => canonical(variants[0].allowOrigins) === canonical(expected))
     && canonical(variants[1].allowOrigins) === canonical([siteOrigin]);
   const directExpected = condition === null && (canonical(variants[0].allowOrigins) === canonical(expected)
     || canonical(variants[0].allowOrigins) === canonical([siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])]));
