@@ -122,3 +122,39 @@ test('maintenance projection preserves deployed table and IAM settings despite s
  assert.throws(()=>projectMaintenanceTemplate(deployed,wrongOrigin,projectionOptions),/do not match the requested exact origin/);
  compiled.Outputs.Base.Value='changed';assert.throws(()=>projectMaintenanceTemplate(deployed,compiled,projectionOptions),/stack-level/);
 });
+
+test('maintenance projection validates disable and preserve-without-origin compiled CORS shapes',()=>{
+ const deployed={Parameters:{},Outputs:{Base:{Value:'stable'}},Resources:{
+  ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{BILLING:'true'}}}},
+  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{allowOrigins:['https://www.solve-lang.com',previewOrigin],allowMethods:['GET'],allowHeaders:['authorization'],allowCredentials:true}},Name:'stable'}},
+ }};
+ const corsSettings={allowMethods:['GET'],allowHeaders:['authorization'],allowCredentials:true};
+ const buildCompiled=(cors)=>{ const compiled=structuredClone(deployed);
+  compiled.Parameters={StudioAcceptanceOrigin:structuredClone(acceptanceParameter)};
+  compiled.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};
+  compiled.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};
+  compiled.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};
+  compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']=cors;
+  return compiled; };
+ // Regression for run 36336061193: a disable request sets StudioAcceptanceOrigin to '', so the
+ // compiled guarded true branch carries the empty string as its second element instead of
+ // collapsing to [siteOrigin]; the validator rejected that shape and disable could never plan.
+ const disableOptions={siteOrigin:'https://www.solve-lang.com',currentStudioAcceptanceOrigin:previewOrigin,studioAcceptanceOriginAction:'disable'};
+ const originArrayDisable={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',''],['https://www.solve-lang.com']]};
+ const disabled=projectMaintenanceTemplate(deployed,buildCompiled(originArrayDisable),disableOptions);
+ assert.deepEqual(disabled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins,['https://www.solve-lang.com']);
+ assertTemplateBoundary(deployed,disabled,disableOptions);
+ const wrappedDisable={'Fn::If':['StudioAcceptanceOriginConfigured',{...corsSettings,allowOrigins:['https://www.solve-lang.com','']},{...corsSettings,allowOrigins:['https://www.solve-lang.com']}]};
+ const disabledWrapped=projectMaintenanceTemplate(deployed,buildCompiled(wrappedDisable),disableOptions);
+ assert.deepEqual(disabledWrapped.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins,['https://www.solve-lang.com']);
+ // Preserve with no origin configured compiles to the same empty-element true branch.
+ const inactiveDeployed=structuredClone(deployed);
+ inactiveDeployed.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins=['https://www.solve-lang.com'];
+ const preservedInactive=projectMaintenanceTemplate(inactiveDeployed,buildCompiled(originArrayDisable),{siteOrigin:'https://www.solve-lang.com',studioAcceptanceOriginAction:'preserve'});
+ assert.deepEqual(preservedInactive.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins,['https://www.solve-lang.com']);
+ // Still fail closed: a foreign origin in either compiled branch is rejected on disable.
+ const evilTrue={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com','https://evil.example'],['https://www.solve-lang.com']]};
+ assert.throws(()=>projectMaintenanceTemplate(deployed,buildCompiled(evilTrue),disableOptions),/do not match the requested exact origin/);
+ const evilFalse={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',''],['https://www.solve-lang.com',previewOrigin]]};
+ assert.throws(()=>projectMaintenanceTemplate(deployed,buildCompiled(evilFalse),disableOptions),/do not match the requested exact origin/);
+});
