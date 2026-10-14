@@ -15,6 +15,45 @@ const acceptanceParameterDefinition = {
 };
 const acceptanceConditionDefinition = { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: acceptanceParameter }, ''] }] };
 
+// Bounded template additions reviewed in #976/#978 that the production stack does not
+// have yet: the two dual-read pepper parameters (blank default = no rotation window),
+// their exact Lambda environment references, and the three 90-day log groups. Each is
+// allowlisted by exact definition and fails closed on any deviation; nothing else may
+// be added or removed by maintenance.
+const pepperParameterDefinitions = {
+  ApiKeyPepperPrevious: {
+    Type: 'String',
+    NoEcho: true,
+    Default: '',
+    Description: 'Previous API key pepper for dual-read rotation; blank means no rotation window.',
+  },
+  CustomerAuthPepperPrevious: {
+    Type: 'String',
+    NoEcho: true,
+    Default: '',
+    Description: 'Previous customer-auth pepper for dual-read rotation; blank means no rotation window.',
+  },
+};
+const pepperParameters = new Set(Object.keys(pepperParameterDefinitions));
+const pepperEnvironment = {
+  ApiAccessFunction: {
+    API_KEY_PEPPER_PREVIOUS: 'ApiKeyPepperPrevious',
+    API_CUSTOMER_AUTH_PEPPER_PREVIOUS: 'CustomerAuthPepperPrevious',
+  },
+  ApiKeyAuthorizerFunction: {
+    API_KEY_PEPPER_PREVIOUS: 'ApiKeyPepperPrevious',
+  },
+};
+const logGroupNameById = {
+  ApiAccessFunctionLogGroup: '/aws/lambda/${ApiAccessFunction}',
+  PublicStatusCollectorFunctionLogGroup: '/aws/lambda/${PublicStatusCollectorFunction}',
+  ApiKeyAuthorizerFunctionLogGroup: '/aws/lambda/${ApiKeyAuthorizerFunction}',
+};
+const expectedLogGroup = id => ({
+  Type: 'AWS::Logs::LogGroup',
+  Properties: { LogGroupName: { 'Fn::Sub': logGroupNameById[id] }, RetentionInDays: 90 },
+});
+
 function acceptanceRequest(options = {}) {
   const action = options.studioAcceptanceOriginAction ?? 'preserve';
   const origin = options.studioAcceptanceOrigin ?? '';
@@ -38,12 +77,20 @@ export function previousParameters(stack, template, options = {}) {
   const current = (stack.Parameters ?? []).map(p => p.ParameterKey).sort();
   const templateKeys = Object.keys(template.Parameters ?? {}).sort();
   if (!templateKeys.includes(acceptanceParameter) && current.includes(acceptanceParameter)) throw new Error('Maintenance cannot remove the Studio acceptance-origin parameter.');
-  if (JSON.stringify(current.filter(key => key !== acceptanceParameter)) !== JSON.stringify(templateKeys.filter(key => key !== acceptanceParameter))) throw new Error('Maintenance cannot add or remove unrelated parameters.');
+  const stackKeys = current.filter(key => key !== acceptanceParameter);
+  const candidateKeys = templateKeys.filter(key => key !== acceptanceParameter);
+  if (stackKeys.some(key => !candidateKeys.includes(key))) throw new Error('Maintenance cannot add or remove unrelated parameters.');
+  const addedKeys = candidateKeys.filter(key => !stackKeys.includes(key));
+  for (const key of addedKeys) {
+    if (!pepperParameters.has(key)) throw new Error('Maintenance cannot add or remove unrelated parameters.');
+    if (canonical(template.Parameters[key]) !== canonical(pepperParameterDefinitions[key])) throw new Error('Maintenance adds an unexpected pepper parameter definition.');
+  }
   const values = Object.fromEntries(stack.Parameters.map(p => [p.ParameterKey, p.ParameterValue]));
   if (values.ApiAccessMode !== 'live' || values.ApiAccessEnabled !== 'true' || values.CustomerAccountsEnabled !== 'true') throw new Error('Expected enabled live customer API.');
   const request = acceptanceRequest(options);
   if (request.action === 'enable') parseStudioAcceptanceOrigin(request.origin, siteOriginFrom(stack, template));
   const result = current.filter(ParameterKey => ParameterKey !== acceptanceParameter).map(ParameterKey => ({ParameterKey, UsePreviousValue:true}));
+  for (const key of addedKeys) result.push({ ParameterKey: key, ParameterValue: '' });
   if (templateKeys.includes(acceptanceParameter)) {
     if (request.action === 'enable') result.push({ ParameterKey: acceptanceParameter, ParameterValue: request.origin });
     else if (request.action === 'disable') result.push({ ParameterKey: acceptanceParameter, ParameterValue: '' });
@@ -60,13 +107,16 @@ export function assertMaintenanceChanges(changes, {rollback = false} = {}) {
     const c = item.ResourceChange;
     if (!c || item.Type !== 'Resource' || c.Replacement && c.Replacement !== 'False') throw new Error('Replacement or unknown change is forbidden.');
     if (c.ResourceType === 'AWS::Lambda::Permission' && permissionIds.has(c.LogicalResourceId) && c.Action === (rollback ? 'Remove' : 'Add')) continue;
+    if (c.ResourceType === 'AWS::Logs::LogGroup' && Object.hasOwn(logGroupNameById, c.LogicalResourceId) && c.Action === (rollback ? 'Remove' : 'Add')) continue;
     const details = c.Details;
     const targetNames = details?.map(detail => detail.Target?.Name) ?? [];
     const apiAccessFunctionOnly = c.ResourceType === 'AWS::Lambda::Function' && c.LogicalResourceId === 'ApiAccessFunction'
-      && targetNames.length > 0 && targetNames.every(name => ['Code', 'Environment', 'Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN'].includes(name));
+      && targetNames.length > 0 && targetNames.every(name => ['Code', 'Environment', 'Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN', 'Environment.Variables.API_KEY_PEPPER_PREVIOUS', 'Environment.Variables.API_CUSTOMER_AUTH_PEPPER_PREVIOUS'].includes(name));
+    const authorizerPepperOnly = c.ResourceType === 'AWS::Lambda::Function' && c.LogicalResourceId === 'ApiKeyAuthorizerFunction'
+      && targetNames.length > 0 && targetNames.every(name => name === 'Environment.Variables.API_KEY_PEPPER_PREVIOUS');
     const apiBodyOnly = c.ResourceType === 'AWS::ApiGatewayV2::Api' && c.LogicalResourceId === 'ApiAccessHttpApi'
       && targetNames.length > 0 && targetNames.every(name => name === 'Body');
-    const permitted = apiAccessFunctionOnly || apiBodyOnly;
+    const permitted = apiAccessFunctionOnly || authorizerPepperOnly || apiBodyOnly;
     if (!permitted || c.Action !== 'Modify' || !Array.isArray(c.Scope) || c.Scope.some(scope => scope !== 'Properties')
       || details.some(detail => detail.Target?.Attribute !== 'Properties' || detail.Target.RequiresRecreation !== 'Never')) {
       throw new Error(`Maintenance refuses ${c.Action} ${c.ResourceType} ${c.LogicalResourceId}.`);
@@ -237,9 +287,27 @@ function stripAcceptanceRootTransition(left, right, {rollback = false} = {}) {
   }
 }
 
+function stripPepperRootTransition(left, right, {rollback = false} = {}) {
+  for (const key of pepperParameters) {
+    const beforeParameter = left.Parameters?.[key];
+    const afterParameter = right.Parameters?.[key];
+    if (!beforeParameter && afterParameter && !rollback) {
+      if (canonical(afterParameter) !== canonical(pepperParameterDefinitions[key])) throw new Error('Maintenance adds an unexpected pepper parameter.');
+      delete right.Parameters[key];
+    } else if (beforeParameter && !afterParameter && rollback) {
+      delete left.Parameters[key];
+    }
+  }
+  for (const side of [left, right]) {
+    const other = side === left ? right : left;
+    if (!other.Parameters && side.Parameters && Object.keys(side.Parameters).length === 0) delete side.Parameters;
+  }
+}
+
 function assertRootBoundary(before, after, options = {}) {
   const left = structuredClone(before), right = structuredClone(after);
   stripAcceptanceRootTransition(left, right, options);
+  stripPepperRootTransition(left, right, options);
   if (canonical(left) !== canonical(right)) throw new Error('Maintenance changes protected stack-level template sections.');
 }
 
@@ -257,6 +325,23 @@ export function assertTemplateBoundary(before, after, options = {}) {
       delete variables.STUDIO_ACCEPTANCE_ORIGIN;
     }
     if (template.Resources?.ApiAccessHttpApi?.Properties) delete template.Resources.ApiAccessHttpApi.Properties.Body;
+    for (const [functionId, varMap] of Object.entries(pepperEnvironment)) {
+      const variables = template.Resources?.[functionId]?.Properties?.Environment?.Variables;
+      if (!variables) continue;
+      for (const [name, parameter] of Object.entries(varMap)) {
+        if (!Object.hasOwn(variables, name)) continue;
+        if (canonical(variables[name]) !== canonical({ Ref: parameter })) throw new Error('Pepper environment must reference only its bounded parameter.');
+        delete variables[name];
+      }
+    }
+  }
+  for (const id of Object.keys(logGroupNameById)) {
+    const old = left.Resources?.[id], next = right.Resources?.[id];
+    if ((!old && next && !rollback) || (old && !next && rollback)) {
+      const group = next ?? old;
+      if (canonical(group) !== canonical(expectedLogGroup(id))) throw new Error('Unexpected maintenance log group.');
+      delete left.Resources[id]; delete right.Resources[id];
+    }
   }
   for (const id of permissionIds) {
     const old = left.Resources?.[id], next = right.Resources?.[id];
@@ -268,6 +353,7 @@ export function assertTemplateBoundary(before, after, options = {}) {
     }
   }
   stripAcceptanceRootTransition(left, right, {rollback});
+  stripPepperRootTransition(left, right, {rollback});
   if (canonical(left) !== canonical(right)) throw new Error('Maintenance changes protected template sections or resource configuration.');
 }
 
@@ -279,7 +365,7 @@ export function projectMaintenanceTemplate(deployed, compiled, options = {}) {
   assertRootBoundary(roots(deployed), roots(compiled));
   const original = deployed.Resources ?? {}, candidate = compiled.Resources ?? {};
   for (const id of Object.keys(original)) if (!candidate[id]) throw new Error(`Candidate removes existing resource ${id}.`);
-  for (const id of Object.keys(candidate)) if (!original[id] && !permissionIds.has(id)) throw new Error(`Candidate adds unrelated resource ${id}.`);
+  for (const id of Object.keys(candidate)) if (!original[id] && !permissionIds.has(id) && !Object.hasOwn(logGroupNameById, id)) throw new Error(`Candidate adds unrelated resource ${id}.`);
   const result = structuredClone(deployed);
   if (!result.Parameters?.[acceptanceParameter]) {
     if (!compiled.Parameters?.[acceptanceParameter]) throw new Error('Missing reviewed Studio acceptance-origin parameter.');
@@ -290,6 +376,17 @@ export function projectMaintenanceTemplate(deployed, compiled, options = {}) {
     if (!compiled.Conditions?.[acceptanceCondition]) throw new Error('Missing reviewed Studio acceptance-origin condition.');
     result.Conditions ??= {};
     result.Conditions[acceptanceCondition] = structuredClone(compiled.Conditions[acceptanceCondition]);
+  }
+  for (const key of pepperParameters) {
+    if (result.Parameters?.[key] || !compiled.Parameters?.[key]) continue;
+    if (canonical(compiled.Parameters[key]) !== canonical(pepperParameterDefinitions[key])) throw new Error('Maintenance adds an unexpected pepper parameter.');
+    result.Parameters ??= {};
+    result.Parameters[key] = structuredClone(compiled.Parameters[key]);
+  }
+  for (const id of Object.keys(logGroupNameById)) {
+    if (original[id] || !candidate[id]) continue;
+    if (canonical(candidate[id]) !== canonical(expectedLogGroup(id))) throw new Error('Unexpected maintenance log group.');
+    result.Resources[id] = structuredClone(candidate[id]);
   }
   for (const [id, type, property] of [
     ...[...functionIds].map(id => [id, 'AWS::Lambda::Function', 'Code']),
@@ -309,6 +406,18 @@ export function projectMaintenanceTemplate(deployed, compiled, options = {}) {
   const compiledVariables = candidate.ApiAccessFunction?.Properties?.Environment?.Variables;
   if (!deployedVariables || !compiledVariables || !Object.hasOwn(compiledVariables, 'STUDIO_ACCEPTANCE_ORIGIN')) throw new Error('Missing maintenance property ApiAccessFunction.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN.');
   result.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN = structuredClone(compiledVariables.STUDIO_ACCEPTANCE_ORIGIN);
+  for (const [functionId, varMap] of Object.entries(pepperEnvironment)) {
+    const candidateVariables = candidate[functionId]?.Properties?.Environment?.Variables;
+    for (const [name, parameter] of Object.entries(varMap)) {
+      if (!Object.hasOwn(compiled.Parameters ?? {}, parameter)) continue;
+      if (!candidateVariables || !Object.hasOwn(candidateVariables, name)) throw new Error(`Missing maintenance property ${functionId}.Environment.Variables.${name}.`);
+      if (canonical(candidateVariables[name]) !== canonical({ Ref: parameter })) throw new Error('Pepper environment must reference only its bounded parameter.');
+      const resultVariables = result.Resources[functionId]?.Properties?.Environment?.Variables;
+      if (!resultVariables) throw new Error(`Missing maintenance property ${functionId}.Environment.Variables.`);
+      if (Object.hasOwn(resultVariables, name) && canonical(resultVariables[name]) !== canonical({ Ref: parameter })) throw new Error('Pepper environment must reference only its bounded parameter.');
+      resultVariables[name] = structuredClone(candidateVariables[name]);
+    }
+  }
   for (const id of permissionIds) if (!original[id] && candidate[id]) result.Resources[id] = structuredClone(candidate[id]);
   assertTemplateBoundary(deployed, result, options);
   return result;
@@ -316,8 +425,14 @@ export function projectMaintenanceTemplate(deployed, compiled, options = {}) {
 
 export function assertPreserved(before, after, options = {}) {
   const normalized = stack => (stack.Parameters ?? []).map(p => [p.ParameterKey, p.ParameterValue, p.ResolvedValue ?? null]).sort((a,b) => a[0].localeCompare(b[0]));
-  const beforeParameters = normalized(before).filter(([key]) => key !== acceptanceParameter);
-  const afterParameters = normalized(after).filter(([key]) => key !== acceptanceParameter);
+  const beforeAll = normalized(before).filter(([key]) => key !== acceptanceParameter);
+  const afterAll = normalized(after).filter(([key]) => key !== acceptanceParameter);
+  // The NoEcho pepper parameters may only appear (forward) or disappear (rollback) as a
+  // presence transition; when present on both sides their masked entries must be equal.
+  const dropAbsentPepper = (entries, other, shed) => entries.filter(([key]) =>
+    !pepperParameters.has(key) || other.some(([otherKey]) => otherKey === key) || !shed);
+  const beforeParameters = dropAbsentPepper(beforeAll, afterAll, Boolean(options.rollback));
+  const afterParameters = dropAbsentPepper(afterAll, beforeAll, !options.rollback);
   if (JSON.stringify(beforeParameters) !== JSON.stringify(afterParameters)) throw new Error('Production parameters changed.');
   const request = acceptanceRequest(options);
   const previousOrigin = before.Parameters?.find(parameter => parameter.ParameterKey === acceptanceParameter)?.ParameterValue ?? '';
