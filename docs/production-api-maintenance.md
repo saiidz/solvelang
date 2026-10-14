@@ -25,12 +25,21 @@ account-authentication, or API-key secrets.
    subsequent enablement.
 
 Every existing parameter uses `UsePreviousValue`, including secrets and enabled
-billing/TOTP/CRM flags. The sole optional parameter transition is the exact
+billing/TOTP/CRM flags. The sole optional parameter value transition is the exact
 `StudioAcceptanceOrigin`, defaulting to empty and restricted to
 `https://studio-acceptance.d<app-id>.amplifyapp.com`. Its value can be preserved,
 enabled, or disabled explicitly. The maintenance projection permits only the
 corresponding exact Lambda environment variable and API CORS body changes in
-addition to the existing code/routes and Studio invoke permissions. Other
+addition to the existing code/routes and Studio invoke permissions. One bounded
+addition is also permitted so the stack can adopt the reviewed #976/#978 template
+changes: the parameters `ApiKeyPepperPrevious` and `CustomerAuthPepperPrevious`
+may be added with their exact definitions at the blank default (no rotation
+window), together with their exact Lambda environment references (two on
+`ApiAccessFunction`, one on `ApiKeyAuthorizerFunction`) and the three 90-day log
+groups `ApiAccessFunctionLogGroup`, `PublicStatusCollectorFunctionLogGroup` and
+`ApiKeyAuthorizerFunctionLogGroup`. Each is verified against its exact definition
+and fails closed on any deviation; the values of the pepper parameters themselves
+are never set by maintenance (rotation is a separate operation). Other
 parameter additions/removals, IAM/data-resource changes, resource replacements,
 non-resource template changes (including unrelated Outputs, Rules, Conditions
 and parameter definitions), and unrelated route permissions fail closed.
@@ -58,7 +67,10 @@ and did not execute a stack update. SAM source defaults can differ from live
 operational hardening. Maintenance therefore expands SAM in a non-executed
 compilation change set, then creates a second template from the deployed
 processed template, copying only the two Lambda Code properties, the exact
-acceptance-origin environment variable, the API Body, and the two new Studio permissions. Existing data/IAM/feature settings remain
+acceptance-origin environment variable, the API Body, and the two new Studio permissions.
+When the deployed stack predates #976/#978, the projection additionally copies the
+two pepper parameter definitions, their exact environment references, and the
+three log groups named above. Existing data/IAM/feature settings remain
 byte-for-byte equivalent after canonical comparison. Stack-level edits and
 unrelated resource additions/removals are still rejected. The final projected
 change set undergoes the same resource and complete-template validation before
