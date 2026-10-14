@@ -158,3 +158,109 @@ test('maintenance projection validates disable and preserve-without-origin compi
  const evilFalse={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',''],['https://www.solve-lang.com',previewOrigin]]};
  assert.throws(()=>projectMaintenanceTemplate(deployed,buildCompiled(evilFalse),disableOptions),/do not match the requested exact origin/);
 });
+
+test('pepper parameters, env references and log groups from #976/#978 are bounded additions; tampering fails closed', () => {
+  const siteOrigin = 'https://solve-lang.com';
+  const previewOrigin = 'https://studio-acceptance.d123.amplifyapp.com';
+  const corsSettings = { allowMethods: ['GET'], allowHeaders: ['authorization'], allowCredentials: true };
+  const secretDef = { NoEcho: true, MinLength: 32, Type: 'String' };
+  const acceptanceDef = { Type: 'String', Default: '', Description: 'Exact dedicated Amplify acceptance-branch origin; blank disables it.', AllowedPattern: '^$|^https://studio-acceptance\\.d[a-z0-9]+\\.amplifyapp\\.com$' };
+  const acceptanceCond = { 'Fn::Not': [{ 'Fn::Equals': [{ Ref: 'StudioAcceptanceOrigin' }, ''] }] };
+  const pepperDefinitions = {
+    ApiKeyPepperPrevious: { Type: 'String', NoEcho: true, Default: '', Description: 'Previous API key pepper for dual-read rotation; blank means no rotation window.' },
+    CustomerAuthPepperPrevious: { Type: 'String', NoEcho: true, Default: '', Description: 'Previous customer-auth pepper for dual-read rotation; blank means no rotation window.' },
+  };
+  const logGroup = fn => ({ Type: 'AWS::Logs::LogGroup', Properties: { LogGroupName: { 'Fn::Sub': '/aws/lambda/${' + fn + '}' }, RetentionInDays: 90 } });
+  const stackValue = key => key === 'ApiAccessMode' ? 'live' : key.endsWith('Enabled') ? 'true' : key === 'SiteOrigin' ? siteOrigin : 'x'.repeat(32);
+  const stackWith = keys => ({
+    StackStatus: 'UPDATE_COMPLETE',
+    Parameters: keys.map(ParameterKey => ({ ParameterKey, ParameterValue: stackValue(ParameterKey) })),
+  });
+  const baseKeys = ['ApiAccessMode', 'ApiAccessEnabled', 'CustomerAccountsEnabled', 'SiteOrigin', 'Secret', 'StudioAcceptanceOrigin'];
+  const candidateTemplate = {
+    Parameters: { ApiAccessMode: {}, ApiAccessEnabled: {}, CustomerAccountsEnabled: {}, SiteOrigin: {}, Secret: secretDef, StudioAcceptanceOrigin: acceptanceDef, ...structuredClone(pepperDefinitions) },
+    Conditions: { StudioAcceptanceOriginConfigured: acceptanceCond },
+  };
+  const parameters = previousParameters(stackWith(baseKeys), candidateTemplate, { studioAcceptanceOriginAction: 'disable' });
+  assert.deepEqual(parameters.find(({ ParameterKey }) => ParameterKey === 'ApiKeyPepperPrevious'), { ParameterKey: 'ApiKeyPepperPrevious', ParameterValue: '' });
+  assert.deepEqual(parameters.find(({ ParameterKey }) => ParameterKey === 'CustomerAuthPepperPrevious'), { ParameterKey: 'CustomerAuthPepperPrevious', ParameterValue: '' });
+  const tamperedDefinition = structuredClone(candidateTemplate);
+  tamperedDefinition.Parameters.ApiKeyPepperPrevious.Default = 'rotated';
+  assert.throws(() => previousParameters(stackWith(baseKeys), tamperedDefinition), /unexpected pepper parameter definition/);
+  const unknownParameter = structuredClone(candidateTemplate);
+  unknownParameter.Parameters.BrandNewParameter = { Type: 'String' };
+  assert.throws(() => previousParameters(stackWith(baseKeys), unknownParameter), /cannot add or remove unrelated parameters/);
+  assert.throws(() => previousParameters(stackWith([...baseKeys, 'ApiKeyPepperPrevious']), { Parameters: { ApiAccessMode: {}, ApiAccessEnabled: {}, CustomerAccountsEnabled: {}, SiteOrigin: {}, Secret: secretDef, StudioAcceptanceOrigin: acceptanceDef, CustomerAuthPepperPrevious: pepperDefinitions.CustomerAuthPepperPrevious } }), /cannot add or remove unrelated parameters/);
+
+  const mkTemplate = additions => {
+    const body = { openapi: '3.0.1', paths: {}, 'x-amazon-apigateway-cors': { 'Fn::If': ['StudioAcceptanceOriginConfigured', [siteOrigin, ''], [siteOrigin]] } };
+    const value = {
+      Parameters: { SiteOrigin: {}, Secret: secretDef, StudioAcceptanceOrigin: acceptanceDef },
+      Conditions: { StudioAcceptanceOriginConfigured: acceptanceCond },
+      Outputs: { Base: { Value: 'stable' } },
+      Resources: {
+        ApiAccessFunction: { Type: 'AWS::Lambda::Function', Properties: { Code: { S3Bucket: 'bucket', S3Key: 'old' }, Environment: { Variables: { BILLING: 'true', STUDIO_ACCEPTANCE_ORIGIN: { Ref: 'StudioAcceptanceOrigin' } } } } },
+        ApiKeyAuthorizerFunction: { Type: 'AWS::Lambda::Function', Properties: { Code: { S3Bucket: 'bucket', S3Key: 'old' }, Environment: { Variables: { API_KEY_PEPPER: { Ref: 'ApiKeyPepper' } } } } },
+        PublicStatusCollectorFunction: { Type: 'AWS::Serverless::Function', Properties: { Code: { S3Bucket: 'bucket', S3Key: 'old' } } },
+        ApiAccessHttpApi: { Type: 'AWS::ApiGatewayV2::Api', Properties: { Body: body } },
+        AdminCrmTable: { Type: 'AWS::DynamoDB::Table', Properties: { PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true } } },
+      },
+    };
+    if (additions) {
+      Object.assign(value.Parameters, structuredClone(pepperDefinitions));
+      value.Resources.ApiAccessFunction.Properties.Code.S3Key = 'new';
+      value.Resources.ApiAccessFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS = { Ref: 'ApiKeyPepperPrevious' };
+      value.Resources.ApiAccessFunction.Properties.Environment.Variables.API_CUSTOMER_AUTH_PEPPER_PREVIOUS = { Ref: 'CustomerAuthPepperPrevious' };
+      value.Resources.ApiKeyAuthorizerFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS = { Ref: 'ApiKeyPepperPrevious' };
+      value.Resources.ApiAccessFunctionLogGroup = logGroup('ApiAccessFunction');
+      value.Resources.PublicStatusCollectorFunctionLogGroup = logGroup('PublicStatusCollectorFunction');
+      value.Resources.ApiKeyAuthorizerFunctionLogGroup = logGroup('ApiKeyAuthorizerFunction');
+    }
+    return value;
+  };
+  const deployedBefore = mkTemplate(false);
+  deployedBefore.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'] = { allowOrigins: [siteOrigin, previewOrigin], ...corsSettings };
+  const projected = projectMaintenanceTemplate(deployedBefore, mkTemplate(true), {
+    siteOrigin, currentStudioAcceptanceOrigin: previewOrigin, studioAcceptanceOriginAction: 'disable',
+  });
+  assert.deepEqual(projected.Parameters.ApiKeyPepperPrevious, pepperDefinitions.ApiKeyPepperPrevious);
+  assert.deepEqual(projected.Parameters.CustomerAuthPepperPrevious, pepperDefinitions.CustomerAuthPepperPrevious);
+  assert.deepEqual(projected.Resources.ApiAccessFunctionLogGroup, logGroup('ApiAccessFunction'));
+  assert.deepEqual(projected.Resources.PublicStatusCollectorFunctionLogGroup, logGroup('PublicStatusCollectorFunction'));
+  assert.deepEqual(projected.Resources.ApiKeyAuthorizerFunctionLogGroup, logGroup('ApiKeyAuthorizerFunction'));
+  assert.deepEqual(projected.Resources.ApiAccessFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS, { Ref: 'ApiKeyPepperPrevious' });
+  assert.deepEqual(projected.Resources.ApiAccessFunction.Properties.Environment.Variables.API_CUSTOMER_AUTH_PEPPER_PREVIOUS, { Ref: 'CustomerAuthPepperPrevious' });
+  assert.deepEqual(projected.Resources.ApiKeyAuthorizerFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS, { Ref: 'ApiKeyPepperPrevious' });
+  assert.deepEqual(projected.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'].allowOrigins, [siteOrigin]);
+  assert.deepEqual(projected.Resources.AdminCrmTable, deployedBefore.Resources.AdminCrmTable);
+
+  const tamperedGroup = mkTemplate(true);
+  tamperedGroup.Resources.ApiAccessFunctionLogGroup.Properties.RetentionInDays = 30;
+  assert.throws(() => projectMaintenanceTemplate(deployedBefore, tamperedGroup, { siteOrigin, currentStudioAcceptanceOrigin: previewOrigin, studioAcceptanceOriginAction: 'disable' }), /Unexpected maintenance log group/);
+  const literalEnv = mkTemplate(true);
+  literalEnv.Resources.ApiKeyAuthorizerFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS = 'literal-secret-value';
+  assert.throws(() => projectMaintenanceTemplate(deployedBefore, literalEnv, { siteOrigin, currentStudioAcceptanceOrigin: previewOrigin, studioAcceptanceOriginAction: 'disable' }), /Pepper environment must reference only its bounded parameter/);
+  const wrongReference = mkTemplate(true);
+  wrongReference.Resources.ApiAccessFunction.Properties.Environment.Variables.API_KEY_PEPPER_PREVIOUS = { Ref: 'CustomerAuthPepperPrevious' };
+  assert.throws(() => projectMaintenanceTemplate(deployedBefore, wrongReference, { siteOrigin, currentStudioAcceptanceOrigin: previewOrigin, studioAcceptanceOriginAction: 'disable' }), /Pepper environment must reference only its bounded parameter/);
+
+  const stackParams = entries => ({ Parameters: entries.map(([ParameterKey, ParameterValue]) => ({ ParameterKey, ParameterValue })) });
+  const beforeDeploy = stackParams([['ApiAccessMode', 'live'], ['SiteOrigin', siteOrigin], ['StudioAcceptanceOrigin', previewOrigin]]);
+  const afterDeploy = stackParams([['ApiAccessMode', 'live'], ['SiteOrigin', siteOrigin], ['StudioAcceptanceOrigin', ''], ['ApiKeyPepperPrevious', '****'], ['CustomerAuthPepperPrevious', '****']]);
+  assert.doesNotThrow(() => assertPreserved(beforeDeploy, afterDeploy, { studioAcceptanceOriginAction: 'disable' }));
+  assert.throws(() => assertPreserved(afterDeploy, beforeDeploy, { studioAcceptanceOriginAction: 'preserve' }), /Production parameters changed/);
+  const deployedWithOrigin = stackParams([['ApiAccessMode', 'live'], ['SiteOrigin', siteOrigin], ['StudioAcceptanceOrigin', previewOrigin], ['ApiKeyPepperPrevious', '****'], ['CustomerAuthPepperPrevious', '****']]);
+  assert.doesNotThrow(() => assertPreserved(deployedWithOrigin, beforeDeploy, { rollback: true }));
+
+  const logGroupChange = (id, action) => ({ Type: 'Resource', ResourceChange: { Action: action, LogicalResourceId: id, ResourceType: 'AWS::Logs::LogGroup', Replacement: 'False', Scope: ['Properties'], Details: [] } });
+  assert.doesNotThrow(() => assertMaintenanceChanges([
+    change('ApiAccessFunction', 'AWS::Lambda::Function', 'Environment.Variables.API_KEY_PEPPER_PREVIOUS'),
+    change('ApiKeyAuthorizerFunction', 'AWS::Lambda::Function', 'Environment.Variables.API_KEY_PEPPER_PREVIOUS'),
+    logGroupChange('ApiAccessFunctionLogGroup', 'Add'),
+    logGroupChange('PublicStatusCollectorFunctionLogGroup', 'Add'),
+    logGroupChange('ApiKeyAuthorizerFunctionLogGroup', 'Add'),
+  ]));
+  assert.doesNotThrow(() => assertMaintenanceChanges([logGroupChange('ApiAccessFunctionLogGroup', 'Remove')], { rollback: true }));
+  assert.throws(() => assertMaintenanceChanges([change('ApiKeyAuthorizerFunction', 'AWS::Lambda::Function', 'Environment')]), /Maintenance refuses/);
+  assert.throws(() => assertMaintenanceChanges([logGroupChange('UnrelatedLogGroup', 'Add')]), /Maintenance refuses/);
+});
