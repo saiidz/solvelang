@@ -1,0 +1,77 @@
+{
+  "schema": "solvelang.wasm-artifact-audit",
+  "version": 1,
+  "sourceCommit": "03fdc10ff542f9bb7616d4fa4ed52e7c6e62ed41",
+  "publishable": false,
+  "browserPreviewReplaced": false,
+  "rust": "1.95.0",
+  "wasmBindgen": "0.2.127",
+  "node": "24.20.0",
+  "policySha256": "17fdbbb41f1c364d3b55ecf57b37a864e38b2d0e89835aa88542f414e315b91f",
+  "totalBytes": 506280,
+  "files": [
+    {
+      "name": "solvec_wasm.js",
+      "bytes": 204,
+      "sha256": "745587693de0b3132bf036ef21ccb528cf29a504186d5d524cf399c8a64efe4c",
+      "integrity": "sha256-dFWHaT3gsxMr8DbvIcy1KM8ppQQYbV1STPOZyKZO/kw="
+    },
+    {
+      "name": "solvec_wasm_bg.js",
+      "bytes": 3684,
+      "sha256": "d0f5cb357d1493cb9632f884b053d8c98e7f8e021e19913544cb7b7f11ae3921",
+      "integrity": "sha256-0PXLNX0Uk8uWMviEsFPYyY5/jgIeGZE1RMt7fxGuOSE="
+    },
+    {
+      "name": "solvec_wasm_bg.wasm",
+      "bytes": 502392,
+      "sha256": "de6dd556ef34a99e2bbd7542824bb219b9e47318f19f87cf2db0a3d0dc20cede",
+      "integrity": "sha256-3m3VVu80qZ4rvXVCgkuyGbnkcxjxn4fPLbCj0Nwgzt4="
+    }
+  ],
+  "imports": [
+    {
+      "module": "./solvec_wasm_bg.js",
+      "name": "__wbindgen_init_externref_table",
+      "kind": "function"
+    }
+  ],
+  "exports": [
+    {
+      "name": "memory",
+      "kind": "memory"
+    },
+    {
+      "name": "run_pure_v1",
+      "kind": "function"
+    },
+    {
+      "name": "__abort_handler",
+      "kind": "global"
+    },
+    {
+      "name": "__instance_terminated",
+      "kind": "global"
+    },
+    {
+      "name": "__wbindgen_externrefs",
+      "kind": "table"
+    },
+    {
+      "name": "__wbindgen_malloc",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_realloc",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_free",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_start",
+      "kind": "function"
+    }
+  ]
+}

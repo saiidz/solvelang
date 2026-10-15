@@ -56,7 +56,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
     defaults:
       run:
         working-directory: services/api-access
