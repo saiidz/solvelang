@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   maintenance:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
     environment: api-access-production
     timeout-minutes: 60
     defaults:
