@@ -58,6 +58,15 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wait-for-production-deployment-turn.mjs
       - uses: aws-actions/setup-sam@v2
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
       - name: Validate and build candidate
         run: |
           set -euo pipefail
