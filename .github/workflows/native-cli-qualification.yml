@@ -24,10 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-15
+          - runner: [self-hosted, macOS, ARM64]
             target: aarch64-apple-darwin
             python: python3
-          - runner: windows-2022
+          - runner: [self-hosted, Windows, X64]
             target: x86_64-pc-windows-msvc
             python: python
     env:

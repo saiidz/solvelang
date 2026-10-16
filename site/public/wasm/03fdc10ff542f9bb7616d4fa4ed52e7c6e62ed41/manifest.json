@@ -1,14 +1,14 @@
 {
   "schema": "solvelang.wasm-artifact-audit",
   "version": 1,
-  "sourceCommit": "1ca5da03bc334478b1b2c0a3683fae35e5529460",
+  "sourceCommit": "03fdc10ff542f9bb7616d4fa4ed52e7c6e62ed41",
   "publishable": false,
   "browserPreviewReplaced": false,
   "rust": "1.95.0",
   "wasmBindgen": "0.2.127",
   "node": "24.20.0",
   "policySha256": "17fdbbb41f1c364d3b55ecf57b37a864e38b2d0e89835aa88542f414e315b91f",
-  "totalBytes": 505585,
+  "totalBytes": 506280,
   "files": [
     {
       "name": "solvec_wasm.js",
@@ -24,9 +24,9 @@
     },
     {
       "name": "solvec_wasm_bg.wasm",
-      "bytes": 501697,
-      "sha256": "06baa5ccdc22f91c9c82f6c5bd176fb8876bd32d3c32875e48b5dee86609733c",
-      "integrity": "sha256-BrqlzNwi+RycgvbFvRdvuIdr0y08ModeSLXe6GYJczw="
+      "bytes": 502392,
+      "sha256": "de6dd556ef34a99e2bbd7542824bb219b9e47318f19f87cf2db0a3d0dc20cede",
+      "integrity": "sha256-3m3VVu80qZ4rvXVCgkuyGbnkcxjxn4fPLbCj0Nwgzt4="
     }
   ],
   "imports": [

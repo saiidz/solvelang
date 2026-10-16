@@ -11,7 +11,7 @@ on:
 jobs:
   rust:
     name: Rust runtime
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
     defaults:
       run:
         working-directory: solvec
@@ -99,7 +99,7 @@ jobs:
 
   site:
     name: Static site
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
     timeout-minutes: 15
     defaults:
       run:
