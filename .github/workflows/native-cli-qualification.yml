@@ -46,6 +46,10 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           targets: ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        if: matrix.target == x86_64-pc-windows-msvc
+        with:
+          python-version: 3.13
       - name: Verify source and native Rust host
         run: |
           set -euo pipefail
