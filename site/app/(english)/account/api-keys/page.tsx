@@ -381,7 +381,28 @@ export default function ApiKeysPage() {
   }
 
   if (screen === "loading") {
-    return <main className="grid min-h-screen place-items-center bg-slate-950 text-white">Loading your API account…</main>;
+    return (
+      <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+        <div className="mx-auto max-w-3xl">
+          <p className="text-slate-300">Loading your API account…</p>
+          <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+            <h1 className="mt-3 text-4xl font-bold">API account</h1>
+            <p className="mt-4 leading-7 text-slate-300">This is your API account page. Once the session check finishes, this page will ask you to sign in — with your password, or with a secure email link if this is your first sign-in or you need recovery — before showing your keys, subscription, and credits.</p>
+            <h2 className="mt-8 text-2xl font-bold">API plans</h2>
+            <ul className="mt-4 space-y-3 text-slate-200">
+              <li><strong>Developer</strong> — $49/month, 1,000 weighted credits, 2 active API keys</li>
+              <li><strong>Pro</strong> — $199/month, 10,000 weighted credits, 3 active API keys</li>
+              <li><strong>Business</strong> — $699/month, 50,000 weighted credits, 5 active API keys</li>
+            </ul>
+            <Link className="mt-8 inline-flex rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-200" href="/api-pricing/">View API pricing</Link>
+            <noscript>
+              <p className="mt-6 rounded-xl bg-amber-300/10 p-4 text-sm text-amber-100">Sign-in on this page needs JavaScript. Please enable JavaScript to sign in and manage your API account.</p>
+            </noscript>
+          </section>
+        </div>
+      </main>
+    );
   }
 
   if (screen === "signed-out" && mfaChallenge) {
