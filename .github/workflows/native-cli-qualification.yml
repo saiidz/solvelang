@@ -46,6 +46,13 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           targets: ${{ matrix.target }}
+      - name: Diagnose Python resolution
+        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+        run: |
+          echo "JOB_PATH=$PATH"
+          ls -l "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe" || true
+          "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe" --version || true
+          true
       - name: Allow Python setup script
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         shell: cmd
