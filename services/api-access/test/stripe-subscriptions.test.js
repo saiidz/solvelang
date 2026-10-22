@@ -57,6 +57,8 @@ test("creates Dahlia embedded-page subscription Checkout with server-owned metad
       mode: "subscription",
       ui_mode: "embedded_page",
       redirect_on_completion: "if_required",
+      allow_promotion_codes: true,
+      payment_method_collection: "if_required",
       client_reference_id: "acct_1",
       customer_email: "dev@example.com",
       line_items: [{ price: "price_pro123", quantity: 1 }],
@@ -85,6 +87,8 @@ test("uses an existing Stripe customer instead of accepting a second email sourc
   });
   assert.equal(params.customer, "cus_1");
   assert.equal(params.customer_email, undefined);
+  assert.equal(params.allow_promotion_codes, true);
+  assert.equal(params.payment_method_collection, "if_required");
 });
 
 test("prefers the subscription default card", async () => {

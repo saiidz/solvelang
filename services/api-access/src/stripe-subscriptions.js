@@ -90,6 +90,8 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         mode: "subscription",
         ui_mode: "embedded_page",
         redirect_on_completion: "if_required",
+        allow_promotion_codes: true,
+        payment_method_collection: "if_required",
         client_reference_id: accountId,
         ...(customerId ? { customer: customerId } : { customer_email: email }),
         line_items: [{ price: priceId, quantity: 1 }],
