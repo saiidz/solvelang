@@ -831,6 +831,11 @@ print(is_empty([]))
 fn file_builtins_read_and_write_temp_files() {
     let mut path = std::env::temp_dir();
     path.push("solvelang_cli_file_builtin.txt");
+    // Embed the path with forward slashes: a raw Windows path's backslashes
+    // are consumed as string escapes by the SolveLang parser, which flattened
+    // the path and dropped the file into the working directory instead of
+    // the temp directory (breaking the clean-checkout qualification gate).
+    let embedded_path = path.display().to_string().replace('\\', "/");
     let file = write_temp_solve_file(
         "solvelang_cli_file_builtins.solve",
         &format!(
@@ -838,8 +843,8 @@ fn file_builtins_read_and_write_temp_files() {
 write_file("{}", "hello file")
 print(read_file("{}"))
 "#,
-            path.display(),
-            path.display()
+            embedded_path,
+            embedded_path
         ),
     );
 
