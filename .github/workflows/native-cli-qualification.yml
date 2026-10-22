@@ -49,7 +49,7 @@ jobs:
       - name: Allow Python setup script
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         shell: cmd
-        run: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
+        run: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction SilentlyContinue; if ((Get-ExecutionPolicy -List | Where-Object Scope -eq CurrentUser).ExecutionPolicy -ne 'RemoteSigned') { exit 1 }"
       - uses: actions/setup-python@v5
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         with:
