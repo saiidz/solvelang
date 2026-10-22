@@ -48,8 +48,8 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Allow Python setup script
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        shell: powershell
-        run: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force
+        shell: cmd
+        run: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force"
       - uses: actions/setup-python@v5
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         with:
