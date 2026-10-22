@@ -26,7 +26,7 @@ const PLAN_DETAILS = {
 } as const;
 
 type EmbeddedCheckoutStripe = Stripe & {
-  initEmbeddedCheckout(options: {
+  createEmbeddedCheckoutPage(options: {
     clientSecret: string;
     onComplete: () => void;
   }): Promise<StripeEmbeddedCheckout>;
@@ -96,7 +96,7 @@ export function EmbeddedApiCheckout() {
         if (!active || !mountRef.current) return;
 
         const embeddedStripe = stripe as EmbeddedCheckoutStripe;
-        const checkout = await embeddedStripe.initEmbeddedCheckout({
+        const checkout = await embeddedStripe.createEmbeddedCheckoutPage({
           clientSecret: session.clientSecret,
           onComplete: () => {
             window.location.assign("/account/api-keys/?checkout=success");
