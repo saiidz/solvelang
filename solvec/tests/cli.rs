@@ -843,8 +843,7 @@ fn file_builtins_read_and_write_temp_files() {
 write_file("{}", "hello file")
 print(read_file("{}"))
 "#,
-            embedded_path,
-            embedded_path
+            embedded_path, embedded_path
         ),
     );
 
