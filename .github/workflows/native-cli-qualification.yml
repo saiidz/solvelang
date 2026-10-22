@@ -46,23 +46,6 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
           targets: ${{ matrix.target }}
-      - name: Diagnose Python resolution
-        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        run: |
-          echo "JOB_PATH=$PATH"
-          ls -la "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/" || true
-          ls -la "/c/Users/Administrator/AppData/Local/Programs/Python/" || true
-          command -v python || true
-          python --version || true
-          true
-      - name: Allow Python setup script
-        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        shell: cmd
-        run: powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction SilentlyContinue; if ((Get-ExecutionPolicy -List | Where-Object Scope -eq CurrentUser).ExecutionPolicy -ne 'RemoteSigned') { exit 1 }"
-      - uses: actions/setup-python@v5
-        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
-        with:
-          python-version: '3.13'
       - name: Verify source and native Rust host
         run: |
           set -euo pipefail
@@ -83,6 +66,11 @@ jobs:
           cargo fmt --check
           cargo clippy --locked --target "$TARGET" -- -D warnings
           cargo test --locked --target "$TARGET"
+      - name: Show checkout state before qualification
+        run: |
+          echo "core.autocrlf=$(git config --get core.autocrlf || echo unset)"
+          git status --porcelain --untracked-files=all | head -40
+          true
       - name: Build, package and verify clean installation
         run: ${{ matrix.python }} solvec/scripts/qualify-native.py --target "$TARGET" --source "$SOURCE_SHA" --out "$RUNNER_TEMP/native-qualification"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
