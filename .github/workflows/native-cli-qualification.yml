@@ -50,8 +50,10 @@ jobs:
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
         run: |
           echo "JOB_PATH=$PATH"
-          ls -l "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe" || true
-          "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe" --version || true
+          ls -la "/c/Users/Administrator/AppData/Local/Programs/Python/Python313/" || true
+          ls -la "/c/Users/Administrator/AppData/Local/Programs/Python/" || true
+          command -v python || true
+          python --version || true
           true
       - name: Allow Python setup script
         if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
