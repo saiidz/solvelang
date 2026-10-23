@@ -134,12 +134,20 @@ try {
     console.log(`PASS public navigation at ${width}px (${routes.length} routes, direct loads and client navigation)`);
   }
   for (const [route, expected] of [
-    ["/pricing/", "View API pricing"],
+    ["/pricing/", "Developer"],
     ["/billing/", "UPCOMINGSOUNDS S.R.L."],
     ["/terms/", "API subscriptions"],
     ["/refund-policy/", "API subscription cancellation and refunds"],
   ]) {
-    await navigate(route);
+    if (route === "/pricing/") {
+      // /pricing/ is a meta-refresh redirect to /api-pricing/ (audit V-3):
+      // assert the browser lands on the canonical pricing page.
+      await command("Page.navigate", { url: base + route });
+      await waitFor(() => evaluate("location.pathname === '/api-pricing/' && document.readyState === 'complete' && !!document.querySelector('[data-site-header]')"), "Pricing redirect did not land on /api-pricing/");
+      await sleep(250);
+    } else {
+      await navigate(route);
+    }
     assert.ok(await evaluate(`document.body.innerText.includes(${JSON.stringify(expected)})`), `billing disclosure visible: ${route}`);
     assert.ok(await evaluate(`!document.body.innerText.includes('Production checkout remains blocked')`), `no stale global checkout claim: ${route}`);
     assert.ok(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), `billing page fits 320px: ${route}`);
