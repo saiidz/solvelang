@@ -342,6 +342,62 @@ test("password login and TOTP verify reject disallowed origins and accept allowe
   assert.deepEqual(calls, ["password", "password", "password", "totp"]);
 });
 
+test("magic-link verify rejects disallowed origins without consuming the token and accepts allowed or absent origins", async () => {
+  const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const calls = [];
+  const verified = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", mfaRequired: false, cookie: sessionCookie };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    studioAcceptanceOrigin: previewOrigin,
+    customerAccountsEnabled: true,
+    customerAuth: {
+      verifyMagicLink: async (body) => { calls.push(body.token); return verified; },
+    },
+    customerAccount: {},
+    logger: { error() {} },
+  });
+
+  const denied = await handler(event("POST", "/customer/auth/verify",
+    { token: "ml_test" },
+    { origin: "https://evil.example" }));
+  assert.equal(denied.statusCode, 403);
+  assert.equal(JSON.parse(denied.body).code, "invalid_origin");
+  assert.deepEqual(JSON.parse(denied.body), { error: "Request origin is not allowed.", code: "invalid_origin" });
+  assert.equal(denied.cookies, undefined);
+  // The magic-link token must not be consumed when the origin is rejected.
+  assert.deepEqual(calls, []);
+
+  const site = await handler(event("POST", "/customer/auth/verify",
+    { token: "ml_test" },
+    { origin: "https://www.solve-lang.com" }));
+  assert.equal(site.statusCode, 200);
+  assert.deepEqual(JSON.parse(site.body), {
+    accountId: "acct_session",
+    email: "dev@example.com",
+    csrfToken: "csrf_ok",
+    mfaRequired: false,
+  });
+  assert.deepEqual(site.cookies, [sessionCookie]);
+
+  const preview = await handler(event("POST", "/customer/auth/verify",
+    { token: "ml_test" },
+    { origin: previewOrigin }));
+  assert.equal(preview.statusCode, 200);
+  assert.deepEqual(preview.cookies, [sessionCookie]);
+
+  // No Origin header: non-browser clients keep the pre-existing behavior.
+  const noOrigin = await handler(event("POST", "/customer/auth/verify",
+    { token: "ml_test" }));
+  assert.equal(noOrigin.statusCode, 200);
+  assert.deepEqual(noOrigin.cookies, [sessionCookie]);
+
+  assert.deepEqual(calls, ["ml_test", "ml_test", "ml_test"]);
+});
+
 test("signed Stripe webhooks bypass admin auth but require signature verification", async () => {
   const seen = [];
   const handler = createApiAccessHandler({

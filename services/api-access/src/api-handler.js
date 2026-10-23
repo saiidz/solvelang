@@ -171,6 +171,7 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
+        assertAllowedOrigin(event);
         return authResponse(await customerAuth.verifyMagicLink(parseJson(event)));
       }
       if (method === "POST" && path.endsWith("/customer/auth/password")) {
