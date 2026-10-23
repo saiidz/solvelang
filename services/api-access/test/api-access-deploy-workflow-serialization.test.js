@@ -16,6 +16,7 @@ const productionWorkflowNames = [
   "deploy-api-access-production-customer-accounts.yml",
   "deploy-api-access-production-foundation.yml",
   "deploy-api-access-production-maintenance.yml",
+  "deploy-api-access-production-redeploy.yml",
   "deploy-api-access-production-totp-kms.yml",
   "deploy-api-access-production-totp.yml",
   "deploy-customer-priority-production-foundation.yml",
