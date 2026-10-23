@@ -125,7 +125,7 @@ jobs:
           set -euo pipefail
           stack="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json)"
           status="$(jq -r '.Stacks[0].StackStatus // empty' <<<"$stack")"
-          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
+          [[ "$status" == CREATE_COMPLETE || "$status" == UPDATE_COMPLETE || "$status" == UPDATE_ROLLBACK_COMPLETE ]] || { echo "Production stack is not stable: $status" >&2; exit 1; }
 
           api_base="$(jq -r '[.Stacks[0].Outputs[]? | select(.OutputKey == "ApiAccessBaseUrl") | .OutputValue] | first // empty' <<<"$stack")"
           api_enabled="$(jq -r '[.Stacks[0].Parameters[]? | select(.ParameterKey == "ApiAccessEnabled") | .ParameterValue] | first // empty' <<<"$stack")"
