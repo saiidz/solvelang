@@ -235,7 +235,7 @@ jobs:
           fi
           workdir="$(mktemp -d)"
           aws cloudformation get-template --stack-name "$STACK_NAME" --output json | jq -r '.TemplateBody' > "$workdir/current.yaml"
-          python3 - "$workdir/current.yaml" services/api-access/template.yaml "$workdir/import.yaml" "${pending_ids[@]}" <<'PYEOF'
+          python3 - "$workdir/current.yaml" template.yaml "$workdir/import.yaml" "${pending_ids[@]}" <<'PYEOF'
           import re
           import sys
           current_path, repo_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
