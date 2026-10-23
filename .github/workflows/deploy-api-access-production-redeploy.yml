@@ -201,35 +201,86 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Adopt pre-existing Lambda log groups the template now manages
+      - name: Import pre-existing Lambda log groups into stack management
         shell: bash
         run: |
           set -euo pipefail
           # Commit 8785f27e added explicit LogGroup resources (90-day retention) for
-          # functions that already existed, so Lambda had already auto-created their
-          # log groups outside stack management and CloudFormation cannot create
-          # them (AlreadyExists). Remove only unmanaged groups the template is
-          # about to adopt; once stack-managed, this step is a no-op.
-          adopt_log_group() {
-            local loggroup_id="$1" function_id="$2"
-            if aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$loggroup_id" >/dev/null 2>&1; then
-              echo "$loggroup_id already stack-managed; skipping."
-              return 0
-            fi
-            local function_name group_name
-            function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$function_id" --query 'StackResourceDetail.PhysicalResourceId' --output text 2>/dev/null || true)"
-            [[ -n "$function_name" ]] || { echo "No existing $function_id; nothing to adopt for $loggroup_id."; return 0; }
-            group_name="/aws/lambda/$function_name"
-            if aws logs describe-log-groups --log-group-name-prefix "$group_name" --query "logGroups[?logGroupName=='$group_name'] | length(@)" --output text | grep -qx 1; then
-              aws logs delete-log-group --log-group-name "$group_name"
-              echo "Deleted unmanaged $group_name so the stack can create it under management."
+          # functions that already existed, so Lambda had auto-created their log
+          # groups outside stack management and CloudFormation cannot create them
+          # (AlreadyExists). Deleting them does not work either: live traffic makes
+          # Lambda re-create a group seconds later. Import the existing groups.
+          pending_ids=()
+          import_json="[]"
+          for pair in "ApiAccessFunctionLogGroup ApiAccessFunction" "PublicStatusCollectorFunctionLogGroup PublicStatusCollectorFunction" "ApiKeyAuthorizerFunctionLogGroup ApiKeyAuthorizerFunction"; do
+            set -- $pair
+            if aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$1" >/dev/null 2>&1; then
+              echo "$1 already stack-managed; skipping."
             else
-              echo "No unmanaged $group_name present."
+              function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$2" --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+              pending_ids+=("$1")
+              import_json="$(jq --arg id "$1" --arg name "/aws/lambda/$function_name" '. + [{ResourceType: "AWS::Logs::LogGroup", LogicalResourceId: $id, ResourceIdentifier: {LogGroupName: $name}}]' <<<"$import_json")"
             fi
-          }
-          adopt_log_group ApiAccessFunctionLogGroup ApiAccessFunction
-          adopt_log_group PublicStatusCollectorFunctionLogGroup PublicStatusCollectorFunction
-          adopt_log_group ApiKeyAuthorizerFunctionLogGroup ApiKeyAuthorizerFunction
+          done
+          if (( ${#pending_ids[@]} == 0 )); then
+            echo "All template log groups are already stack-managed."
+            exit 0
+          fi
+          workdir="$(mktemp -d)"
+          aws cloudformation get-template --stack-name "$STACK_NAME" --query TemplateBody --output text > "$workdir/current.yaml"
+          python3 - "$workdir/current.yaml" services/api-access/template.yaml "$workdir/import.yaml" "${pending_ids[@]}" <<'PYEOF'
+          import re
+          import sys
+          current_path, repo_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+          ids = sys.argv[4:]
+          def extract_block(lines, logical_id):
+              start = None
+              for i, line in enumerate(lines):
+                  if line.rstrip("\n") == "  " + logical_id + ":":
+                      start = i
+                      break
+              if start is None:
+                  raise SystemExit("resource block not found: " + logical_id)
+              end = start + 1
+              while end < len(lines):
+                  line = lines[end]
+                  if re.match(r"^  \S", line) or re.match(r"^\S", line):
+                      break
+                  end += 1
+              block = lines[start:end]
+              while block and block[-1].strip() == "":
+                  block.pop()
+              return block
+          repo_lines = open(repo_path).read().splitlines(keepends=True)
+          current = open(current_path).read()
+          current_lines = current.splitlines(keepends=True)
+          blocks = []
+          for logical_id in ids:
+              if re.search(r"^  " + re.escape(logical_id) + ":", current, flags=re.M):
+                  raise SystemExit(logical_id + " already present in current template")
+              blocks.extend(extract_block(repo_lines, logical_id))
+              blocks.append("\n")
+          res_idx = None
+          for i, line in enumerate(current_lines):
+              if line.rstrip("\n") == "Resources:":
+                  res_idx = i
+                  break
+          if res_idx is None:
+              raise SystemExit("Resources: line not found in current template")
+          out_lines = current_lines[: res_idx + 1] + blocks + current_lines[res_idx + 1:]
+          open(out_path, "w").write("".join(out_lines))
+          print("spliced " + str(len(ids)) + " log group blocks after Resources:")
+          PYEOF
+          printf '%s' "$import_json" > "$workdir/import.json"
+          changeset="import-log-groups-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --change-set-type IMPORT --resources-to-import "file://$workdir/import.json" --template-body "file://$workdir/import.yaml" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"
+          aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset"
+          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+          for id in "${pending_ids[@]}"; do
+            aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$id" >/dev/null
+          done
+          echo "Imported into stack management: ${pending_ids[*]}"
 
       - name: Prepare dedicated production SAM artifact bucket
         id: artifact-bucket
