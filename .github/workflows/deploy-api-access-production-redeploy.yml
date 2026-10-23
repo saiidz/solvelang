@@ -210,14 +210,21 @@ jobs:
           # groups outside stack management and CloudFormation cannot create them
           # (AlreadyExists). Deleting them does not work either: live traffic makes
           # Lambda re-create a group seconds later. Import the existing groups.
+          aws --version
+          # describe-stack-resource (singular) is unusable with this CLI: its
+          # response makes the CLI die with "'str' object has no attribute
+          # 'items'" (redeploy attempt 5, run 39992188311). Fetch the full
+          # resource list once (plural API) and resolve everything locally.
+          resources_json="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json)"
           pending_ids=()
           import_json="[]"
           for pair in "ApiAccessFunctionLogGroup ApiAccessFunction" "PublicStatusCollectorFunctionLogGroup PublicStatusCollectorFunction" "ApiKeyAuthorizerFunctionLogGroup ApiKeyAuthorizerFunction"; do
             set -- $pair
-            if aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$1" >/dev/null 2>&1; then
+            if jq -e --arg id "$1" '.StackResources[] | select(.LogicalResourceId == $id)' <<<"$resources_json" >/dev/null; then
               echo "$1 already stack-managed; skipping."
             else
-              function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$2" --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+              function_name="$(jq -r --arg id "$2" '.StackResources[] | select(.LogicalResourceId == $id) | .PhysicalResourceId' <<<"$resources_json")"
+              [[ -n "$function_name" && "$function_name" != "null" ]]
               pending_ids+=("$1")
               import_json="$(jq --arg id "$1" --arg name "/aws/lambda/$function_name" '. + [{ResourceType: "AWS::Logs::LogGroup", LogicalResourceId: $id, ResourceIdentifier: {LogGroupName: $name}}]' <<<"$import_json")"
             fi
@@ -227,7 +234,7 @@ jobs:
             exit 0
           fi
           workdir="$(mktemp -d)"
-          aws cloudformation get-template --stack-name "$STACK_NAME" --query TemplateBody --output text > "$workdir/current.yaml"
+          aws cloudformation get-template --stack-name "$STACK_NAME" --output json | jq -r '.TemplateBody' > "$workdir/current.yaml"
           python3 - "$workdir/current.yaml" services/api-access/template.yaml "$workdir/import.yaml" "${pending_ids[@]}" <<'PYEOF'
           import re
           import sys
@@ -277,8 +284,9 @@ jobs:
           aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"
           aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset"
           aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+          after_json="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json)"
           for id in "${pending_ids[@]}"; do
-            aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$id" >/dev/null
+            jq -e --arg id "$id" '.StackResources[] | select(.LogicalResourceId == $id)' <<<"$after_json" >/dev/null
           done
           echo "Imported into stack management: ${pending_ids[*]}"
 
@@ -354,8 +362,8 @@ jobs:
           health="$(curl --fail --silent --show-error -H "x-solvelang-admin-secret: $API_ACCESS_ADMIN_SECRET" "$API_BASE/admin/status")"
           jq -e --argjson totp "$PRESERVED_TOTP_ENABLED" '.status == "ok" and .enabled == true and .customerAccountsEnabled == true and .customerTotpEnabled == $totp and .subscriptionBillingEnabled == true' <<<"$health" >/dev/null
 
-          function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id ApiAccessFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)"
-          billing_flag="$(aws lambda get-function-configuration --function-name "$function_name" --query 'Environment.Variables.API_SUBSCRIPTION_BILLING_ENABLED' --output text)"
+          function_name="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json | jq -r '.StackResources[] | select(.LogicalResourceId == "ApiAccessFunction") | .PhysicalResourceId')"
+          billing_flag="$(aws lambda get-function-configuration --function-name "$function_name" --output json | jq -r '.Environment.Variables.API_SUBSCRIPTION_BILLING_ENABLED // empty')"
           [[ "$billing_flag" == true ]]
 
           webhook_status="$(curl --silent --output /tmp/solvelang-webhook-enabled-probe.json --write-out '%{http_code}' -X POST "$API_BASE/stripe/subscriptions/webhook")"
@@ -369,9 +377,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id ApiAccessFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          function_name="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json | jq -r '.StackResources[] | select(.LogicalResourceId == "ApiAccessFunction") | .PhysicalResourceId')"
           log_group="/aws/lambda/${function_name}"
-          filter_name="$(aws logs describe-metric-filters --log-group-name "$log_group" --filter-name-prefix "${STACK_NAME}-subscription-webhook-failures" --query 'metricFilters[0].filterName' --output text)"
+          filter_name="$(aws logs describe-metric-filters --log-group-name "$log_group" --filter-name-prefix "${STACK_NAME}-subscription-webhook-failures" --output json | jq -r '.metricFilters[0].filterName // empty')"
           [[ "$filter_name" == "${STACK_NAME}-subscription-webhook-failures" ]]
 
           alarm="$(aws cloudwatch describe-alarms --alarm-names "${STACK_NAME}-subscription-webhook-failures" --output json)"
