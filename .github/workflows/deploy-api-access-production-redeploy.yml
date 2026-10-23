@@ -201,6 +201,36 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Adopt pre-existing Lambda log groups the template now manages
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Commit 8785f27e added explicit LogGroup resources (90-day retention) for
+          # functions that already existed, so Lambda had already auto-created their
+          # log groups outside stack management and CloudFormation cannot create
+          # them (AlreadyExists). Remove only unmanaged groups the template is
+          # about to adopt; once stack-managed, this step is a no-op.
+          adopt_log_group() {
+            local loggroup_id="$1" function_id="$2"
+            if aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$loggroup_id" >/dev/null 2>&1; then
+              echo "$loggroup_id already stack-managed; skipping."
+              return 0
+            fi
+            local function_name group_name
+            function_name="$(aws cloudformation describe-stack-resource --stack-name "$STACK_NAME" --logical-resource-id "$function_id" --query 'StackResourceDetail.PhysicalResourceId' --output text 2>/dev/null || true)"
+            [[ -n "$function_name" ]] || { echo "No existing $function_id; nothing to adopt for $loggroup_id."; return 0; }
+            group_name="/aws/lambda/$function_name"
+            if aws logs describe-log-groups --log-group-name-prefix "$group_name" --query "logGroups[?logGroupName=='$group_name'] | length(@)" --output text | grep -qx 1; then
+              aws logs delete-log-group --log-group-name "$group_name"
+              echo "Deleted unmanaged $group_name so the stack can create it under management."
+            else
+              echo "No unmanaged $group_name present."
+            fi
+          }
+          adopt_log_group ApiAccessFunctionLogGroup ApiAccessFunction
+          adopt_log_group PublicStatusCollectorFunctionLogGroup PublicStatusCollectorFunction
+          adopt_log_group ApiKeyAuthorizerFunctionLogGroup ApiKeyAuthorizerFunction
+
       - name: Prepare dedicated production SAM artifact bucket
         id: artifact-bucket
         shell: bash
