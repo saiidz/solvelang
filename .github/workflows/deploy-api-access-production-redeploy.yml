@@ -217,6 +217,7 @@ jobs:
           # resource list once (plural API) and resolve everything locally.
           resources_json="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json)"
           pending_ids=()
+          pending_pairs=()
           import_json="[]"
           for pair in "ApiAccessFunctionLogGroup ApiAccessFunction" "PublicStatusCollectorFunctionLogGroup PublicStatusCollectorFunction" "ApiKeyAuthorizerFunctionLogGroup ApiKeyAuthorizerFunction"; do
             set -- $pair
@@ -226,6 +227,7 @@ jobs:
               function_name="$(jq -r --arg id "$2" '.StackResources[] | select(.LogicalResourceId == $id) | .PhysicalResourceId' <<<"$resources_json")"
               [[ -n "$function_name" && "$function_name" != "null" ]]
               pending_ids+=("$1")
+              pending_pairs+=("$1=$2")
               import_json="$(jq --arg id "$1" --arg name "/aws/lambda/$function_name" '. + [{ResourceType: "AWS::Logs::LogGroup", LogicalResourceId: $id, ResourceIdentifier: {LogGroupName: $name}}]' <<<"$import_json")"
             fi
           done
@@ -235,48 +237,72 @@ jobs:
           fi
           workdir="$(mktemp -d)"
           aws cloudformation get-template --stack-name "$STACK_NAME" --output json | jq -r '.TemplateBody' > "$workdir/current.yaml"
-          python3 - "$workdir/current.yaml" template.yaml "$workdir/import.yaml" "${pending_ids[@]}" <<'PYEOF'
+          python3 - "$workdir/current.yaml" template.yaml "$workdir/import.yaml" "${pending_pairs[@]}" <<'PYEOF'
+          import json
           import re
           import sys
+
           current_path, repo_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
-          ids = sys.argv[4:]
-          def extract_block(lines, logical_id):
-              start = None
-              for i, line in enumerate(lines):
-                  if line.rstrip("\n") == "  " + logical_id + ":":
-                      start = i
+          pairs = [arg.split("=", 1) for arg in sys.argv[4:]]
+          ids = [pair[0] for pair in pairs]
+          current_text = open(current_path).read()
+
+          if current_text.lstrip().startswith("{"):
+              # SAM deploys store the stack template as JSON, so get-template returns
+              # JSON: merge the log group resources structurally instead of scanning
+              # for YAML lines that do not exist in JSON text.
+              template = json.loads(current_text)
+              resources = template.setdefault("Resources", {})
+              for logical_id, function_id in pairs:
+                  if logical_id in resources:
+                      raise SystemExit(logical_id + " already present in current template")
+                  resources[logical_id] = {
+                      "Type": "AWS::Logs::LogGroup",
+                      "Properties": {
+                          "LogGroupName": {"Fn::Sub": "/aws/lambda/${" + function_id + "}"},
+                          "RetentionInDays": 90,
+                      },
+                  }
+              open(out_path, "w").write(json.dumps(template, indent=2) + "\n")
+              print("merged " + str(len(pairs)) + " log group resources into the JSON template")
+          else:
+              def extract_block(lines, logical_id):
+                  start = None
+                  for i, line in enumerate(lines):
+                      if line.rstrip("\n") == "  " + logical_id + ":":
+                          start = i
+                          break
+                  if start is None:
+                      raise SystemExit("resource block not found: " + logical_id)
+                  end = start + 1
+                  while end < len(lines):
+                      line = lines[end]
+                      if re.match(r"^  \S", line) or re.match(r"^\S", line):
+                          break
+                      end += 1
+                  block = lines[start:end]
+                  while block and block[-1].strip() == "":
+                      block.pop()
+                  return block
+
+              repo_lines = open(repo_path).read().splitlines(keepends=True)
+              current_lines = current_text.splitlines(keepends=True)
+              blocks = []
+              for logical_id in ids:
+                  if re.search(r"^  " + re.escape(logical_id) + ":", current_text, flags=re.M):
+                      raise SystemExit(logical_id + " already present in current template")
+                  blocks.extend(extract_block(repo_lines, logical_id))
+                  blocks.append("\n")
+              res_idx = None
+              for i, line in enumerate(current_lines):
+                  if line.rstrip("\n") == "Resources:":
+                      res_idx = i
                       break
-              if start is None:
-                  raise SystemExit("resource block not found: " + logical_id)
-              end = start + 1
-              while end < len(lines):
-                  line = lines[end]
-                  if re.match(r"^  \S", line) or re.match(r"^\S", line):
-                      break
-                  end += 1
-              block = lines[start:end]
-              while block and block[-1].strip() == "":
-                  block.pop()
-              return block
-          repo_lines = open(repo_path).read().splitlines(keepends=True)
-          current = open(current_path).read()
-          current_lines = current.splitlines(keepends=True)
-          blocks = []
-          for logical_id in ids:
-              if re.search(r"^  " + re.escape(logical_id) + ":", current, flags=re.M):
-                  raise SystemExit(logical_id + " already present in current template")
-              blocks.extend(extract_block(repo_lines, logical_id))
-              blocks.append("\n")
-          res_idx = None
-          for i, line in enumerate(current_lines):
-              if line.rstrip("\n") == "Resources:":
-                  res_idx = i
-                  break
-          if res_idx is None:
-              raise SystemExit("Resources: line not found in current template")
-          out_lines = current_lines[: res_idx + 1] + blocks + current_lines[res_idx + 1:]
-          open(out_path, "w").write("".join(out_lines))
-          print("spliced " + str(len(ids)) + " log group blocks after Resources:")
+              if res_idx is None:
+                  raise SystemExit("Resources: line not found in current template")
+              out_lines = current_lines[: res_idx + 1] + blocks + current_lines[res_idx + 1:]
+              open(out_path, "w").write("".join(out_lines))
+              print("spliced " + str(len(ids)) + " log group blocks after Resources:")
           PYEOF
           printf '%s' "$import_json" > "$workdir/import.json"
           changeset="import-log-groups-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
