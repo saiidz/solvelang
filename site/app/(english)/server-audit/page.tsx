@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import ServerAuditApp from "../../server-audit/ServerAuditApp";
 
 export const metadata: Metadata = {
-  title: "Server Audit | SolveLang",
+  title: "Server Audit",
   description: "Analyze a redacted, read-only server posture snapshot locally in your browser with deterministic operational and security checks.",
 };
 

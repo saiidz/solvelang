@@ -60,7 +60,7 @@ export function StatusDashboard() {
   const { observations, now, loading, overall } = useLiveStatus();
   return <section className="mt-10" aria-labelledby="components-heading">
     <h2 id="components-heading" className="text-2xl font-semibold">Current observations and component boundaries</h2>
-    <div className="mt-4" aria-live="polite"><StatusBadge state={overall} />{loading ? <span className="ml-3 text-sm text-slate-600">Checking public surfaces…</span> : null}</div>
+    <div className="mt-4" aria-live="polite"><StatusBadge state={overall} />{loading ? <span className="ml-3 text-sm text-slate-600">Live check has not completed yet — treat status as unverified.</span> : null}</div>
     <div className="mt-5 divide-y divide-slate-200 overflow-hidden rounded-3xl border border-slate-200 bg-white">
       {statusPage.components.map((component) => {
         const observation = component.monitored ? observations[component.id] : undefined;
@@ -72,9 +72,9 @@ export function StatusDashboard() {
 }
 
 export function StatusSummary() {
-  const { overall, loading } = useLiveStatus();
+  const { overall } = useLiveStatus();
   return <div className="mt-8 flex flex-wrap items-center gap-4 rounded-xl border border-white/20 bg-white/5 p-5 text-white" aria-live="polite">
-    <div><p className="text-xs font-semibold uppercase tracking-widest text-[#93b6df]">Current public status</p><p className="mt-2 text-sm">{loading ? "Checking public surfaces…" : labels[overall]}</p></div>
+    <div><p className="text-xs font-semibold uppercase tracking-widest text-[#93b6df]">Current public status</p><p className="mt-2 text-sm">{labels[overall]}</p></div>
     <Link href="/status/" className="ml-auto text-sm font-semibold text-[#a9cdff] underline underline-offset-4 hover:text-white">View system status →</Link>
   </div>;
 }
