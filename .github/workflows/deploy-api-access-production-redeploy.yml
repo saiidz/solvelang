@@ -237,13 +237,13 @@ jobs:
           fi
           workdir="$(mktemp -d)"
           aws cloudformation get-template --stack-name "$STACK_NAME" --output json | jq -r '.TemplateBody' > "$workdir/current.yaml"
-          python3 - "$workdir/current.yaml" template.yaml "$workdir/import.yaml" "${pending_pairs[@]}" <<'PYEOF'
+          python3 - "$workdir/current.yaml" template.yaml "$workdir/import.yaml" "$workdir/params.json" "${pending_pairs[@]}" <<'PYEOF'
           import json
           import re
           import sys
 
-          current_path, repo_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
-          pairs = [arg.split("=", 1) for arg in sys.argv[4:]]
+          current_path, repo_path, out_path, params_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+          pairs = [arg.split("=", 1) for arg in sys.argv[5:]]
           ids = [pair[0] for pair in pairs]
           current_text = open(current_path).read()
 
@@ -264,6 +264,8 @@ jobs:
                       },
                   }
               open(out_path, "w").write(json.dumps(template, separators=(",", ":")) + "\n")
+              params = [{"ParameterKey": key, "UsePreviousValue": True} for key in template.get("Parameters", {})]
+              open(params_path, "w").write(json.dumps(params))
               print("merged " + str(len(pairs)) + " log group resources into the JSON template")
           else:
               def extract_block(lines, logical_id):
@@ -301,6 +303,20 @@ jobs:
               if res_idx is None:
                   raise SystemExit("Resources: line not found in current template")
               out_lines = current_lines[: res_idx + 1] + blocks + current_lines[res_idx + 1:]
+              param_keys = []
+              in_params = False
+              for line in repo_lines:
+                  if line.rstrip("\n") == "Parameters:":
+                      in_params = True
+                      continue
+                  if in_params:
+                      if re.match(r"^\S", line):
+                          break
+                      m = re.match(r"^  ([A-Za-z0-9]+):", line)
+                      if m:
+                          param_keys.append(m.group(1))
+              params = [{"ParameterKey": key, "UsePreviousValue": True} for key in param_keys]
+              open(params_path, "w").write(json.dumps(params))
               open(out_path, "w").write("".join(out_lines))
               print("spliced " + str(len(ids)) + " log group blocks after Resources:")
           PYEOF
@@ -311,7 +327,7 @@ jobs:
             exit 1
           fi
           changeset="import-log-groups-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --change-set-type IMPORT --resources-to-import "file://$workdir/import.json" --template-body "file://$workdir/import.yaml" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
+          aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --change-set-type IMPORT --resources-to-import "file://$workdir/import.json" --parameters "file://$workdir/params.json" --template-body "file://$workdir/import.yaml" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
           aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"
           aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset"
           aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
