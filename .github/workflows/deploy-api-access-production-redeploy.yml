@@ -261,6 +261,7 @@ jobs:
                   resources[logical_id] = {
                       "Type": "AWS::Logs::LogGroup",
                       "DeletionPolicy": "Retain",
+                      "UpdateReplacePolicy": "Retain",
                       "Properties": {
                           "LogGroupName": {"Fn::Sub": "/aws/lambda/${" + function_id + "}"},
                           "RetentionInDays": 90,
