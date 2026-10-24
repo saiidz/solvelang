@@ -332,9 +332,17 @@ jobs:
           fi
           changeset="import-log-groups-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --change-set-type IMPORT --resources-to-import "file://$workdir/import.json" --parameters "file://$workdir/params.json" --template-body "file://$workdir/import.yaml" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
-          aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"
+          if ! aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"; then
+            echo "Import change set did not reach CREATE_COMPLETE; describing it before failing:" >&2
+            aws cloudformation describe-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --output json >&2 || true
+            exit 1
+          fi
           aws cloudformation execute-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset"
-          aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"
+          if ! aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"; then
+            echo "Stack update did not complete after import execution; latest stack events:" >&2
+            aws cloudformation describe-stack-events --stack-name "$STACK_NAME" --output json | jq -r '.StackEvents[:15][] | .Timestamp + " " + .LogicalResourceId + " " + .ResourceStatus + " " + (.ResourceStatusReason // "")' >&2 || true
+            exit 1
+          fi
           after_json="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json)"
           for id in "${pending_ids[@]}"; do
             jq -e --arg id "$id" '.StackResources[] | select(.LogicalResourceId == $id)' <<<"$after_json" >/dev/null
