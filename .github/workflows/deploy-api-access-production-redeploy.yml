@@ -263,7 +263,7 @@ jobs:
                           "RetentionInDays": 90,
                       },
                   }
-              open(out_path, "w").write(json.dumps(template, indent=2) + "\n")
+              open(out_path, "w").write(json.dumps(template, separators=(",", ":")) + "\n")
               print("merged " + str(len(pairs)) + " log group resources into the JSON template")
           else:
               def extract_block(lines, logical_id):
@@ -305,6 +305,11 @@ jobs:
               print("spliced " + str(len(ids)) + " log group blocks after Resources:")
           PYEOF
           printf '%s' "$import_json" > "$workdir/import.json"
+          template_bytes="$(wc -c < "$workdir/import.yaml")"
+          if (( template_bytes > 51200 )); then
+            echo "Merged import template is ${template_bytes} bytes; the direct template-body limit is 51200." >&2
+            exit 1
+          fi
           changeset="import-log-groups-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           aws cloudformation create-change-set --stack-name "$STACK_NAME" --change-set-name "$changeset" --change-set-type IMPORT --resources-to-import "file://$workdir/import.json" --template-body "file://$workdir/import.yaml" --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND
           aws cloudformation wait change-set-create-complete --stack-name "$STACK_NAME" --change-set-name "$changeset"
