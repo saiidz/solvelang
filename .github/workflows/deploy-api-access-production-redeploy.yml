@@ -201,6 +201,12 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Assume production deploy role (refresh before import)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       - name: Import pre-existing Lambda log groups into stack management
         shell: bash
         run: |
@@ -221,6 +227,7 @@ jobs:
           # response makes the CLI die with "'str' object has no attribute
           # 'items'" (redeploy attempt 5, run 39992188311). Fetch the full
           # resource list once (plural API) and resolve everything locally.
+          echo "Stack status on entry: $(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json | jq -r '.Stacks[0].StackStatus')"
           resources_json="$(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --output json)"
           pending_ids=()
           pending_pairs=()
@@ -376,6 +383,12 @@ jobs:
           aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
           aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
           echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Assume production deploy role (refresh before redeploy)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
 
       - name: Redeploy current main while preserving the exact feature state
         id: deploy
