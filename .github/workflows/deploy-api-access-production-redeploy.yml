@@ -210,6 +210,12 @@ jobs:
           # groups outside stack management and CloudFormation cannot create them
           # (AlreadyExists). Deleting them does not work either: live traffic makes
           # Lambda re-create a group seconds later. Import the existing groups.
+          # A group that does not exist at all cannot be imported: attempt 4
+          # deleted the ApiKeyAuthorizer group and that function has not run
+          # since, so Lambda never re-created it - the attempt-12 change set
+          # FAILED with "was not found". Probe existence first and import
+          # only groups that exist; the deploy step creates any missing
+          # group from the template.
           aws --version
           # describe-stack-resource (singular) is unusable with this CLI: its
           # response makes the CLI die with "'str' object has no attribute
@@ -226,13 +232,19 @@ jobs:
             else
               function_name="$(jq -r --arg id "$2" '.StackResources[] | select(.LogicalResourceId == $id) | .PhysicalResourceId' <<<"$resources_json")"
               [[ -n "$function_name" && "$function_name" != "null" ]]
-              pending_ids+=("$1")
-              pending_pairs+=("$1=$2")
-              import_json="$(jq --arg id "$1" --arg name "/aws/lambda/$function_name" '. + [{ResourceType: "AWS::Logs::LogGroup", LogicalResourceId: $id, ResourceIdentifier: {LogGroupName: $name}}]' <<<"$import_json")"
+              log_group_name="/aws/lambda/$function_name"
+              groups_json="$(aws logs describe-log-groups --log-group-name-prefix "$log_group_name" --output json)"
+              if jq -e --arg name "$log_group_name" '.logGroups[] | select(.logGroupName == $name)' <<<"$groups_json" >/dev/null; then
+                pending_ids+=("$1")
+                pending_pairs+=("$1=$2")
+                import_json="$(jq --arg id "$1" --arg name "$log_group_name" '. + [{ResourceType: "AWS::Logs::LogGroup", LogicalResourceId: $id, ResourceIdentifier: {LogGroupName: $name}}]' <<<"$import_json")"
+              else
+                echo "$1: log group $log_group_name does not exist yet; skipping import - the deploy step will create it from the template."
+              fi
             fi
           done
           if (( ${#pending_ids[@]} == 0 )); then
-            echo "All template log groups are already stack-managed."
+            echo "Nothing to import: every template log group is already stack-managed or does not exist yet."
             exit 0
           fi
           workdir="$(mktemp -d)"
