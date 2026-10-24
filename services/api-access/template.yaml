@@ -613,6 +613,8 @@ Resources:
 
   ApiAccessFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ApiAccessFunction}"
       RetentionInDays: 90
@@ -647,6 +649,8 @@ Resources:
 
   PublicStatusCollectorFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${PublicStatusCollectorFunction}"
       RetentionInDays: 90
@@ -700,6 +704,8 @@ Resources:
 
   ApiKeyAuthorizerFunctionLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ApiKeyAuthorizerFunction}"
       RetentionInDays: 90
