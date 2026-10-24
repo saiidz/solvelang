@@ -256,8 +256,11 @@ jobs:
               for logical_id, function_id in pairs:
                   if logical_id in resources:
                       raise SystemExit(logical_id + " already present in current template")
+                  # IMPORT change sets require a DeletionPolicy on every imported
+                  # resource (attempt 10, run 40055297531). Retain: logs survive.
                   resources[logical_id] = {
                       "Type": "AWS::Logs::LogGroup",
+                      "DeletionPolicy": "Retain",
                       "Properties": {
                           "LogGroupName": {"Fn::Sub": "/aws/lambda/${" + function_id + "}"},
                           "RetentionInDays": 90,
