@@ -640,6 +640,12 @@ Resources:
               - dynamodb:UpdateItem
               - dynamodb:PutItem
             Resource: !GetAtt PublicStatusTable.Arn
+      Events:
+        Refresh:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 minute)
+            Enabled: true
 
   PublicStatusCollectorFunctionLogGroup:
     Type: AWS::Logs::LogGroup
