@@ -117,11 +117,11 @@ test("conditional shared lease limits concurrent scheduled refreshes to one six-
   assert.equal(seen.length, 12);
 });
 
-test("SAM wiring keeps one collector (schedule suspended: redeploy two-phase fix phase 1) and limits request Lambda to shared snapshot reads", () => {
+test("SAM wiring schedules one collector and limits request Lambda to shared snapshot reads", () => {
   const template = readFileSync(new URL("../template.yaml", import.meta.url), "utf8");
   assert.match(template, /PublicStatusTable:[\s\S]*?snapshotKey[\s\S]*?PublicStatusCollectorFunction:/);
   const collector = template.split("  PublicStatusCollectorFunction:")[1].split("  ApiKeyAuthorizerFunction:")[0];
-  assert.doesNotMatch(collector, /Events:/);
+  assert.match(collector, /Schedule: rate\(1 minute\)/);
   assert.match(collector, /dynamodb:UpdateItem[\s\S]*dynamodb:PutItem/);
   assert.doesNotMatch(collector, /DynamoDBCrudPolicy|dynamodb:GetItem|customer|stripe|secret/i);
   const request = template.split("  ApiAccessFunction:")[1].split("  PublicStatusCollectorFunction:")[0];
