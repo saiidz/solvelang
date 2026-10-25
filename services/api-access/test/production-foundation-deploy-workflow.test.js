@@ -118,6 +118,31 @@ test("production deploy policy scopes API Gateway tagging to HTTP API resources"
   assert.ok(!statement.Action.includes("apigateway:*"));
 });
 
+test("production deploy policy grants scoped EventBridge rule management for stack schedules", async () => {
+  const policy = await deployPolicy();
+  const statement = policy.Statement.find(({ Sid }) => Sid === "SolveLangProductionEventBridgeRules");
+
+  assert.ok(statement);
+  assert.equal(statement.Effect, "Allow");
+  assert.deepEqual(statement.Resource, [
+    "arn:aws:events:*:*:rule/solvelang-api-access-prod-*",
+  ]);
+  for (const action of [
+    "events:PutRule",
+    "events:DescribeRule",
+    "events:DeleteRule",
+    "events:PutTargets",
+    "events:RemoveTargets",
+    "events:ListTargetsByRule",
+    "events:TagResource",
+    "events:UntagResource",
+    "events:ListTagsForResource",
+  ]) {
+    assert.ok(statement.Action.includes(action), action);
+  }
+  assert.ok(!statement.Action.includes("events:*"));
+});
+
 test("operations baseline enables PITR, retention, and alarm routing", async () => {
   const source = await opsScript();
   assert.match(source, /update-continuous-backups/);
