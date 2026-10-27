@@ -6,6 +6,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     || !stripe?.customers
     || !stripe?.invoices
     || !stripe?.invoicePayments
+    || !stripe?.promotionCodes
     || !stripe?.paymentIntents
     || !stripe?.paymentMethods
     || !stripe?.setupIntents
@@ -99,6 +100,49 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         metadata: { accountId, plan, requestId },
         subscription_data: { metadata: { accountId, email, plan } },
       }, { idempotencyKey: `api-subscription-checkout-${requestId}` });
+    },
+
+    async findPromotionCode(code) {
+      const result = await stripe.promotionCodes.list({ code, active: true, limit: 1 });
+      const match = result?.data?.[0];
+      return match?.id ?? null;
+    },
+
+    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId }) {
+      let customer = customerId;
+      if (!customer) {
+        const createdCustomer = await stripe.customers.create(
+          { email, metadata: { accountId } },
+          { idempotencyKey: `api-subscription-customer-${accountId}` },
+        );
+        customer = createdCustomer?.id;
+      }
+      if (typeof customer !== "string" || !customer) throw new Error("Stripe customer is unavailable.");
+
+      const subscription = await stripe.subscriptions.create({
+          customer,
+          items: [{ price: priceId }],
+          payment_behavior: "default_incomplete",
+          payment_settings: { save_default_payment_method: "on_subscription" },
+          ...(promotionCodeId ? { discounts: [{ promotion_code: promotionCodeId }] } : {}),
+          metadata: { accountId, email, plan, requestId },
+          expand: ["latest_invoice.payment_intent"],
+        }, { idempotencyKey: `api-subscription-elements-${requestId}` });
+      const invoice = subscription?.latest_invoice;
+      const paymentIntent = invoice?.payment_intent;
+      const paymentRequired = Boolean(paymentIntent?.client_secret)
+        && typeof invoice?.amount_due === "number"
+        && invoice.amount_due > 0
+        && invoice?.status !== "paid";
+      if (!subscription?.id) {
+        throw new Error("Stripe subscription is unavailable.");
+      }
+      return {
+        subscriptionId: subscription.id,
+        customerId: customer,
+        paymentRequired,
+        ...(paymentRequired ? { clientSecret: paymentIntent.client_secret } : {}),
+      };
     },
 
     async retrieveSubscriptionManagement({ customerId, subscriptionId }) {

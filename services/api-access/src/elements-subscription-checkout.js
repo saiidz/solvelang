@@ -1,0 +1,148 @@
+import { ApiAccessError } from "./service.js";
+import { getApiPlan } from "./plans.js";
+
+const REPLACEABLE_SUBSCRIPTION_STATUSES = new Set(["canceled", "unpaid"]);
+const STRIPE_ERROR_TYPES = new Set([
+  "StripeInvalidRequestError", "StripeAuthenticationError", "StripePermissionError",
+  "StripeAPIError", "StripeConnectionError", "StripeRateLimitError", "StripeIdempotencyError", "StripeCardError",
+]);
+const STRIPE_ERROR_CODES = new Set([
+  "parameter_invalid_enum", "parameter_missing", "parameter_unknown", "parameters_exclusive",
+  "url_invalid", "resource_missing", "api_key_expired", "account_invalid", "secret_key_required",
+  "testmode_charges_only", "livemode_mismatch", "rate_limit", "idempotency_key_in_use",
+  "promotion_code_invalid", "promotion_code_max_redemptions_reached", "coupon_expired",
+]);
+
+function logElementsFailure(logger, error) {
+  try {
+    const record = {
+      type: "stripe_checkout_error",
+      operation: "elements_subscription_create",
+      stripeType: STRIPE_ERROR_TYPES.has(error?.type) ? error.type : "unknown",
+    };
+    if (STRIPE_ERROR_CODES.has(error?.code)) record.stripeCode = error.code;
+    if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode <= 599) {
+      record.statusCode = error.statusCode;
+    }
+    if (typeof error?.requestId === "string" && /^req_[A-Za-z0-9]{1,64}$/.test(error.requestId)) {
+      record.stripeRequestId = error.requestId;
+    }
+    logger.error(record);
+  } catch {
+    // Diagnostics must not replace the original failure or affect reservation cleanup.
+  }
+}
+
+function cleanText(value, label, maximum = 254) {
+  if (typeof value !== "string") throw new ApiAccessError(400, "invalid_subscription_checkout", `${label} is invalid.`);
+  const cleaned = value.trim();
+  if (!cleaned || cleaned.length > maximum || /[\u0000-\u001f\u007f]/.test(cleaned)) {
+    throw new ApiAccessError(400, "invalid_subscription_checkout", `${label} is invalid.`);
+  }
+  return cleaned;
+}
+
+function cleanId(value, label) {
+  const cleaned = cleanText(value, label, 200);
+  if (!/^[A-Za-z0-9_.:-]+$/.test(cleaned)) {
+    throw new ApiAccessError(400, "invalid_subscription_checkout", `${label} is invalid.`);
+  }
+  return cleaned;
+}
+
+function cleanEmail(value) {
+  const email = cleanText(value, "Subscription email").toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new ApiAccessError(400, "invalid_subscription_checkout", "Subscription email is invalid.");
+  }
+  return email;
+}
+
+function cleanPromotionCode(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const code = cleanText(value, "Promotion code", 64);
+  if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+    throw new ApiAccessError(400, "promotion_code_invalid", "Promotion code is invalid.");
+  }
+  return code;
+}
+
+export function createElementsSubscriptionCheckoutService({ gateway, apiAccessService, priceIds, enabled = false, logger = console }) {
+  if (!gateway
+    || typeof gateway.findPromotionCode !== "function"
+    || typeof gateway.createIncompleteSubscription !== "function") {
+    throw new Error("Stripe subscription gateway is required.");
+  }
+  if (!apiAccessService
+    || typeof apiAccessService.getSubscriptionAccount !== "function"
+    || typeof apiAccessService.reserveSubscriptionCheckout !== "function"
+    || typeof apiAccessService.releaseSubscriptionCheckout !== "function") {
+    throw new Error("API access service is required.");
+  }
+
+  return {
+    async createElementsCheckout(input) {
+      if (!enabled) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
+      const accountId = cleanId(input.accountId, "Account ID");
+      const existing = await apiAccessService.getSubscriptionAccount(accountId);
+      if (existing?.stripeSubscriptionId && !REPLACEABLE_SUBSCRIPTION_STATUSES.has(existing.subscriptionStatus)) {
+        throw new ApiAccessError(409, "subscription_already_exists", "This account already has a subscription that must be managed instead of replaced.");
+      }
+
+      const requestId = cleanId(input.requestId, "Checkout request ID");
+      const email = cleanEmail(input.email);
+      const plan = getApiPlan(input.plan).name;
+      const priceId = priceIds[plan];
+      if (typeof priceId !== "string" || !/^price_[A-Za-z0-9]+$/.test(priceId)) {
+        throw new ApiAccessError(503, "subscription_price_unavailable", "API subscription pricing is not configured.");
+      }
+
+      const promotionCode = cleanPromotionCode(input.promotionCode);
+      let promotionCodeId;
+      if (promotionCode) {
+        promotionCodeId = await gateway.findPromotionCode(promotionCode);
+        if (!promotionCodeId) {
+          throw new ApiAccessError(400, "promotion_code_invalid", "Promotion code is invalid.");
+        }
+      }
+
+      await apiAccessService.reserveSubscriptionCheckout({ accountId, requestId });
+      let created;
+      try {
+        created = await gateway.createIncompleteSubscription({
+          accountId,
+          requestId,
+          email,
+          plan,
+          priceId,
+          customerId: input.customerId ? cleanId(input.customerId, "Stripe customer ID") : undefined,
+          promotionCodeId,
+        });
+      } catch (error) {
+        await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});
+        logElementsFailure(logger, error);
+        throw error;
+      }
+      if (!created?.subscriptionId || typeof created.customerId !== "string" || !created.customerId) {
+        await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});
+        throw new ApiAccessError(502, "stripe_checkout_unavailable", "Subscription checkout is temporarily unavailable.");
+      }
+      if (created.paymentRequired) {
+        if (typeof created.clientSecret !== "string" || !created.clientSecret) {
+          throw new ApiAccessError(502, "stripe_checkout_unavailable", "Subscription checkout is temporarily unavailable.");
+        }
+        return {
+          subscriptionId: created.subscriptionId,
+          customerId: created.customerId,
+          paymentRequired: true,
+          clientSecret: created.clientSecret,
+        };
+      }
+      return {
+        subscriptionId: created.subscriptionId,
+        customerId: created.customerId,
+        paymentRequired: false,
+      };
+    },
+  };
+}
