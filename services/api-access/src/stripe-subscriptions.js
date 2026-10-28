@@ -6,7 +6,6 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
     || !stripe?.customers
     || !stripe?.invoices
     || !stripe?.invoicePayments
-    || !stripe?.promotionCodes
     || !stripe?.paymentIntents
     || !stripe?.paymentMethods
     || !stripe?.setupIntents
