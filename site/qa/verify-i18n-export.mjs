@@ -21,7 +21,17 @@ const publishedSegments = ["ro", "fr", "de", "es", "it", "pt-br", "nl", "pl", "c
 const rootEntries = new Set(await readdir(outRoot));
 
 if (!draftPreview) {
-  for (const segment of publishedSegments) assert.equal(rootEntries.has(segment), false, `Draft route /${segment}/ was exported.`);
+  for (const segment of publishedSegments) {
+    if (segment === "ro") continue;
+    assert.equal(rootEntries.has(segment), false, `Draft route /${segment}/ was exported.`);
+  }
+  // The only permitted /ro exports are the hand-written statutory Romanian
+  // legal pages. Draft locale routes stay banned: no /ro index and no other
+  // /ro page may appear in the production export.
+  const romanianLegalExports = rootEntries.has("ro")
+    ? (await readdir(path.join(outRoot, "ro"), { recursive: true })).filter((entry) => entry.endsWith("index.html")).sort()
+    : [];
+  assert.deepEqual(romanianLegalExports, ["refund-policy/index.html", "terms/index.html"], "Unexpected /ro export: only the statutory Romanian legal pages may ship.");
 } else {
   let previewRouteCount = 0;
   for (const segment of publishedSegments) {

@@ -117,9 +117,9 @@ test("Romanian legal routes, withdrawal flow, and current ANPC SAL asset are pre
     source("app/(english)/landing/page.tsx"),
     source("app/sitemap.ts"),
   ]);
-  assert.match(romanianLegal, /verificare juridica si a proprietarului/);
+  assert.match(romanianLegal, /J2026027621002/);
   assert.match(localizedPage, /RomanianLegalDraft/);
-  assert.equal(existsSync(path.join(siteRoot, "app/ro")), false);
+  assert.equal(existsSync(path.join(siteRoot, "app/ro")), true);
   assert.doesNotMatch(sitemap, /\/ro\/(terms|refund-policy|preflight-privacy|withdraw)\//);
   assert.match(withdraw, /WithdrawalRequestClient/);
   assert.match(landing, /anpc-sal-pictogram\.png/);
