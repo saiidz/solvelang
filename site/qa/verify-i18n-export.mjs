@@ -31,7 +31,7 @@ if (!draftPreview) {
   const romanianLegalExports = rootEntries.has("ro")
     ? (await readdir(path.join(outRoot, "ro"), { recursive: true })).filter((entry) => entry.endsWith("index.html")).sort()
     : [];
-  assert.deepEqual(romanianLegalExports, ["refund-policy/index.html", "terms/index.html"], "Unexpected /ro export: only the statutory Romanian legal pages may ship.");
+  assert.deepEqual(romanianLegalExports, ["preflight-privacy/index.html", "refund-policy/index.html", "terms/index.html", "withdraw/index.html"], "Unexpected /ro export: only the statutory Romanian legal pages may ship.");
 } else {
   let previewRouteCount = 0;
   for (const segment of publishedSegments) {
