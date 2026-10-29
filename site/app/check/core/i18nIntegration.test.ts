@@ -41,7 +41,7 @@ test("Romanian legal drafts live only in the canonical locale architecture", asy
     source("app/i18n/romanianLegal.tsx"),
     source("app/i18n/locales.ts"),
   ]);
-  assert.equal(existsSync(path.join(siteRoot, "app/ro")), false);
+  assert.equal(existsSync(path.join(siteRoot, "app/ro")), true);
   assert.match(localizedPage, /RomanianLegalDraft/);
   assert.match(romanianLegal, /2026-10-27-v4/);
   assert.match(romanianLegal, /UPCOMINGSOUNDS S\.R\.L\./);
