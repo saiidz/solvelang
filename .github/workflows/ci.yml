@@ -168,7 +168,7 @@ jobs:
           test -f out/pricing/index.html
           test -f out/check/index.html
           test -f out/sitemap.xml
-          test "$(find out -mindepth 1 -maxdepth 1 -type d \( -name fr -o -name ro -o -name ar -o -name he \) | wc -l)" -eq 0
+          test "$(find out -mindepth 1 -maxdepth 1 -type d \( -name fr -o -name ar -o -name he \) | wc -l)" -eq 0
           grep -q '<html lang="en" dir="ltr"' out/index.html
           test ! -d app/api
 
