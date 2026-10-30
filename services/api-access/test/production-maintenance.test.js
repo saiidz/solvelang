@@ -264,3 +264,39 @@ test('pepper parameters, env references and log groups from #976/#978 are bounde
   assert.throws(() => assertMaintenanceChanges([change('ApiKeyAuthorizerFunction', 'AWS::Lambda::Function', 'Environment')]), /Maintenance refuses/);
   assert.throws(() => assertMaintenanceChanges([logGroupChange('UnrelatedLogGroup', 'Add')]), /Maintenance refuses/);
 });
+
+test('maintenance projection stamps resolved origins into condition-wrapped deployed CORS definitions',()=>{
+ const corsSettings={allowMethods:['GET'],allowHeaders:['authorization'],allowCredentials:true};
+ const deployed={Parameters:{},Outputs:{Base:{Value:'stable'}},Resources:{
+  ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{BILLING:'true'}}}},
+  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{'Fn::If':['StudioAcceptanceOriginConfigured',{...corsSettings,allowOrigins:[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}]},{...corsSettings,allowOrigins:[{Ref:'SiteOrigin'}]}]}},Name:'stable'}},
+ }};
+ const buildCompiled=(cors)=>{ const compiled=structuredClone(deployed);
+  compiled.Parameters={StudioAcceptanceOrigin:structuredClone(acceptanceParameter)};
+  compiled.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};
+  compiled.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};
+  compiled.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};
+  compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']=cors;
+  return compiled; };
+ const originArrayDisable={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',''],['https://www.solve-lang.com']]};
+ const disableOptions={siteOrigin:'https://www.solve-lang.com',currentStudioAcceptanceOrigin:previewOrigin,studioAcceptanceOriginAction:'disable'};
+ // Regression for run 40945881751: the deployed body carries its CORS as a condition-wrapped
+ // extension, which replaceCorsOrigins did not handle, so the disable plan failed closed.
+ const disabled=projectMaintenanceTemplate(deployed,buildCompiled(originArrayDisable),disableOptions);
+ const wrapped=disabled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']['Fn::If'];
+ assert.deepEqual(wrapped[1].allowOrigins,['https://www.solve-lang.com']);
+ assert.deepEqual(wrapped[2].allowOrigins,['https://www.solve-lang.com']);
+ assert.deepEqual(wrapped[1].allowMethods,['GET']);
+ assert.equal(wrapped[2].allowCredentials,true);
+ assertTemplateBoundary(deployed,disabled,disableOptions);
+ // Origins-only conditional deployed definition projects to the direct definition.
+ const arrayDeployed=structuredClone(deployed);
+ arrayDeployed.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['StudioAcceptanceOriginConfigured',[{Ref:'SiteOrigin'},{Ref:'StudioAcceptanceOrigin'}],[{Ref:'SiteOrigin'}]]};
+ const disabledArray=projectMaintenanceTemplate(arrayDeployed,buildCompiled(originArrayDisable),disableOptions);
+ assert.deepEqual(disabledArray.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors'],{allowOrigins:['https://www.solve-lang.com']});
+ assertTemplateBoundary(arrayDeployed,disabledArray,disableOptions);
+ // A deployed definition with settings but no origin list still fails closed, naming its keys.
+ const noOrigins=structuredClone(deployed);
+ noOrigins.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={allowMethods:['GET'],allowHeaders:['authorization']};
+ assert.throws(()=>projectMaintenanceTemplate(noOrigins,buildCompiled(originArrayDisable),disableOptions),/no explicit origin list \(found keys: allowHeaders, allowMethods/);
+});

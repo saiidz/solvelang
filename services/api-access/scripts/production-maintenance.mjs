@@ -214,10 +214,31 @@ function assertCompiledCorsOriginRequest(beforeBody, compiledBody, options) {
 function replaceCorsOrigins(body, origins) {
   const wasString = typeof body === 'string';
   const parsed = structuredClone(parseApiGatewayBody(body));
-  const cors = locateCorsExtension(parsed, 'deployed');
-  if (!Object.hasOwn(cors.cors, 'allowOrigins')) throw new Error('Deployed API Gateway CORS definition has no explicit origin list.');
-  cors.cors.allowOrigins = structuredClone(origins);
-  return wasString ? JSON.stringify(parsed) : parsed;
+  const located = locateCorsExtension(parsed, 'deployed');
+  const cors = located.cors;
+  if (Object.hasOwn(cors, 'allowOrigins')) {
+    cors.allowOrigins = structuredClone(origins);
+    return wasString ? JSON.stringify(parsed) : parsed;
+  }
+  const conditional = cors['Fn::If'];
+  const soleConditional = Object.keys(cors).length === 1 && Array.isArray(conditional) && conditional.length === 3;
+  if (soleConditional && conditional.slice(1).every(branch => branch && typeof branch === 'object' && !Array.isArray(branch) && Object.hasOwn(branch, 'allowOrigins'))) {
+    // Condition-wrapped definition: the deployed template materializes a conditional
+    // AllowOrigins as one Fn::If whose branches each carry the full CORS settings.
+    // Stamp the resolved origins into every branch; each branch's remaining settings
+    // stay exactly as deployed, and the boundary assertions still run afterwards.
+    for (const branch of conditional.slice(1)) branch.allowOrigins = structuredClone(origins);
+    return wasString ? JSON.stringify(parsed) : parsed;
+  }
+  if (soleConditional && conditional.slice(1).every(Array.isArray)) {
+    // Origins-only conditional: the extension carries nothing but the origin list,
+    // so the projection replaces it with the direct definition.
+    const parent = located.path.slice(0, -1).reduce((value, key) => value[key], parsed);
+    parent[located.path.at(-1)] = { allowOrigins: structuredClone(origins) };
+    return wasString ? JSON.stringify(parsed) : parsed;
+  }
+  const branchKinds = Array.isArray(conditional) ? conditional.slice(1).map(branch => Array.isArray(branch) ? 'array' : typeof branch).join(', ') : 'none';
+  throw new Error(`Deployed API Gateway CORS definition has no explicit origin list (found keys: ${Object.keys(cors).sort().join(', ') || 'none'}; Fn::If branch kinds: ${branchKinds}).`);
 }
 function assertApiCorsOriginOnly(beforeBody, afterBody, {
   siteOrigin,
