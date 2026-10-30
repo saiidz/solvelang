@@ -26,6 +26,7 @@ import { createCustomerEmailGateway } from "./customer-email.js";
 import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
+import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
 import { createSubscriptionManagementHandler } from "./subscription-management-handler.js";
@@ -111,6 +112,7 @@ const supportAutomationApplication = createSupportAutomationApiHandler({
 
 let stripeGateway;
 let subscriptionCheckout;
+let elementsCheckout;
 let subscriptionPortal;
 let subscriptionLifecycle;
 let subscriptionManagementApplication;
@@ -118,6 +120,7 @@ if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
   subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, siteOrigin: environment.siteOrigin, enabled: true });
+  elementsCheckout = createElementsSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true });
   subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
   subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
   subscriptionManagementApplication = createSubscriptionManagementHandler({
@@ -140,6 +143,7 @@ const application = createApiAccessHandler({
   customerAccount,
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
+  elementsCheckout,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,

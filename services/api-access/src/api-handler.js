@@ -54,6 +54,7 @@ export function createApiAccessHandler({
   customerAccount,
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
+  elementsCheckout,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -269,6 +270,21 @@ export function createApiAccessHandler({
           customerId: account?.stripeCustomerId,
         }));
       }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/elements-checkout")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!elementsCheckout) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
+        const body = parseJson(event);
+        const account = await service.getSubscriptionAccount(session.accountId);
+        return response(201, await elementsCheckout.createElementsCheckout({
+          accountId: session.accountId,
+          email: session.email,
+          plan: body.plan,
+          requestId: body.requestId,
+          customerId: account?.stripeCustomerId,
+          promotionCode: body.promotionCode,
+        }));
+      }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
@@ -291,6 +307,11 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/internal/subscriptions/checkout")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         return response(201, await subscriptionCheckout.createCheckout(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/subscriptions/elements-checkout")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!elementsCheckout) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
+        return response(201, await elementsCheckout.createElementsCheckout(body));
       }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
