@@ -49,6 +49,6 @@ test("generated request ID survives disclosure navigation and checkout return", 
 
   const checkout = readFileSync("app/account/api-checkout/EmbeddedApiCheckout.tsx", "utf8");
   const persist = checkout.indexOf("persistApiCheckoutRequestId(window.location, window.history, newRequestId)");
-  const reserve = checkout.indexOf('"/customer/subscriptions/checkout"');
+  const reserve = checkout.indexOf('"/customer/subscriptions/elements-checkout"');
   assert.ok(persist >= 0 && reserve > persist, "persist the ID before checkout reservation");
 });

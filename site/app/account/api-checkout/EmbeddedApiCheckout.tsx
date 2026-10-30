@@ -1,6 +1,6 @@
 "use client";
 
-import { loadStripe, type Stripe, type StripeEmbeddedCheckout } from "@stripe/stripe-js";
+import { loadStripe, type Stripe, type StripeElements, type StripePaymentElement } from "@stripe/stripe-js";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -25,39 +25,39 @@ const PLAN_DETAILS = {
   business: { name: "Business", price: "$699", credits: "50,000 weighted credits", keys: "5 active API keys" },
 } as const;
 
-type EmbeddedCheckoutStripe = Stripe & {
-  createEmbeddedCheckoutPage(options: {
-    clientSecret: string;
-    onComplete: () => void;
-  }): Promise<StripeEmbeddedCheckout>;
+type ElementsCheckoutResponse = {
+  subscriptionId: string;
+  customerId: string;
+  paymentRequired: boolean;
+  clientSecret?: string;
 };
 
-type CheckoutSessionResponse = {
-  sessionId: string;
-  clientSecret?: string;
-  url?: string;
-};
+type Phase = "preparing" | "code" | "creating" | "pay" | "confirming" | "free-done";
 
 export function EmbeddedApiCheckout() {
   const mountRef = useRef<HTMLDivElement>(null);
-  const checkoutRef = useRef<StripeEmbeddedCheckout | null>(null);
+  const stripeRef = useRef<Stripe | null>(null);
+  const elementsRef = useRef<StripeElements | null>(null);
+  const paymentElementRef = useRef<StripePaymentElement | null>(null);
   const startedRef = useRef(false);
+  const accountRef = useRef<CustomerDashboard | null>(null);
   const [plan, setPlan] = useState<ApiPlanKey | null>(null);
   const [email, setEmail] = useState("");
+  const [promoCode, setPromoCode] = useState("");
+  const [phase, setPhase] = useState<Phase>("preparing");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [payError, setPayError] = useState("");
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
     let active = true;
 
-    async function startCheckout() {
+    async function prepare() {
       try {
         const params = new URLSearchParams(window.location.search);
         const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
         if (!active) return;
-
         const decision = resolveApiCheckoutStart(account.subscription.plan, params.get("plan"));
         if (decision.kind === "existing-subscription") {
           window.location.replace("/account/api-keys/?checkout=already-subscribed");
@@ -68,67 +68,109 @@ export function EmbeddedApiCheckout() {
           return;
         }
         if (!PUBLISHABLE_KEY) throw new Error("Stripe checkout is not configured.");
-
-        const selectedPlan = decision.plan;
-        const requestId = persistApiCheckoutRequestId(window.location, window.history, newRequestId);
-        setPlan(selectedPlan);
+        accountRef.current = account;
+        setPlan(decision.plan);
         setEmail(account.email);
-
-        const session = await customerApi<CheckoutSessionResponse>(
-          API_BASE,
-          "/customer/subscriptions/checkout",
-          {
-            method: "POST",
-            csrfToken: account.csrfToken,
-            body: JSON.stringify({ plan: selectedPlan, requestId }),
-          },
-        );
-        if (!session.clientSecret) {
-          if (session.url) {
-            window.location.assign(session.url);
-            return;
-          }
-          throw new Error("Stripe checkout did not return a secure session.");
-        }
-
-        const stripe = await loadStripe(PUBLISHABLE_KEY);
-        if (!stripe) throw new Error("Stripe checkout could not be loaded.");
-        if (!active || !mountRef.current) return;
-
-        const embeddedStripe = stripe as EmbeddedCheckoutStripe;
-        const checkout = await embeddedStripe.createEmbeddedCheckoutPage({
-          clientSecret: session.clientSecret,
-          onComplete: () => {
-            window.location.assign("/account/api-keys/?checkout=success");
-          },
-        });
-        if (!active || !mountRef.current) {
-          checkout.destroy();
-          return;
-        }
-        checkoutRef.current = checkout;
-        checkout.mount(mountRef.current);
-        setLoading(false);
+        setPhase("code");
       } catch (caught) {
         if (!active) return;
-        if (caught instanceof CustomerApiError && caught.code === "subscription_checkout_conflict") {
-          setError("Your previous checkout is still being finalized. Try again in a moment; you will not be charged twice.");
-        } else {
-          setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
-        }
-        setLoading(false);
+        setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
+        setPhase("code");
       }
     }
 
-    void startCheckout();
+    void prepare();
     return () => {
       active = false;
-      checkoutRef.current?.destroy();
-      checkoutRef.current = null;
+      paymentElementRef.current?.destroy();
+      paymentElementRef.current = null;
     };
   }, []);
 
+  async function startPayment() {
+    const account = accountRef.current;
+    if (!account || !plan || phase === "creating") return;
+    setPhase("creating");
+    setError("");
+    setPayError("");
+    try {
+      const requestId = persistApiCheckoutRequestId(window.location, window.history, newRequestId);
+      const result = await customerApi<ElementsCheckoutResponse>(
+        API_BASE,
+        "/customer/subscriptions/elements-checkout",
+        {
+          method: "POST",
+          csrfToken: account.csrfToken,
+          body: JSON.stringify({
+            plan,
+            requestId,
+            ...(promoCode.trim() ? { promotionCode: promoCode.trim() } : {}),
+          }),
+        },
+      );
+      if (!result.paymentRequired) {
+        setPhase("free-done");
+        return;
+      }
+      if (!result.clientSecret) throw new Error("Stripe checkout did not return a secure payment session.");
+      const stripe = await loadStripe(PUBLISHABLE_KEY);
+      if (!stripe) throw new Error("Stripe checkout could not be loaded.");
+      stripeRef.current = stripe;
+      const elements = stripe.elements({
+        clientSecret: result.clientSecret,
+        appearance: { theme: "stripe", variables: { borderRadius: "12px" } },
+      });
+      elementsRef.current = elements;
+      const paymentElement = elements.create("payment", {
+        layout: "tabs",
+        wallets: { applePay: "never", googlePay: "never" },
+      });
+      paymentElementRef.current = paymentElement;
+      setPhase("pay");
+      // Mount after React renders the pay phase container.
+      requestAnimationFrame(() => {
+        if (mountRef.current) paymentElement.mount(mountRef.current);
+      });
+    } catch (caught) {
+      if (caught instanceof CustomerApiError && caught.code === "promotion_code_invalid") {
+        setError("That promotion code is not valid. Check it and try again, or continue without a code.");
+      } else if (caught instanceof CustomerApiError && caught.code === "subscription_already_exists") {
+        setError("This account already has a subscription. Manage it from your API account instead of starting a new one.");
+      } else {
+        setError(caught instanceof Error ? caught.message : "Checkout could not be started.");
+      }
+      setPhase("code");
+    }
+  }
+
+  async function confirmPayment() {
+    const stripe = stripeRef.current;
+    const elements = elementsRef.current;
+    if (!stripe || !elements || phase !== "pay") return;
+    setPhase("confirming");
+    setPayError("");
+    const result = await stripe.confirmPayment({
+      elements,
+      confirmParams: {
+        return_url: `${window.location.origin}/account/api-keys/?checkout=success`,
+      },
+      redirect: "if_required",
+    });
+    if (result.error) {
+      setPayError(result.error.message ?? "Payment could not be completed. Check your details and try again.");
+      setPhase("pay");
+      return;
+    }
+    if (result.paymentIntent && (result.paymentIntent.status === "succeeded" || result.paymentIntent.status === "processing")) {
+      window.location.replace("/account/api-keys/?checkout=success");
+      return;
+    }
+    setPayError("Payment is still being processed. If it does not complete, you can try again; you will not be charged twice.");
+    setPhase("pay");
+  }
+
   const details = plan ? PLAN_DETAILS[plan] : null;
+  const busy = phase === "preparing" || phase === "creating" || phase === "confirming";
 
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
@@ -166,26 +208,76 @@ export function EmbeddedApiCheckout() {
             <div className="mb-5 px-2 pt-2">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Secure payment</p>
               <h2 className="mt-2 text-2xl font-bold">Complete your SolveLang subscription</h2>
-              <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe.</p>
+              <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe. We accept cards and Link, processed securely by Stripe.</p>
             </div>
-            {loading ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
-            {error ? (
-              <div role="alert" className="mx-2 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
+
+            {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
+
+            {error && phase === "code" ? (
+              <div role="alert" className="mx-2 mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
                 <p>{error}</p>
+              </div>
+            ) : null}
+
+            {phase === "code" && details ? (
+              <div className="mx-2">
+                <label htmlFor="promo-code" className="text-sm font-semibold text-slate-700">Promotion code (optional)</label>
+                <input
+                  id="promo-code"
+                  type="text"
+                  value={promoCode}
+                  onChange={(event) => setPromoCode(event.target.value)}
+                  placeholder="Enter code"
+                  autoComplete="off"
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                />
+                <p className="mt-4 text-sm leading-6 text-slate-600">
+                  Total due today: <strong className="text-slate-950">{details.price}.00</strong>
+                  {promoCode.trim() ? " before any promotion discount is applied." : "."} Then {details.price}/month, renewing monthly until you cancel. Cancel anytime in your subscription account; cancellation stops renewal at the current period end.
+                </p>
                 <button
                   type="button"
-                  className="mt-4 rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  onClick={() => {
-                    const params = new URLSearchParams(window.location.search);
-                    params.set("request_id", newRequestId());
-                    window.location.replace(`/account/api-checkout/?${params.toString()}`);
-                  }}
+                  disabled={busy}
+                  onClick={() => void startPayment()}
+                  className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
-                  Try secure checkout again
+                  Continue to payment
                 </button>
               </div>
             ) : null}
-            <div ref={mountRef} className={loading || error ? "hidden" : "block"} aria-label="Secure Stripe subscription checkout" />
+
+            {phase === "creating" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Preparing your secure payment form…</div> : null}
+
+            {phase === "free-done" ? (
+              <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
+                <p>Your {details?.name} subscription is active. No payment was due — your promotion code covered the first period in full.</p>
+                <Link href="/account/api-keys/" className="mt-4 inline-block rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                  Go to your API account
+                </Link>
+              </div>
+            ) : null}
+
+            {(phase === "pay" || phase === "confirming") && details ? (
+              <div className="mx-2">
+                <div ref={mountRef} aria-label="Secure Stripe payment form" />
+                {payError ? (
+                  <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+                    <p>{payError}</p>
+                  </div>
+                ) : null}
+                <p className="mt-5 text-sm leading-6 text-slate-600">
+                  Total due today: <strong className="text-slate-950">{details.price}.00</strong>. Then {details.price}/month, renewing monthly until you cancel. Cancel anytime in your subscription account; cancellation stops renewal at the current period end.
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void confirmPayment()}
+                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {phase === "confirming" ? "Processing…" : `Subscribe and pay ${details.price}.00`}
+                </button>
+              </div>
+            ) : null}
           </section>
         </div>
       </div>
