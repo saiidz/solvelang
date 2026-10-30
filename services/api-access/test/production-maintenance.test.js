@@ -300,3 +300,11 @@ test('maintenance projection stamps resolved origins into condition-wrapped depl
  noOrigins.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={allowMethods:['GET'],allowHeaders:['authorization']};
  assert.throws(()=>projectMaintenanceTemplate(noOrigins,buildCompiled(originArrayDisable),disableOptions),/no explicit origin list \(found keys: allowHeaders, allowMethods/);
 });
+
+test('maintenance origin baseline failure names the observed deployed origins',()=>{
+ const body=(cors)=>({openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':cors});
+ const before={Parameters:{},Resources:{ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:body({allowOrigins:['https://example.com'],allowMethods:['GET']})}}}};
+ const after=structuredClone(before);
+ after.Resources.ApiAccessHttpApi.Properties.Body=body({allowOrigins:['https://www.solve-lang.com'],allowMethods:['GET']});
+ assert.throws(()=>assertTemplateBoundary(before,after,{siteOrigin:'https://www.solve-lang.com',currentStudioAcceptanceOrigin:previewOrigin,studioAcceptanceOriginAction:'disable'}),/changes the existing API Gateway origin \(observed condition: none; observed variant origins: .*example\.com/);
+});
