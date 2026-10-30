@@ -263,7 +263,7 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
     && canonical(beforeVariants.variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
     && canonical(beforeVariants.variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
   if (!baselineConditional && !beforeVariants.variants.every(variant => originsMatchBaseline(variant.allowOrigins))) {
-    throw new Error('Maintenance changes the existing API Gateway origin.');
+    throw new Error(`Maintenance changes the existing API Gateway origin (observed condition: ${beforeVariants.condition ?? 'none'}; observed variant origins: ${beforeVariants.variants.map(variant => canonical(variant.allowOrigins)).join(' | ')}).`);
   }
   const withoutOrigins = variant => { const copy = structuredClone(variant); delete copy.allowOrigins; return copy; };
   const beforeSettings = beforeVariants.variants.map(withoutOrigins);
@@ -282,7 +282,7 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   const exactLiteralOrigins = siteOrigin ? [siteOrigin, ...(resolvedAcceptanceOrigin ? [resolvedAcceptanceOrigin] : [])] : undefined;
   if (!compiledOriginRequestMatches(afterVariants.variants, afterVariants.condition, {siteOrigin, studioAcceptanceOrigin,
     currentStudioAcceptanceOrigin, studioAcceptanceOriginAction}) || afterVariants.originOnly) {
-    throw new Error('Maintenance adds an unexpected API Gateway CORS origin.');
+    throw new Error(`Maintenance adds an unexpected API Gateway CORS origin (observed condition: ${afterVariants.condition ?? 'none'}; observed variant origins: ${afterVariants.variants.map(variant => canonical(variant.allowOrigins)).join(' | ')}).`);
   }
 }
 function stripAcceptanceRootTransition(left, right, {rollback = false} = {}) {
