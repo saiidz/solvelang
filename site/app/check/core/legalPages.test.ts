@@ -30,7 +30,7 @@ test("Terms and Refund Policy pages contain their required customer-facing headi
   assert.match(terms, /legalContent/);
   assert.match(refundPolicy, /legalContent/);
   assert.match(legalContent, /UPCOMINGSOUNDS S\.R\.L\./);
-  assert.match(legalContent, /2026-09-27-v3/);
+  assert.match(legalContent, /2026-10-27-v4/);
   assert.match(legalContent, /API subscriptions renew monthly until canceled/);
   assert.match(legalContent, /API subscription cancellation and refunds/);
   assert.match(legalContent, /does not automatically refund/);
@@ -117,9 +117,9 @@ test("Romanian legal routes, withdrawal flow, and current ANPC SAL asset are pre
     source("app/(english)/landing/page.tsx"),
     source("app/sitemap.ts"),
   ]);
-  assert.match(romanianLegal, /verificare juridica si a proprietarului/);
+  assert.match(romanianLegal, /J2026027621002/);
   assert.match(localizedPage, /RomanianLegalDraft/);
-  assert.equal(existsSync(path.join(siteRoot, "app/ro")), false);
+  assert.equal(existsSync(path.join(siteRoot, "app/ro")), true);
   assert.doesNotMatch(sitemap, /\/ro\/(terms|refund-policy|preflight-privacy|withdraw)\//);
   assert.match(withdraw, /WithdrawalRequestClient/);
   assert.match(landing, /anpc-sal-pictogram\.png/);

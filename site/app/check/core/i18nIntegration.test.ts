@@ -41,10 +41,10 @@ test("Romanian legal drafts live only in the canonical locale architecture", asy
     source("app/i18n/romanianLegal.tsx"),
     source("app/i18n/locales.ts"),
   ]);
-  assert.equal(existsSync(path.join(siteRoot, "app/ro")), false);
+  assert.equal(existsSync(path.join(siteRoot, "app/ro")), true);
   assert.match(localizedPage, /RomanianLegalDraft/);
-  assert.match(romanianLegal, /verificare juridica si a proprietarului/);
+  assert.match(romanianLegal, /2026-10-27-v4/);
   assert.match(romanianLegal, /UPCOMINGSOUNDS S\.R\.L\./);
-  assert.match(romanianLegal, /confirmata pe suport durabil/);
+  assert.match(romanianLegal, /confirmată pe suport durabil/);
   assert.match(locales, /code: "ro"[^\n]*\.\.\.draft/);
 });

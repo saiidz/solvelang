@@ -1,30 +1,253 @@
 {
-  "termsVersion": "2026-09-27-v3",
-  "operator": "UPCOMINGSOUNDS S.R.L., Romania",
+  "termsVersion": "2026-10-27-v4",
+  "operator": "UPCOMINGSOUNDS S.R.L., Str. Nerva Traian nr. 27-33, Birou 6, Scara B, Etaj 1, Sector 3, Bucharest, Romania",
   "supportEmail": "hello@solve-lang.com",
   "terms": [
-    ["Acceptance, eligibility, and operator", ["These Terms of Use (Terms) govern use of SolveLang. By using SolveLang or purchasing a Workflow Preflight report, you agree to these Terms. You must be able to enter into a binding agreement or use the service with permission from a parent, guardian, or authorized organization representative.", "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). These Terms are effective as of version 2026-09-27-v3. Contact the Operator at hello@solve-lang.com. The separate Workflow Preflight one-time checkout remains gated pending its own delivery and confirmation checks. Current API subscription availability is described on the API Pricing page."]],
-    ["Automated outputs and customer review", ["SolveLang provides automated workflow analysis, reports, digital entitlements, requests, credits, and related services. Available features may change, and some features may be previews or limited releases.", "Reports and other automated outputs may be incomplete, inaccurate, outdated, or unsuitable for a particular workflow. They are informational only and are not legal, financial, tax, cybersecurity, compliance, medical, or other professional advice. You must independently review outputs before changing production systems."]],
-    ["No guarantees", ["To the maximum extent permitted by applicable law, SolveLang does not guarantee uninterrupted availability, accuracy, completeness, compatibility, security, revenue, savings, business outcomes, or detection of every defect, vulnerability, or workflow problem."]],
-    ["Your responsibilities", ["You are responsible for backups, permissions, credential security, and ensuring that you have lawful authority over submitted material. You are also responsible for regulatory compliance and for reviewing and testing any workflow change before deployment."]],
-    ["Prohibited conduct", ["You may not submit malware, unlawful content, secrets, unauthorized personal data, or confidential data that you are not authorized to provide. You may not abuse, attack, scrape, or create excessive automated traffic; bypass payment, entitlement, Turnstile, or other security controls; reverse engineer where legally restrictable; or resell or transfer the service or purchased reports without permission."]],
-    ["Third-party services", ["SolveLang may rely on Stripe, Cloudflare, AWS, GitHub, n8n, and other integrations. Their services, terms, privacy practices, availability, and outages are governed by their own terms and are outside the Operator's reasonable control."]],
-    ["Intellectual property and license", ["SolveLang and its content are protected by applicable intellectual-property laws. Subject to these Terms and payment where required, the Operator grants you a limited, revocable, non-transferable license to use a purchased report for your personal or internal business purpose. No ownership is transferred."]],
-    ["API subscriptions", ["SolveLang API Developer, Pro, and Business subscriptions are processed by Stripe and renew monthly until canceled. The plan price and billing period are shown before payment. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment. The Operator and merchant is UPCOMINGSOUNDS S.R.L.; the payment statement may show UPCOMINGSOUNDS S.R.L.", "You can schedule cancellation in the SolveLang subscription account. Cancellation stops renewal at the end of the current billing period; access during the remainder of that period remains subject to the subscription status and entitlement gates. Plan changes may take effect immediately and Stripe may calculate prorations. A scheduled cancellation does not itself issue a refund.", "API plan credits and key limits apply only to the documented repository-audit scope. Purchasing an API subscription does not enable paid priority lanes, provider-backed execution, or general managed workflow execution."]],
-    ["Workflow Preflight payments and immediate digital performance", ["Workflow Preflight payments are processed by Stripe. That one-time purchase may start automated processing and digital delivery immediately after you give the required express consent, immediate-performance request, and withdrawal acknowledgement. The applicable Refund Policy is incorporated into these Terms by reference. A durable contract confirmation must be safely queued before a purchased report can be recovered."]],
-    ["Tokens, credits, entitlements, and requests", ["Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. API subscription allowances are limited to the plan and current entitlement gates described on the API Pricing page."]],
-    ["Suspension and termination", ["The Operator may suspend or terminate access for fraud, abuse, chargebacks, unlawful activity, or a security risk. This does not limit mandatory consumer rights."]],
-    ["Warranty disclaimer", ["To the maximum extent permitted by applicable law, SolveLang is provided on an as-is and as-available basis without warranties of any kind. Mandatory consumer rights and liabilities that cannot legally be excluded remain unaffected."]],
-    ["Consumer remedies and business liability", ["Consumers retain all mandatory statutory remedies, including remedies for failure to supply, lack of conformity, unauthorised payments, duplicate charges, and any right that cannot lawfully be excluded or limited. Nothing in these Terms limits liability for fraud, wilful misconduct, gross negligence, death or personal injury, or any other liability that cannot legally be limited.", "For business users only, and only to the maximum extent permitted by applicable law, the Operator is not liable for indirect, incidental, special, consequential, lost-profit, lost-data, or business-interruption damages. For an affected business purchase, the Operator's total aggregate liability is limited to the greater of the amount actually paid for that purchase or USD $49. This section does not limit mandatory consumer rights."]],
-    ["Business-user indemnity", ["Where legally permitted, business users will indemnify the Operator for third-party claims arising from their unlawful submissions, misuse of the service, or breach of these Terms. This does not remove or limit mandatory consumer rights."]],
-    ["Governing law and consumers", ["These Terms are governed by Romanian law. Consumers retain mandatory protections and may bring claims in courts available in their country of residence where applicable law requires."]],
-    ["Changes, severability, and entire agreement", ["The Operator may update these Terms for future use by publishing a new effective version. If part of these Terms is unenforceable, the remaining provisions continue to apply. These Terms and the Refund Policy are the entire agreement for the relevant service, except where mandatory law provides otherwise."]]
+    [
+      "Acceptance, eligibility, and operator",
+      [
+        "These Terms of Use (Terms) govern use of SolveLang. By using SolveLang or purchasing a Workflow Preflight report, you agree to these Terms. You must be at least 16 years old and able to enter into a binding agreement, or use the service with permission from a parent, guardian, or authorized organization representative.",
+        "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). Registered office: Str. Nerva Traian nr. 27-33, Birou 6, Scara B, Etaj 1, Sector 3, Bucharest, Romania. Trade Registry number J2026027621002. Fiscal code (CUI) 54564122. European unique identifier (EUID) ROONRC.J2026027621002. The Operator is not registered for VAT in Romania. Contact the Operator at hello@solve-lang.com or +1 786-420-3128. These Terms are effective as of version 2026-10-27-v4.",
+        "These Terms are available in English and Romanian. For consumers in Romania, the Romanian version prevails. The separate Workflow Preflight one-time checkout remains gated pending its own delivery and confirmation checks. Current API subscription availability is described on the API Pricing page."
+      ]
+    ],
+    [
+      "Automated outputs and customer review",
+      [
+        "SolveLang provides automated workflow analysis, reports, digital entitlements, requests, credits, and related services. Available features may change, and some features may be previews or limited releases.",
+        "Reports and other automated outputs may be incomplete, inaccurate, outdated, or unsuitable for a particular workflow. They are informational only and are not legal, financial, tax, cybersecurity, compliance, medical, or other professional advice. You must independently review outputs before changing production systems."
+      ]
+    ],
+    [
+      "Your content and intellectual property",
+      [
+        "You own your workflows, code, Solve Graph data, and any other material you submit to SolveLang (Your Content), and you own the reports and analysis outputs generated for you from Your Content. No ownership of Your Content or of your outputs is transferred to the Operator.",
+        "You grant the Operator a limited licence to process Your Content only as needed to provide the service you requested, to secure it, and to comply with the law. The Operator does not sell Your Content and does not use Your Content or your outputs to train artificial intelligence or machine learning models.",
+        "Hosted remote analysis is designed to process submitted workflow or graph data in memory and does not intentionally persist raw workflow or graph payloads. Ordinary security and abuse-prevention logs that may contain request metadata are kept for no more than 30 days unless a longer period is required for an active security investigation or by law.",
+        "SolveLang and its content are protected by applicable intellectual-property laws. Subject to these Terms and payment where required, the Operator grants you a limited, revocable, non-transferable license to use a purchased report for your personal or internal business purpose. If you give feedback about SolveLang, the Operator may use it without restriction or payment to you."
+      ]
+    ],
+    [
+      "No guarantees",
+      [
+        "To the maximum extent permitted by applicable law, SolveLang does not guarantee uninterrupted availability, accuracy, completeness, compatibility, security, revenue, savings, business outcomes, or detection of every defect, vulnerability, or workflow problem. SolveLang does not offer a service-level agreement or an uptime commitment unless a separate written agreement with the Operator says so."
+      ]
+    ],
+    [
+      "Digital service conformity, updates, and changes to the service",
+      [
+        "For consumers, the Operator must supply the digital service as described and keep it in conformity for the whole supply period of a subscription. The Operator will inform you of, and supply, updates, including security updates, that are necessary to keep the service in conformity during your subscription.",
+        "If the service fails to conform, consumers have the statutory remedies: bringing the service into conformity free of charge within a reasonable time not exceeding 15 calendar days from being informed, a proportionate price reduction for the non-conforming period, or termination where the law allows it. Nothing in these Terms removes or reduces those remedies.",
+        "The Operator may modify the service beyond what conformity requires only where these Terms allow it for a valid reason, such as security, legal compliance, technical improvement, or cost changes outside the Operator's control, and at no additional cost to you. Where a modification negatively affects your access to or use of the service beyond a minor impact, the Operator will inform you in advance on a durable medium, and you may terminate the subscription free of charge within 30 days of receiving that information or of the modification, whichever is later."
+      ]
+    ],
+    [
+      "Your responsibilities",
+      [
+        "You are responsible for backups, permissions, credential security, and ensuring that you have lawful authority over submitted material. You are also responsible for regulatory compliance and for reviewing and testing any workflow change before deployment."
+      ]
+    ],
+    [
+      "Prohibited conduct",
+      [
+        "You may not submit malware, unlawful content, secrets, unauthorized personal data, or confidential data that you are not authorized to provide. You may not abuse, attack, scrape, or create excessive automated traffic; bypass payment, entitlement, Turnstile, or other security controls; reverse engineer where legally restrictable; or resell or transfer the service or purchased reports without permission. The Acceptable Use Policy published on the SolveLang website is part of these Terms."
+      ]
+    ],
+    [
+      "Third-party services",
+      [
+        "SolveLang may rely on Stripe, Cloudflare, AWS, GitHub, n8n, and other integrations. Their services, terms, privacy practices, availability, and outages are governed by their own terms and are outside the Operator's reasonable control. The companies that process personal data on the Operator's behalf are listed on the Subprocessors page of the SolveLang website."
+      ]
+    ],
+    [
+      "Data protection and processing",
+      [
+        "How the Operator collects and uses personal data is described in the Privacy Policy. Where the Operator processes personal data on behalf of a business customer, the Data Processing Addendum published on the SolveLang website applies and forms part of these Terms for that customer."
+      ]
+    ],
+    [
+      "API subscriptions",
+      [
+        "SolveLang API Developer, Pro, and Business subscriptions are processed by Stripe and renew monthly until canceled. The plan price and billing period are shown before payment. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment. The Operator and merchant is UPCOMINGSOUNDS S.R.L.; the payment statement may show UPCOMINGSOUNDS S.R.L.",
+        "Prices are in US dollars. The Operator is not registered for VAT in Romania and does not add Romanian VAT to its prices. Where a tax legally applies to your purchase, it is calculated and shown by Stripe at checkout before you confirm payment.",
+        "You can schedule cancellation in the SolveLang subscription account. Cancellation stops renewal at the end of the current billing period; access during the remainder of that period remains subject to the subscription status and entitlement gates. Plan changes may take effect immediately and Stripe may calculate prorations. A scheduled cancellation does not itself issue a refund.",
+        "Consumers in the EU and EEA normally have a 14-day right to withdraw from a subscription contract, as described in the Refund Policy. If you expressly request that the subscription begins immediately and then withdraw within the withdrawal period, you pay a proportionate amount for the part of the service already supplied.",
+        "API plan credits and key limits apply only to the documented repository-audit scope. Purchasing an API subscription does not enable paid priority lanes, provider-backed execution, or general managed workflow execution."
+      ]
+    ],
+    [
+      "Workflow Preflight payments and immediate digital performance",
+      [
+        "Workflow Preflight payments are processed by Stripe. That one-time purchase may start automated processing and digital delivery immediately after you give the required express consent, immediate-performance request, and withdrawal acknowledgement. The applicable Refund Policy is incorporated into these Terms by reference. A durable contract confirmation must be safely queued before a purchased report can be recovered."
+      ]
+    ],
+    [
+      "Tokens, credits, entitlements, and requests",
+      [
+        "Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. API subscription allowances are limited to the plan and current entitlement gates described on the API Pricing page."
+      ]
+    ],
+    [
+      "Suspension and termination",
+      [
+        "The Operator may suspend or terminate access for fraud, abuse, chargebacks, unlawful activity, or a security risk, giving notice where it is reasonable to do so. You may terminate your subscription at any time as described in the API subscriptions section, and consumers keep their statutory withdrawal and termination rights at all times. This does not limit mandatory consumer rights.",
+        "When a contract ends, you may request an export of Your Content that the service holds for you, free of charge, in a commonly used machine-readable format, as described in the Privacy Policy and, for business customers, the Data Processing Addendum."
+      ]
+    ],
+    [
+      "Warranty disclaimer",
+      [
+        "To the maximum extent permitted by applicable law, SolveLang is provided on an as-is and as-available basis without warranties of any kind. Mandatory consumer rights and liabilities that cannot legally be excluded remain unaffected."
+      ]
+    ],
+    [
+      "Consumer remedies and business liability",
+      [
+        "Consumers retain all mandatory statutory remedies, including remedies for failure to supply, lack of conformity, unauthorised payments, duplicate charges, and any right that cannot lawfully be excluded or limited. Nothing in these Terms limits liability for fraud, wilful misconduct, gross negligence, death or personal injury, or any other liability that cannot legally be limited.",
+        "For business users only, and only to the maximum extent permitted by applicable law, the Operator is not liable for indirect, incidental, special, consequential, lost-profit, lost-data, or business-interruption damages. The Operator's total aggregate liability to a business user is limited to the fees that user paid to the Operator in the 12 months immediately before the event giving rise to the claim; for a one-time purchase, it is limited to the amount paid for that purchase. These limits do not apply to the Operator's indemnity obligations. This section does not limit mandatory consumer rights."
+      ]
+    ],
+    [
+      "Business-user indemnity",
+      [
+        "Where legally permitted, business users will indemnify the Operator for third-party claims arising from their unlawful submissions, misuse of the service, or breach of these Terms. The Operator will indemnify business users for third-party claims that the service, as provided by the Operator and used as these Terms permit, infringes intellectual-property rights. This does not remove or limit mandatory consumer rights."
+      ]
+    ],
+    [
+      "Governing law, disputes, and consumer ADR",
+      [
+        "These Terms are governed by Romanian law. Consumers retain mandatory protections and may bring claims in courts available in their country of residence where applicable law requires. For business users, disputes are subject to the courts of Bucharest, Romania.",
+        "If you are a consumer, please contact hello@solve-lang.com first so we can try to resolve your complaint directly. Consumers in Romania may also use the alternative dispute resolution procedure of the National Authority for Consumer Protection (ANPC), Direcția SAL, free of charge: see https://anpc.ro/ce-este-sal/ and the SAL platform at https://reclamatiisal.anpc.ro. Nothing in this section removes your right to go to court."
+      ]
+    ],
+    [
+      "Changes, severability, and entire agreement",
+      [
+        "The Operator may update these Terms for valid reasons, such as changes in law, security, or the service itself. Material changes are published with a new effective version and, for subscribers and consumers, notified at least 30 days before they take effect; if a material change negatively affects you, you may terminate your subscription free of charge before the change takes effect. Changes do not affect a billing period already paid for. Price changes apply only from the next renewal after notification, and you may cancel before the new price applies. If part of these Terms is unenforceable, the remaining provisions continue to apply. These Terms and the Refund Policy are the entire agreement for the relevant service, except where mandatory law provides otherwise."
+      ]
+    ]
   ],
   "refundPolicy": [
-    ["API subscription cancellation and refunds", ["API subscriptions renew monthly until canceled. Schedule cancellation in your SolveLang subscription account to stop renewal at the end of the current billing period. Scheduling cancellation does not automatically refund a paid period or end access immediately; access still depends on the subscription status and entitlement gates.", "For a duplicate or unauthorized charge, a verified failure to supply the subscribed service, or any refund or remedy required by law, contact hello@solve-lang.com for review. No statement here removes statutory withdrawal rights or other mandatory consumer remedies. The Workflow Preflight digital-report rules in this policy apply to that separate one-time product, not automatically to API subscriptions."]],
-    ["Digital service rule", ["Workflow Preflight is an automated digital report delivered immediately after successful payment. Where a purchase is legally treated as digital content not supplied on a tangible medium, the withdrawal position depends on the required express consent, acknowledgement, and durable confirmation. Where it is legally treated as a service, the rules applicable to services and full performance apply. These classifications are not used to remove any mandatory consumer right."]],
-    ["When refunds may be available", ["Refunds may still be provided for a duplicate charge, a verified technical failure by SolveLang to deliver the purchased service, a fraudulent or unauthorized charge handled under applicable payment rules, a refund required by applicable law, or another exception expressly approved by SolveLang."]],
-    ["When refunds are generally not available", ["For a delivered Workflow Preflight report, refunds are generally not provided merely because an automated finding is unsatisfactory, a workflow is unsupported or malformed, or the report is not used. This commercial policy does not override statutory withdrawal rights, mandatory remedies for failure to supply or lack of conformity, unauthorised-payment protections, duplicate-charge remedies, or any other right required by law."]],
-    ["EU and EEA consumer information", ["Consumers may normally have statutory withdrawal rights. For Workflow Preflight, its checkout asks you to expressly request immediate performance and delivery and acknowledge the applicable digital-content or service consequences. A withdrawal right is not treated as lost unless the legal conditions for the applicable product classification are met. Mandatory consumer rights remain unaffected."]]
+    [
+      "API subscription cancellation and refunds",
+      [
+        "API subscriptions renew monthly until canceled. Schedule cancellation in your SolveLang subscription account to stop renewal at the end of the current billing period. Scheduling cancellation does not automatically refund a paid period or end access immediately; access still depends on the subscription status and entitlement gates.",
+        "For a duplicate or unauthorized charge, a verified failure to supply the subscribed service, or any refund or remedy required by law, contact hello@solve-lang.com for review. No statement here removes statutory withdrawal rights or other mandatory consumer remedies. The Workflow Preflight digital-report rules in this policy apply to that separate one-time product, not automatically to API subscriptions."
+      ]
+    ],
+    [
+      "Digital service rule",
+      [
+        "Workflow Preflight is an automated digital report delivered immediately after successful payment. Where a purchase is legally treated as digital content not supplied on a tangible medium, the withdrawal position depends on the required express consent, acknowledgement, and durable confirmation. Where it is legally treated as a service, the rules applicable to services and full performance apply. These classifications are not used to remove any mandatory consumer right."
+      ]
+    ],
+    [
+      "When refunds may be available",
+      [
+        "Refunds may still be provided for a duplicate charge, a verified technical failure by SolveLang to deliver the purchased service, a fraudulent or unauthorized charge handled under applicable payment rules, a refund required by applicable law, or another exception expressly approved by SolveLang."
+      ]
+    ],
+    [
+      "When refunds are generally not available",
+      [
+        "For a delivered Workflow Preflight report, refunds are generally not provided merely because an automated finding is unsatisfactory, a workflow is unsupported or malformed, or the report is not used. This commercial policy does not override statutory withdrawal rights, mandatory remedies for failure to supply or lack of conformity, unauthorised-payment protections, duplicate-charge remedies, or any other right required by law."
+      ]
+    ],
+    [
+      "EU and EEA consumer information",
+      [
+        "Consumers in the EU and EEA normally have a statutory right to withdraw from a distance contract within 14 days of its conclusion, without giving a reason. You can withdraw using the withdrawal function in your account, the withdrawal form on this website, or any other clear statement sent to hello@solve-lang.com.",
+        "For an API subscription: if you expressly requested that the service begin during the withdrawal period and then withdraw, you pay an amount proportionate to what was supplied up to the withdrawal, calculated on the agreed price. You owe nothing for a period in which the required express request, information, or confirmation was not properly given. Approved reimbursements are made without undue delay and no later than 14 days after we are informed of the withdrawal, using the same means of payment, unless you expressly agree otherwise.",
+        "For Workflow Preflight, its checkout asks you to expressly request immediate performance and delivery and acknowledge the applicable digital-content or service consequences. A withdrawal right is not treated as lost unless the legal conditions for the applicable product classification are met.",
+        "After withdrawal or termination, you may request the content you provided or created through the service, free of charge, in a commonly used machine-readable format, and we will not use that content except as the law permits. Mandatory consumer rights remain unaffected."
+      ]
+    ]
+  ],
+  "dataProcessing": [
+    [
+      "Scope and roles",
+      [
+        "This Data Processing Addendum (Addendum) applies where UPCOMINGSOUNDS S.R.L. (Operator) processes personal data on behalf of a business customer (Controller) through the SolveLang API, hosted MCP, or plugin services. It forms part of the Terms of Use for that customer. The Operator processes personal data only on the Controller's documented instructions, which are: to provide the requested analysis and related account, security, and support functions."
+      ]
+    ],
+    [
+      "Subject matter and data",
+      [
+        "Processing covers account identifiers and contact details of the Controller's authorised users, request metadata, and any personal data contained in workflow or graph payloads the Controller chooses to submit. Hosted remote analysis processes payload data in memory and does not intentionally persist raw payloads. Processing lasts for the duration of the customer's contract, after which personal data processed on the Controller's behalf is deleted or returned at the Controller's choice, subject to legal retention duties."
+      ]
+    ],
+    [
+      "Operator obligations",
+      [
+        "The Operator will: process personal data only on documented instructions from the Controller, unless EU or Romanian law requires otherwise, in which case the Operator will inform the Controller unless the law prohibits it; ensure that persons authorised to process the data are bound by confidentiality; implement appropriate technical and organisational security measures; assist the Controller, taking into account the nature of the processing, with data-subject requests and with security, breach-notification, impact-assessment, and prior-consultation duties; notify the Controller without undue delay after becoming aware of a personal-data breach affecting the Controller's data; and make available the information reasonably necessary to demonstrate compliance with this Addendum."
+      ]
+    ],
+    [
+      "Sub-processors",
+      [
+        "The Controller gives general authorisation for the Operator to use the sub-processors listed on the Subprocessors page of the SolveLang website. The Operator will give at least 30 days' notice of an intended addition or replacement of a sub-processor, during which the Controller may object on reasonable data-protection grounds. The Operator remains responsible for its sub-processors' performance of the data-protection obligations in this Addendum."
+      ]
+    ],
+    [
+      "International transfers",
+      [
+        "Where processing involves a transfer of personal data outside the European Economic Area, the transfer will rely on an adequacy decision or on the European Commission's standard contractual clauses, which are incorporated into this Addendum for that transfer."
+      ]
+    ],
+    [
+      "Audit and precedence",
+      [
+        "On reasonable notice, the Operator will provide the records and information needed for the Controller's audit of this Addendum, proportionate to the scale of processing. If there is a conflict between this Addendum and the Terms of Use about personal data processed on behalf of a business customer, this Addendum prevails for that processing."
+      ]
+    ]
+  ],
+  "subprocessors": [
+    [
+      "Amazon Web Services, Inc. (AWS)",
+      "Cloud hosting, compute, storage, and email delivery (SES) for the SolveLang API and website infrastructure.",
+      "United States (us-east-2)"
+    ],
+    [
+      "Stripe, Inc. and Stripe Payments Europe, Limited",
+      "Payment processing, subscription billing, invoicing, and fraud prevention for purchases.",
+      "Ireland and the United States"
+    ],
+    [
+      "Cloudflare, Inc.",
+      "DNS, content delivery, website security, and bot management (including Turnstile).",
+      "Global network; data processed in the region required to deliver the service"
+    ]
+  ],
+  "acceptableUse": [
+    [
+      "Purpose",
+      [
+        "This Acceptable Use Policy is part of the SolveLang Terms of Use. It describes conduct that is not allowed when using SolveLang, including the website, Workflow Preflight, Workflow Studio, the API, and hosted MCP and plugin integrations."
+      ]
+    ],
+    [
+      "Illegal and harmful use",
+      [
+        "You may not use SolveLang to violate any applicable law, to infringe the rights of others, or to plan or facilitate unlawful activity. You may not submit malware, exploit code intended to harm third-party systems, or content you have no lawful right to provide."
+      ]
+    ],
+    [
+      "Secrets and personal data",
+      [
+        "Do not submit passwords, access tokens, private keys, or other secrets, and do not submit personal data that you are not authorised to provide. SolveLang is designed to analyse workflow structure, not to receive credentials or unrelated personal information."
+      ]
+    ],
+    [
+      "Abuse of the service",
+      [
+        "You may not attack, probe, or disrupt SolveLang or its providers; scrape or create excessive automated traffic outside the documented API limits; share, sell, or transfer API keys or accounts; bypass payment, entitlement, rate-limit, Turnstile, or other security or access controls; or use purchased reports or subscriptions for the benefit of third parties except as the Terms permit."
+      ]
+    ],
+    [
+      "Enforcement",
+      [
+        "The Operator may warn, suspend, or terminate access for a breach of this policy, proportionately to the risk involved, and will give notice where it is reasonable to do so. Enforcement under this policy does not limit mandatory consumer rights."
+      ]
+    ]
   ]
 }
