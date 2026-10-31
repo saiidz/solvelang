@@ -319,7 +319,13 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   const entitlementTerms = await readFile(path.join(root, "services/entitlements/src/terms.ts"), "utf8");
   const termsPage = await readFile(path.join(root, "site/app/(english)/terms/page.tsx"), "utf8");
   const refundPolicyPage = await readFile(path.join(root, "site/app/(english)/refund-policy/page.tsx"), "utf8");
-  const legalChecklist = await readFile(path.join(root, "docs/checkout-legal-owner-checklist.md"), "utf8");
+  // The legal owner checklist lives in the private saiidz/solvelang-ops repo.
+  // Point SOLVELANG_OPS_ROOT at a local ops checkout to evaluate its marker;
+  // without one the marker counts as not verified (fail closed).
+  const opsRoot = process.env.SOLVELANG_OPS_ROOT;
+  const legalChecklist = opsRoot
+    ? await readFile(path.join(opsRoot, "docs/checkout-legal-owner-checklist.md"), "utf8").catch(() => "")
+    : "";
   const turnstileGateway = await readFile(path.join(root, "services/entitlements/src/turnstile.ts"), "utf8");
   const healthRoute = /method\s*===\s*["']GET["'][\s\S]*\/health/.test(entitlementService)
     && /status:\s*["']ok["'],\s*service:\s*["']solvelang-entitlements["'],\s*mode:\s*config\.mode/.test(entitlementService)

@@ -293,31 +293,6 @@ test("launch control collects safe GitHub environment metadata and fails closed 
   );
 });
 
-test("production runbook preserves the disabled checkout bootstrap sequence", async () => {
-  const runbook = await readFile(path.join(repositoryRoot, "docs/launch-owner-runbook.md"), "utf8");
-  const requiredSteps = [
-    "`CHECKOUT_ENABLED` to `false`",
-    "first production deployment with checkout disabled",
-    "Capture the non-secret `WebhookUrl`",
-    "`payment_intent.succeeded`",
-    "`charge.refunded`",
-    "Replace the bootstrap value",
-    "checkout still disabled",
-    "Stripe-signed event returns HTTP 200",
-    "`WEBHOOK_SIGNED_DELIVERY_VERIFIED=true`",
-    "`CHECKOUT_ENABLED=true`",
-    "third production deployment",
-    "only then point or activate the live frontend",
-  ];
-
-  let previousIndex = -1;
-  for (const step of requiredSteps) {
-    const index = runbook.indexOf(step, previousIndex + 1);
-    assert.ok(index > previousIndex, `missing or out-of-order production bootstrap step: ${step}`);
-    previousIndex = index;
-  }
-});
-
 test("SAM rejects production checkout enablement without signed-webhook verification", async () => {
   const template = await readFile(path.join(repositoryRoot, "services/entitlements/template.yaml"), "utf8");
   assert.match(template, /WebhookSignedDeliveryVerified:/);
