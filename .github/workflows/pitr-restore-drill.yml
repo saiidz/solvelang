@@ -1,0 +1,83 @@
+name: PITR Restore Drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      execute_drill:
+        description: Execute the restore drill on the named source table (false inventories the deployed PITR status of every production table only)
+        required: true
+        default: false
+        type: boolean
+      source_table:
+        description: Exact production table name to restore into a throwaway drill table; required only when execute_drill is true
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  id-token: write
+
+jobs:
+  drill:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: services/api-access
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: ${{ vars.API_ACCESS_STACK_NAME }}
+      ENTITLEMENT_STACK_NAME: ${{ vars.ENTITLEMENT_STACK_NAME }}
+      EXECUTE_DRILL: ${{ inputs.execute_drill }}
+      SOURCE_TABLE: ${{ inputs.source_table }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require main and the existing production stack
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$STACK_NAME" == solvelang-api-access-production ]]
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wait for earlier production deployment requests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/wait-for-production-deployment-turn.mjs
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          for f in "$RUNNER_TEMP/aws/install" "$RUNNER_TEMP/aws/dist/aws" "$RUNNER_TEMP/aws/dist/aws_completer"; do
+            if [[ -f "$f" ]]; then chmod +x "$f"; fi
+          done
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
+      - name: Validate candidate
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+      - name: Assume protected production deployment role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Run PITR inventory or restore drill
+        run: node scripts/pitr-restore-drill.mjs
+      - name: Record drill scope
+        run: |
+          {
+            echo "## PITR restore drill"
+            echo "- Commit: $GITHUB_SHA"
+            echo "- Execute requested: $EXECUTE_DRILL"
+            echo "- Source table: ${SOURCE_TABLE:-<inventory only>}"
+            echo "- Inventory mode changes nothing. Execute mode restores one PITR-enabled table into a throwaway pitr-drill- table, verifies it, and deletes it in the same run."
+            echo "- Source tables, stacks, parameters, and feature flags are never modified."
+          } >> "$GITHUB_STEP_SUMMARY"
