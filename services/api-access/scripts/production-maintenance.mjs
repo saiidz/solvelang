@@ -262,8 +262,16 @@ function assertApiCorsOriginOnly(beforeBody, afterBody, {
   const baselineConditional = beforeVariants.condition === acceptanceCondition
     && canonical(beforeVariants.variants[0].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }, { Ref: acceptanceParameter }])
     && canonical(beforeVariants.variants[1].allowOrigins) === canonical([{ Ref: 'SiteOrigin' }]);
-  if (!baselineConditional && !beforeVariants.variants.every(variant => originsMatchBaseline(variant.allowOrigins))) {
-    throw new Error(`Maintenance changes the existing API Gateway origin (observed condition: ${beforeVariants.condition ?? 'none'}; observed variant origins: ${beforeVariants.variants.map(variant => canonical(variant.allowOrigins)).join(' | ')}).`);
+  // The deployed stack materializes the same conditional shape with literal origins
+  // (the SAM transform bakes the parameter values into the body): the true branch is
+  // [siteOrigin, acceptance origin] and the false branch is [siteOrigin], pinned to the
+  // deployed stack's own acceptance parameter so a drifted body still fails closed.
+  const baselineConditionalLiteral = Boolean(siteOrigin) && Boolean(currentStudioAcceptanceOrigin)
+    && beforeVariants.condition === acceptanceCondition
+    && canonical(beforeVariants.variants[0].allowOrigins) === canonical([siteOrigin, currentStudioAcceptanceOrigin])
+    && canonical(beforeVariants.variants[1].allowOrigins) === canonical([siteOrigin]);
+  if (!baselineConditional && !baselineConditionalLiteral && !beforeVariants.variants.every(variant => originsMatchBaseline(variant.allowOrigins))) {
+    throw new Error(`Maintenance changes the existing API Gateway origin (observed condition: ${beforeVariants.condition ?? 'none'}; observed variant origins: ${beforeVariants.variants.map(variant => canonical(variant.allowOrigins)).join(' | ')}; deployed acceptance parameter: ${currentStudioAcceptanceOrigin || 'empty'}).`);
   }
   const withoutOrigins = variant => { const copy = structuredClone(variant); delete copy.allowOrigins; return copy; };
   const beforeSettings = beforeVariants.variants.map(withoutOrigins);
