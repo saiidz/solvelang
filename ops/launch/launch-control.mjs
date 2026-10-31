@@ -291,7 +291,7 @@ function githubRepository(root) {
   return match?.[1];
 }
 
-export async function collectRepositoryState(root, { npmVersion } = {}) {
+export async function collectRepositoryState(root, { npmVersion, opsRoot = process.env.SOLVELANG_OPS_ROOT } = {}) {
   const manifest = readJson(await readFile(path.join(root, "packages/mcp-server/package.json"), "utf8"));
   const lock = readJson(await readFile(path.join(root, "packages/mcp-server/package-lock.json"), "utf8"));
   const workflowText = await readFile(path.join(root, ".github/workflows/npm-release.yml"), "utf8");
@@ -322,7 +322,6 @@ export async function collectRepositoryState(root, { npmVersion } = {}) {
   // The legal owner checklist lives in the private saiidz/solvelang-ops repo.
   // Point SOLVELANG_OPS_ROOT at a local ops checkout to evaluate its marker;
   // without one the marker counts as not verified (fail closed).
-  const opsRoot = process.env.SOLVELANG_OPS_ROOT;
   const legalChecklist = opsRoot
     ? await readFile(path.join(opsRoot, "docs/checkout-legal-owner-checklist.md"), "utf8").catch(() => "")
     : "";

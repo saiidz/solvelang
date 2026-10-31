@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { collectRepositoryState, evaluateLaunch, renderMarkdown, selectReleaseTag, writeLaunchEvidence } from "./launch-control.mjs";
 
@@ -242,16 +242,28 @@ test("missing health, privacy, and Stripe E2E safeguards are hard failures", () 
 });
 
 test("current repository proves all entitlement code gates with implementation and regression contracts", async () => {
-  const state = await collectRepositoryState(repositoryRoot, { npmVersion: "0.2.0" });
-  assert.deepEqual(state.entitlement, {
-    healthRoute: true,
-    privacySafe: true,
-    testModeE2eHarness: true,
-    refundAware: true,
-    checkoutGate: true,
-  });
-  assert.equal(state.workflow.packedInstall, true);
-  assert.equal(state.workflow.tagValidation, true);
+  // The legal owner checklist lives in the private solvelang-ops repo; stand in
+  // a fixture ops checkout carrying the verified marker.
+  const opsRoot = await mkdtemp(path.join(tmpdir(), "solvelang-ops-fixture-"));
+  try {
+    await mkdir(path.join(opsRoot, "docs"), { recursive: true });
+    await writeFile(
+      path.join(opsRoot, "docs/checkout-legal-owner-checklist.md"),
+      "# Legal owner checklist\n\nLEGAL_CHECKOUT_REVIEW_VERIFIED\n",
+    );
+    const state = await collectRepositoryState(repositoryRoot, { npmVersion: "0.2.0", opsRoot });
+    assert.deepEqual(state.entitlement, {
+      healthRoute: true,
+      privacySafe: true,
+      testModeE2eHarness: true,
+      refundAware: true,
+      checkoutGate: true,
+    });
+    assert.equal(state.workflow.packedInstall, true);
+    assert.equal(state.workflow.tagValidation, true);
+  } finally {
+    await rm(opsRoot, { recursive: true, force: true });
+  }
 });
 
 test("launch control collects the public MCP npm version without credentials", async () => {
