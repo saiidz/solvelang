@@ -12,6 +12,7 @@ export const PRODUCTION_WORKFLOW_PATHS = Object.freeze([
   ".github/workflows/deploy-api-access-production-totp.yml",
   ".github/workflows/deploy-customer-priority-production-foundation.yml",
   ".github/workflows/deploy-support-automation-production-foundation.yml",
+  ".github/workflows/pitr-restore-drill.yml",
 ]);
 
 const ACTIVE_RUN_STATUSES = Object.freeze(["requested", "pending", "waiting", "queued", "in_progress"]);

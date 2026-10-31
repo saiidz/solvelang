@@ -21,6 +21,7 @@ const productionWorkflowNames = [
   "deploy-api-access-production-totp.yml",
   "deploy-customer-priority-production-foundation.yml",
   "deploy-support-automation-production-foundation.yml",
+  "pitr-restore-drill.yml",
 ];
 
 async function workflow(name) {
@@ -49,7 +50,7 @@ test("test deployment is isolated while every production mutation uses the repos
   for (const name of workflowNames) {
     const source = await workflow(name);
     if (
-      (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy|production-maintenance\.mjs/.test(source))
+      (/API_ACCESS_STACK_NAME/.test(source) && /sam deploy|production-maintenance\.mjs|pitr-restore-drill\.mjs/.test(source))
       || (/solvelang-api-access-production-admin-console/.test(source) && /sam deploy/.test(source))
       || (/solvelang-api-access-production-totp-kms/.test(source) && /cloudformation deploy/.test(source))
     ) deploymentWorkflowNames.push(name);
