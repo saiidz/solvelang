@@ -56,7 +56,7 @@ on:
 
 jobs:
   test:
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    runs-on: [self-hosted, solvelang-flex]
     defaults:
       run:
         working-directory: services/api-access
