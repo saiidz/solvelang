@@ -30,7 +30,7 @@ Explain that the Rust CLI is the canonical runtime.
 
 ### 65-80 seconds — maturity
 
-Show the landing-page status section or `docs/demo-status.md`.
+Show the landing-page status section.
 
 Say:
 
