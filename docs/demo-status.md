@@ -426,7 +426,6 @@ A successful demonstration allows the viewer to answer:
 ## Related documents
 
 - [README](../README.md)
-- [Competitive analysis](competitive-analysis.md)
 - [Language reference](language-reference.md)
 - [Runtime safety](runtime-safety.md)
 - [Studio product specification](product/workflow-intelligence-studio-v1.md)
