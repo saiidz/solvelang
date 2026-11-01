@@ -352,7 +352,6 @@ Start here:
 - [Solve Context v0](docs/product/solve-context-v0.md)
 - [Solve Context evals](docs/product/solve-context-evals-v0.md)
 - [Codex/Claude MCP integration](docs/integrations/mcp-codex-claude.md)
-- [Production readiness](docs/production-readiness.md)
 
 Live project resources:
 

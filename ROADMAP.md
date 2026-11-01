@@ -9,8 +9,7 @@ bounded production account, isolation, and local-first checks passed. The
 temporary acceptance origin remains configured after its protected cleanup
 plan failed before any stack update.
 MCP v0.3.0 is published on npm and GitHub; main protection remains enforced.
-See [current production readiness](docs/production-readiness.md) for dated live
-evidence and remaining gates. Older checkpoints below are historical.
+Older checkpoints below are historical.
 
 This is the active roadmap for `saiidz/solvelang`. Keep four states separate: **implemented and repository-tested**, **published**, **deployed**, and **verified with a live provider/customer path**. A merge or green CI result proves only repository state unless a separate deployment/provider record says otherwise.
 
@@ -120,4 +119,4 @@ Trusted Mac, Oracle ARM64 and Windows lanes are platform-specific evidence. Orac
 
 Repository-safe work does not authorize production deployment, AWS/IAM/KMS/DNS/Cloudflare/Admin mutation, provider credentials, inbox reads/sends, external task creation, customer mutation, TOTP enrollment, Stripe configuration, charges/refunds, billing/priority activation, production source execution, restore drills, package/tag/release publication or business/legal commitments.
 
-Consult [`docs/production-readiness.md`](docs/production-readiness.md), the active issues above and exact dated deployment/provider records for those decisions.
+Consult the active issues above and exact dated deployment/provider records for those decisions.

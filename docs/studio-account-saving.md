@@ -8,8 +8,7 @@ protected acceptance surface and harness at main
 `62da3f46b05c0449dce071f04729cf6d8e561616`. Canonical production
 account-saving controls were enabled from main commit
 `1e8e3db46dfc504d61bd7b1c8a9427df0333a2e7` after a guarded feature-off
-build and bounded production smoke checks. See
-[production readiness](production-readiness.md) for the rollout evidence.
+build and bounded production smoke checks.
 
 On 2026-09-23, PR [#954](https://github.com/saiidz/solvelang/pull/954) merged
 as `e4273de61151f4e703b4ef15c736f334460b9759`; exact-head CI passed before
@@ -149,7 +148,6 @@ sanitized evidence is retained outside the repository. The canonical site is
 enabled after guarded deployment and bounded production verification. The
 temporary acceptance origin and password-protected branch remain configured:
 the protected plan-only removal failed validation before any stack update.
-See [production readiness](production-readiness.md) before attempting cleanup.
 
 ## Validation source
 
