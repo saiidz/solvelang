@@ -54,5 +54,5 @@ body:
       options:
         - label: I removed API keys, tokens, credentials, and private data.
           required: true
-        - label: I checked the current README/demo-status maturity labels before reporting a planned capability as a bug.
+        - label: I checked the current README maturity labels before reporting a planned capability as a bug.
           required: true

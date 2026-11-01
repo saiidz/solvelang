@@ -151,7 +151,7 @@ export default function TechnicalEvidencePage() {
           </div>
           <div className="mt-6 space-y-4 leading-7 text-slate-700">
             <p>No charges, refunds, inbox messages, customer data changes, provider activation, or secret provisioning were performed for this evidence record.</p>
-            <p>See the changed-boundary verification (<code className={code}>completion-security-review-2026-09-20.md</code>) for failure classifications and the limits of repository evidence.</p>
+            <p>The changed-boundary verification record covers failure classifications and the limits of repository evidence.</p>
           </div>
         </section>
       </section>
