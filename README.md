@@ -353,7 +353,6 @@ Start here:
 - [Solve Context evals](docs/product/solve-context-evals-v0.md)
 - [Codex/Claude MCP integration](docs/integrations/mcp-codex-claude.md)
 - [Production readiness](docs/production-readiness.md)
-- [Product strategy](docs/strategy.md)
 
 Live project resources:
 
@@ -459,7 +458,7 @@ The repository is best evaluated as a combined language-runtime, developer-tooli
 
 ## Roadmap
 
-The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md). Strategic product material remains in [`docs/strategy.md`](docs/strategy.md).
+The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md).
 
 Current priorities are:
 
