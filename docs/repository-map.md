@@ -67,7 +67,6 @@ Business-facing explanatory examples live separately under `docs/examples/` so d
 
 Key entry points:
 
-- `competitive-analysis.md` — ecosystem analysis and positioning boundaries.
 - `demo-status.md` — canonical truth source for demo maturity.
 - `development.md` — local contributor setup.
 - `language-reference.md` — current executable syntax.
