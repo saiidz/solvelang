@@ -3,8 +3,7 @@
 ## Current verification — 2026-09-20
 
 MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
-See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
-remaining live acceptance gates. Older checkpoints below are historical.
+Older checkpoints below are historical.
 
 > **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
 
