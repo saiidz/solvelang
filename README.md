@@ -87,7 +87,7 @@ Projection means direction, not a promised date or unsupported completion percen
 - owner-authorized public version selection/publication and exact-platform release artifacts beyond current Linux x86_64 evidence
 - enterprise governance, durability, and observability
 
-See [`ROADMAP.md`](ROADMAP.md) and [`docs/project-completion-plan.md`](docs/project-completion-plan.md) for the current active queue and completion gates.
+See [`ROADMAP.md`](ROADMAP.md) for the current active queue and completion gates.
 
 ## Quick start
 
@@ -345,8 +345,6 @@ solvelang/
 Start here:
 
 - [Active engineering roadmap](ROADMAP.md)
-- [Active buildout handoff](docs/active-buildout-handoff.md)
-- [Project completion plan](docs/project-completion-plan.md)
 - [0.1 language specification](SPEC.md)
 - [Language reference](docs/language-reference.md)
 - [Runtime safety](docs/runtime-safety.md)

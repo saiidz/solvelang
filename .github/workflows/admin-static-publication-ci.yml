@@ -5,7 +5,6 @@ on:
     paths:
       - 'services/admin-console-edge/**'
       - 'admin-console-static/**'
-      - 'docs/production-admin-console-publication.md'
       - '.github/workflows/admin-static-publication-ci.yml'
   push:
     branches:
@@ -13,7 +12,6 @@ on:
     paths:
       - 'services/admin-console-edge/**'
       - 'admin-console-static/**'
-      - 'docs/production-admin-console-publication.md'
       - '.github/workflows/admin-static-publication-ci.yml'
 
 permissions:
