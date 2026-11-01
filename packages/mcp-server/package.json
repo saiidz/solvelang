@@ -103,8 +103,8 @@
     "start:remote": "node dist/src/remote-cli.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.29.0",
-    "zod": "^3.25.76"
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.19.0",
