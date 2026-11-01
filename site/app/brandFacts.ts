@@ -37,7 +37,7 @@ export const brandFacts = {
   claimEvidence: [
     { claim: "positioning", source: "README.md" }, { claim: "runtime and CLI", source: "solvec/src/main.rs" },
     { claim: "language behavior", source: "docs/language-reference.md" }, { claim: "runtime safety", source: "docs/runtime-safety.md" },
-    { claim: "Studio boundary", source: "docs/strategy.md" }, { claim: "browser preview boundary", source: "site/app/(english)/run/page.tsx" },
+    { claim: "Studio boundary", source: "saiidz/solvelang-ops: docs/strategy.md" }, { claim: "browser preview boundary", source: "site/app/(english)/run/page.tsx" },
     { claim: "dated public capability evidence", source: "saiidz/solvelang-ops: docs/production-launch-runbook.md" },
   ],
   unverifiedClaims: ["Production managed workflow execution", "Production API availability", "Enterprise compliance certification", "Production uptime or SLA", "Customer adoption or revenue", "Performance superiority over other workflow platforms"],
