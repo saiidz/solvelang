@@ -74,4 +74,3 @@ Use these exact labels when helpful:
 - benchmark or reliability numbers that have not been measured
 - autonomous consequential decisions without human controls
 
-See `docs/demo-status.md` for the detailed maturity inventory.
