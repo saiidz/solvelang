@@ -67,7 +67,7 @@ jobs:
 
       - name: Install matching wasm-bindgen CLI
         if: steps.wasm-bindgen-cache.outputs.cache-hit != 'true'
-        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked --force
 
       - name: Verify matching wasm-bindgen CLI
         run: test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
