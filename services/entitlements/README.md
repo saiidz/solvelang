@@ -75,4 +75,4 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=REDACTED_PUBLIC_SITE_KEY
 
 Rebuild and deploy the static site after setting the variables. `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is a public Turnstile site key; do not place Stripe or Turnstile secret values in `NEXT_PUBLIC_*` variables, repository files, build logs, or GitHub Actions variables.
 
-Follow [the owner launch runbook](../../docs/launch-owner-runbook.md) for isolated test and production setup, live webhook registration, one low-risk payment/refund verification, privacy review, and rollback.
+Follow [the owner launch runbook](https://github.com/saiidz/solvelang-ops/blob/main/docs/launch-owner-runbook.md) (private ops repo) for isolated test and production setup, live webhook registration, one low-risk payment/refund verification, privacy review, and rollback.

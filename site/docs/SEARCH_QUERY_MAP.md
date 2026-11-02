@@ -6,7 +6,7 @@ This map is a content and measurement plan. It does not contain search-volume or
 
 | Query group | Searcher intent | Best existing page | Missing page / gap | Direct answer | Supporting evidence | Desired conversion | Type |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| SolveLang brand | Understand what the project is | `/`, `/about/` | None | SolveLang is a readable, explainable workflow language designed for AI-assisted business processes. | `README.md`, `docs/strategy.md`, brand facts | Read docs / GitHub | Navigational + informational |
+| SolveLang brand | Understand what the project is | `/`, `/about/` | None | SolveLang is a readable, explainable workflow language designed for AI-assisted business processes. | `README.md`, brand facts | Read docs / GitHub | Navigational + informational |
 | SolveLang maturity | Determine whether it is production-ready | `/about/`, `/status/`, README | Keep maturity copy synchronized | SolveLang is a versioned open-source product. Local Rust execution works today; general managed production workflow execution is not currently offered. | README, demo status, status page | Evaluate safely | Informational |
 | Install SolveLang | Run the project locally | README / GitHub | A dedicated public getting-started HTML page would improve citation eligibility | Clone the repository and use the Rust CLI in `solvec/`. | README, language reference | Clone repository | Technical |
 | SolveLang CLI | Understand `run`, `validate`, `tokens`, `ast` | README, language reference | Dedicated CLI HTML documentation | The Rust CLI is the canonical validator and runtime. | `solvec/src/main.rs`, language reference | Run example | Technical |

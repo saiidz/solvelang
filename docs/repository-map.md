@@ -67,9 +67,6 @@ Business-facing explanatory examples live separately under `docs/examples/` so d
 
 Key entry points:
 
-- `strategy.md` — product, technical, revenue, and marketing strategy.
-- `competitive-analysis.md` — ecosystem analysis and positioning boundaries.
-- `demo-status.md` — canonical truth source for demo maturity.
 - `development.md` — local contributor setup.
 - `language-reference.md` — current executable syntax.
 - `runtime-safety.md` — hardened execution and capability boundaries.
@@ -167,9 +164,8 @@ When two surfaces disagree, use this order:
 1. Executable tests and current code.
 2. `docs/language-reference.md` for supported language behavior.
 3. `docs/runtime-safety.md` for execution-policy behavior.
-4. `docs/demo-status.md` for maturity and demo labeling.
-5. README/product documentation.
-6. Roadmap/planning documents.
+4. README/product documentation.
+5. Roadmap/planning documents.
 
 A roadmap never overrides what the implementation actually supports.
 
@@ -212,13 +208,11 @@ A cosmetic move alone is not enough.
 | change Studio | `site/app/studio/` |
 | change API auth/billing/usage | `services/api-access/` |
 | change AWS API resources | `services/api-access/template.yaml` |
-| change maturity claims | `docs/demo-status.md` and relevant product docs |
+| change maturity claims | relevant product docs |
 
 ## Related docs
 
 - `CONTRIBUTING.md`
 - `docs/development.md`
-- `docs/demo-status.md`
 - `docs/language-reference.md`
 - `docs/runtime-safety.md`
-- `docs/strategy.md`

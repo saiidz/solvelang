@@ -3,8 +3,7 @@
 ## Current verification — 2026-09-20
 
 MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
-See [the current completion checklist](../project-completion-evidence-2026-09-20.md) for fresh evidence and
-remaining live acceptance gates. Older checkpoints below are historical.
+Older checkpoints below are historical.
 
 Status: **implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.3.0 package; not yet proven by complete real-agent/provider measurements**
 Tracking epic: #898  

@@ -308,3 +308,29 @@ test('maintenance origin baseline failure names the observed deployed origins',(
  after.Resources.ApiAccessHttpApi.Properties.Body=body({allowOrigins:['https://www.solve-lang.com'],allowMethods:['GET']});
  assert.throws(()=>assertTemplateBoundary(before,after,{siteOrigin:'https://www.solve-lang.com',currentStudioAcceptanceOrigin:previewOrigin,studioAcceptanceOriginAction:'disable'}),/changes the existing API Gateway origin \(observed condition: none; observed variant origins: .*example\.com/);
 });
+
+test('maintenance baseline accepts the literal condition-wrapped deployed CORS definition',()=>{
+ const corsSettings={allowMethods:['GET'],allowHeaders:['authorization'],allowCredentials:true};
+ const deployed={Parameters:{},Outputs:{Base:{Value:'stable'}},Resources:{
+  ApiAccessFunction:{Type:'AWS::Lambda::Function',Properties:{Code:{S3Key:'old'},Environment:{Variables:{BILLING:'true'}}}},
+  ApiAccessHttpApi:{Type:'AWS::ApiGatewayV2::Api',Properties:{Body:{openapi:'3.0.1',paths:{},'x-amazon-apigateway-cors':{'Fn::If':['StudioAcceptanceOriginConfigured',{...corsSettings,allowOrigins:['https://www.solve-lang.com',previewOrigin]},{...corsSettings,allowOrigins:['https://www.solve-lang.com']}]}},Name:'stable'}},
+ }};
+ const compiled=structuredClone(deployed);
+ compiled.Parameters={StudioAcceptanceOrigin:structuredClone(acceptanceParameter)};
+ compiled.Conditions={StudioAcceptanceOriginConfigured:structuredClone(acceptanceCondition)};
+ compiled.Resources.ApiAccessFunction.Properties.Code={S3Key:'new'};
+ compiled.Resources.ApiAccessFunction.Properties.Environment.Variables.STUDIO_ACCEPTANCE_ORIGIN={Ref:'StudioAcceptanceOrigin'};
+ compiled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']={'Fn::If':['StudioAcceptanceOriginConfigured',['https://www.solve-lang.com',''],['https://www.solve-lang.com']]};
+ const disableOptions={siteOrigin:'https://www.solve-lang.com',currentStudioAcceptanceOrigin:previewOrigin,studioAcceptanceOriginAction:'disable'};
+ // Regression for run 41054262317: the deployed body carries literal origins, which the
+ // Ref-only baselineConditional did not recognise, so the disable plan failed closed.
+ const disabled=projectMaintenanceTemplate(deployed,compiled,disableOptions);
+ const wrapped=disabled.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']['Fn::If'];
+ assert.deepEqual(wrapped[1].allowOrigins,['https://www.solve-lang.com']);
+ assert.deepEqual(wrapped[2].allowOrigins,['https://www.solve-lang.com']);
+ assertTemplateBoundary(deployed,disabled,disableOptions);
+ // A literal acceptance origin that differs from the deployed parameter still fails closed.
+ const drifted=structuredClone(deployed);
+ drifted.Resources.ApiAccessHttpApi.Properties.Body['x-amazon-apigateway-cors']['Fn::If'][1].allowOrigins=['https://www.solve-lang.com','https://studio-acceptance.d999.amplifyapp.com'];
+ assert.throws(()=>assertTemplateBoundary(drifted,disabled,disableOptions),/changes the existing API Gateway origin/);
+});

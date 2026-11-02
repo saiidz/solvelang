@@ -7,11 +7,10 @@ SolveLang is an open-source, pre-1.0 workflow-language project. Contributions sh
 Read these first:
 
 1. `README.md` — product positioning and current maturity.
-2. `docs/demo-status.md` — which surfaces are canonical, preview, experimental, or planned.
-3. `docs/language-reference.md` — current executable syntax.
-4. `docs/runtime-safety.md` — execution and capability boundaries.
-5. `docs/development.md` — local setup and validation commands.
-6. `docs/repository-map.md` — where major subsystems live.
+2. `docs/language-reference.md` — current executable syntax.
+3. `docs/runtime-safety.md` — execution and capability boundaries.
+4. `docs/development.md` — local setup and validation commands.
+5. `docs/repository-map.md` — where major subsystems live.
 
 ## Development principles
 

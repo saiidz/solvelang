@@ -13,7 +13,7 @@ concurrency:
 jobs:
   solvec:
     name: SolveLang Rust security and tests
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    runs-on: [self-hosted, solvelang-flex]
     defaults:
       run:
         working-directory: solvec

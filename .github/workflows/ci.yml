@@ -11,7 +11,7 @@ on:
 jobs:
   rust:
     name: Rust runtime
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    runs-on: [self-hosted, solvelang-flex]
     defaults:
       run:
         working-directory: solvec
@@ -67,7 +67,7 @@ jobs:
 
       - name: Install matching wasm-bindgen CLI
         if: steps.wasm-bindgen-cache.outputs.cache-hit != 'true'
-        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked
+        run: cargo install wasm-bindgen-cli --version 0.2.127 --locked --force
 
       - name: Verify matching wasm-bindgen CLI
         run: test "$(wasm-bindgen --version)" = "wasm-bindgen 0.2.127"
@@ -99,7 +99,7 @@ jobs:
 
   site:
     name: Static site
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    runs-on: [self-hosted, solvelang-flex]
     timeout-minutes: 60
     defaults:
       run:

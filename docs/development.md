@@ -17,7 +17,7 @@ The repository contains several surfaces with different maturity levels:
 - **Workflow Intelligence Studio:** deterministic local-first workflow modeling and analysis with a broader model than executable syntax.
 - **API access:** experimental/test-mode account, key, subscription, and usage infrastructure.
 
-Before changing behavior, read `docs/demo-status.md` and `docs/language-reference.md`.
+Before changing behavior, read `docs/language-reference.md`.
 
 ## 2. Prerequisites
 
@@ -50,7 +50,6 @@ Start with:
 ```text
 README.md
 CONTRIBUTING.md
-docs/demo-status.md
 docs/repository-map.md
 docs/language-reference.md
 ```
@@ -243,7 +242,6 @@ A new contributor should be able to complete this sequence:
 
 ```text
 [ ] Read README.md
-[ ] Read docs/demo-status.md
 [ ] Open docs/repository-map.md
 [ ] Run cargo test in solvec/
 [ ] Validate examples/support_triage.solve

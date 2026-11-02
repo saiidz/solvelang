@@ -3,8 +3,7 @@
 ## Current verification — 2026-09-20
 
 MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
-See [the current completion checklist](docs/project-completion-evidence-2026-09-20.md) for fresh evidence and
-remaining live acceptance gates. Older checkpoints below are historical.
+Older checkpoints below are historical.
 
 > **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
 
@@ -87,7 +86,7 @@ Projection means direction, not a promised date or unsupported completion percen
 - owner-authorized public version selection/publication and exact-platform release artifacts beyond current Linux x86_64 evidence
 - enterprise governance, durability, and observability
 
-See [`ROADMAP.md`](ROADMAP.md) and [`docs/project-completion-plan.md`](docs/project-completion-plan.md) for the current active queue and completion gates.
+See [`ROADMAP.md`](ROADMAP.md) for the current active queue and completion gates.
 
 ## Quick start
 
@@ -345,8 +344,6 @@ solvelang/
 Start here:
 
 - [Active engineering roadmap](ROADMAP.md)
-- [Active buildout handoff](docs/active-buildout-handoff.md)
-- [Project completion plan](docs/project-completion-plan.md)
 - [0.1 language specification](SPEC.md)
 - [Language reference](docs/language-reference.md)
 - [Runtime safety](docs/runtime-safety.md)
@@ -354,8 +351,6 @@ Start here:
 - [Solve Context v0](docs/product/solve-context-v0.md)
 - [Solve Context evals](docs/product/solve-context-evals-v0.md)
 - [Codex/Claude MCP integration](docs/integrations/mcp-codex-claude.md)
-- [Production readiness](docs/production-readiness.md)
-- [Product strategy](docs/strategy.md)
 
 Live project resources:
 
@@ -461,7 +456,7 @@ The repository is best evaluated as a combined language-runtime, developer-tooli
 
 ## Roadmap
 
-The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md). Strategic product material remains in [`docs/strategy.md`](docs/strategy.md).
+The repository-level engineering roadmap is [`ROADMAP.md`](ROADMAP.md).
 
 Current priorities are:
 
