@@ -1,0 +1,57 @@
+name: Workflow syntax
+
+# Guard: a workflow file that GitHub cannot parse fails silently (zero jobs,
+# no checks) — the native-cli-qualification parse failure hid for ~10 days
+# that way. This workflow lints every workflow file whenever one changes.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actionlint.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: Workflow syntax (actionlint)
+    runs-on: [self-hosted, solvelang-flex]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actionlint 1.7.12 (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          version="1.7.12"
+          case "$(uname -s)-$(uname -m)" in
+            Linux-aarch64|Linux-arm64) asset="actionlint_${version}_linux_arm64.tar.gz" ;;
+            Darwin-arm64) asset="actionlint_${version}_darwin_arm64.tar.gz" ;;
+            *) echo "unsupported runner platform: $(uname -s)-$(uname -m)"; exit 1 ;;
+          esac
+          base="https://github.com/rhysd/actionlint/releases/download/v${version}"
+          curl -sSfL "${base}/${asset}" -o "/tmp/${asset}"
+          curl -sSfL "${base}/actionlint_${version}_checksums.txt" -o /tmp/actionlint_checksums.txt
+          python3 - "/tmp/${asset}" /tmp/actionlint_checksums.txt <<'PYEOF'
+          import hashlib, sys
+          path, sums_path = sys.argv[1], sys.argv[2]
+          name = path.rsplit("/", 1)[-1]
+          expected = None
+          for line in open(sums_path):
+              parts = line.split()
+              if len(parts) == 2 and parts[1].lstrip("*") == name:
+                  expected = parts[0]
+                  break
+          if not expected:
+              sys.exit(f"no checksum entry for {name}")
+          digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
+          if digest != expected:
+              sys.exit(f"checksum mismatch for {name}: {digest} != {expected}")
+          print(f"checksum verified for {name}")
+          PYEOF
+          tar -xzf "/tmp/${asset}" -C /tmp actionlint
+          /tmp/actionlint --version
+      - name: Lint all workflow files
+        # Shellcheck integration is disabled on purpose: the guard targets
+        # syntax/expression/action errors (the silent-failure class). The
+        # repo's legacy shellcheck style notes are a separate cleanup.
+        run: /tmp/actionlint -color -shellcheck=
