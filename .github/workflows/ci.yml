@@ -99,7 +99,7 @@ jobs:
 
   site:
     name: Static site
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    runs-on: [self-hosted, solvelang-flex]
     timeout-minutes: 60
     defaults:
       run:

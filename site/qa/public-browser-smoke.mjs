@@ -8,7 +8,7 @@ import { join, resolve, extname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../out", import.meta.url));
 const output = fileURLToPath(new URL("../.studio-test-dist/browser-smoke", import.meta.url));
-const chrome = [process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find(p => p && existsSync(p));
+const chrome = [process.env.CHROME_BIN, "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/Applications/Chromium.app/Contents/MacOS/Chromium"].find(p => p && existsSync(p));
 assert.ok(chrome, "Chromium required: set CHROME_BIN. Do not silently skip browser acceptance tests.");
 assert.ok(existsSync(join(root, "index.html")), "Build the static site first.");
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".txt": "text/plain", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".wasm": "application/wasm" };
