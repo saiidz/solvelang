@@ -292,6 +292,7 @@ Resources:
         AllowCredentials: true
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders:
+          - accept
           - authorization
           - content-type
           - idempotency-key
