@@ -31,6 +31,11 @@ function listAfter(block, key) {
   const at = block.indexOf(key);
   assert.notEqual(at, -1, `CorsConfiguration must define ${key}`);
   const tail = block.slice(at + key.length);
+  // Inline flow form: "AllowMethods: [GET, POST, OPTIONS]"
+  const firstLine = tail.split("\n")[0];
+  const flow = firstLine.match(/\[([^\]]*)\]/);
+  if (flow) return flow[1].split(",").map((item) => item.trim()).filter(Boolean);
+  // Block form: following lines of "- item"
   const items = [];
   for (const line of tail.split("\n").slice(1)) {
     const match = line.match(/^\s+-\s+(\S+)\s*$/);
