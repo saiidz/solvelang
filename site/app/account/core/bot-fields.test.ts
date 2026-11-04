@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import { buildBotFields } from "./bot-fields";
+
+const siteRoot = process.cwd();
+const source = (relativePath: string) => readFile(path.join(siteRoot, relativePath), "utf8");
 
 test("bot fields carry the honeypot value and the elapsed form time", () => {
   assert.deepEqual(
@@ -21,7 +25,7 @@ test("bot fields clamp negative elapsed time and omit an empty token", () => {
 });
 
 test("the sign-in page sends bot fields with both public auth requests", async () => {
-  const page = await readFile(new URL("../../(english)/account/api-keys/page.tsx", import.meta.url), "utf8");
+  const page = await source("app/(english)/account/api-keys/page.tsx");
   assert.match(page, /SignInTurnstile/);
   assert.match(page, /SignInHoneypot/);
   const magicLink = page.slice(page.indexOf("/customer/auth/magic-link") - 200, page.indexOf("/customer/auth/magic-link") + 200);
@@ -31,7 +35,7 @@ test("the sign-in page sends bot fields with both public auth requests", async (
 });
 
 test("the sign-in bot check uses the signin action and the canonical Turnstile script", async () => {
-  const component = await readFile(new URL("./signin-bot-check.tsx", import.meta.url), "utf8");
+  const component = await source("app/account/core/signin-bot-check.tsx");
   assert.match(component, /action: "signin"/);
   assert.match(component, /https:\/\/challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/);
   assert.match(component, /name="website"/);
