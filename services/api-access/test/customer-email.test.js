@@ -19,6 +19,7 @@ test("security notice emails the account with change-specific copy and delivery 
   assert.equal(input.FromEmailAddress, "security@solve-lang.com");
   assert.deepEqual(input.ReplyToAddresses, ["support@solve-lang.com"]);
   assert.deepEqual(input.Destination.ToAddresses, ["dev@example.com"]);
+  assert.deepEqual(input.EmailTags, [{ Name: "project", Value: "solvelang" }]);
   assert.match(input.Content.Simple.Subject.Data, /password was changed/i);
   assert.match(input.Content.Simple.Body.Text.Data, /If it was not/i);
   assert.match(input.Content.Simple.Body.Html.Data, /password was changed/i);
