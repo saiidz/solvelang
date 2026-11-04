@@ -285,10 +285,8 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
-        AllowOrigins: !If
-          - StudioAcceptanceOriginConfigured
-          - [!Ref SiteOrigin, !Ref StudioAcceptanceOrigin]
-          - [!Ref SiteOrigin]
+        AllowOrigins:
+          - !Ref SiteOrigin
         AllowCredentials: true
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders:
