@@ -131,7 +131,6 @@ Conditions:
   CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
   AdminCrmFeatureEnabled: !Equals [!Ref AdminCrmEnabled, "true"]
-  StudioAcceptanceOriginConfigured: !Not [!Equals [!Ref StudioAcceptanceOrigin, ""]]
 
 Resources:
   ApiAccountsTable:
