@@ -3,6 +3,9 @@ import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 import { unverifiedPublicStatus } from "./public-status.js";
 
+// A sign-in form submitted faster than this is a bot, not a person.
+const BOT_TIMING_MIN_MS = 1_200;
+
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
   const leftBuffer = Buffer.from(left);
@@ -58,6 +61,7 @@ export function createApiAccessHandler({
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
+  botProtection = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
   logger = console,
 }) {
@@ -106,6 +110,23 @@ export function createApiAccessHandler({
     const session = await customerAuth.authenticate(cookieHeader(event));
     if (mutation) customerAuth.assertCsrf(session, header(event, "x-solvelang-csrf"));
     return session;
+  }
+
+  // Bot gate for the public, session-establishing routes (magic-link and
+  // password sign-in). The honeypot and timing checks always apply;
+  // Turnstile applies when a verifier is configured (botProtection). A
+  // failed check must be indistinguishable from success to the caller: no
+  // email is sent, no record is created, and the response stays neutral —
+  // the same verify-before-send rule the auth throttles already follow.
+  async function botCheckPasses(event, body) {
+    if (typeof body?.website === "string" && body.website.trim() !== "") return false;
+    if (typeof body?.formElapsedMs === "number" && body.formElapsedMs < BOT_TIMING_MIN_MS) return false;
+    if (!botProtection) return true;
+    return botProtection.verify({
+      token: body?.turnstileToken,
+      remoteIp: event?.requestContext?.http?.sourceIp,
+      expectedAction: "signin",
+    });
   }
 
   // Session-establishing routes set the SameSite=None session cookie, so a
@@ -167,7 +188,11 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
         const origin = assertAllowedOrigin(event);
-        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
+        const body = parseJson(event);
+        if (!(await botCheckPasses(event, body))) {
+          return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
+        }
+        await customerAuth.requestMagicLink(body, { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
         return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {
@@ -178,8 +203,12 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/auth/password")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
         assertAllowedOrigin(event);
+        const body = parseJson(event);
+        if (!(await botCheckPasses(event, body))) {
+          throw new ApiAccessError(401, "invalid_credentials", "Email/username or password is incorrect.");
+        }
         return authResponse(await customerAuth.loginWithPassword(
-          parseJson(event),
+          body,
           { sourceIp: event?.requestContext?.http?.sourceIp },
         ));
       }

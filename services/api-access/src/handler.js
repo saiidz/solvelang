@@ -39,6 +39,7 @@ import { createGmailSupportProvider, createLinearSupportProvider, createSecretsM
 import { createDynamoSupportAutomationStore } from "./support-automation-store.js";
 import { createSupportAutomationService } from "./support-automation.js";
 import { createTotpSecretProtector } from "./totp-kms.js";
+import { createTurnstileVerifier } from "./turnstile.js";
 
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -131,6 +132,10 @@ if (environment.subscriptionBillingEnabled) {
   });
 }
 
+const botProtection = environment.turnstileSecretKey
+  ? createTurnstileVerifier({ secret: environment.turnstileSecretKey, expectedHostname: new URL(environment.siteOrigin).hostname })
+  : undefined;
+
 const application = createApiAccessHandler({
   service: guardedService,
   enabled: environment.enabled,
@@ -147,6 +152,7 @@ const application = createApiAccessHandler({
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
+  botProtection,
   publicStatusReader: () => publicStatusStore.readSnapshot(),
 });
 

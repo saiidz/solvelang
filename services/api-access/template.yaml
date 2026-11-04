@@ -39,6 +39,11 @@ Parameters:
     Default: ""
     Description: Exact dedicated Amplify acceptance-branch origin; blank disables it.
     AllowedPattern: '^$|^https://studio-acceptance\.d[a-z0-9]+\.amplifyapp\.com$'
+  TurnstileSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Cloudflare Turnstile secret key for sign-in bot verification; blank leaves Turnstile unenforced (rate limits and the honeypot/timing checks stay active).
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -337,6 +342,7 @@ Resources:
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
+          API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex

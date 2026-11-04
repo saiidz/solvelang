@@ -97,6 +97,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
     ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation,
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
+    turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,
   };
 }
 
