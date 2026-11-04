@@ -50,6 +50,16 @@ test("gateway CORS answers browser preflights for every header the site sends", 
   const block = corsBlock(template);
 
   assert.match(block, /AllowCredentials:\s*true/, "credentialed calls require AllowCredentials: true");
+  // AllowOrigins must stay a PLAIN list. An !If wrapper around it reaches the
+  // deployed API body unevaluated (SAM bakes the branch literals but keeps the
+  // Fn::If), API Gateway cannot evaluate it, and every preflight returns a
+  // bare 204 with no access-control headers. That is exactly how browser
+  // sign-in/checkout broke while the template looked correct. The production
+  // StudioAcceptanceOrigin parameter is empty (acceptance origin disabled),
+  // so the plain site-only list is the production truth.
+  assert.ok(!/AllowOrigins:\s*!If/.test(block), "AllowOrigins must not be wrapped in !If: the wrapper reaches API Gateway unevaluated and preflights fail");
+  assert.ok(!/StudioAcceptanceOrigin/.test(block), "CorsConfiguration must not reference StudioAcceptanceOrigin: production runs with the acceptance origin disabled");
+  assert.match(block, /AllowOrigins:\s*\n\s+-\s+!Ref SiteOrigin\s*\n/, "AllowOrigins must be exactly the site origin");
   assert.ok(!/AllowOrigins:[\s\S]*?-\s+["']?\*["']?(\s|$)/.test(block), "AllowOrigins must never be a wildcard");
 
   const methods = listAfter(block, "AllowMethods:");
