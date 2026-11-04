@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   type AuthResult,
   CustomerApiError,
@@ -13,6 +13,8 @@ import {
   newRequestId,
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
+import { buildBotFields } from "@/app/account/core/bot-fields";
+import { SignInHoneypot, SignInTurnstile } from "@/app/account/core/signin-bot-check";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const plans = [
@@ -51,6 +53,10 @@ export default function ApiKeysPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [botWebsite, setBotWebsite] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [botResetSignal, setBotResetSignal] = useState(0);
+  const formRenderedAt = useRef(Date.now());
 
   async function refreshDashboard() {
     const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
@@ -107,6 +113,15 @@ export default function ApiKeysPage() {
     return () => { active = false; };
   }, []);
 
+  function botFields() {
+    return buildBotFields({ renderedAt: formRenderedAt.current, now: Date.now(), website: botWebsite, turnstileToken: turnstileToken || undefined });
+  }
+
+  function resetBotCheck() {
+    setTurnstileToken("");
+    setBotResetSignal((value) => value + 1);
+  }
+
   async function passwordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -115,13 +130,14 @@ export default function ApiKeysPage() {
     try {
       const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/password", {
         method: "POST",
-        body: JSON.stringify({ identifier, password: loginPassword }),
+        body: JSON.stringify({ identifier, password: loginPassword, ...botFields() }),
       });
       if (!result.mfaRequired) setLoginPassword("");
       await finishFirstFactor(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in failed.");
     } finally {
+      resetBotCheck();
       setBusy(false);
     }
   }
@@ -156,12 +172,13 @@ export default function ApiKeysPage() {
     try {
       await customerApi(API_BASE, "/customer/auth/magic-link", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, ...botFields() }),
       });
       setNotice("Check your email for a sign-in link. It expires in 15 minutes.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in could not be started.");
     } finally {
+      resetBotCheck();
       setBusy(false);
     }
   }
@@ -449,6 +466,7 @@ export default function ApiKeysPage() {
               <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com or username" />
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
               <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
               <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
             </form>
           </section>
@@ -460,9 +478,13 @@ export default function ApiKeysPage() {
             <form className="mt-8 space-y-4" onSubmit={requestLink}>
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
               <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com" />
+              <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
               <button disabled={busy} className="w-full rounded-xl border border-cyan-300/40 px-5 py-3 font-bold text-cyan-100 disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
             </form>
           </section>
+        </div>
+        <div className="mx-auto mt-6 max-w-5xl">
+          <SignInTurnstile onToken={setTurnstileToken} resetSignal={botResetSignal} />
         </div>
         <div className="mx-auto mt-6 max-w-5xl">
           {notice ? <p className="rounded-xl bg-emerald-400/10 p-4 text-sm text-emerald-200">{notice}</p> : null}
