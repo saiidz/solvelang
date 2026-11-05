@@ -69,7 +69,7 @@ Parameters:
     Description: SolveLang GitHub App webhook secret for delivery signature verification.
   GitHubAppSlug:
     Type: String
-    Default: "solvelang"
+    Default: "solvelang-reader"
     Description: SolveLang GitHub App URL slug used to build the install URL.
   ApiKeyPepper:
     Type: String
