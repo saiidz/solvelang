@@ -328,6 +328,11 @@ export function createApiAccessHandler({
         if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
         return response(200, await githubApp.linkInstallation({ accountId: session.accountId, ...parseJson(event) }));
       }
+      if (method === "POST" && path.endsWith("/customer/github/audit")) {
+        const session = await customerSession(event, true);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        return response(200, await githubApp.runAudit({ accountId: session.accountId, ...parseJson(event) }));
+      }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);
         return response(201, await customerAccount.issueKey(session, parseJson(event)));
