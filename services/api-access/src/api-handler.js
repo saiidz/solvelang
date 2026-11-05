@@ -218,6 +218,12 @@ export function createApiAccessHandler({
         if (!verified) return response(401, { error: "Invalid webhook.", code: "invalid_webhook_signature" });
         return response(200, {});
       }
+      if (method === "GET" && path.endsWith("/github/install/start")) {
+        const session = await customerSession(event);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        const { location } = await githubApp.beginInstall(session.accountId);
+        return redirect(location);
+      }
 
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
@@ -316,6 +322,11 @@ export function createApiAccessHandler({
         const session = await customerSession(event);
         if (!githubApp) return response(200, { enabled: false, installations: [] });
         return response(200, { enabled: true, installations: await githubApp.listForAccount(session.accountId) });
+      }
+      if (method === "POST" && path.endsWith("/customer/github/installations/link")) {
+        const session = await customerSession(event, true);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        return response(200, await githubApp.linkInstallation({ accountId: session.accountId, ...parseJson(event) }));
       }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);

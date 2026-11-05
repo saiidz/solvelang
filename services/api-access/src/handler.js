@@ -28,7 +28,7 @@ import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
-import { applyInstallationWebhook, buildAuthorizeUrl, exchangeOAuthCode, fetchGitHubUser, verifyWebhookSignature } from "./github-app.js";
+import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
@@ -78,6 +78,17 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
       const nonce = Buffer.from(nodeRandomBytes(24)).toString("hex");
       await store.putOAuthState({ nonce });
       return { location: buildAuthorizeUrl({ clientId: config.clientId, state: nonce }) };
+    },
+
+    async beginInstall(accountId) {
+      if (typeof accountId !== "string" || !accountId) throw new Error("SolveLang account id is required.");
+      const nonce = Buffer.from(nodeRandomBytes(24)).toString("hex");
+      await store.putOAuthState({ nonce, purpose: "install", accountId });
+      return { location: buildInstallUrl({ slug: config.slug, state: nonce }) };
+    },
+
+    async linkInstallation({ accountId, installationId, state }) {
+      return linkInstallationFromGitHub({ store, appId: config.appId, privateKey: config.privateKey, accountId, installationId, state });
     },
 
     async completeSignIn({ code, state }) {

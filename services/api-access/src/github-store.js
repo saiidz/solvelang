@@ -98,13 +98,21 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
       }));
     },
 
-    async putOAuthState({ nonce, ttlSeconds = OAUTH_STATE_TTL_SECONDS } = {}) {
+    async putOAuthState({ nonce, ttlSeconds = OAUTH_STATE_TTL_SECONDS, purpose, accountId } = {}) {
       if (typeof nonce !== "string" || !nonce) throw new Error("GitHub OAuth state nonce is required.");
       if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) throw new Error("GitHub OAuth state TTL is invalid.");
       const expiresAt = nowSeconds() + ttlSeconds;
       await documentClient.send(new PutCommand({
         TableName: tableName,
-        Item: { recordKey: stateKey(nonce), kind: "oauth-state", expiresAt },
+        Item: {
+          recordKey: stateKey(nonce),
+          kind: "oauth-state",
+          expiresAt,
+          // A state may be bound to one purpose and one account (the
+          // install flow); sign-in states carry neither field.
+          ...(typeof purpose === "string" && purpose ? { purpose } : {}),
+          ...(typeof accountId === "string" && accountId ? { accountId } : {}),
+        },
       }));
       return { expiresAt };
     },
@@ -112,8 +120,11 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
     // Single-use: the nonce record is atomically deleted by the consume
     // itself, so a replayed callback can never succeed twice. An expired
     // nonce is consumed too (and rejected), so it cannot be revived.
-    async consumeOAuthState(nonce) {
-      if (typeof nonce !== "string" || !nonce) return false;
+    // Returns the consumed record's binding ({ purpose, accountId },
+    // either possibly undefined) or null when there is nothing valid to
+    // consume.
+    async consumeOAuthStateRecord(nonce) {
+      if (typeof nonce !== "string" || !nonce) return null;
       let deleted;
       try {
         const result = await documentClient.send(new DeleteCommand({
@@ -124,11 +135,22 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
         }));
         deleted = result?.Attributes;
       } catch (error) {
-        if (error?.name === "ConditionalCheckFailedException") return false;
+        if (error?.name === "ConditionalCheckFailedException") return null;
         throw error;
       }
-      if (!deleted || deleted.kind !== "oauth-state") return false;
-      return Number.isSafeInteger(deleted.expiresAt) && deleted.expiresAt > nowSeconds();
+      if (!deleted || deleted.kind !== "oauth-state") return null;
+      if (!Number.isSafeInteger(deleted.expiresAt) || deleted.expiresAt <= nowSeconds()) return null;
+      return {
+        purpose: typeof deleted.purpose === "string" && deleted.purpose ? deleted.purpose : undefined,
+        accountId: typeof deleted.accountId === "string" && deleted.accountId ? deleted.accountId : undefined,
+      };
+    },
+
+    // The sign-in flow's consume: a purpose-bound state (e.g. an install
+    // state) is NOT a sign-in state and never validates here.
+    async consumeOAuthState(nonce) {
+      const record = await this.consumeOAuthStateRecord(nonce);
+      return record !== null && record.purpose === undefined;
     },
 
     async linkAccountInstallation({ accountId, installationId } = {}) {
