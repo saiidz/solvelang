@@ -42,7 +42,9 @@ export function SignInTurnstile({
   const widgetRef = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
   const tokenRef = useRef(onToken);
-  tokenRef.current = onToken;
+  useEffect(() => {
+    tokenRef.current = onToken;
+  }, [onToken]);
 
   useEffect(() => {
     if (!ready || !turnstileSiteKey || !containerRef.current) return;

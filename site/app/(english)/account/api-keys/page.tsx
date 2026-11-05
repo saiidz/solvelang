@@ -56,7 +56,11 @@ export default function ApiKeysPage() {
   const [botWebsite, setBotWebsite] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [botResetSignal, setBotResetSignal] = useState(0);
-  const formRenderedAt = useRef(Date.now());
+  const formRenderedAt = useRef(0);
+
+  useEffect(() => {
+    formRenderedAt.current = Date.now();
+  }, []);
 
   async function refreshDashboard() {
     const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
