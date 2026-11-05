@@ -63,6 +63,7 @@ export function createApiAccessHandler({
   stripeGateway,
   botProtection = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
+  statusProbes = {},
   logger = console,
 }) {
   if (!service) throw new Error("API access service is required.");
@@ -158,6 +159,19 @@ export function createApiAccessHandler({
     }, {}, [verified.cookie]);
   }
 
+  async function statusProbeResponse(probe) {
+    if (typeof probe !== "function") return response(503, { status: "unavailable", service: "solvelang-api-access" });
+    try {
+      const outcome = await Promise.race([
+        probe(),
+        new Promise((_, reject) => { setTimeout(() => reject(new Error("status probe timeout")), 2_000); }),
+      ]);
+      return outcome
+        ? response(200, { status: "ok", service: "solvelang-api-access" })
+        : response(503, { status: "unavailable", service: "solvelang-api-access" });
+    } catch { return response(503, { status: "unavailable", service: "solvelang-api-access" }); }
+  }
+
   return async function handle(event) {
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
@@ -166,6 +180,12 @@ export function createApiAccessHandler({
       if (method === "GET" && path.endsWith("/public/status/health")) {
         try { return response(200, await publicStatusReader()); }
         catch { return response(200, unverifiedPublicStatus()); }
+      }
+      if (method === "GET" && path.endsWith("/public/status/account")) {
+        return statusProbeResponse(statusProbes.accountPersistence);
+      }
+      if (method === "GET" && path.endsWith("/public/status/billing")) {
+        return statusProbeResponse(statusProbes.billing);
       }
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, { status: "ok", service: "solvelang-api-access" });
