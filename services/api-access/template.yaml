@@ -44,6 +44,29 @@ Parameters:
     NoEcho: true
     Default: ""
     Description: Cloudflare Turnstile secret key for sign-in bot verification; blank leaves Turnstile unenforced (rate limits and the honeypot/timing checks stay active).
+  GitHubAppId:
+    Type: String
+    Default: ""
+    Description: SolveLang GitHub App id; blank (with any other GitHub App value blank) leaves GitHub sign-in and installations dark.
+  GitHubAppClientId:
+    Type: String
+    Default: ""
+    Description: SolveLang GitHub App OAuth client id.
+  GitHubAppClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App OAuth client secret.
+  GitHubAppPrivateKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App private key (PEM; literal \n escapes are accepted).
+  GitHubAppWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App webhook secret for delivery signature verification.
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -250,6 +273,24 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  GitHubInstallationsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: recordKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: recordKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   AdminCrmTable:
     Type: AWS::DynamoDB::Table
     Condition: AdminCrmFeatureEnabled
@@ -350,6 +391,12 @@ Resources:
           API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
           API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
           API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
+          API_GITHUB_APP_ID: !Ref GitHubAppId
+          API_GITHUB_APP_CLIENT_ID: !Ref GitHubAppClientId
+          API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
+          API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
+          API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
+          API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
           STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
@@ -368,6 +415,8 @@ Resources:
             TableName: !Ref ApiSubscriptionEventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GitHubInstallationsTable
         - Statement:
             Effect: Allow
             Action:
@@ -450,6 +499,30 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/auth/logout
             Method: POST
+        GitHubAuthAuthorize:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/authorize
+            Method: GET
+        GitHubAuthCallback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/callback
+            Method: GET
+        GitHubWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/webhook
+            Method: POST
+        CustomerGitHubInstallations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/installations
+            Method: GET
         CustomerRevokeAllSessions:
           Type: HttpApi
           Properties:

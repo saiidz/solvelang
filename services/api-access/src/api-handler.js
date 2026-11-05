@@ -62,6 +62,7 @@ export function createApiAccessHandler({
   subscriptionLifecycle,
   stripeGateway,
   botProtection = null,
+  githubApp = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
   logger = console,
 }) {
@@ -98,6 +99,12 @@ export function createApiAccessHandler({
       ...(cookies.length > 0 ? { cookies } : {}),
       body: JSON.stringify(body),
     };
+  }
+
+  // Browser flows (GitHub OAuth) answer with a redirect, not JSON. The
+  // body stays the standard empty JSON object; browsers follow Location.
+  function redirect(location, cookies = []) {
+    return response(302, {}, { location }, cookies);
   }
 
   function requireAdmin(event) {
@@ -183,6 +190,33 @@ export function createApiAccessHandler({
         }
         const result = await subscriptionLifecycle.processEvent(stripeEvent);
         return response(200, { received: true, handled: result.handled, duplicate: result.duplicate });
+      }
+
+      if (method === "GET" && path.endsWith("/github/auth/authorize")) {
+        if (!customerAccountsEnabled || !githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        const { location } = await githubApp.beginAuthorize();
+        return redirect(location);
+      }
+      if (method === "GET" && path.endsWith("/github/auth/callback")) {
+        // Every failure lands on the same detail-free error redirect: the
+        // caller learns nothing about which step rejected the sign-in.
+        const failure = redirect(`${siteOrigin}/account/api-keys/?github=error`);
+        if (!customerAccountsEnabled || !githubApp) return failure;
+        const code = event?.queryStringParameters?.code;
+        const state = event?.queryStringParameters?.state;
+        if (typeof code !== "string" || !code || typeof state !== "string" || !state) return failure;
+        try {
+          const result = await githubApp.completeSignIn({ code, state });
+          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, [result.cookie]);
+        } catch {
+          return failure;
+        }
+      }
+      if (method === "POST" && path.endsWith("/github/webhook")) {
+        if (!githubApp) return response(401, { error: "Invalid webhook.", code: "invalid_webhook_signature" });
+        const verified = await githubApp.handleWebhook({ rawBody: bodyText(event), signature: header(event, "x-hub-signature-256") });
+        if (!verified) return response(401, { error: "Invalid webhook.", code: "invalid_webhook_signature" });
+        return response(200, {});
       }
 
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
@@ -277,6 +311,11 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/auth/totp/disable")) {
         const session = await customerSession(event, true);
         return response(200, { auth: await customerAuth.disableTotp(session, parseJson(event)) });
+      }
+      if (method === "GET" && path.endsWith("/customer/github/installations")) {
+        const session = await customerSession(event);
+        if (!githubApp) return response(200, { enabled: false, installations: [] });
+        return response(200, { enabled: true, installations: await githubApp.listForAccount(session.accountId) });
       }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);
