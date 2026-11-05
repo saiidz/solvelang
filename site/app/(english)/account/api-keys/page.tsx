@@ -14,6 +14,7 @@ import {
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
 import { buildBotFields } from "@/app/account/core/bot-fields";
+import { githubAuthorizeUrl, githubSignInOutcome } from "@/app/account/core/github-install";
 import { SignInHoneypot, SignInTurnstile } from "@/app/account/core/signin-bot-check";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
@@ -86,6 +87,9 @@ export default function ApiKeysPage() {
     let active = true;
     (async () => {
       try {
+        const githubOutcome = githubSignInOutcome(window.location.search);
+        if (githubOutcome === "connected") setNotice("GitHub sign-in complete — you are signed in.");
+        if (githubOutcome === "error") setError("GitHub sign-in didn't complete. You can keep using your password or a secure email link.");
         const token = magicTokenFromHash(window.location.hash);
         if (token) {
           const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/verify", {
@@ -465,6 +469,12 @@ export default function ApiKeysPage() {
             <p className="mt-8 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
             <h1 className="mt-3 text-4xl font-bold">Sign in</h1>
             <p className="mt-4 text-slate-300">Use your email address or username and password. Normal password sign-ins do not send email.</p>
+            {API_BASE ? (
+              <div className="mt-8">
+                <a href={githubAuthorizeUrl(API_BASE)} className="flex w-full items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-slate-950 hover:bg-slate-200">Continue with GitHub</a>
+                <p className="mt-3 text-sm text-slate-400">GitHub sign-in uses the verified email address on your GitHub account.</p>
+              </div>
+            ) : null}
             <form className="mt-8 space-y-4" onSubmit={passwordLogin}>
               <label className="block text-sm font-medium" htmlFor="identifier">Email or username</label>
               <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com or username" />
