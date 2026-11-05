@@ -420,6 +420,18 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /public/status/health
             Method: GET
+        PublicStatusAccount:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/account
+            Method: GET
+        PublicStatusBilling:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/billing
+            Method: GET
         CustomerMagicLink:
           Type: HttpApi
           Properties:

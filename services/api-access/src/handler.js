@@ -3,7 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { KMSClient } from "@aws-sdk/client-kms";
 import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { SESv2Client } from "@aws-sdk/client-sesv2";
-import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import Stripe from "stripe";
 import { createAccountAccessAdminHandler } from "./account-access-admin-handler.js";
 import { createAccessGuardedApiAccessService } from "./account-access-api-service.js";
@@ -44,6 +44,7 @@ import { createTurnstileVerifier } from "./turnstile.js";
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const publicStatusStore = createDynamoPublicStatusStore(documentClient, process.env.PUBLIC_STATUS_TABLE);
+const statusProbes = { accountPersistence: undefined, billing: undefined };
 const store = createDynamoApiAccessStore(documentClient, environment);
 const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
 const service = createApiAccessService({ store, pepper: environment.pepper, previousPepper: environment.previousPepper, mode: environment.mode });
@@ -124,6 +125,7 @@ if (environment.subscriptionBillingEnabled) {
   elementsCheckout = createElementsSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true });
   subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
   subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
+  statusProbes.billing = async () => { await stripe.balance.retrieve(); return true; };
   subscriptionManagementApplication = createSubscriptionManagementHandler({
     customerAuth,
     management: createSubscriptionManagementService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true }),
@@ -135,6 +137,13 @@ if (environment.subscriptionBillingEnabled) {
 const botProtection = environment.turnstileSecretKey
   ? createTurnstileVerifier({ secret: environment.turnstileSecretKey, expectedHostname: new URL(environment.siteOrigin).hostname })
   : undefined;
+
+if (environment.customerAccountsEnabled && environment.customerAuthTable) {
+  statusProbes.accountPersistence = async () => {
+    await documentClient.send(new GetCommand({ TableName: environment.customerAuthTable, Key: { authKey: "status#probe" } }));
+    return true;
+  };
+}
 
 const application = createApiAccessHandler({
   service: guardedService,
@@ -154,6 +163,7 @@ const application = createApiAccessHandler({
   stripeGateway,
   botProtection,
   publicStatusReader: () => publicStatusStore.readSnapshot(),
+  statusProbes,
 });
 
 const studioWorkspaceApplication = createStudioWorkspaceHandler({
