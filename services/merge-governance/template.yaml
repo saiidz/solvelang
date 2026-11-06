@@ -31,6 +31,20 @@ Parameters:
       HMAC secret for the GitHub webhook ingress (added by the stacked
       webhook PR). Empty (the default) fails closed with 503; a bad
       signature is rejected with 401 and nothing is enqueued.
+  GitHubAppId:
+    Type: String
+    Default: ""
+    Description: >-
+      SolveLang Reader GitHub App id. Together with GitHubAppPrivateKey
+      it lets the queue reader mint per-installation tokens for repos
+      bound to an installation. Empty (the default) keeps app auth off.
+  GitHubAppPrivateKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      PEM private key for the GitHub App ("\n"-escaped newlines are
+      accepted). Empty (the default) keeps app auth off. Never logged.
   PilotTenantId:
     Type: String
     Default: ""
@@ -40,7 +54,10 @@ Parameters:
     Default: ""
     Description: >-
       Comma-separated owner/repo list the reconcile sweeper watches
-      (e.g. "saiidz/solvelang"). Empty disables the sweeper (no-op).
+      (e.g. "saiidz/solvelang"). An entry may carry the repo's GitHub
+      App installation id as an "@<installationId>" suffix (e.g.
+      "saiidz/upcomingsounds-private@179351888") so its reads mint an
+      installation token. Empty disables the sweeper (no-op).
 
 Resources:
   # Tenant-first single-table design. PK is always "TENANT#<tenantId>";
@@ -121,6 +138,8 @@ Resources:
           GITHUB_TOKEN: !Ref GitHubReadToken
           ADMIN_TOKEN: !Ref AdminToken
           WEBHOOK_SECRET: !Ref WebhookSecret
+          MGOV_GITHUB_APP_ID: !Ref GitHubAppId
+          MGOV_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
           WEBHOOK_QUEUE_URL: !Ref WebhookQueue
           PILOT_TENANT_ID: !Ref PilotTenantId
           PILOT_REPOS: !Ref PilotRepos
