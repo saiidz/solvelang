@@ -83,3 +83,23 @@ export function buildQueueSnapshot(tenantId, owner, repo, prs, now = new Date())
     prs,
   };
 }
+
+// Resolves the GitHub credential for one repo read, in priority order:
+//
+//   1. A GitHub App installation token — when the repo is bound to an
+//      installation (installationId set) AND app auth is configured.
+//      Minting failures throw the typed GitHubAppAuthError from
+//      github-app-auth.js; the handler maps them to a sanitized 502 and
+//      no GitHub response detail ever reaches callers.
+//   2. The static read token, when configured.
+//   3. null — nothing usable is configured; callers fail closed (503).
+//
+// The installation id may arrive as a number (DynamoDB record / parsed
+// repo spec) or as a numeric string; anything else counts as unbound.
+export async function resolveRepoToken({ installationId, staticToken, appAuth } = {}) {
+  const id = Number(installationId);
+  if (Number.isSafeInteger(id) && id > 0 && appAuth) {
+    return appAuth.getInstallationToken(id);
+  }
+  return staticToken || null;
+}
