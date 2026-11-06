@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  SolveLang merge-governance pilot — tenant-first queue state model,
+  read-only GitHub queue reader, and the 15-minute reconcile sweeper.
+  Deployed later by a dedicated dispatch workflow as stack
+  "solvelang-merge-governance-pilot" in us-east-2. Nothing in this
+  template is deployed by the PR that introduces it.
+
+Parameters:
+  GitHubReadToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      Read-only GitHub token for the queue reader. Empty (the default)
+      keeps the reader dark: queue reads fail closed with a 503
+      "github_not_configured" instead of guessing.
+  AdminToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      Pilot skeleton admin auth. Callers must send this value in the
+      x-admin-token header. Empty (the default) fails closed with 503.
+  PilotTenantId:
+    Type: String
+    Default: ""
+    Description: Tenant id the reconcile sweeper and webhook worker act for.
+  PilotRepos:
+    Type: String
+    Default: ""
+    Description: >-
+      Comma-separated owner/repo list the reconcile sweeper watches
+      (e.g. "saiidz/solvelang"). Empty disables the sweeper (no-op).
+
+Resources:
+  # Tenant-first single-table design. PK is always "TENANT#<tenantId>";
+  # the record kind lives in SK:
+  #   SK "PROFILE"                        -> tenant profile
+  #   SK "REPO#<owner/name>"              -> repo record; attributes include
+  #                                          paused (bool), killSwitch (bool),
+  #                                          rulesVersion (string)
+  #   SK "QUEUE#<owner/name>#<prNumber>"  -> one governed pull request;
+  #                                          attributes include headSha, state
+  #                                          (queued|draft|merging|landed|ejected),
+  #                                          batchId when part of a batch
+  #   SK "BATCH#<id>"                     -> one merge batch
+  #   SK "DECISION#<ISO-ts>#<id>"         -> structured decision-log record
+  #                                          {ts, tenantId, repo, pr, action,
+  #                                          reason, rulesVersion} — plain JSON,
+  #                                          SIEM-exportable
+  #   SK "USAGE#<yyyy-mm-dd>"             -> daily usage counters, bumped with
+  #                                          atomic ADD (queueReads, prsObserved,
+  #                                          eventsReceived, prsGoverned)
+  # TTL attribute: expiresAt (epoch seconds) — set only on records that
+  # are meant to expire; governance records leave it unset.
+  MergeGovernanceTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # Webhook pipeline declared now; the ingress route and worker wiring
+  # land in the stacked follow-up PR. FIFO so per-repo delivery order is
+  # preserved; senders set MessageDeduplicationId to the GitHub delivery
+  # id, so redeliveries collapse instead of double-applying.
+  WebhookQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt WebhookDeadLetterQueue.Arn
+        maxReceiveCount: 5
+
+  WebhookDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      FifoQueue: true
+
+  MergeGovernanceApi:
+    Type: AWS::Serverless::HttpApi
+
+  QueueFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 30
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref MergeGovernanceTable
+          GITHUB_TOKEN: !Ref GitHubReadToken
+          ADMIN_TOKEN: !Ref AdminToken
+          PILOT_TENANT_ID: !Ref PilotTenantId
+          PILOT_REPOS: !Ref PilotRepos
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref MergeGovernanceTable
+      Events:
+        QueueRead:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MergeGovernanceApi
+            Path: /tenants/{tenantId}/queue
+            Method: GET
+        ReconcileSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(15 minutes)
+            Input: '{"action":"reconcile"}'
+            Enabled: true
+
+Outputs:
+  MergeGovernanceApiUrl:
+    Description: Base URL of the merge-governance pilot API.
+    Value: !Sub "https://${MergeGovernanceApi}.execute-api.${AWS::Region}.amazonaws.com"
+  MergeGovernanceTableName:
+    Description: Name of the merge-governance state table.
+    Value: !Ref MergeGovernanceTable
+  WebhookQueueUrl:
+    Description: URL of the webhook worker queue.
+    Value: !Ref WebhookQueue
