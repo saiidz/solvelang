@@ -1,21 +1,28 @@
 // Merge-governance pilot — Lambda entry point.
 //
-// One function serves these triggers (pilot skeleton simplicity):
-//   - HttpApi:  GET /tenants/{tenantId}/queue?owner=<o>&repo=<r>
+// One function serves every trigger for the pilot skeleton (kept as a
+// single function deliberately; splitting ingress/worker is a later
+// step). Triggers:
+//   - HttpApi:  GET  /tenants/{tenantId}/queue?owner=<o>&repo=<r>
+//   - HttpApi:  POST /webhooks/github            (signed webhook ingress)
+//   - SQS:      webhook worker queue             (state transitions)
 //   - EventBridge schedule (rate 15 minutes): {"action":"reconcile"}
-//   - (webhook ingress + SQS worker are added by the stacked follow-up)
 //
 // Everything fails closed with sanitized errors:
 //   - ADMIN_TOKEN unset            -> 503 (pilot admin auth not configured)
 //   - x-admin-token header missing -> 401
 //   - GITHUB_TOKEN unset           -> 503 (queue reader not configured)
+//   - WEBHOOK_SECRET unset         -> 503 (webhook ingress not configured)
+//   - bad webhook signature        -> 401
 //
 // The handler is built by a factory so tests can inject an in-memory
-// store, config, and fetch implementation.
+// store, config, fetch implementation, and SQS sender.
 
 import { timingSafeEqual } from "node:crypto";
 import { buildQueueSnapshot, readRepoQueue } from "./queue-reader.js";
 import { createDynamoStore } from "./state-store.js";
+import { createWebhookHandler, defaultSqsSend } from "./webhook.js";
+import { createWorker } from "./worker.js";
 
 const RULES_VERSION = "pilot-0";
 
@@ -52,13 +59,21 @@ export function configFromEnv(env) {
     tableName: env.TABLE_NAME || "",
     githubToken: env.GITHUB_TOKEN || "",
     adminToken: env.ADMIN_TOKEN || "",
+    webhookSecret: env.WEBHOOK_SECRET || "",
+    webhookQueueUrl: env.WEBHOOK_QUEUE_URL || "",
     pilotTenantId: env.PILOT_TENANT_ID || "",
     pilotRepos: parseRepoList(env.PILOT_REPOS || ""),
     rulesVersion: RULES_VERSION,
   };
 }
 
-export function createHandler({ store, config, fetchImpl = fetch }) {
+export function createHandler({ store, config, fetchImpl = fetch, sqsSend }) {
+  const handleWebhook = createWebhookHandler({
+    config,
+    sqsSend: sqsSend || defaultSqsSend,
+  });
+  const handleSqsEvent = createWorker({ store, config });
+
   async function handleQueueRead(event) {
     if (!config.adminToken) {
       return json(503, { error: "admin_auth_not_configured" });
@@ -156,11 +171,17 @@ export function createHandler({ store, config, fetchImpl = fetch }) {
 
   return async function mergeGovernanceHandler(event) {
     try {
+      if (event && Array.isArray(event.Records) && event.Records.length > 0) {
+        return await handleSqsEvent(event);
+      }
       if (event && event.action === "reconcile") {
         return await handleReconcile();
       }
       const method = event?.requestContext?.http?.method;
       const rawPath = event?.rawPath || "";
+      if (method === "POST" && rawPath === "/webhooks/github") {
+        return await handleWebhook(event);
+      }
       if (
         method === "GET" &&
         rawPath.startsWith("/tenants/") &&
