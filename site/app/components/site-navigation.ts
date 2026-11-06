@@ -13,6 +13,7 @@ export const toolLinks = [
   { label: "Server audit", href: "/server-audit/" },
   { label: "About SolveLang", href: "/about/" },
   { label: "API plans (preview)", href: "/api-pricing/" },
+  { label: "Process Solution", href: "/process-solution/" },
 ] as const;
 
 export function normalizePath(pathname: string | null): string {
