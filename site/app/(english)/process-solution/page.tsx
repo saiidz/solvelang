@@ -77,6 +77,9 @@ export default function ProcessSolutionPage() {
             <pre className="mt-4 whitespace-pre-wrap break-words font-mono text-sm leading-7 text-slate-100">{rulesLines.join("\n")}</pre>
           </div>
           <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
+            Every cap in this template is a recommendation, not a lock — your team configures stack size, shard caps, batch size and gate strictness to your own queue. The floor that never moves: fail-closed on unresolvable state, a written reason for every merge and block, and your code never leaves your infrastructure.
+          </p>
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
             The rules are the readable part. The product is that they are enforced on every landing — and that every enforcement is audited.
           </p>
         </section>
