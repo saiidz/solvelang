@@ -9,8 +9,10 @@ const pages = [
   { id: "browser-preview", path: "/run/", marker: "Browser preview" },
   { id: "repository-audit-page", path: "/repository-audit/", marker: "Repository Audit" },
   { id: "solve-graph-page", path: "/solve-graph/", marker: "Solve Graph" },
+  { id: "support", path: "/support/", marker: "SolveLang help" },
 ];
-const ids = [...pages.map(({ id }) => id), "api-health"];
+const ids = [...pages.map(({ id }) => id), "api-health", "account-persistence", "billing", "ci-deployment"];
+const CI_BADGE_URL = "https://github.com/saiidz/solvelang/actions/workflows/ci.yml/badge.svg";
 const states = new Set(["operational", "degraded", "partial_outage", "major_outage", "maintenance", "not_monitored"]);
 
 export const unverifiedPublicStatus = () => ({ observations: {} });
@@ -56,8 +58,9 @@ async function probe(url, kind, marker, fetchImpl, now, timeoutMs) {
   try {
     const body = await Promise.race([
       (async () => {
-        const response = await fetchImpl(url, { method: "GET", redirect: "error", signal: controller.signal, headers: { accept: kind === "json" ? "application/json" : "text/html" } });
-        if (response.status !== 200 || !response.headers.get("content-type")?.includes(kind === "json" ? "application/json" : "text/html")) return "";
+        const expectedType = kind === "json" ? "application/json" : kind === "svg" ? "image/svg+xml" : "text/html";
+        const response = await fetchImpl(url, { method: "GET", redirect: "error", signal: controller.signal, headers: { accept: kind === "json" ? "application/json" : kind === "svg" ? "image/svg+xml" : "text/html" } });
+        if (response.status !== 200 || !response.headers.get("content-type")?.includes(expectedType)) return "";
         return boundedText(response);
       })(),
       new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("timeout")); }, timeoutMs); }),
@@ -86,6 +89,9 @@ export function createPublicStatusCollector({ siteOrigin, apiHealthUrl, fetchImp
     const entries = await Promise.all([
       ...pages.map(({ id, path, marker }) => probe(new URL(path, origin), "html", marker, fetchImpl, now, timeoutMs).then((observation) => [id, observation])),
       probe(api, "json", "", fetchImpl, now, timeoutMs).then((observation) => ["api-health", observation]),
+      probe(new URL("/public/status/account", api), "json", "", fetchImpl, now, timeoutMs).then((observation) => ["account-persistence", observation]),
+      probe(new URL("/public/status/billing", api), "json", "", fetchImpl, now, timeoutMs).then((observation) => ["billing", observation]),
+      probe(new URL(CI_BADGE_URL), "svg", "passing", fetchImpl, now, timeoutMs).then((observation) => ["ci-deployment", observation]),
     ]);
     return { collectedAt: new Date(startedAt).toISOString(), observations: Object.fromEntries(entries) };
   };

@@ -469,6 +469,18 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /public/status/health
             Method: GET
+        PublicStatusAccount:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/account
+            Method: GET
+        PublicStatusBilling:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /public/status/billing
+            Method: GET
         CustomerMagicLink:
           Type: HttpApi
           Properties:
@@ -601,11 +613,23 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/portal
             Method: POST
+        CustomerSubscriptionElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/elements-checkout
+            Method: POST
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /internal/subscriptions/checkout
+            Method: POST
+        SubscriptionElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/elements-checkout
             Method: POST
         SubscriptionWebhook:
           Type: HttpApi
