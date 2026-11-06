@@ -88,13 +88,28 @@ function supportAutomation(environment) {
   };
 }
 
+function githubApp(environment) {
+  // The GitHub App is dark until every credential is present: a partial
+  // configuration never enables a half-wired sign-in or webhook surface,
+  // it simply leaves the whole feature off (fail closed).
+  const config = {
+    appId: environment.API_GITHUB_APP_ID || undefined,
+    clientId: environment.API_GITHUB_APP_CLIENT_ID || undefined,
+    clientSecret: environment.API_GITHUB_APP_CLIENT_SECRET || undefined,
+    privateKey: environment.API_GITHUB_APP_PRIVATE_KEY || undefined,
+    webhookSecret: environment.API_GITHUB_APP_WEBHOOK_SECRET || undefined,
+  };
+  const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
+  return { githubApp: { enabled, ...config } };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   const customer = customerAccounts(environment);
   const automation = supportAutomation(environment);
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation,
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,
