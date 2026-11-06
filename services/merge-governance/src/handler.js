@@ -1,0 +1,189 @@
+// Merge-governance pilot — Lambda entry point.
+//
+// One function serves these triggers (pilot skeleton simplicity):
+//   - HttpApi:  GET /tenants/{tenantId}/queue?owner=<o>&repo=<r>
+//   - EventBridge schedule (rate 15 minutes): {"action":"reconcile"}
+//   - (webhook ingress + SQS worker are added by the stacked follow-up)
+//
+// Everything fails closed with sanitized errors:
+//   - ADMIN_TOKEN unset            -> 503 (pilot admin auth not configured)
+//   - x-admin-token header missing -> 401
+//   - GITHUB_TOKEN unset           -> 503 (queue reader not configured)
+//
+// The handler is built by a factory so tests can inject an in-memory
+// store, config, and fetch implementation.
+
+import { timingSafeEqual } from "node:crypto";
+import { buildQueueSnapshot, readRepoQueue } from "./queue-reader.js";
+import { createDynamoStore } from "./state-store.js";
+
+const RULES_VERSION = "pilot-0";
+
+function json(statusCode, payload) {
+  return {
+    statusCode,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  };
+}
+
+function tokenMatches(provided, expected) {
+  if (!provided || !expected) return false;
+  const a = Buffer.from(String(provided));
+  const b = Buffer.from(String(expected));
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export function parseRepoList(raw) {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.includes("/"))
+    .map((entry) => {
+      const [owner, repo] = entry.split("/");
+      return { owner, repo, fullName: `${owner}/${repo}` };
+    });
+}
+
+export function configFromEnv(env) {
+  return {
+    tableName: env.TABLE_NAME || "",
+    githubToken: env.GITHUB_TOKEN || "",
+    adminToken: env.ADMIN_TOKEN || "",
+    pilotTenantId: env.PILOT_TENANT_ID || "",
+    pilotRepos: parseRepoList(env.PILOT_REPOS || ""),
+    rulesVersion: RULES_VERSION,
+  };
+}
+
+export function createHandler({ store, config, fetchImpl = fetch }) {
+  async function handleQueueRead(event) {
+    if (!config.adminToken) {
+      return json(503, { error: "admin_auth_not_configured" });
+    }
+    const headers = event.headers || {};
+    const provided = headers["x-admin-token"] || headers["X-Admin-Token"] || "";
+    if (!tokenMatches(provided, config.adminToken)) {
+      return json(401, { error: "unauthorized" });
+    }
+    if (!config.githubToken) {
+      return json(503, { error: "github_not_configured" });
+    }
+    const tenantId = event.pathParameters?.tenantId;
+    const owner = event.queryStringParameters?.owner;
+    const repo = event.queryStringParameters?.repo;
+    if (!tenantId || !owner || !repo) {
+      return json(400, { error: "tenant_owner_repo_required" });
+    }
+
+    const { prs } = await readRepoQueue({
+      owner,
+      repo,
+      token: config.githubToken,
+      fetchImpl,
+    });
+    const snapshot = buildQueueSnapshot(tenantId, owner, repo, prs, new Date());
+    const repoRecord = await store.getRepoRecord(tenantId, snapshot.repo);
+    snapshot.summary.paused = Boolean(repoRecord?.paused);
+
+    await store.putQueueSnapshot(snapshot);
+    await store.appendDecision({
+      tenantId,
+      repo: snapshot.repo,
+      action: "queue_read",
+      reason: `openPrs=${snapshot.summary.openPrs} drafts=${snapshot.summary.drafts}`,
+      rulesVersion: config.rulesVersion,
+    });
+    await store.bumpUsage(tenantId, {
+      queueReads: 1,
+      prsObserved: snapshot.summary.openPrs,
+    });
+
+    return json(200, {
+      tenantId,
+      repo: snapshot.repo,
+      summary: snapshot.summary,
+      prs: snapshot.prs,
+    });
+  }
+
+  // Shield guard: on the 15-minute sweep, any stored QUEUE entry in state
+  // "merging" whose live head SHA no longer matches (or whose PR vanished)
+  // pauses the repo automatically and writes a decision record. The pilot
+  // never un-pauses on its own.
+  async function handleReconcile() {
+    const tenantId = config.pilotTenantId;
+    if (!tenantId || config.pilotRepos.length === 0) {
+      return { ok: true, skipped: "pilot_not_configured", paused: [] };
+    }
+    if (!config.githubToken) {
+      return { ok: false, skipped: "github_not_configured", paused: [] };
+    }
+    const paused = [];
+    for (const { owner, repo, fullName } of config.pilotRepos) {
+      const { prs } = await readRepoQueue({
+        owner,
+        repo,
+        token: config.githubToken,
+        fetchImpl,
+      });
+      const liveByNumber = new Map(prs.map((pr) => [pr.number, pr]));
+      const stored = await store.listQueueEntries(tenantId, fullName);
+      for (const entry of stored) {
+        if (entry.state !== "merging") continue;
+        const live = liveByNumber.get(entry.prNumber);
+        if (!live || live.headSha !== entry.headSha) {
+          await store.setRepoPaused(tenantId, fullName, true, {
+            reason: `head_mismatch pr=${entry.prNumber} stored=${entry.headSha} live=${live ? live.headSha : "missing"}`,
+            rulesVersion: config.rulesVersion,
+          });
+          await store.appendDecision({
+            tenantId,
+            repo: fullName,
+            pr: entry.prNumber,
+            action: "auto_pause_mismatch",
+            reason: "stored merging head does not match live head",
+            rulesVersion: config.rulesVersion,
+          });
+          paused.push({ repo: fullName, pr: entry.prNumber });
+        }
+      }
+    }
+    return { ok: true, paused };
+  }
+
+  return async function mergeGovernanceHandler(event) {
+    try {
+      if (event && event.action === "reconcile") {
+        return await handleReconcile();
+      }
+      const method = event?.requestContext?.http?.method;
+      const rawPath = event?.rawPath || "";
+      if (
+        method === "GET" &&
+        rawPath.startsWith("/tenants/") &&
+        rawPath.endsWith("/queue")
+      ) {
+        return await handleQueueRead(event);
+      }
+      return json(404, { error: "not_found" });
+    } catch (err) {
+      // Sanitized: never leak upstream detail or internals to callers.
+      console.error("merge_governance_error", err?.message || "unknown");
+      return json(502, { error: "upstream_unavailable" });
+    }
+  };
+}
+
+let defaultHandler = null;
+
+export async function handler(event) {
+  if (!defaultHandler) {
+    const config = configFromEnv(process.env);
+    const store = createDynamoStore({ tableName: config.tableName });
+    defaultHandler = createHandler({ store, config });
+  }
+  return defaultHandler(event);
+}
