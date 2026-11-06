@@ -23,6 +23,14 @@ Parameters:
     Description: >-
       Pilot skeleton admin auth. Callers must send this value in the
       x-admin-token header. Empty (the default) fails closed with 503.
+  WebhookSecret:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      HMAC secret for the GitHub webhook ingress (added by the stacked
+      webhook PR). Empty (the default) fails closed with 503; a bad
+      signature is rejected with 401 and nothing is enqueued.
   PilotTenantId:
     Type: String
     Default: ""
@@ -112,11 +120,21 @@ Resources:
           TABLE_NAME: !Ref MergeGovernanceTable
           GITHUB_TOKEN: !Ref GitHubReadToken
           ADMIN_TOKEN: !Ref AdminToken
+          WEBHOOK_SECRET: !Ref WebhookSecret
+          WEBHOOK_QUEUE_URL: !Ref WebhookQueue
           PILOT_TENANT_ID: !Ref PilotTenantId
           PILOT_REPOS: !Ref PilotRepos
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MergeGovernanceTable
+        # One function serves both webhook ingress and the SQS worker for
+        # the pilot skeleton (see src/handler.js), so it holds both the
+        # send and consume policies for the webhook queue. Splitting the
+        # ingress and worker into separate functions is a later step.
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt WebhookQueue.QueueName
+        - SQSConsumeMessagesPolicy:
+            QueueName: !GetAtt WebhookQueue.QueueName
       Events:
         QueueRead:
           Type: HttpApi
@@ -129,6 +147,18 @@ Resources:
           Properties:
             Schedule: rate(15 minutes)
             Input: '{"action":"reconcile"}'
+            Enabled: true
+        WebhookIngress:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref MergeGovernanceApi
+            Path: /webhooks/github
+            Method: POST
+        WebhookWorker:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt WebhookQueue.Arn
+            BatchSize: 10
             Enabled: true
 
 Outputs:
