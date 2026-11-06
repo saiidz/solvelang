@@ -1,0 +1,143 @@
+name: Deploy Merge Governance Pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_pilot_deploy:
+        description: Confirm deploying the merge-governance pilot stack (new stack, pilot tenant only, no production traffic)
+        required: true
+        default: false
+        type: boolean
+      confirm_cost_d0_only:
+        description: Confirm this deploy stays inside the D0 cost envelope (on-demand Lambda, DynamoDB, SQS and API Gateway only; no provisioned capacity, no paid add-ons)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: services/merge-governance
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: solvelang-merge-governance-pilot
+      PILOT_TENANT_ID: saiidz-pilot
+      PILOT_REPOS: saiidz/upcomingsounds-private@179351888,saiidz/solvelang
+      MGOV_GITHUB_READ_TOKEN: ${{ secrets.MGOV_GITHUB_READ_TOKEN }}
+      MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
+      MGOV_WEBHOOK_SECRET: ${{ secrets.MGOV_WEBHOOK_SECRET }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enforce pilot deploy boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Pilot deploy must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_pilot_deploy }}" == "true" ]] || { echo "Explicit pilot deploy confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_cost_d0_only }}" == "true" ]] || { echo "Explicit D0 cost-envelope confirmation is required." >&2; exit 1; }
+          [[ "$STACK_NAME" == "solvelang-merge-governance-pilot" ]] || { echo "Unexpected pilot stack name." >&2; exit 1; }
+          test -n "$AWS_REGION"
+          test -n "$PILOT_TENANT_ID"
+          test -n "$PILOT_REPOS"
+          # The optional credentials (static read token, GitHub App) may be
+          # empty: the stack deploys dark for whichever is missing and the
+          # function fails closed per repo. The two pilot secrets below may
+          # NOT be empty: without them the admin route and the webhook
+          # ingress would deploy permanently dark by accident.
+          [[ -n "$MGOV_ADMIN_TOKEN" ]] || { echo "MGOV_ADMIN_TOKEN secret must be set before the pilot deploy." >&2; exit 1; }
+          [[ -n "$MGOV_WEBHOOK_SECRET" ]] || { echo "MGOV_WEBHOOK_SECRET secret must be set before the pilot deploy." >&2; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate merge-governance candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          node scripts/check-licences.mjs --from-node-modules
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          for f in "$RUNNER_TEMP/aws/install" "$RUNNER_TEMP/aws/dist/aws" "$RUNNER_TEMP/aws/dist/aws_completer"; do
+            if [[ -f "$f" ]]; then chmod +x "$f"; fi
+          done
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
+
+      - name: Assume pilot deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Validate and build the pilot template
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam validate --lint --template template.yaml
+          sam build --template template.yaml
+
+      - name: Deploy the merge-governance pilot stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            PilotTenantId="$PILOT_TENANT_ID"
+            PilotRepos="$PILOT_REPOS"
+            AdminToken="$MGOV_ADMIN_TOKEN"
+            WebhookSecret="$MGOV_WEBHOOK_SECRET"
+          )
+          [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || parameters+=(GitHubReadToken="$MGOV_GITHUB_READ_TOKEN")
+          [[ -z "$GH_APP_ID" ]] || parameters+=(GitHubAppId="$GH_APP_ID")
+          [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_auth="off"
+          [[ -z "$GH_APP_ID" || -z "$GH_APP_PRIVATE_KEY" ]] || app_auth="on"
+          static_reader="off"
+          [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || static_reader="on"
+          {
+            echo "## SolveLang merge-governance pilot deploy"
+            echo
+            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Stack: \`$STACK_NAME\`"
+            echo "- Region: \`$AWS_REGION\`"
+            echo "- Pilot tenant: \`$PILOT_TENANT_ID\`"
+            echo "- Pilot repos: \`$PILOT_REPOS\`"
+            echo "- GitHub App auth configured: **$app_auth**"
+            echo "- Static read token configured: **$static_reader**"
+            echo "- Cost envelope: **D0** (on-demand serverless only)"
+          } >> "$GITHUB_STEP_SUMMARY"
