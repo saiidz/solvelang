@@ -4,10 +4,12 @@ import test from "node:test";
 import {
   applyInstallationWebhook,
   buildAuthorizeUrl,
+  buildInstallUrl,
   createAppJwt,
   createInstallationToken,
   exchangeOAuthCode,
   fetchGitHubUser,
+  linkInstallationFromGitHub,
   verifyWebhookSignature,
 } from "../src/github-app.js";
 import { parseApiAccessEnvironment } from "../src/config.js";
@@ -258,4 +260,152 @@ test("githubApp config stays dark unless every credential is present", () => {
   assert.equal(full.enabled, true);
   assert.equal(full.appId, "1");
   assert.equal(full.webhookSecret, "ws");
+});
+
+test("install URL targets the app's GitHub install screen with the state", () => {
+  assert.equal(
+    buildInstallUrl({ slug: "solvelang", state: "nonce-9" }),
+    "https://github.com/apps/solvelang/installations/new?state=nonce-9",
+  );
+});
+
+test("purpose-bound OAuth states record their binding and never validate as sign-in states", async () => {
+  const store = createDynamoGitHubStore(fakeDocumentClient(), "github-table", { now: () => AT });
+  await store.putOAuthState({ nonce: "install-1", purpose: "install", accountId: "acct_abc" });
+  // The sign-in consume refuses a purpose-bound state (and burns it).
+  assert.equal(await store.consumeOAuthState("install-1"), false);
+  assert.equal(await store.consumeOAuthStateRecord("install-1"), null);
+
+  await store.putOAuthState({ nonce: "install-2", purpose: "install", accountId: "acct_abc" });
+  assert.deepEqual(await store.consumeOAuthStateRecord("install-2"), { purpose: "install", accountId: "acct_abc" });
+  assert.equal(await store.consumeOAuthStateRecord("install-2"), null);
+
+  await store.putOAuthState({ nonce: "signin-1" });
+  assert.deepEqual(await store.consumeOAuthStateRecord("signin-1"), { purpose: undefined, accountId: undefined });
+});
+
+function linkFetch({ installation, installationStatus = 200, repositories = [] }) {
+  const calls = [];
+  const impl = async (url) => {
+    const target = String(url);
+    calls.push(target);
+    if (target === "https://api.github.com/app/installations/42") {
+      return jsonResponse(installation, { ok: installationStatus === 200, status: installationStatus });
+    }
+    if (target === "https://api.github.com/app/installations/42/access_tokens") {
+      return jsonResponse({ token: "ghs_test_token", expires_at: "2026-11-05T13:00:00Z" });
+    }
+    if (target.startsWith("https://api.github.com/installation/repositories")) {
+      return jsonResponse({ total_count: repositories.length, repositories });
+    }
+    throw new Error(`Unexpected fetch ${target}`);
+  };
+  impl.calls = calls;
+  return impl;
+}
+
+const LIVE_INSTALLATION = {
+  id: 42,
+  app_id: 123,
+  account: { login: "octocat", type: "User" },
+  suspended_at: null,
+};
+
+async function linkReadyStore() {
+  const store = createDynamoGitHubStore(fakeDocumentClient(), "github-table", { now: () => AT });
+  await store.putOAuthState({ nonce: "install-state", purpose: "install", accountId: "acct_abc" });
+  return store;
+}
+
+test("link happy path verifies the installation live, then writes the record and the link", async () => {
+  const store = await linkReadyStore();
+  const fetchImpl = linkFetch({
+    installation: LIVE_INSTALLATION,
+    repositories: [
+      { id: 1, full_name: "octocat/hello" },
+      { id: 2, full_name: "octocat/world" },
+    ],
+  });
+  const summary = await linkInstallationFromGitHub({
+    store, appId: "123", privateKey: privatePem, accountId: "acct_abc",
+    installationId: 42, state: "install-state", fetchImpl, now: () => AT,
+  });
+  assert.equal(summary.linked, true);
+  assert.equal(summary.accountLogin, "octocat");
+  assert.deepEqual(summary.repositories, [
+    { id: 1, fullName: "octocat/hello" },
+    { id: 2, fullName: "octocat/world" },
+  ]);
+  const stored = await store.getInstallation(42);
+  assert.equal(stored.accountId, "acct_abc");
+  assert.equal(stored.suspended, false);
+  assert.equal((await store.listInstallationsForAccount("acct_abc")).length, 1);
+  // The state is single-use: a replay is rejected without any GitHub call.
+  const callsBefore = fetchImpl.calls.length;
+  await assert.rejects(
+    () => linkInstallationFromGitHub({
+      store, appId: "123", privateKey: privatePem, accountId: "acct_abc",
+      installationId: 42, state: "install-state", fetchImpl, now: () => AT,
+    }),
+    (error) => error.code === "github_link_state_invalid" && error.statusCode === 400,
+  );
+  assert.equal(fetchImpl.calls.length, callsBefore);
+});
+
+test("link rejects a state bound to a different account and writes nothing", async () => {
+  const store = await linkReadyStore();
+  const fetchImpl = linkFetch({ installation: LIVE_INSTALLATION });
+  await assert.rejects(
+    () => linkInstallationFromGitHub({
+      store, appId: "123", privateKey: privatePem, accountId: "acct_someone_else",
+      installationId: 42, state: "install-state", fetchImpl, now: () => AT,
+    }),
+    (error) => error.code === "github_link_state_invalid" && error.statusCode === 400,
+  );
+  assert.equal(fetchImpl.calls.length, 0);
+  assert.equal(await store.getInstallation(42), undefined);
+  assert.deepEqual(await store.listInstallationsForAccount("acct_someone_else"), []);
+});
+
+test("link rejects a suspended installation and writes nothing", async () => {
+  const store = await linkReadyStore();
+  const fetchImpl = linkFetch({
+    installation: { ...LIVE_INSTALLATION, suspended_at: "2026-11-01T00:00:00Z" },
+  });
+  await assert.rejects(
+    () => linkInstallationFromGitHub({
+      store, appId: "123", privateKey: privatePem, accountId: "acct_abc",
+      installationId: 42, state: "install-state", fetchImpl, now: () => AT,
+    }),
+    (error) => error.code === "github_installation_suspended" && error.statusCode === 403,
+  );
+  assert.equal(await store.getInstallation(42), undefined);
+  assert.deepEqual(await store.listInstallationsForAccount("acct_abc"), []);
+});
+
+test("link maps a GitHub 404 to a not-found error and writes nothing", async () => {
+  const store = await linkReadyStore();
+  const fetchImpl = linkFetch({ installation: { message: "Not Found" }, installationStatus: 404 });
+  await assert.rejects(
+    () => linkInstallationFromGitHub({
+      store, appId: "123", privateKey: privatePem, accountId: "acct_abc",
+      installationId: 42, state: "install-state", fetchImpl, now: () => AT,
+    }),
+    (error) => error.code === "github_installation_not_found" && error.statusCode === 404,
+  );
+  assert.equal(await store.getInstallation(42), undefined);
+});
+
+test("githubApp slug defaults to solvelang and can be overridden", () => {
+  const base = {
+    API_ACCESS_MODE: "test",
+    API_KEY_PEPPER: "p".repeat(32),
+    API_ACCESS_ADMIN_SECRET: "a".repeat(32),
+    API_ACCOUNTS_TABLE: "accounts", API_KEYS_TABLE: "keys",
+    API_USAGE_TABLE: "usage", API_USAGE_IDEMPOTENCY_TABLE: "idem",
+    API_SUBSCRIPTION_EVENTS_TABLE: "events",
+    SITE_ORIGIN: "https://www.solve-lang.com",
+  };
+  assert.equal(parseApiAccessEnvironment(base).githubApp.slug, "solvelang");
+  assert.equal(parseApiAccessEnvironment({ ...base, API_GITHUB_APP_SLUG: "solvelang-dev" }).githubApp.slug, "solvelang-dev");
 });

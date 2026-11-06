@@ -100,7 +100,11 @@ function githubApp(environment) {
     webhookSecret: environment.API_GITHUB_APP_WEBHOOK_SECRET || undefined,
   };
   const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
-  return { githubApp: { enabled, ...config } };
+  // The app slug only builds the public install URL; it is not a
+  // credential, so it never gates `enabled` and defaults to the
+  // production app's slug.
+  const slug = environment.API_GITHUB_APP_SLUG || "solvelang";
+  return { githubApp: { enabled, ...config, slug } };
 }
 
 export function parseApiAccessEnvironment(environment = process.env) {

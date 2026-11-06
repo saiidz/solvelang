@@ -1,4 +1,5 @@
 import { createHmac, createSign, timingSafeEqual } from "node:crypto";
+import { ApiAccessError } from "./service.js";
 
 // GitHub App primitives for the SolveLang GitHub App: app JWT signing,
 // webhook signature verification, the OAuth web flow, and installation
@@ -216,4 +217,140 @@ export async function applyInstallationWebhook({ store, payload, now = Date.now 
     default:
       return { handled: false };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Install linking: the signed-in customer returns from GitHub's install
+// screen with an installation id and the state nonce that beginInstall
+// bound to their account. Linking trusts nothing the browser carried: the
+// state is consumed single-use, the installation is fetched live from
+// GitHub as the app, and only then is anything written.
+
+export class GitHubApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "GitHubApiError";
+    this.status = status;
+  }
+}
+
+export function buildInstallUrl({ slug, state } = {}) {
+  if (typeof slug !== "string" || !slug) throw new Error("GitHub App slug is required.");
+  if (typeof state !== "string" || !state) throw new Error("GitHub install state is required.");
+  return `https://github.com/apps/${encodeURIComponent(slug)}/installations/new?state=${encodeURIComponent(state)}`;
+}
+
+async function githubApiJson(fetchImpl, url, options, failureMessage) {
+  const response = await fetchImpl(url, options);
+  if (!response.ok) throw new GitHubApiError(response.status, failureMessage);
+  const payload = await response.json().catch(() => null);
+  if (!payload || typeof payload !== "object") throw new GitHubApiError(0, failureMessage);
+  return payload;
+}
+
+// The live installation record, fetched as the app itself. GitHub answers
+// 404 both for unknown ids and for installations that belong to a
+// different app, so a 404 is the not-found / not-ours signal.
+export async function fetchInstallation({ appJwt, installationId, fetchImpl = fetch } = {}) {
+  if (typeof appJwt !== "string" || !appJwt) throw new Error("GitHub App JWT is required.");
+  if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error("GitHub installation id is required.");
+  const payload = await githubApiJson(fetchImpl, `${GITHUB_API_BASE}/app/installations/${installationId}`, {
+    headers: githubApiHeaders(appJwt),
+  }, "GitHub installation lookup failed.");
+  if (payload.id !== installationId) throw new GitHubApiError(0, "GitHub installation lookup failed.");
+  return {
+    installationId,
+    appId: Number.isSafeInteger(payload.app_id) ? payload.app_id : undefined,
+    accountLogin: typeof payload.account?.login === "string" ? payload.account.login : "",
+    accountType: typeof payload.account?.type === "string" ? payload.account.type : "",
+    suspended: Boolean(payload.suspended_at),
+  };
+}
+
+// The repositories the installation can reach, read with an installation
+// token. Paging is capped (default 3 pages x 100) so a huge installation
+// cannot fan the link request out indefinitely; the webhook keeps the
+// stored set complete afterwards.
+export async function fetchInstallationRepositories({ token, fetchImpl = fetch, maxPages = 3 } = {}) {
+  if (typeof token !== "string" || !token) throw new Error("GitHub installation token is required.");
+  if (!Number.isSafeInteger(maxPages) || maxPages <= 0) throw new Error("GitHub repository page cap is invalid.");
+  const headers = githubApiHeaders(token);
+  const collected = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const payload = await githubApiJson(fetchImpl, `${GITHUB_API_BASE}/installation/repositories?per_page=100&page=${page}`, {
+      headers,
+    }, "GitHub installation repository lookup failed.");
+    const batch = Array.isArray(payload.repositories) ? payload.repositories : [];
+    collected.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return normalizeRepositories(collected);
+}
+
+// Links one installation to the signed-in SolveLang account. The state
+// nonce is consumed FIRST and must be bound to this account with the
+// install purpose — any mismatch is one generic state error, so the
+// route is no oracle for other accounts' states. The installation is
+// then verified live against GitHub; the link records are written only
+// after every GitHub check has passed, so a failure leaves nothing
+// half-written. GitHub-side failures surface as a generic 502.
+export async function linkInstallationFromGitHub({ store, appId, privateKey, accountId, installationId, state, fetchImpl = fetch, now = Date.now } = {}) {
+  if (!store || typeof store.consumeOAuthStateRecord !== "function" || typeof store.putInstallation !== "function"
+    || typeof store.linkAccountInstallation !== "function") {
+    throw new Error("GitHub installation store is required.");
+  }
+  if (typeof accountId !== "string" || !accountId
+    || !Number.isSafeInteger(installationId) || installationId <= 0
+    || typeof state !== "string" || !state) {
+    throw new ApiAccessError(400, "github_link_invalid", "The installation link request is invalid.");
+  }
+  const consumed = await store.consumeOAuthStateRecord(state);
+  if (!consumed || consumed.purpose !== "install" || consumed.accountId !== accountId) {
+    throw new ApiAccessError(400, "github_link_state_invalid", "The installation link has expired. Start the install again.");
+  }
+
+  let installation;
+  let repositories;
+  try {
+    const appJwt = createAppJwt({ appId, privateKey, now });
+    try {
+      installation = await fetchInstallation({ appJwt, installationId, fetchImpl });
+    } catch (error) {
+      if (error instanceof GitHubApiError && error.status === 404) {
+        throw new ApiAccessError(404, "github_installation_not_found", "That GitHub installation was not found for this app.");
+      }
+      throw error;
+    }
+    if (installation.appId !== Number(appId)) {
+      throw new ApiAccessError(403, "github_installation_mismatch", "That installation does not belong to the SolveLang GitHub App.");
+    }
+    if (installation.suspended) {
+      throw new ApiAccessError(403, "github_installation_suspended", "That GitHub installation is suspended.");
+    }
+    const { token } = await createInstallationToken({ appJwt, installationId, fetchImpl });
+    repositories = await fetchInstallationRepositories({ token, fetchImpl });
+  } catch (error) {
+    if (error instanceof ApiAccessError) throw error;
+    throw new ApiAccessError(502, "github_upstream_unavailable", "GitHub could not be reached to verify the installation.");
+  }
+
+  const record = {
+    installationId,
+    accountLogin: installation.accountLogin,
+    accountType: installation.accountType,
+    repositories,
+    suspended: false,
+    accountId,
+    updatedAt: new Date(typeof now === "function" ? now() : now).toISOString(),
+  };
+  await store.putInstallation(record);
+  await store.linkAccountInstallation({ accountId, installationId });
+  return {
+    installationId,
+    accountLogin: record.accountLogin,
+    accountType: record.accountType,
+    repositories,
+    suspended: false,
+    linked: true,
+  };
 }
