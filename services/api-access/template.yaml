@@ -67,10 +67,6 @@ Parameters:
     NoEcho: true
     Default: ""
     Description: SolveLang GitHub App webhook secret for delivery signature verification.
-  GitHubAppSlug:
-    Type: String
-    Default: "solvelang-reader"
-    Description: SolveLang GitHub App URL slug used to build the install URL.
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -400,7 +396,6 @@ Resources:
           API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
           API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
           API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
-          API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
           API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
@@ -528,18 +523,6 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/github/installations
             Method: GET
-        GitHubInstallStart:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /github/install/start
-            Method: GET
-        CustomerGitHubInstallationsLink:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/github/installations/link
-            Method: POST
         CustomerGitHubAudit:
           Type: HttpApi
           Properties:
