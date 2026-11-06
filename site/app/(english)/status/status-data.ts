@@ -1,4 +1,3 @@
-import { accountAvailability, billingAvailability, previewAvailability } from "../../product-capabilities";
 
 export type ComponentState = "operational" | "degraded" | "partial_outage" | "major_outage" | "maintenance" | "not_monitored";
 export type ComponentMetadata = {
@@ -41,12 +40,12 @@ export const statusPage: {
     { id: "browser-preview", name: "Browser Preview public page", description: "Pinned WebAssembly safe-core preview at /run/.", monitored: true, note: "Page availability does not execute the preview or verify its runtime contract." },
     { id: "repository-audit-page", name: "Repository Audit public page", description: "Public Repository Audit example surface.", monitored: true, note: "Page availability does not verify analysis correctness." },
     { id: "solve-graph-page", name: "Solve Graph public page", description: "Public Solve Graph example surface.", monitored: true, note: "Page availability does not verify graph correctness." },
-    { id: "account-persistence", name: "Account authentication and persistence", description: "Customer account and Studio account-saving behavior.", monitored: false, note: accountAvailability },
-    { id: "billing", name: "Checkout, payment, and webhooks", description: "Production subscription billing capability.", monitored: false, note: billingAvailability },
-    { id: "support", name: "Support automation", description: "Support triage preview and connected automation.", monitored: false, note: previewAvailability },
+    { id: "account-persistence", name: "Account authentication and persistence", description: "Customer account and Studio account-saving behavior.", monitored: true, note: "Live probe: the API checks its customer account store with a read-only request and reports healthy only when the store answers. It does not sign anyone in, and it does not read or expose customer records." },
+    { id: "billing", name: "Checkout, payment, and webhooks", description: "Production subscription billing capability.", monitored: true, note: "Live probe: the API confirms subscription billing is enabled and Stripe answers a read-only request. It does not create charges, and it does not prove webhook delivery; a completed checkout is the payment proof." },
+    { id: "support", name: "Support automation", description: "Support triage preview and connected automation.", monitored: true, note: "Live probe: the public support page answers with its expected content. Page availability does not connect an inbox or execute support automation." },
     { id: "provider-execution", name: "Paid priority and managed execution", description: "Provider-backed and side-effecting execution.", monitored: false, note: "No independent public health signal measures paid priority, providers, or managed workflow execution." },
     { id: "posthog", name: "PostHog", description: "Analytics integration.", monitored: false, note: "No independent public health signal is connected." },
-    { id: "ci-deployment", name: "CI and Deployment", description: "GitHub Actions validation and AWS Amplify publishing.", monitored: false, note: "Successful runs do not prove continuing service health or the status of an upstream provider." },
+    { id: "ci-deployment", name: "CI and Deployment", description: "GitHub Actions validation and AWS Amplify publishing.", monitored: true, note: "Live probe: GitHub's own CI badge for this repository's main workflow. It measures the latest reported CI state, not AWS Amplify publishing or continuing service health." },
   ],
   incidents: [
     {

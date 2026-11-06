@@ -13,6 +13,7 @@ const markers = new Map([
   ["/run/", "Browser preview"],
   ["/repository-audit/", "Repository Audit"],
   ["/solve-graph/", "Solve Graph"],
+  ["/support/", "SolveLang help"],
 ]);
 const at = Date.parse("2026-09-27T12:00:00Z");
 
@@ -20,8 +21,10 @@ function publicFetch(seen = [], failure = false) {
   return async (url, options) => {
     seen.push([String(url), options]);
     if (failure) throw new Error("private upstream failure");
-    const path = new URL(url).pathname;
-    if (path === "/health") return new Response(JSON.stringify({ status: "ok", service: "solvelang-api-access", privateToken: "secret-never-returned" }), { headers: { "content-type": "application/json" } });
+    const target = new URL(url);
+    const path = target.pathname;
+    if (target.hostname === "github.com") return new Response("<svg>passing</svg>", { headers: { "content-type": "image/svg+xml" } });
+    if (path === "/health" || path === "/public/status/account" || path === "/public/status/billing") return new Response(JSON.stringify({ status: "ok", service: "solvelang-api-access", privateToken: "secret-never-returned" }), { headers: { "content-type": "application/json" } });
     return new Response(`<html>${markers.get(path)} secret-never-returned</html>`, { headers: { "content-type": "text/html" } });
   };
 }
@@ -59,19 +62,19 @@ function apiHandler(reader) {
 }
 const publicRequest = { rawPath: "/public/status/health", headers: { cookie: "private-session" }, requestContext: { http: { method: "GET" } } };
 
-test("scheduled collection probes only six fixed public GET surfaces with bounded observations", async () => {
+test("scheduled collection probes only ten fixed public GET surfaces with bounded observations", async () => {
   const seen = [];
   const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: publicFetch(seen), now: () => at });
   const snapshot = await collect(at);
-  assert.equal(seen.length, 6);
-  assert.deepEqual(new Set(seen.map(([url]) => url)), new Set([...markers.keys()].map((path) => `${origin}${path}`).concat(apiHealth)));
+  assert.equal(seen.length, 10);
+  assert.deepEqual(new Set(seen.map(([url]) => url)), new Set([...markers.keys()].map((path) => `${origin}${path}`).concat(apiHealth, apiHealth.replace(/\/health$/, "/public/status/account"), apiHealth.replace(/\/health$/, "/public/status/billing"), "https://github.com/saiidz/solvelang/actions/workflows/ci.yml/badge.svg")));
   for (const [, options] of seen) {
     assert.equal(options.method, "GET");
     assert.equal(options.redirect, "error");
     assert.equal(options.headers.authorization, undefined);
     assert.equal(options.headers.cookie, undefined);
   }
-  assert.equal(Object.keys(snapshot.observations).length, 6);
+  assert.equal(Object.keys(snapshot.observations).length, 10);
   for (const observation of Object.values(snapshot.observations)) {
     assert.equal(observation.state, "operational");
     assert.equal(observation.validForMs, STATUS_VALID_FOR_MS);
@@ -86,12 +89,12 @@ test("multiple and concurrent public requests across handler instances read one 
   const seen = [];
   const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: publicFetch(seen), now: () => now });
   assert.deepEqual(await refreshPublicStatus({ store, collect, now: () => now }), { refreshed: true });
-  assert.equal(seen.length, 6);
+  assert.equal(seen.length, 10);
   const first = apiHandler(() => store.readSnapshot());
   const second = apiHandler(() => store.readSnapshot());
   const responses = await Promise.all(Array.from({ length: 20 }, (_, index) => (index % 2 ? first : second)(publicRequest)));
   assert.ok(responses.every((response) => response.statusCode === 200 && JSON.parse(response.body).observations.website.state === "operational"));
-  assert.equal(seen.length, 6, "public requests do not collect upstream observations");
+  assert.equal(seen.length, 10, "public requests do not collect upstream observations");
   assert.equal(dynamo.calls.filter(([name]) => name === "GetCommand").length, 20);
   assert.equal(dynamo.calls.filter(([name]) => name === "PutCommand").length, 1);
   assert.doesNotMatch(JSON.stringify(dynamo.items.get("current")), /secret|private-session|https:\/\//i);
@@ -101,7 +104,7 @@ test("multiple and concurrent public requests across handler instances read one 
   assert.equal((await store.readSnapshot()).observations.website.state, "operational");
 });
 
-test("conditional shared lease limits concurrent scheduled refreshes to one six-probe sweep per interval", async () => {
+test("conditional shared lease limits concurrent scheduled refreshes to one ten-probe sweep per interval", async () => {
   let now = at;
   const dynamo = fakeDynamo();
   const store = createDynamoPublicStatusStore(dynamo, "public-status", { now: () => now });
@@ -109,12 +112,12 @@ test("conditional shared lease limits concurrent scheduled refreshes to one six-
   const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: publicFetch(seen), now: () => now });
   const results = await Promise.all(Array.from({ length: 10 }, () => refreshPublicStatus({ store, collect, now: () => now })));
   assert.equal(results.filter(({ refreshed }) => refreshed).length, 1);
-  assert.equal(seen.length, 6);
+  assert.equal(seen.length, 10);
   assert.deepEqual(await refreshPublicStatus({ store, collect, now: () => now + 54_999 }), { refreshed: false });
-  assert.equal(seen.length, 6);
+  assert.equal(seen.length, 10);
   now += 60_000;
   assert.deepEqual(await refreshPublicStatus({ store, collect, now: () => now }), { refreshed: true });
-  assert.equal(seen.length, 12);
+  assert.equal(seen.length, 20);
 });
 
 test("SAM wiring schedules one collector and limits request Lambda to shared snapshot reads", () => {
@@ -172,4 +175,42 @@ test("unresponsive public probes time out and produce only unverified observatio
   const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: async () => new Promise(() => {}), now: () => at, timeoutMs: 10 });
   const snapshot = await collect(at);
   assert.ok(Object.values(snapshot.observations).every(({ state }) => state === "not_monitored"));
+});
+
+
+test("status probe routes answer ok only when the underlying probe passes", async () => {
+  const base = { service: {}, adminSecret: "a".repeat(64), siteOrigin: origin, enabled: false, logger: { error() {} } };
+  const accountRequest = { rawPath: "/public/status/account", headers: {}, requestContext: { http: { method: "GET" } } };
+  const billingRequest = { rawPath: "/public/status/billing", headers: {}, requestContext: { http: { method: "GET" } } };
+  const okHandler = createApiAccessHandler({ ...base, statusProbes: { accountPersistence: async () => true, billing: async () => true } });
+  assert.equal((await okHandler(accountRequest)).statusCode, 200);
+  assert.equal(JSON.parse((await okHandler(billingRequest)).body).status, "ok");
+  const failing = createApiAccessHandler({ ...base, statusProbes: { accountPersistence: async () => false, billing: async () => { throw new Error("down"); } } });
+  assert.equal((await failing(accountRequest)).statusCode, 503);
+  assert.equal((await failing(billingRequest)).statusCode, 503);
+  const unconfigured = createApiAccessHandler({ ...base });
+  assert.equal((await unconfigured(accountRequest)).statusCode, 503);
+  assert.equal((await unconfigured(billingRequest)).statusCode, 503);
+});
+
+test("sanitizer fails closed when a newly wired component is missing", async () => {
+  const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: publicFetch([]), now: () => at });
+  const snapshot = await collect(at);
+  assert.equal(Object.keys(snapshot.observations).length, 10);
+  assert.equal(sanitizedPublicStatus(snapshot, at).observations["ci-deployment"].state, "operational");
+  assert.equal(sanitizedPublicStatus(snapshot, at).observations.billing.state, "operational");
+  const incomplete = { ...snapshot, observations: { ...snapshot.observations } };
+  delete incomplete.observations.billing;
+  assert.deepEqual(sanitizedPublicStatus(incomplete, at), { observations: {} });
+});
+
+test("ci-deployment observation follows the live CI badge, never optimism", async () => {
+  const failingBadgeFetch = async (url, options) => {
+    if (new URL(url).hostname === "github.com") return new Response("<svg>failing</svg>", { headers: { "content-type": "image/svg+xml" } });
+    return publicFetch([])(url, options);
+  };
+  const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: failingBadgeFetch, now: () => at });
+  const snapshot = await collect(at);
+  assert.equal(snapshot.observations["ci-deployment"].state, "not_monitored");
+  assert.equal(snapshot.observations.website.state, "operational");
 });
