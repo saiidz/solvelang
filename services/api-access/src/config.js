@@ -103,7 +103,7 @@ function githubApp(environment) {
   // The app slug only builds the public install URL; it is not a
   // credential, so it never gates `enabled` and defaults to the
   // production app's slug.
-  const slug = environment.API_GITHUB_APP_SLUG || "solvelang";
+  const slug = environment.API_GITHUB_APP_SLUG || "solvelang-reader";
   return { githubApp: { enabled, ...config, slug } };
 }
 

@@ -30,6 +30,7 @@ import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscripti
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
+import { runRepositoryAuditRead } from "./github-repo-reader.js";
 import { createApiAccessService } from "./service.js";
 import { createStripeSubscriptionGateway } from "./stripe-subscriptions.js";
 import { createSubscriptionManagementHandler } from "./subscription-management-handler.js";
@@ -89,6 +90,10 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
 
     async linkInstallation({ accountId, installationId, state }) {
       return linkInstallationFromGitHub({ store, appId: config.appId, privateKey: config.privateKey, accountId, installationId, state });
+    },
+
+    async runAudit({ accountId, installationId, repoFullName }) {
+      return runRepositoryAuditRead({ store, appId: config.appId, privateKey: config.privateKey, accountId, installationId, repoFullName });
     },
 
     async completeSignIn({ code, state }) {

@@ -11,6 +11,9 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/li
 //   link#<accountId>#<instId>    the account <-> installation link; the
 //                                account listing is a begins_with Query
 //                                on this prefix, then one Get per id.
+//   audit#<accountId>#<runId>    one repository-read audit run: status
+//                                (read_complete | read_failed), the repo,
+//                                and the manifest summary once read.
 // Records are only ever written from a validly signed webhook or from an
 // authenticated account action — never from unauthenticated input.
 
@@ -30,6 +33,10 @@ function linkKey(accountId, installationId) {
 
 function linkPrefix(accountId) {
   return `link#${accountId}#`;
+}
+
+function auditKey(accountId, runId) {
+  return `audit#${accountId}#${runId}`;
 }
 
 function requiredId(value, label) {
@@ -174,6 +181,45 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
       if (existing && existing.accountId !== accountId) {
         await this.putInstallation({ ...existing, accountId });
       }
+    },
+
+    async putAuditRun(record) {
+      if (typeof record?.accountId !== "string" || !record.accountId) throw new Error("SolveLang account id is required.");
+      if (typeof record?.runId !== "string" || !record.runId) throw new Error("Audit run id is required.");
+      if (!Number.isSafeInteger(record.installationId) || record.installationId <= 0) throw new Error("GitHub installation id is required.");
+      if (record.status !== "read_complete" && record.status !== "read_failed") throw new Error("Audit run status is invalid.");
+      await documentClient.send(new PutCommand({
+        TableName: tableName,
+        Item: {
+          recordKey: auditKey(record.accountId, record.runId),
+          kind: "audit-run",
+          accountId: record.accountId,
+          runId: record.runId,
+          installationId: record.installationId,
+          repoFullName: typeof record.repoFullName === "string" ? record.repoFullName : "",
+          status: record.status,
+          ...(record.manifest && typeof record.manifest === "object" ? { manifest: record.manifest } : {}),
+          createdAt: typeof record.createdAt === "string" && record.createdAt ? record.createdAt : new Date(nowSeconds() * 1_000).toISOString(),
+        },
+      }));
+    },
+
+    async getAuditRun({ accountId, runId } = {}) {
+      if (typeof accountId !== "string" || !accountId || typeof runId !== "string" || !runId) return undefined;
+      const { Item } = await documentClient.send(new GetCommand({
+        TableName: tableName,
+        Key: { recordKey: auditKey(accountId, runId) },
+        ConsistentRead: true,
+      }));
+      if (!Item || Item.kind !== "audit-run") return undefined;
+      return {
+        runId: Item.runId,
+        installationId: Item.installationId,
+        repoFullName: typeof Item.repoFullName === "string" ? Item.repoFullName : "",
+        status: Item.status,
+        ...(Item.manifest && typeof Item.manifest === "object" ? { manifest: Item.manifest } : {}),
+        createdAt: typeof Item.createdAt === "string" ? Item.createdAt : "",
+      };
     },
 
     async listInstallationsForAccount(accountId) {

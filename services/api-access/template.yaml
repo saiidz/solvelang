@@ -552,6 +552,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/github/installations/link
             Method: POST
+        CustomerGitHubAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/audit
+            Method: POST
         CustomerRevokeAllSessions:
           Type: HttpApi
           Properties:
