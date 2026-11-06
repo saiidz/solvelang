@@ -396,7 +396,7 @@ test("link maps a GitHub 404 to a not-found error and writes nothing", async () 
   assert.equal(await store.getInstallation(42), undefined);
 });
 
-test("githubApp slug defaults to solvelang and can be overridden", () => {
+test("githubApp slug defaults to solvelang-reader and can be overridden", () => {
   const base = {
     API_ACCESS_MODE: "test",
     API_KEY_PEPPER: "p".repeat(32),
@@ -406,6 +406,6 @@ test("githubApp slug defaults to solvelang and can be overridden", () => {
     API_SUBSCRIPTION_EVENTS_TABLE: "events",
     SITE_ORIGIN: "https://www.solve-lang.com",
   };
-  assert.equal(parseApiAccessEnvironment(base).githubApp.slug, "solvelang");
+  assert.equal(parseApiAccessEnvironment(base).githubApp.slug, "solvelang-reader");
   assert.equal(parseApiAccessEnvironment({ ...base, API_GITHUB_APP_SLUG: "solvelang-dev" }).githubApp.slug, "solvelang-dev");
 });
