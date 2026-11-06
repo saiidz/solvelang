@@ -516,48 +516,6 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/auth/logout
             Method: POST
-        GitHubAuthAuthorize:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /github/auth/authorize
-            Method: GET
-        GitHubAuthCallback:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /github/auth/callback
-            Method: GET
-        GitHubWebhook:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /github/webhook
-            Method: POST
-        CustomerGitHubInstallations:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/github/installations
-            Method: GET
-        GitHubInstallStart:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /github/install/start
-            Method: GET
-        CustomerGitHubInstallationsLink:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/github/installations/link
-            Method: POST
-        CustomerGitHubAudit:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/github/audit
-            Method: POST
         CustomerRevokeAllSessions:
           Type: HttpApi
           Properties:
@@ -734,6 +692,105 @@ Resources:
             Method: GET
             Auth:
               Authorizer: SolveLangApiKeyAuthorizer
+
+  GitHubFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          API_ACCESS_ENABLED: !Ref ApiAccessEnabled
+          API_ACCESS_MODE: !Ref ApiAccessMode
+          API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
+          API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
+          API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
+          API_ADMIN_CRM_ENABLED: !Ref AdminCrmEnabled
+          API_ADMIN_CRM_TABLE: !If [AdminCrmFeatureEnabled, !Ref AdminCrmTable, disabled]
+          API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
+          API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
+          API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_KEY_PEPPER_PREVIOUS: !Ref ApiKeyPepperPrevious
+          API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
+          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_PEPPER_PREVIOUS: !Ref CustomerAuthPepperPrevious
+          API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
+          API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
+          SITE_ORIGIN: !Ref SiteOrigin
+          PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
+          API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
+          API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
+          API_KEYS_TABLE: !Ref ApiKeysTable
+          API_KEYS_ACCOUNT_INDEX: AccountIdIndex
+          API_USAGE_TABLE: !Ref ApiUsageTable
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+          API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
+          API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
+          API_GITHUB_APP_ID: !Ref GitHubAppId
+          API_GITHUB_APP_CLIENT_ID: !Ref GitHubAppClientId
+          API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
+          API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
+          API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
+          API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
+          STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
+          STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
+          STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiCustomerAuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GitHubInstallationsTable
+      Events:
+        GitHubAuthAuthorize:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/authorize
+            Method: GET
+        GitHubAuthCallback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/callback
+            Method: GET
+        GitHubWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/webhook
+            Method: POST
+        CustomerGitHubInstallations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/installations
+            Method: GET
+        GitHubInstallStart:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/install/start
+            Method: GET
+        CustomerGitHubInstallationsLink:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/installations/link
+            Method: POST
+        CustomerGitHubAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/audit
+            Method: POST
 
   ApiAccessFunctionLogGroup:
     Type: AWS::Logs::LogGroup
