@@ -1,0 +1,28 @@
+name: Merge Governance CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'services/merge-governance/**'
+      - '.github/workflows/merge-governance-ci.yml'
+
+jobs:
+  test:
+    name: Merge governance tests
+    runs-on: [self-hosted, solvelang-flex]
+    defaults:
+      run:
+        working-directory: services/merge-governance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install pinned runtime dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Run merge governance tests
+        run: npm test
+      - name: Check dependency licences
+        run: node scripts/check-licences.mjs --from-node-modules
