@@ -74,7 +74,7 @@ export default function ProcessSolutionPage() {
           </p>
           <div className="mt-6 rounded-3xl bg-slate-950 p-7 text-white">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">merge-rules.solve</p>
-            <pre className="mt-4 overflow-x-auto font-mono text-sm leading-7 text-slate-100">{rulesLines.join("\n")}</pre>
+            <pre className="mt-4 whitespace-pre-wrap break-words font-mono text-sm leading-7 text-slate-100">{rulesLines.join("\n")}</pre>
           </div>
           <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
             The rules are the readable part. The product is that they are enforced on every landing — and that every enforcement is audited.
