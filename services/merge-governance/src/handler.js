@@ -252,7 +252,10 @@ export function createHandler({ store, config, fetchImpl = fetch, sqsSend, appAu
       return json(404, { error: "not_found" });
     } catch (err) {
       // Sanitized: never leak upstream detail or internals to callers.
-      console.error("merge_governance_error", err?.message || "unknown");
+      // A bare numeric status separates a local/network failure (0) from a
+      // GitHub rejection (e.g. 401) without logging any upstream content.
+      const statusSuffix = typeof err?.status === "number" ? ` status=${err.status}` : "";
+      console.error("merge_governance_error", `${err?.message || "unknown"}${statusSuffix}`);
       return json(502, { error: "upstream_unavailable" });
     }
   };
