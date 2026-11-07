@@ -140,6 +140,18 @@ jobs:
           aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
           echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
 
+      - name: Encode the GitHub App private key for transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The raw PEM is corrupted by SAM/CloudFormation parameter
+          # parsing (spaces and newlines), so the key travels
+          # base64-encoded as a single line and the service decodes it
+          # on receipt. Never echo the key or its encoding anywhere.
+          if [[ -n "$GH_APP_PRIVATE_KEY" ]]; then
+            printf 'GH_APP_PRIVATE_KEY_B64=%s\n' "$(printf '%s' "$GH_APP_PRIVATE_KEY" | base64 -w 0)" >> "$GITHUB_ENV"
+          fi
+
       - name: Deploy the merge-governance pilot stack
         env:
           SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
@@ -154,7 +166,9 @@ jobs:
           )
           [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || parameters+=(GitHubReadToken="$MGOV_GITHUB_READ_TOKEN")
           [[ -z "$GH_APP_ID" ]] || parameters+=(GitHubAppId="$GH_APP_ID")
-          [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY")
+          # The key travels base64-encoded because raw PEMs are corrupted
+          # by parameter parsing; the service decodes it on receipt.
+          [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY_B64")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \
