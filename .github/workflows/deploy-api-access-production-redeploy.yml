@@ -47,6 +47,10 @@ jobs:
       STRIPE_API_DEVELOPER_PRICE_ID: ${{ vars.STRIPE_API_DEVELOPER_PRICE_ID }}
       STRIPE_API_PRO_PRICE_ID: ${{ vars.STRIPE_API_PRO_PRICE_ID }}
       STRIPE_API_BUSINESS_PRICE_ID: ${{ vars.STRIPE_API_BUSINESS_PRICE_ID }}
+      STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID }}
+      STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID }}
+      STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID }}
+      STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
@@ -85,6 +89,10 @@ jobs:
           [[ "$STRIPE_API_DEVELOPER_PRICE_ID" == "price_1U2jBo4HWc7PvaDYXcET6RX9" ]]
           [[ "$STRIPE_API_PRO_PRICE_ID" == "price_1U2jCa4HWc7PvaDYNE8wPhgr" ]]
           [[ "$STRIPE_API_BUSINESS_PRICE_ID" == "price_1U2jCx4HWc7PvaDYIvE3ne0Y" ]]
+          [[ "$STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID" == "price_1UZGDH4HWc7PvaDYJ1W9Rlxh" ]]
+          [[ "$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID" == "price_1UZGDH4HWc7PvaDY5j7uMC3s" ]]
+          [[ "$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID" == "price_1UZGDN4HWc7PvaDYD9evdkxz" ]]
+          [[ "$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID" == "price_1UZGDN4HWc7PvaDYK42zx1LY" ]]
           (( ${#API_KEY_PEPPER} >= 32 ))
           (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
           (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
@@ -424,6 +432,10 @@ jobs:
             StripeApiDeveloperPriceId="$STRIPE_API_DEVELOPER_PRICE_ID"
             StripeApiProPriceId="$STRIPE_API_PRO_PRICE_ID"
             StripeApiBusinessPriceId="$STRIPE_API_BUSINESS_PRICE_ID"
+            StripeMgovRegularMonthlyPriceId="$STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID"
+            StripeMgovRegularAnnualPriceId="$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID"
+            StripeMgovPlusMonthlyPriceId="$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID"
+            StripeMgovPlusAnnualPriceId="$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID"
           )
           [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
           [[ -z "$TURNSTILE_SECRET_KEY" ]] || parameters+=(TurnstileSecretKey="$TURNSTILE_SECRET_KEY")
