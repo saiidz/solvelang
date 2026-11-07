@@ -116,6 +116,18 @@ Parameters:
   StripeApiBusinessPriceId:
     Type: String
     Default: ""
+  StripeMgovRegularMonthlyPriceId:
+    Type: String
+    Default: ""
+  StripeMgovRegularAnnualPriceId:
+    Type: String
+    Default: ""
+  StripeMgovPlusMonthlyPriceId:
+    Type: String
+    Default: ""
+  StripeMgovPlusAnnualPriceId:
+    Type: String
+    Default: ""
 
 Rules:
   CustomerAccountsRequirements:
@@ -407,6 +419,10 @@ Resources:
           STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
           STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
           STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+          STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: !Ref StripeMgovRegularMonthlyPriceId
+          STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
+          STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
+          STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -600,6 +616,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/elements-checkout
             Method: POST
+        CustomerMergeGovernanceElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/merge-governance/elements-checkout
+            Method: POST
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
@@ -611,6 +633,12 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /internal/subscriptions/elements-checkout
+            Method: POST
+        MergeGovernanceElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/merge-governance/elements-checkout
             Method: POST
         SubscriptionWebhook:
           Type: HttpApi
@@ -743,6 +771,10 @@ Resources:
           STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
           STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
           STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+          STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: !Ref StripeMgovRegularMonthlyPriceId
+          STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
+          STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
+          STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable

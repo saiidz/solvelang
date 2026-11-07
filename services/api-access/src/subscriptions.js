@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { getApiPlan } from "./plans.js";
+import { MERGE_GOVERNANCE_PRODUCT } from "./merge-governance-plans.js";
 
 const SUPPORTED_SUBSCRIPTION_EVENTS = new Set([
   "customer.subscription.created",
@@ -187,6 +188,14 @@ export function createSubscriptionLifecycleService({
 
       const subscription = subscriptionObject(event);
       const metadata = subscription.metadata ?? {};
+      // Merge Governance subscriptions are a different product sold through
+      // the same Stripe account. Their prices are not API plans: acknowledge
+      // and skip them so their events never fail plan mapping or touch the
+      // API account record. Fulfillment is tracked with the Merge
+      // Governance service, not the API subscription lifecycle.
+      if (metadata.product === MERGE_GOVERNANCE_PRODUCT) {
+        return { handled: false, duplicate: false, ignored: "merge-governance" };
+      }
       const accountId = cleanId(metadata.accountId, "Account ID");
       const email = cleanEmail(metadata.email);
       const customerId = cleanId(typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id, "Stripe customer ID");
