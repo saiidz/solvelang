@@ -107,7 +107,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       return match?.id ?? null;
     },
 
-    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId }) {
+    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId, quantity = 1, product }) {
       let customer = customerId;
       if (!customer) {
         const createdCustomer = await stripe.customers.create(
@@ -120,11 +120,11 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
 
       const subscription = await stripe.subscriptions.create({
           customer,
-          items: [{ price: priceId }],
+          items: [{ price: priceId, ...(Number.isSafeInteger(quantity) && quantity > 1 ? { quantity } : {}) }],
           payment_behavior: "default_incomplete",
           payment_settings: { save_default_payment_method: "on_subscription" },
           ...(promotionCodeId ? { discounts: [{ promotion_code: promotionCodeId }] } : {}),
-          metadata: { accountId, email, plan, requestId },
+          metadata: { accountId, email, plan, requestId, ...(product ? { product } : {}) },
           expand: ["latest_invoice.payment_intent"],
         }, { idempotencyKey: `api-subscription-elements-${requestId}` });
       const invoice = subscription?.latest_invoice;

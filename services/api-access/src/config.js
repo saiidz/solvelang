@@ -47,6 +47,15 @@ function billing(environment) {
       pro: enabled ? required(environment, "STRIPE_API_PRO_PRICE_ID") : undefined,
       business: enabled ? required(environment, "STRIPE_API_BUSINESS_PRICE_ID") : undefined,
     },
+    // Merge Governance pricing stays optional at parse time: an absent or
+    // partial set leaves only the Merge Governance checkout dark (its
+    // service fails closed per plan), never the API-plan billing above.
+    mergeGovernancePriceIds: {
+      "mgov-regular-monthly": environment.STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID || undefined,
+      "mgov-regular-annual": environment.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID || undefined,
+      "mgov-plus-monthly": environment.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID || undefined,
+      "mgov-plus-annual": environment.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID || undefined,
+    },
   };
 }
 
