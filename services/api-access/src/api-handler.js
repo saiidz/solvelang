@@ -58,6 +58,7 @@ export function createApiAccessHandler({
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
   elementsCheckout,
+  mergeGovernanceCheckout,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -389,6 +390,22 @@ export function createApiAccessHandler({
           promotionCode: body.promotionCode,
         }));
       }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/merge-governance/elements-checkout")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!mergeGovernanceCheckout) throw new ApiAccessError(503, "merge_governance_checkout_disabled", "Merge Governance checkout is not enabled.");
+        const body = parseJson(event);
+        const account = await service.getSubscriptionAccount(session.accountId);
+        return response(201, await mergeGovernanceCheckout.createMergeGovernanceCheckout({
+          accountId: session.accountId,
+          email: session.email,
+          plan: body.plan,
+          quantity: body.quantity,
+          requestId: body.requestId,
+          customerId: account?.stripeCustomerId,
+          promotionCode: body.promotionCode,
+        }));
+      }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
@@ -416,6 +433,11 @@ export function createApiAccessHandler({
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         if (!elementsCheckout) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
         return response(201, await elementsCheckout.createElementsCheckout(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/subscriptions/merge-governance/elements-checkout")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!mergeGovernanceCheckout) throw new ApiAccessError(503, "merge_governance_checkout_disabled", "Merge Governance checkout is not enabled.");
+        return response(201, await mergeGovernanceCheckout.createMergeGovernanceCheckout(body));
       }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");

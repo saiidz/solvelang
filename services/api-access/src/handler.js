@@ -28,6 +28,7 @@ import { createDynamoCustomerUsageReader } from "./customer-usage.js";
 import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
+import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -244,6 +245,7 @@ const supportAutomationApplication = createSupportAutomationApiHandler({
 let stripeGateway;
 let subscriptionCheckout;
 let elementsCheckout;
+let mergeGovernanceCheckout;
 let subscriptionPortal;
 let subscriptionLifecycle;
 let subscriptionManagementApplication;
@@ -252,6 +254,7 @@ if (environment.subscriptionBillingEnabled) {
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
   subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, siteOrigin: environment.siteOrigin, enabled: true });
   elementsCheckout = createElementsSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true });
+  mergeGovernanceCheckout = createMergeGovernanceCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.mergeGovernancePriceIds, enabled: true });
   subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
   subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
   statusProbes.billing = async () => { await stripe.balance.retrieve(); return true; };
@@ -287,6 +290,7 @@ const application = createApiAccessHandler({
   subscriptionBillingEnabled: environment.subscriptionBillingEnabled,
   subscriptionCheckout,
   elementsCheckout,
+  mergeGovernanceCheckout,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
