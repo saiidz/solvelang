@@ -1,5 +1,13 @@
 name: Deploy Merge Governance Pilot
 
+# FREE-ROUTE DISPATCH (owner-approved Nov 7, 2026): this workflow is only a
+# dispatcher. The approval gate stays HERE, on the public repo's
+# api-access-production environment, where required-reviewers works. The
+# product code it deploys no longer lives in this repo: it is checked out
+# from the private repo saiidz/solvelang-merge-governance (input private_ref)
+# through the read-only deploy key in the MGOV_PRIVATE_REPO_DEPLOY_KEY
+# environment secret. Nothing in this repo is deployed anymore.
+
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +21,11 @@ on:
         required: true
         default: false
         type: boolean
+      private_ref:
+        description: Ref of saiidz/solvelang-merge-governance to deploy (the private product code source)
+        required: false
+        default: main
+        type: string
 
 permissions:
   actions: read
@@ -25,7 +38,7 @@ jobs:
     environment: api-access-production
     defaults:
       run:
-        working-directory: services/merge-governance
+        working-directory: private-src/services/merge-governance
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       STACK_NAME: solvelang-merge-governance-pilot
@@ -38,7 +51,13 @@ jobs:
       GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the private product source
+        uses: actions/checkout@v4
+        with:
+          repository: saiidz/solvelang-merge-governance
+          ref: ${{ inputs.private_ref }}
+          ssh-key: ${{ secrets.MGOV_PRIVATE_REPO_DEPLOY_KEY }}
+          path: private-src
 
       - name: Enforce pilot deploy boundary
         shell: bash
@@ -58,6 +77,12 @@ jobs:
           # ingress would deploy permanently dark by accident.
           [[ -n "$MGOV_ADMIN_TOKEN" ]] || { echo "MGOV_ADMIN_TOKEN secret must be set before the pilot deploy." >&2; exit 1; }
           [[ -n "$MGOV_WEBHOOK_SECRET" ]] || { echo "MGOV_WEBHOOK_SECRET secret must be set before the pilot deploy." >&2; exit 1; }
+          # The deployable code comes from the private repo checkout, never
+          # from this repo: prove the checkout landed before doing any work.
+          # (working-directory is private-src/services/merge-governance.)
+          test -f template.yaml
+          test -f package.json
+          test -f src/handler.js
 
       - uses: actions/setup-node@v4
         with:
@@ -151,7 +176,8 @@ jobs:
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
-            echo "- Commit: \`$GITHUB_SHA\`"
+            echo "- Dispatcher commit: \`$GITHUB_SHA\`"
+            echo "- Product source: \`saiidz/solvelang-merge-governance\` @ \`${{ inputs.private_ref }}\` (read-only deploy key checkout)"
             echo "- Stack: \`$STACK_NAME\`"
             echo "- Region: \`$AWS_REGION\`"
             echo "- Pilot tenant: \`$PILOT_TENANT_ID\`"
