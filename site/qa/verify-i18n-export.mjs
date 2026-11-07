@@ -7,7 +7,7 @@ const siteRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const outRoot = path.join(siteRoot, "out");
 const english = await readFile(path.join(outRoot, "index.html"), "utf8");
 assert.match(english, /^<!DOCTYPE html><html lang="en" dir="ltr"/);
-assert.match(english, /<title>SolveLang — Workflow Language, API Access & Merge Governance<\/title>/);
+assert.match(english, /<title>SolveLang — Workflow Language, API Access &amp; Merge Governance<\/title>/);
 assert.doesNotMatch(english, /SolveLang \| SolveLang/);
 const support = await readFile(path.join(outRoot, "support", "index.html"), "utf8");
 assert.match(support, /<title>SolveLang Support \| SolveLang<\/title>/);
