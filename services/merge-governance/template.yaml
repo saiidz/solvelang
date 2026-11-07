@@ -152,7 +152,7 @@ Resources:
         # ingress and worker into separate functions is a later step.
         - SQSSendMessagePolicy:
             QueueName: !GetAtt WebhookQueue.QueueName
-        - SQSConsumeMessagePolicy:
+        - SQSPollerPolicy:
             QueueName: !GetAtt WebhookQueue.QueueName
       Events:
         QueueRead:
