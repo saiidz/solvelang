@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { auditStats, landingOutcomes, processSteps, rulesLines, scoreboardMetrics } from "./process-solution-data";
+import { auditStats, ciChipGroups, classifiedCard, compatExplainer, landingOutcomes, processSteps, rulesLines, scoreboardMetrics, testChips, testChipsLabel } from "./process-solution-data";
 
 export const metadata: Metadata = {
   title: "Process Solution",
@@ -51,6 +51,47 @@ export default function ProcessSolutionPage() {
           </div>
         </section>
 
+        <section className="mt-12" aria-labelledby="compat-heading">
+          <h2 id="compat-heading" className="text-2xl font-semibold">Works with the checks you already run</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{compatExplainer}</p>
+          {ciChipGroups.map((group) => (
+            <div key={group.label} className="mt-6">
+              <h3 className="text-sm font-semibold">{group.label}</h3>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {group.chips.map((chip) => (
+                  <li
+                    key={chip}
+                    className={
+                      group.tier === "proven"
+                        ? "rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                        : "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700"
+                    }
+                  >
+                    {chip}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold">{testChipsLabel}</h3>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {testChips.map((chip) => (
+                <li key={chip} className="rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700">
+                  {chip}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="mt-6 max-w-3xl text-sm leading-6 text-slate-600">
+            Don&apos;t see your CI? If it reports checks or commit statuses to GitHub, it works. If it doesn&apos;t, tell us —{" "}
+            <a href="mailto:hello@solve-lang.com" className="font-semibold text-blue-700">
+              hello@solve-lang.com
+            </a>
+            .
+          </p>
+        </section>
+
         <section className="mt-12" aria-labelledby="proof-heading">
           <h2 id="proof-heading" className="text-2xl font-semibold">Proof, measured — not promised</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
@@ -98,6 +139,11 @@ export default function ProcessSolutionPage() {
               <p className="mt-2 text-sm leading-7 text-slate-600">
                 {scoreboardMetrics.join(" · ")} — read daily, before and after. The scoreboard is the renewal: savings are audited numbers your own queue produced, not a sales claim.
               </p>
+            </article>
+            <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">{classifiedCard.kicker}</p>
+              <h3 className="mt-3 text-lg font-semibold">{classifiedCard.title}</h3>
+              <p className="mt-2 text-sm leading-7 text-slate-600">{classifiedCard.body}</p>
             </article>
           </div>
         </section>
