@@ -89,3 +89,66 @@ export const scoreboardMetrics: string[] = [
   "queue-wait share",
   "fleet state",
 ];
+
+export type CiChipGroup = {
+  label: string;
+  tier: "proven" | "by-design";
+  chips: string[];
+};
+
+export type WhyCard = {
+  kicker: string;
+  title: string;
+  body: string;
+};
+
+export const compatExplainer: string =
+  "Process Solution governs from GitHub check state — it never sits inside your CI and never parses your test reports. It is proven today on GitHub Actions, and it works with any CI that reports results to GitHub as checks or commit statuses, and any test framework whose results land as a check. If GitHub can see it red or green, the governor can govern it.";
+
+export const ciChipGroups: CiChipGroup[] = [
+  {
+    label: "Proven on the pilot queue",
+    tier: "proven",
+    chips: ["GitHub Actions"],
+  },
+  {
+    label: "Works by the same mechanism — any CI that reports GitHub checks",
+    tier: "by-design",
+    chips: [
+      "Azure Pipelines",
+      "Buildkite",
+      "CircleCI",
+      "GitLab CI (via GitHub status reporting)",
+      "Jenkins",
+      "TeamCity",
+      "Travis CI",
+    ],
+  },
+];
+
+export const testChipsLabel: string =
+  "Any framework whose results surface as a check — including";
+
+export const testChips: string[] = [
+  "Jest",
+  "Vitest",
+  "pytest",
+  "PHPUnit",
+  "Pest",
+  "RSpec",
+  "Minitest",
+  "Go test",
+  "JUnit",
+  "TestNG",
+  "NUnit",
+  "MSTest",
+  "Playwright",
+  "Cypress",
+  "Cargo (Rust)",
+];
+
+export const classifiedCard: WhyCard = {
+  kicker: "When a check goes red",
+  title: "Classified, not just counted",
+  body: "Every red is sorted before anything moves: a real defect goes back to its author with the reason; proven infrastructure noise earns exactly one rerun — never an open-ended retry loop. Both outcomes are written to the decision audit log, so a blocked merge always has a readable why.",
+};
