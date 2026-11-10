@@ -286,3 +286,136 @@ test("passes raw webhook bytes and signature to Stripe verification", () => {
   assert.deepEqual(gateway.constructWebhookEvent(Buffer.from("raw"), "sig"), { id: "evt_1" });
   assert.deepEqual(calls, [{ rawBody: "raw", signature: "sig", secret: "whsec_test" }]);
 });
+
+// --- Merge Governance tax: opt-in automatic_tax + tax-details ordering ---
+// The bleed law: the subscription gateway is shared with the live API
+// plans, so the API-plan payload is pinned byte-for-byte below. Any change
+// that alters it (flag off, no tax details) must fail this test.
+
+function taxRecordingStripe(calls) {
+  return stripeClient({
+    customers: {
+      create: async (params, options) => { calls.push(["customers.create", params, options]); return { id: "cus_new" }; },
+      retrieve: async () => ({ id: "cus_existing", invoice_settings: {} }),
+      update: async (id, params) => { calls.push(["customers.update", id, params]); return { id, ...params }; },
+      createTaxId: async (id, params) => { calls.push(["customers.createTaxId", id, params]); return { id: "taxi_1", type: params.type, value: params.value }; },
+    },
+    subscriptions: {
+      create: async (params, options) => {
+        calls.push(["subscriptions.create", params, options]);
+        return { id: "sub_tax", latest_invoice: { amount_due: 0, status: "paid", payment_intent: null } };
+      },
+      retrieve: async () => ({ id: "sub_1", customer: "cus_1", status: "active", default_payment_method: "pm_1" }),
+      update: async (id, params) => ({ id, ...params }),
+    },
+  });
+}
+
+test("API-plan subscription payload stays byte-identical without the tax flag", async () => {
+  const calls = [];
+  const gateway = createStripeSubscriptionGateway(taxRecordingStripe(calls), "whsec_test");
+  await gateway.createIncompleteSubscription({
+    accountId: "acct_1",
+    requestId: "req_byte_pin",
+    email: "dev@example.com",
+    plan: "pro",
+    priceId: "price_pro123",
+    customerId: "cus_existing",
+  });
+  assert.deepEqual(calls.map(([name]) => name), ["subscriptions.create"]);
+  const [, params, options] = calls[0];
+  assert.equal(
+    JSON.stringify(params),
+    "{\"customer\":\"cus_existing\",\"items\":[{\"price\":\"price_pro123\"}],\"payment_behavior\":\"default_incomplete\",\"payment_settings\":{\"save_default_payment_method\":\"on_subscription\"},\"metadata\":{\"accountId\":\"acct_1\",\"email\":\"dev@example.com\",\"plan\":\"pro\",\"requestId\":\"req_byte_pin\"},\"expand\":[\"latest_invoice.payment_intent\"]}",
+  );
+  assert.deepEqual(options, { idempotencyKey: "api-subscription-elements-req_byte_pin" });
+});
+
+test("automaticTax opt-in adds automatic_tax and nothing else to the payload", async () => {
+  const calls = [];
+  const gateway = createStripeSubscriptionGateway(taxRecordingStripe(calls), "whsec_test");
+  await gateway.createIncompleteSubscription({
+    accountId: "acct_1",
+    requestId: "req_tax_on",
+    email: "dev@example.com",
+    plan: "mgov-regular-monthly",
+    priceId: "price_mgovregmonthly",
+    customerId: "cus_existing",
+    product: "merge-governance",
+    automaticTax: true,
+  });
+  assert.deepEqual(calls.map(([name]) => name), ["subscriptions.create"]);
+  const [, params] = calls[0];
+  assert.deepEqual(params.automatic_tax, { enabled: true });
+  assert.equal(
+    JSON.stringify(params),
+    "{\"customer\":\"cus_existing\",\"items\":[{\"price\":\"price_mgovregmonthly\"}],\"payment_behavior\":\"default_incomplete\",\"payment_settings\":{\"save_default_payment_method\":\"on_subscription\"},\"automatic_tax\":{\"enabled\":true},\"metadata\":{\"accountId\":\"acct_1\",\"email\":\"dev@example.com\",\"plan\":\"mgov-regular-monthly\",\"requestId\":\"req_tax_on\",\"product\":\"merge-governance\"},\"expand\":[\"latest_invoice.payment_intent\"]}",
+  );
+});
+
+test("tax details are saved on a new customer before the subscription is created", async () => {
+  const calls = [];
+  const gateway = createStripeSubscriptionGateway(taxRecordingStripe(calls), "whsec_test");
+  const result = await gateway.createIncompleteSubscription({
+    accountId: "acct_1",
+    requestId: "req_tax_order",
+    email: "dev@example.com",
+    plan: "mgov-regular-monthly",
+    priceId: "price_mgovregmonthly",
+    product: "merge-governance",
+    automaticTax: true,
+    taxDetails: {
+      billingAddress: { country: "RO", line1: "Str. Nerva Traian 27-33", city: "Bucharest", postalCode: "030167" },
+      taxId: "RO54564122",
+    },
+  });
+  assert.equal(result.customerId, "cus_new");
+  assert.deepEqual(calls.map(([name]) => name), [
+    "customers.create",
+    "customers.update",
+    "customers.createTaxId",
+    "subscriptions.create",
+  ]);
+  assert.deepEqual(calls[1], ["customers.update", "cus_new", {
+    address: { country: "RO", line1: "Str. Nerva Traian 27-33", city: "Bucharest", postal_code: "030167" },
+  }]);
+  assert.deepEqual(calls[2], ["customers.createTaxId", "cus_new", { type: "eu_vat", value: "RO54564122" }]);
+  assert.deepEqual(calls[3][1].automatic_tax, { enabled: true });
+});
+
+test("a non-EU tax ID is not attached as an EU VAT ID, but the address is still saved first", async () => {
+  const calls = [];
+  const gateway = createStripeSubscriptionGateway(taxRecordingStripe(calls), "whsec_test");
+  await gateway.createIncompleteSubscription({
+    accountId: "acct_1",
+    requestId: "req_tax_us",
+    email: "dev@example.com",
+    plan: "mgov-plus-monthly",
+    priceId: "price_mgovplusmonthly",
+    customerId: "cus_existing",
+    product: "merge-governance",
+    automaticTax: true,
+    taxDetails: {
+      billingAddress: { country: "US", city: "Hinesville", state: "GA", postalCode: "31313" },
+      taxId: "12-3456789",
+    },
+  });
+  assert.deepEqual(calls.map(([name]) => name), ["customers.update", "subscriptions.create"]);
+  assert.deepEqual(calls[0], ["customers.update", "cus_existing", {
+    address: { country: "US", city: "Hinesville", state: "GA", postal_code: "31313" },
+  }]);
+});
+
+test("saveCustomerTaxDetails saves the address, then the EU VAT ID, and tolerates a missing tax ID", async () => {
+  const calls = [];
+  const gateway = createStripeSubscriptionGateway(taxRecordingStripe(calls), "whsec_test");
+  await gateway.saveCustomerTaxDetails({
+    customerId: "cus_existing",
+    billingAddress: { country: "DE", city: "Berlin" },
+    taxId: "DE123456789",
+  });
+  assert.deepEqual(calls.map(([name]) => name), ["customers.update", "customers.createTaxId"]);
+  await gateway.saveCustomerTaxDetails({ customerId: "cus_existing", billingAddress: { country: "FR" } });
+  assert.deepEqual(calls.map(([name]) => name), ["customers.update", "customers.createTaxId", "customers.update"]);
+  await assert.rejects(gateway.saveCustomerTaxDetails({ billingAddress: { country: "FR" } }), /Stripe customer is unavailable/);
+});

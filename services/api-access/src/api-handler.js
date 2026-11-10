@@ -427,6 +427,8 @@ export function createApiAccessHandler({
           requestId: body.requestId,
           customerId: account?.stripeCustomerId,
           promotionCode: body.promotionCode,
+          ...(body.billingAddress !== undefined ? { billingAddress: body.billingAddress } : {}),
+          ...(body.taxId !== undefined ? { taxId: body.taxId } : {}),
         }));
       }
       if (method === "GET" && path.endsWith("/customer/live-center/board")) {

@@ -84,7 +84,48 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       .filter((paymentMethod) => paymentMethod?.type === "card" && belongsToCustomer(paymentMethod, customerId));
   }
 
+  // Merge Governance tax support (opt-in): Stripe Tax computes the first
+  // invoice at subscription creation, so the customer's billing address —
+  // and an EU VAT ID, attached as a customer tax ID — must be saved on the
+  // customer BEFORE the subscription exists. The API-plan path never passes
+  // taxDetails and never calls this helper; only the Merge Governance
+  // checkout (with a buyer-supplied billing address) does.
+  const EU_VAT_COUNTRIES = new Set([
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR",
+    "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK",
+    "SI", "ES", "SE",
+  ]);
+
+  function stripeAddress(billingAddress) {
+    return {
+      country: billingAddress.country,
+      ...(billingAddress.line1 ? { line1: billingAddress.line1 } : {}),
+      ...(billingAddress.line2 ? { line2: billingAddress.line2 } : {}),
+      ...(billingAddress.city ? { city: billingAddress.city } : {}),
+      ...(billingAddress.state ? { state: billingAddress.state } : {}),
+      ...(billingAddress.postalCode ? { postal_code: billingAddress.postalCode } : {}),
+    };
+  }
+
+  async function saveCustomerTaxDetails(customerId, { billingAddress, taxId } = {}) {
+    if (billingAddress) {
+      await stripe.customers.update(customerId, { address: stripeAddress(billingAddress) });
+    }
+    if (taxId && billingAddress && EU_VAT_COUNTRIES.has(billingAddress.country)) {
+      if (typeof stripe.customers.createTaxId !== "function") {
+        throw new Error("Stripe customer tax IDs are unavailable.");
+      }
+      await stripe.customers.createTaxId(customerId, { type: "eu_vat", value: taxId });
+    }
+  }
+
   return {
+    async saveCustomerTaxDetails({ customerId, billingAddress, taxId }) {
+      if (typeof customerId !== "string" || !customerId) throw new Error("Stripe customer is unavailable.");
+      await saveCustomerTaxDetails(customerId, { billingAddress, taxId });
+      return { customerId };
+    },
+
     async createCheckoutSession({ accountId, requestId, email, plan, priceId, customerId, returnUrl }) {
       return stripe.checkout.sessions.create({
         mode: "subscription",
@@ -107,7 +148,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       return match?.id ?? null;
     },
 
-    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId, quantity = 1, product }) {
+    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId, quantity = 1, product, automaticTax = false, taxDetails }) {
       let customer = customerId;
       if (!customer) {
         const createdCustomer = await stripe.customers.create(
@@ -118,11 +159,16 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       }
       if (typeof customer !== "string" || !customer) throw new Error("Stripe customer is unavailable.");
 
+      if (taxDetails) {
+        await saveCustomerTaxDetails(customer, taxDetails);
+      }
+
       const subscription = await stripe.subscriptions.create({
           customer,
           items: [{ price: priceId, ...(Number.isSafeInteger(quantity) && quantity > 1 ? { quantity } : {}) }],
           payment_behavior: "default_incomplete",
           payment_settings: { save_default_payment_method: "on_subscription" },
+          ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
           ...(promotionCodeId ? { discounts: [{ promotion_code: promotionCodeId }] } : {}),
           metadata: { accountId, email, plan, requestId, ...(product ? { product } : {}) },
           expand: ["latest_invoice.payment_intent"],

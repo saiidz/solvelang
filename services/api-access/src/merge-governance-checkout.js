@@ -89,6 +89,38 @@ function cleanQuantity(value) {
   return value;
 }
 
+const BILLING_ADDRESS_FIELD_LIMITS = { line1: 200, line2: 200, city: 100, state: 100, postalCode: 32 };
+
+// The billing address is optional end to end: without it the checkout keeps
+// its pre-tax behavior exactly (no automatic tax, no customer writes). When
+// present, the country is required — Stripe Tax cannot place the buyer
+// without it — and every other field is optional and length-capped.
+function cleanBillingAddress(value) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new ApiAccessError(400, "invalid_merge_governance_checkout", "Billing address is invalid.");
+  }
+  const country = cleanText(value.country, "Billing country", 2).toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country)) {
+    throw new ApiAccessError(400, "invalid_merge_governance_checkout", "Billing country is invalid.");
+  }
+  const address = { country };
+  for (const [field, maximum] of Object.entries(BILLING_ADDRESS_FIELD_LIMITS)) {
+    const raw = value[field];
+    if (raw === undefined || raw === null || raw === "") continue;
+    address[field] = cleanText(raw, "Billing address", maximum);
+  }
+  return address;
+}
+
+// A tax ID only travels with a billing address: the gateway needs the
+// billing country to recognize an EU VAT ID. A tax ID sent on its own is
+// validated here and then dropped by the caller, never half-applied.
+function cleanTaxId(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  return cleanText(value, "Tax ID", 64);
+}
+
 function cleanPlan(value) {
   try {
     return getMergeGovernancePlan(value);
@@ -121,6 +153,8 @@ export function createMergeGovernanceCheckoutService({ gateway, apiAccessService
         throw new ApiAccessError(503, "merge_governance_price_unavailable", "Merge Governance pricing is not configured.");
       }
       const quantity = cleanQuantity(input.quantity);
+      const billingAddress = cleanBillingAddress(input.billingAddress);
+      const taxId = cleanTaxId(input.taxId);
 
       const promotionCode = cleanPromotionCode(input.promotionCode);
       let promotionCodeId;
@@ -144,6 +178,10 @@ export function createMergeGovernanceCheckoutService({ gateway, apiAccessService
           product: MERGE_GOVERNANCE_PRODUCT,
           customerId: input.customerId ? cleanId(input.customerId, "Stripe customer ID") : undefined,
           promotionCodeId,
+          ...(billingAddress ? {
+            automaticTax: true,
+            taxDetails: { billingAddress, ...(taxId ? { taxId } : {}) },
+          } : {}),
         });
       } catch (error) {
         await apiAccessService.releaseSubscriptionCheckout({ accountId, requestId }).catch(() => {});

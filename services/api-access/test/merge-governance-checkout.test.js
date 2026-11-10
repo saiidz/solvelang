@@ -286,3 +286,91 @@ test("config binds Merge Governance price IDs from the environment", () => {
     "mgov-plus-annual": "price_1UZGDN4HWc7PvaDYK42zx1LY",
   });
 });
+
+test("passes a validated billing address and tax ID to the gateway with automatic tax on", async () => {
+  const seen = [];
+  const checkout = service({
+    gateway: gateway({
+      createIncompleteSubscription: async (input) => {
+        seen.push(input);
+        return { subscriptionId: "sub_tax", customerId: "cus_tax", paymentRequired: true, clientSecret: "pi_tax_secret" };
+      },
+    }),
+  });
+  const result = await checkout.createMergeGovernanceCheckout({
+    ...baseInput,
+    billingAddress: { country: "ro", line1: "Str. Nerva Traian 27-33", city: "Bucharest", postalCode: "030167" },
+    taxId: "RO54564122",
+  });
+  assert.equal(result.subscriptionId, "sub_tax");
+  assert.deepEqual(seen[0], {
+    accountId: "acct_1",
+    requestId: "checkout_1",
+    email: "dev@example.com",
+    plan: "mgov-regular-monthly",
+    priceId: "price_mgovregmonthly",
+    quantity: 1,
+    product: "merge-governance",
+    customerId: undefined,
+    promotionCodeId: undefined,
+    automaticTax: true,
+    taxDetails: {
+      billingAddress: { country: "RO", line1: "Str. Nerva Traian 27-33", city: "Bucharest", postalCode: "030167" },
+      taxId: "RO54564122",
+    },
+  });
+});
+
+test("omits empty optional address fields and never forwards a tax ID sent without an address", async () => {
+  const seen = [];
+  const capture = {
+    createIncompleteSubscription: async (input) => {
+      seen.push(input);
+      return { subscriptionId: "sub_8", customerId: "cus_8", paymentRequired: false };
+    },
+  };
+  const checkout = service({ gateway: gateway(capture) });
+  await checkout.createMergeGovernanceCheckout({
+    ...baseInput,
+    billingAddress: { country: "DE", line1: "", city: "Berlin", state: null },
+  });
+  assert.deepEqual(seen[0].taxDetails, { billingAddress: { country: "DE", city: "Berlin" } });
+  assert.equal(seen[0].automaticTax, true);
+
+  const bare = service({ gateway: gateway(capture) });
+  await bare.createMergeGovernanceCheckout({ ...baseInput, taxId: "RO54564122" });
+  assert.deepEqual(seen[1], {
+    accountId: "acct_1",
+    requestId: "checkout_1",
+    email: "dev@example.com",
+    plan: "mgov-regular-monthly",
+    priceId: "price_mgovregmonthly",
+    quantity: 1,
+    product: "merge-governance",
+    customerId: undefined,
+    promotionCodeId: undefined,
+  });
+});
+
+test("rejects malformed billing addresses and tax IDs before reserving", async () => {
+  const malformed = [
+    { billingAddress: "RO" },
+    { billingAddress: ["RO"] },
+    { billingAddress: {} },
+    { billingAddress: { country: "ROU" } },
+    { billingAddress: { country: "R1" } },
+    { billingAddress: { country: "RO", line1: 42 } },
+    { billingAddress: { country: "RO", postalCode: "x".repeat(33) } },
+    { taxId: 42 },
+    { billingAddress: { country: "RO" }, taxId: "bad\nid" },
+  ];
+  for (const extra of malformed) {
+    const calls = {};
+    const checkout = service({ apiAccessService: apiService(calls) });
+    await assert.rejects(
+      checkout.createMergeGovernanceCheckout({ ...baseInput, ...extra }),
+      (error) => error instanceof ApiAccessError && error.statusCode === 400 && error.code === "invalid_merge_governance_checkout",
+    );
+    assert.equal(calls.reserved ?? 0, 0);
+  }
+});
