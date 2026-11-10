@@ -21,6 +21,9 @@ test("navigation uses the shared account menu and unique internal destinations",
   assert.match(accountMenu, /csrfToken: account\.csrfToken/);
   assert.match(accountMenu, /Signed in as/);
   assert.match(accountMenu, /Sign out/);
+  assert.match(accountMenu, /\/account\/live-center\//);
+  assert.match(accountMenu, />Live Center</);
+  assert.match(read("app/(english)/account/api-keys/page.tsx"), /\/account\/live-center\//);
   const links = [...primaryLinks, ...toolLinks];
   assert.equal(new Set(links.map((link) => link.href)).size, links.length);
   for (const link of links) {

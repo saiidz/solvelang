@@ -70,6 +70,16 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
   assert.deepEqual(normalizeLiveCenterBoard("nope"), empty);
 });
 
+test("the Live Center is linked from the account menu and the account dashboard", () => {
+  const menu = readFileSync("app/components/SiteAccountMenu.tsx", "utf8");
+  const menuLink = menu.indexOf('href="/account/live-center/"');
+  const manageAccount = menu.indexOf("Manage account");
+  assert.ok(menuLink >= 0 && manageAccount >= 0 && menuLink > manageAccount, "the account menu links Live Center after Manage account");
+  assert.ok(menu.includes(">Live Center<"), "the menu label is plain Live Center");
+  const dashboard = readFileSync("app/(english)/account/api-keys/page.tsx", "utf8");
+  assert.ok(dashboard.includes('href="/account/live-center/"'), "the account dashboard links to the Live Center");
+});
+
 test("the board page proves the session before fetching the board and handles the not-configured state", () => {
   const board = readFileSync("app/account/live-center/LiveCenterBoard.tsx", "utf8");
   const accountCheck = board.indexOf('"/customer/account"');
