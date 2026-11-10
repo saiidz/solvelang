@@ -131,20 +131,28 @@ Parameters:
   MgovPilotBaseUrl:
     Type: String
     Default: ""
-    Description: >-
-      Base URL of the merge-governance pilot service (private repo).
-      Together with MgovAdminToken it enables the signed-in
-      /customer/connect/* proxy routes. Empty (the default) keeps
-      them dark: they answer 503 instead of guessing.
+    Description: Merge Governance pilot base URL for the Live Center board proxy; blank (with any other Mgov pilot value blank) leaves Live Center dark.
   MgovAdminToken:
     Type: String
-    Default: ""
     NoEcho: true
-    Description: >-
-      Admin token for the merge-governance pilot service, sent
-      server-side as the x-admin-token header by the connect proxy.
-      Never exposed to browsers. Empty (the default) keeps the
-      connect proxy dark.
+    Default: ""
+    Description: Admin token presented to the Merge Governance pilot board endpoint.
+  MgovPilotTenant:
+    Type: String
+    Default: ""
+    Description: Merge Governance pilot tenant id for the Live Center board.
+  MgovPilotOwner:
+    Type: String
+    Default: ""
+    Description: GitHub owner of the repository shown in the Live Center board.
+  MgovPilotRepo:
+    Type: String
+    Default: ""
+    Description: GitHub repository shown in the Live Center board.
+  MgovPilotInstallationId:
+    Type: String
+    Default: ""
+    Description: GitHub App installation id for the Live Center board repository.
 
 Rules:
   CustomerAccountsRequirements:
@@ -442,6 +450,10 @@ Resources:
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
+          MGOV_PILOT_TENANT: !Ref MgovPilotTenant
+          MGOV_PILOT_OWNER: !Ref MgovPilotOwner
+          MGOV_PILOT_REPO: !Ref MgovPilotRepo
+          MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -562,6 +574,12 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/account
+            Method: GET
+        CustomerLiveCenterBoard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/live-center/board
             Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
@@ -808,6 +826,10 @@ Resources:
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
+          MGOV_PILOT_TENANT: !Ref MgovPilotTenant
+          MGOV_PILOT_OWNER: !Ref MgovPilotOwner
+          MGOV_PILOT_REPO: !Ref MgovPilotRepo
+          MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable

@@ -60,6 +60,7 @@ export function createApiAccessHandler({
   elementsCheckout,
   mergeGovernanceCheckout,
   mergeGovernanceConnect = null,
+  liveCenter,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -427,6 +428,11 @@ export function createApiAccessHandler({
           customerId: account?.stripeCustomerId,
           promotionCode: body.promotionCode,
         }));
+      }
+      if (method === "GET" && path.endsWith("/customer/live-center/board")) {
+        const session = await customerSession(event);
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        return response(200, await liveCenter.getBoard());
       }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);

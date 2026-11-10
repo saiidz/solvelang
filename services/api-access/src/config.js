@@ -109,6 +109,23 @@ function supportAutomation(environment) {
   };
 }
 
+function liveCenter(environment) {
+  // Live Center stays dark until every pilot pointer is present: a partial
+  // configuration never enables a half-wired board proxy, it simply leaves
+  // the route failing closed (503 mgov_not_configured) — the same
+  // optional-config discipline as the Merge Governance price IDs above.
+  const config = {
+    baseUrl: environment.MGOV_PILOT_BASE_URL || undefined,
+    adminToken: environment.MGOV_ADMIN_TOKEN || undefined,
+    tenant: environment.MGOV_PILOT_TENANT || undefined,
+    owner: environment.MGOV_PILOT_OWNER || undefined,
+    repo: environment.MGOV_PILOT_REPO || undefined,
+    installationId: environment.MGOV_PILOT_INSTALLATION_ID || undefined,
+  };
+  const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
+  return { liveCenter: { enabled, ...config } };
+}
+
 function githubApp(environment) {
   // The GitHub App is dark until every credential is present: a partial
   // configuration never enables a half-wired sign-in or webhook surface,
@@ -134,7 +151,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...mergeGovernanceService(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

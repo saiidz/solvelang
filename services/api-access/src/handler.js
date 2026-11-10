@@ -30,6 +30,7 @@ import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscripti
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
+import { createLiveCenterService } from "./live-center.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -303,6 +304,7 @@ const application = createApiAccessHandler({
   elementsCheckout,
   mergeGovernanceCheckout,
   mergeGovernanceConnect,
+  liveCenter: createLiveCenterService({ config: environment.liveCenter }),
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
