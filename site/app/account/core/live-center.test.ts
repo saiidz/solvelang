@@ -206,14 +206,7 @@ test("normalizeLiveCenterBoard flattens activity runs into job rows with runner 
       status: "Passed",
     },
     { runId: 9002, workflowName: "Deploy", name: "Deploy", runnerName: "", status: "Failed" },
-  ]);
-  // The legacy flat jobs alias mirrors the activity rows.
-  assert.deepEqual(view.jobs, [
-    { name: "Validation selection", runnerName: "", status: "Queued" },
-    { name: "Repository policy", runnerName: "UCS-ORACLE-CI-3", status: "Passed" },
-    { name: "Deploy", runnerName: "", status: "Failed" },
-  ]);
-});
+  ]);});
 
 test("normalizeLiveCenterBoard reads a blocked batch planner state", () => {
   const view = normalizeLiveCenterBoard(pilotBoard);
@@ -275,7 +268,6 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     stats: { openPrs: 0, drafts: 0, failingPrs: 0, checkingPrs: 0, readyPrs: 0, waitingOnOwner: 0 },
     queue: [],
     pullRequests: [],
-    jobs: [],
     activity: [],
     ownerActions: [],
     ownerActionGroups: [],
