@@ -29,6 +29,7 @@ import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
+import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -266,6 +267,16 @@ if (environment.subscriptionBillingEnabled) {
   });
 }
 
+// The repository-connect proxy exists only when the merge-governance
+// pilot service is fully configured (base URL + admin token); see
+// config.js. Unset pair -> undefined -> the connect routes answer 503.
+const mergeGovernanceConnect = environment.mergeGovernanceService.enabled
+  ? createMergeGovernanceConnectService({
+      baseUrl: environment.mergeGovernanceService.baseUrl,
+      adminToken: environment.mergeGovernanceService.adminToken,
+    })
+  : undefined;
+
 const botProtection = environment.turnstileSecretKey
   ? createTurnstileVerifier({ secret: environment.turnstileSecretKey, expectedHostname: new URL(environment.siteOrigin).hostname })
   : undefined;
@@ -291,6 +302,7 @@ const application = createApiAccessHandler({
   subscriptionCheckout,
   elementsCheckout,
   mergeGovernanceCheckout,
+  mergeGovernanceConnect,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,

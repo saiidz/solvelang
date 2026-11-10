@@ -59,6 +59,7 @@ export function createApiAccessHandler({
   subscriptionCheckout,
   elementsCheckout,
   mergeGovernanceCheckout,
+  mergeGovernanceConnect = null,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -353,6 +354,27 @@ export function createApiAccessHandler({
         const session = await customerSession(event, true);
         if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
         return response(200, await githubApp.runAudit({ accountId: session.accountId, ...parseJson(event) }));
+      }
+      // "Connect a repository by app sign-in": read-only proxies to
+      // the merge-governance pilot service's product-app routes. The
+      // session gate is the only authorization in this slice (the
+      // pilot service is reached with its admin token server-side);
+      // an unconfigured proxy answers 503 so the site can show its
+      // "being switched on" state.
+      if (method === "GET" && path.endsWith("/customer/connect/repositories")) {
+        await customerSession(event);
+        if (!mergeGovernanceConnect) throw new ApiAccessError(503, "merge_governance_connect_disabled", "Repository connect is not enabled.");
+        return response(200, await mergeGovernanceConnect.listRepositories(event.queryStringParameters?.installationId));
+      }
+      if (method === "GET" && path.endsWith("/customer/connect/audit")) {
+        await customerSession(event);
+        if (!mergeGovernanceConnect) throw new ApiAccessError(503, "merge_governance_connect_disabled", "Repository connect is not enabled.");
+        const query = event.queryStringParameters ?? {};
+        return response(200, await mergeGovernanceConnect.getAudit({
+          installationId: query.installationId,
+          owner: query.owner,
+          repo: query.repo,
+        }));
       }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);

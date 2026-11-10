@@ -128,6 +128,23 @@ Parameters:
   StripeMgovPlusAnnualPriceId:
     Type: String
     Default: ""
+  MgovPilotBaseUrl:
+    Type: String
+    Default: ""
+    Description: >-
+      Base URL of the merge-governance pilot service (private repo).
+      Together with MgovAdminToken it enables the signed-in
+      /customer/connect/* proxy routes. Empty (the default) keeps
+      them dark: they answer 503 instead of guessing.
+  MgovAdminToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      Admin token for the merge-governance pilot service, sent
+      server-side as the x-admin-token header by the connect proxy.
+      Never exposed to browsers. Empty (the default) keeps the
+      connect proxy dark.
 
 Rules:
   CustomerAccountsRequirements:
@@ -423,6 +440,8 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
+          MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -775,6 +794,8 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
+          MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
