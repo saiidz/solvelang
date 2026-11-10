@@ -521,6 +521,7 @@ export default function ApiKeysPage() {
             <p className="mt-2 text-slate-400">{dashboard.email}</p>
           </div>
           <div className="flex gap-3">
+            <Link href="/account/live-center/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Live Center</Link>
             <Link href="/api-pricing/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Plans</Link>
           </div>
         </header>
