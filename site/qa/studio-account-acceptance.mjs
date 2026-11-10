@@ -23,7 +23,7 @@ export const TEST_NAMES = [
 ];
 
 const expectedAcceptanceOrigin = "https://studio-acceptance.d3j3fgk4gcxxg2.amplifyapp.com";
-const expectedApiBase = "https://3l3y008e94.execute-api.us-east-2.amazonaws.com";
+const expectedApiBase = "https://api.solve-lang.com";
 const acceptanceOrigin = process.env.STUDIO_QA_BASE_URL ?? expectedAcceptanceOrigin;
 const apiBase = process.env.STUDIO_QA_API_BASE_URL ?? expectedApiBase;
 const accountDigests = {
