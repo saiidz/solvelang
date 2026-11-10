@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { audit } = require("./audit-artifact.cjs");
+const policy = require("./artifact-policy.json");
 
 // Mutation tests use the actual pinned build, not a second model of the policy.
 const built = process.env.SOLVELANG_WASM_AUDIT_DIR;
@@ -27,7 +28,7 @@ test("rejects injected browser side effects", t => {
 });
 test("rejects oversized artifacts before compilation", t => {
   const root = fixture(t);
-  fs.writeFileSync(path.join(root, "solvec_wasm_bg.wasm"), Buffer.alloc(600001));
+  fs.writeFileSync(path.join(root, "solvec_wasm_bg.wasm"), Buffer.alloc(policy.maxWasmBytes + 1));
   assert.throws(() => audit(root, sha), /size budget/);
 });
 test("rejects a WASI import without executing it", t => {
