@@ -139,3 +139,104 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
   for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
 });
+
+const {
+  QUEUE_CARDS,
+  BREAKER_ID,
+  BATCH_LABEL,
+  BREAK_BANNER,
+  ISOLATE_BANNER,
+  MERGE_BANNER,
+  BEAT_BANNERS,
+  DESKTOP_TIMELINE,
+  MOBILE_TIMELINE,
+  phaseAt,
+  SEQUENCE_DESCRIPTION,
+} = require("../.studio-test-dist/public-site/(english)/process-solution/queue-animation.js");
+const queueComponent = read("app/(english)/process-solution/QueueAnimation.tsx");
+const queueCss = read("app/(english)/process-solution/QueueAnimation.module.css");
+const queueEngine = read("app/(english)/process-solution/queue-animation.ts");
+
+test("queue animation tells only the brief's story, with generic PR titles", () => {
+  assert.deepEqual(
+    QUEUE_CARDS.map((card) => card.title),
+    ["feat/auth-retry", "fix/cache-ttl", "chore/deps-bump", "feat/export-csv"],
+  );
+  const breaker = QUEUE_CARDS.find((card) => card.id === BREAKER_ID);
+  assert.equal(breaker?.title, "fix/cache-ttl");
+  assert.equal(breaker?.breaker, true);
+  assert.equal(QUEUE_CARDS.filter((card) => card.breaker).length, 1);
+  assert.equal(BATCH_LABEL, "Combined tree — testing together");
+  assert.equal(BREAK_BANNER, "Combined check failed.");
+  assert.equal(ISOLATE_BANNER, "Breaker isolated — returned to its author.");
+  assert.equal(MERGE_BANNER, "Main stayed green.");
+  assert.equal(BEAT_BANNERS.hold, MERGE_BANNER);
+  assert.ok(SEQUENCE_DESCRIPTION.length > 40);
+});
+
+test("queue timelines stay inside the shared loop budget", () => {
+  for (const timeline of [DESKTOP_TIMELINE, MOBILE_TIMELINE]) {
+    assert.ok(timeline.totalMs >= 9_000 && timeline.totalMs <= 14_000, `${timeline.variant} total ${timeline.totalMs}`);
+    assert.ok(timeline.holdMs >= 1_500, `${timeline.variant} hold ${timeline.holdMs}`);
+    assert.equal(timeline.beats[0].startMs, 0);
+    assert.equal(timeline.beats[timeline.beats.length - 1].endMs, timeline.totalMs);
+    for (let i = 1; i < timeline.beats.length; i += 1) {
+      assert.equal(timeline.beats[i].startMs, timeline.beats[i - 1].endMs, `${timeline.variant} beat ${i} is contiguous`);
+    }
+    assert.deepEqual(
+      timeline.beats.map((beat) => beat.id),
+      ["queue", "batch", "break", "bisect", "isolate", "merge", "hold"],
+    );
+  }
+  assert.ok(MOBILE_TIMELINE.totalMs < DESKTOP_TIMELINE.totalMs, "mobile loop is the calm, shortened one");
+  assert.equal(MOBILE_TIMELINE.secondSplitAt, null, "mobile performs a single bisect split");
+  assert.ok(DESKTOP_TIMELINE.secondSplitAt !== null && DESKTOP_TIMELINE.secondSplitAt > 0 && DESKTOP_TIMELINE.secondSplitAt < 1);
+});
+
+test("phaseAt walks every beat in order, reports the beat banner, and wraps", () => {
+  for (const [variant, timeline] of [["desktop", DESKTOP_TIMELINE], ["mobile", MOBILE_TIMELINE]]) {
+    const seen = [];
+    for (let t = 0; t < timeline.totalMs; t += 50) {
+      const phase = phaseAt(t, variant);
+      assert.equal(phase.banner, BEAT_BANNERS[phase.beat]);
+      assert.ok(phase.progress >= 0 && phase.progress <= 1);
+      assert.ok(phase.cycleMs >= 0 && phase.cycleMs < timeline.totalMs);
+      if (seen[seen.length - 1] !== phase.beat) seen.push(phase.beat);
+    }
+    assert.deepEqual(seen, ["queue", "batch", "break", "bisect", "isolate", "merge", "hold"]);
+    assert.equal(phaseAt(timeline.totalMs + 100, variant).beat, phaseAt(100, variant).beat);
+    assert.equal(phaseAt(-100, variant).cycleMs, phaseAt(timeline.totalMs - 100, variant).cycleMs);
+  }
+  const desktopBisectMid = DESKTOP_TIMELINE.beats.find((beat) => beat.id === "bisect");
+  const beforeSecondSplit = phaseAt(desktopBisectMid.startMs + 10, "desktop");
+  const afterSecondSplit = phaseAt(desktopBisectMid.endMs - 10, "desktop");
+  assert.equal(beforeSecondSplit.secondSplit, false);
+  assert.equal(afterSecondSplit.secondSplit, true);
+});
+
+test("queue component honours the motion, pause, and accessibility contracts", () => {
+  assert.match(queueComponent, /IntersectionObserver/);
+  assert.match(queueComponent, /visibilitychange/);
+  assert.match(queueComponent, /prefers-reduced-motion: reduce/);
+  assert.match(queueComponent, /role="img"/);
+  assert.match(queueComponent, /aria-hidden="true"/);
+  assert.match(queueComponent, /sr-only/);
+  assert.match(queueComponent, /h-\[448px\]/);
+  assert.match(queueComponent, /sm:h-\[468px\]/);
+  assert.match(queueCss, /transition-property: transform, opacity/);
+  const keyframeBodies = [...queueCss.matchAll(/@keyframes[^{]+\{([\s\S]*?)\n\}/g)].map((match) => match[1]);
+  assert.ok(keyframeBodies.length >= 1, "the shimmer keyframes exist");
+  for (const body of keyframeBodies) {
+    const properties = [...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]);
+    assert.ok(properties.length >= 1, "keyframes declare at least one property");
+    for (const property of properties) {
+      assert.ok(property === "transform" || property === "opacity", `keyframe animates ${property}`);
+    }
+  }
+  assert.match(queueCss, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(queueEngine, /document\.|window\.|requestAnimationFrame/);
+  for (const source of [queueComponent, queueEngine]) {
+    assert.doesNotMatch(source, /upcomingsounds/i);
+    assert.doesNotMatch(source, /saiidz/);
+  }
+});
