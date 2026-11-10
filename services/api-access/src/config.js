@@ -59,6 +59,18 @@ function billing(environment) {
   };
 }
 
+function mergeGovernanceService(environment) {
+  // The merge-governance pilot service (private repo) backs the
+  // signed-in "connect a repository" proxy routes. Optional like the
+  // Merge Governance prices: BOTH values present or the proxy stays
+  // dark (its routes answer 503) — a partial pair never enables a
+  // half-wired proxy.
+  const rawBase = typeof environment.MGOV_PILOT_BASE_URL === "string" ? environment.MGOV_PILOT_BASE_URL.trim().replace(/\/+$/, "") : "";
+  const baseUrl = rawBase || undefined;
+  const adminToken = environment.MGOV_ADMIN_TOKEN || undefined;
+  return { mergeGovernanceService: { baseUrl, adminToken, enabled: Boolean(baseUrl && adminToken) } };
+}
+
 function customerAccess(environment) {
   const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
   return { customerAccountsEnabled: enabled, customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined };
@@ -139,7 +151,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

@@ -659,6 +659,18 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/merge-governance/elements-checkout
             Method: POST
+        CustomerConnectRepositories:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/connect/repositories
+            Method: GET
+        CustomerConnectAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/connect/audit
+            Method: GET
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
