@@ -51,6 +51,12 @@ jobs:
       STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID }}
       STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID }}
       STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID }}
+      MGOV_PILOT_BASE_URL: ${{ vars.MGOV_PILOT_BASE_URL }}
+      MGOV_PILOT_TENANT: ${{ vars.MGOV_PILOT_TENANT }}
+      MGOV_PILOT_OWNER: ${{ vars.MGOV_PILOT_OWNER }}
+      MGOV_PILOT_REPO: ${{ vars.MGOV_PILOT_REPO }}
+      MGOV_PILOT_INSTALLATION_ID: ${{ vars.MGOV_PILOT_INSTALLATION_ID }}
+      MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
@@ -93,6 +99,12 @@ jobs:
           [[ "$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID" == "price_1UZGDH4HWc7PvaDY5j7uMC3s" ]]
           [[ "$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID" == "price_1UZGDN4HWc7PvaDYD9evdkxz" ]]
           [[ "$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID" == "price_1UZGDN4HWc7PvaDYK42zx1LY" ]]
+          [[ "$MGOV_PILOT_BASE_URL" == "https://2l346svz17.execute-api.us-east-2.amazonaws.com" ]]
+          [[ "$MGOV_PILOT_TENANT" == "saiidz-pilot" ]]
+          [[ "$MGOV_PILOT_OWNER" == "saiidz" ]]
+          [[ "$MGOV_PILOT_REPO" == "upcomingsounds-private" ]]
+          [[ "$MGOV_PILOT_INSTALLATION_ID" == "179351888" ]]
+          (( ${#MGOV_ADMIN_TOKEN} >= 32 ))
           (( ${#API_KEY_PEPPER} >= 32 ))
           (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
           (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
@@ -436,6 +448,12 @@ jobs:
             StripeMgovRegularAnnualPriceId="$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID"
             StripeMgovPlusMonthlyPriceId="$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID"
             StripeMgovPlusAnnualPriceId="$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID"
+            MgovPilotBaseUrl="$MGOV_PILOT_BASE_URL"
+            MgovAdminToken="$MGOV_ADMIN_TOKEN"
+            MgovPilotTenant="$MGOV_PILOT_TENANT"
+            MgovPilotOwner="$MGOV_PILOT_OWNER"
+            MgovPilotRepo="$MGOV_PILOT_REPO"
+            MgovPilotInstallationId="$MGOV_PILOT_INSTALLATION_ID"
           )
           [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
           [[ -z "$TURNSTILE_SECRET_KEY" ]] || parameters+=(TurnstileSecretKey="$TURNSTILE_SECRET_KEY")
