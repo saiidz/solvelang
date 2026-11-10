@@ -187,3 +187,26 @@ test("the lifecycle skip is marker-specific: unmarked unknown prices still fail 
     (error) => error instanceof ApiAccessError && error.code === "unknown_subscription_price",
   );
 });
+
+test("the customer route forwards billing address and tax ID when the buyer supplies them", async () => {
+  const { handler, checkoutCalls } = gateFixture();
+  const response = await handler(customerEvent({
+    plan: "mgov-regular-monthly",
+    quantity: 2,
+    requestId: "checkout_tax",
+    billingAddress: { country: "RO", city: "Bucharest" },
+    taxId: "RO54564122",
+  }));
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(checkoutCalls, [{
+    accountId: "acct_session",
+    email: "owner@example.com",
+    plan: "mgov-regular-monthly",
+    quantity: 2,
+    requestId: "checkout_tax",
+    customerId: "cus_from_account",
+    promotionCode: undefined,
+    billingAddress: { country: "RO", city: "Bucharest" },
+    taxId: "RO54564122",
+  }]);
+});
