@@ -30,4 +30,4 @@ applications:
           - key: 'X-Frame-Options'
             value: 'DENY'
           - key: 'Content-Security-Policy'
-            value: 'default-src ''self''; script-src ''self'' ''unsafe-inline'' ''wasm-unsafe-eval'' https://js.stripe.com https://challenges.cloudflare.com; style-src ''self'' ''unsafe-inline''; img-src ''self'' data: blob:; font-src ''self'' data:; connect-src ''self'' https://3l3y008e94.execute-api.us-east-2.amazonaws.com https://api.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com; frame-ancestors ''none''; base-uri ''self''; form-action ''self'''
+            value: 'default-src ''self''; script-src ''self'' ''unsafe-inline'' ''wasm-unsafe-eval'' https://js.stripe.com https://challenges.cloudflare.com; style-src ''self'' ''unsafe-inline''; img-src ''self'' data: blob:; font-src ''self'' data:; connect-src ''self'' https://api.solve-lang.com https://3l3y008e94.execute-api.us-east-2.amazonaws.com https://api.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com; frame-ancestors ''none''; base-uri ''self''; form-action ''self'''
