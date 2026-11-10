@@ -401,7 +401,7 @@ Resources:
       Handler: src/handler.handler
       CodeUri: .
       MemorySize: 256
-      Timeout: 15
+      Timeout: 30
       Architectures: [arm64]
       Environment:
         Variables:
