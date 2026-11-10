@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { auditStats, ciChipGroups, classifiedCard, compatExplainer, landingOutcomes, processSteps, rulesLines, scoreboardMetrics, testChips, testChipsLabel } from "./process-solution-data";
+import QueueAnimation from "./QueueAnimation";
 
 export const metadata: Metadata = {
   title: "Process Solution",
@@ -11,11 +12,16 @@ export default function ProcessSolutionPage() {
     <main className="min-h-screen bg-slate-50 text-slate-950">
       <div className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
         <div className="border-b border-slate-200 pb-8">
-          <p className="text-sm font-semibold text-blue-700">SolveLang Process Solution</p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Test the landing tree once. Merge only what was tested.</h1>
-          <p className="mt-5 max-w-3xl leading-7 text-slate-600">
-            Process Solution is a merge-governance control plane for GitHub teams. It builds the exact tree that will land — base plus batch together — runs one capped battery on it, and lands that tree only on FULL GREEN. Every decision is written to an audit log, and the savings are proved on a scoreboard your team can read.
-          </p>
+          <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+            <div>
+              <p className="text-sm font-semibold text-blue-700">SolveLang Process Solution</p>
+              <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Test the landing tree once. Merge only what was tested.</h1>
+              <p className="mt-5 max-w-3xl leading-7 text-slate-600">
+                Process Solution is a merge-governance control plane for GitHub teams. It builds the exact tree that will land — base plus batch together — runs one capped battery on it, and lands that tree only on FULL GREEN. Every decision is written to an audit log, and the savings are proved on a scoreboard your team can read.
+              </p>
+            </div>
+            <QueueAnimation />
+          </div>
         </div>
 
         <section className="mt-8 rounded-3xl bg-slate-950 p-7 text-white" aria-labelledby="wall-heading">
