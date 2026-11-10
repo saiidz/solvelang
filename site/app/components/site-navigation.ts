@@ -12,7 +12,7 @@ export const toolLinks = [
   { label: "Repository audit", href: "/repository-audit/" },
   { label: "Server audit", href: "/server-audit/" },
   { label: "About SolveLang", href: "/about/" },
-  { label: "API plans (preview)", href: "/api-pricing/" },
+  { label: "API plans", href: "/api-pricing/" },
   { label: "Process Solution", href: "/process-solution/" },
 ] as const;
 
