@@ -33,7 +33,7 @@ assert.deepEqual(manifest.exports, policy.exports);
 assert.deepEqual(manifest.files.map(file => file.name), names.slice(1));
 let total = 0;
 for (const file of manifest.files) {
-  const bytes = read(file.name, 600000);
+  const bytes = read(file.name, policy.maxWasmBytes);
   assert.equal(bytes.byteLength, file.bytes);
   assert.equal(hash(bytes), file.sha256, "pinned artifact bytes changed");
   if (file.name.endsWith(".js")) assert.equal(file.sha256, policy.glueSha256[file.name]);
@@ -45,5 +45,5 @@ for (const file of manifest.files) {
   }
 }
 assert.equal(total, manifest.totalBytes);
-assert.ok(total <= 620000);
+assert.ok(total <= policy.maxBundleBytes);
 console.log(`Verified pinned browser artifact ${pin.sourceCommit}; no Rust toolchain used.`);
