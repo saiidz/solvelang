@@ -140,7 +140,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
       return {
         accountId,
         email,
-        cookie: `${GITHUB_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${Math.floor(GITHUB_SESSION_TTL_MS / 1_000)}`,
+        cookie: `${GITHUB_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${Math.floor(GITHUB_SESSION_TTL_MS / 1_000)}`,
       };
     },
 

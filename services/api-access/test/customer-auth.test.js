@@ -212,6 +212,7 @@ test("magic-link verification creates the durable account and versioned session"
   assert.match(verified.cookie, /Secure/);
   assert.match(verified.cookie, /SameSite=None/);
   assert.match(verified.cookie, /Partitioned/);
+  assert.match(verified.cookie, /Domain=\.solve-lang\.com/);
   assert.equal(typeof verified.csrfToken, "string");
 
   const account = await store.getAccount(verified.accountId);
@@ -366,6 +367,7 @@ test("logout revokes the server session and clears the partitioned cookie", asyn
   const cleared = await service.logout(rawCookie);
   assert.match(cleared, /Max-Age=0/);
   assert.match(cleared, /Partitioned/);
+  assert.match(cleared, /Domain=\.solve-lang\.com/);
   await assert.rejects(
     () => service.authenticate(rawCookie),
     (error) => error instanceof ApiAccessError && error.code === "invalid_session",

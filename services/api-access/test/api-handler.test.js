@@ -130,8 +130,8 @@ test("internal routes require a constant-time admin secret and return the plaint
 test("customer routes support password login, credential setup, cookies, ownership, and CSRF", async () => {
   const seen = [];
   const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok" };
-  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
-  const logoutCookie = "sl_api_session=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned";
+  const logoutCookie = "sl_api_session=; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
   const customerAuth = {
     requestMagicLink: async (body, context) => seen.push(["magic", body.email, context.sourceIp]),
     verifyMagicLink: async () => ({ ...session, cookie: sessionCookie }),
@@ -284,7 +284,7 @@ test("magic-link requests accept only the canonical or configured acceptance ori
 
 test("password login and TOTP verify reject disallowed origins and accept allowed ones", async () => {
   const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
-  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned";
   const calls = [];
   const verified = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", mfaRequired: false, cookie: sessionCookie };
   const handler = createApiAccessHandler({
@@ -344,7 +344,7 @@ test("password login and TOTP verify reject disallowed origins and accept allowe
 
 test("magic-link verify rejects disallowed origins without consuming the token and accepts allowed or absent origins", async () => {
   const previewOrigin = "https://studio-acceptance.dabcdef123456.amplifyapp.com";
-  const sessionCookie = "sl_api_session=sess_test; Path=/; HttpOnly; Secure; SameSite=None; Partitioned";
+  const sessionCookie = "sl_api_session=sess_test; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned";
   const calls = [];
   const verified = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", mfaRequired: false, cookie: sessionCookie };
   const handler = createApiAccessHandler({
@@ -513,7 +513,7 @@ test("invalid JSON and unknown routes return sanitized errors", async () => {
 test("sign out everywhere revokes all sessions, clears the cookie, and enforces session plus CSRF", async () => {
   const seen = [];
   const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok", sessionId: "sess_test" };
-  const clearedCookie = "sl_api_session=; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
+  const clearedCookie = "sl_api_session=; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=0";
   const customerAuth = {
     authenticate: async (cookie) => {
       seen.push(["cookie", cookie]);
@@ -625,4 +625,57 @@ test("customer checkout keeps Stripe errors private while releasing the reservat
     { type: "stripe_checkout_error", operation: "checkout_session_create", stripeType: "StripePermissionError", statusCode: 403, stripeRequestId: "req_correlation123" },
     { type: "api_access_error", code: "request_failed" },
   ]);
+});
+
+test("github install start redirects a signed-in customer to GitHub and rejects a missing session", async () => {
+  const seen = [];
+  const session = { accountId: "acct_session", email: "dev@example.com", csrfToken: "csrf_ok" };
+  const customerAuth = {
+    authenticate: async (cookie) => {
+      seen.push(["cookie", cookie]);
+      if (!cookie?.includes("sess_test")) {
+        throw new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+      }
+      return session;
+    },
+    assertCsrf: () => {},
+  };
+  const customerAccount = { getDashboard: async () => ({}) };
+  const githubApp = {
+    beginInstall: async (accountId) => {
+      seen.push(["beginInstall", accountId]);
+      return { location: "https://github.com/apps/solvelang-reader/installations/new?state=nonce_test" };
+    },
+  };
+  const handler = createApiAccessHandler({
+    service,
+    enabled: true,
+    adminSecret,
+    siteOrigin: "https://www.solve-lang.com",
+    customerAccountsEnabled: true,
+    customerAuth,
+    customerAccount,
+    githubApp,
+    logger: { error() {} },
+  });
+
+  // The regression: install start is a top-level browser navigation (a
+  // plain link from the account page), not a fetch. On the custom domain
+  // the navigation carries the session cookie, so a signed-in customer
+  // must reach beginInstall — before the Domain cookie fix the browser
+  // never sent the cookie on this navigation and the route answered
+  // invalid_session to customers who were signed in.
+  const started = await handler(event("GET", "/github/install/start", undefined, {
+    host: "api.solve-lang.com",
+    cookie: "sl_api_session=sess_test",
+  }));
+  assert.equal(started.statusCode, 302);
+  assert.equal(started.headers.location, "https://github.com/apps/solvelang-reader/installations/new?state=nonce_test");
+  assert.deepEqual(seen, [["cookie", "sl_api_session=sess_test"], ["beginInstall", "acct_session"]]);
+
+  const anonymous = await handler(event("GET", "/github/install/start", undefined, {
+    host: "api.solve-lang.com",
+  }));
+  assert.equal(anonymous.statusCode, 401);
+  assert.equal(JSON.parse(anonymous.body).code, "invalid_session");
 });

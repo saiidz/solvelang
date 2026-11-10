@@ -147,8 +147,19 @@ function cookieValue(cookieHeader, name) {
   return undefined;
 }
 
+// Domain=.solve-lang.com is load-bearing, not cosmetic: the session has
+// to reach api.solve-lang.com from top-level browser navigations as well
+// as from site fetches — the GitHub install and OAuth flows are plain
+// links, and a host-only cookie set through the raw gateway host is never
+// sent on a navigation away from that host, which failed
+// /github/install/start with invalid_session for signed-in customers.
+// The session is only ever set by responses served under solve-lang.com
+// (the custom domain fronts sign-in and the GitHub callback), so the
+// browser always accepts the Domain attribute when it is emitted.
+// handler.js mirrors this cookie for GitHub-issued sessions; the two
+// emitters must change together.
 function sessionCookie(token, maxAge) {
-  return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
+  return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
 }
 
 async function derivePassword(password, salt) {
