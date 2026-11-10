@@ -29,6 +29,7 @@ import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
+import { createLiveCenterService } from "./live-center.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -291,6 +292,7 @@ const application = createApiAccessHandler({
   subscriptionCheckout,
   elementsCheckout,
   mergeGovernanceCheckout,
+  liveCenter: createLiveCenterService({ config: environment.liveCenter }),
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
