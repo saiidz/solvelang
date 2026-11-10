@@ -575,6 +575,12 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/account
             Method: GET
+        CustomerLiveCenterBoard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/live-center/board
+            Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
           Properties:
