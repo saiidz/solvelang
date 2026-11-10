@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { audit } = require("./audit-artifact.cjs");
+const policy = require("./artifact-policy.json");
 
 // Packaging has no compiler path: its only inputs are already-audited bytes.
 function packageArtifact(bundle, destination, sourceCommit) {
@@ -35,7 +36,7 @@ function verifyPackage(directory, sourceCommit) {
     for (const name of expected.slice(1)) {
       const file = path.join(directory, name);
       assert.ok(fs.lstatSync(file).isFile(), "package entries must be regular files");
-      assert.ok(fs.statSync(file).size <= 600000, "package entry exceeds byte bound");
+      assert.ok(fs.statSync(file).size <= policy.maxWasmBytes, "package entry exceeds byte bound");
       fs.copyFileSync(file, path.join(temporary, name));
     }
     assert.match(manifest.node, /^24\.\d+\.\d+$/, "package must record a Node 24 qualification runtime");
