@@ -14,6 +14,8 @@ import { persistApiCheckoutRequestId } from "@/app/account/core/api-checkout";
 import {
   type MgovInterval,
   type MgovPackKey,
+  buildMgovBillingDetails,
+  MGOV_BILLING_COUNTRIES,
   mgovPlanFor,
   mgovTotalDollars,
   parseMgovSeats,
@@ -50,6 +52,13 @@ export function EmbeddedMgovCheckout() {
   const [interval, setInterval] = useState<MgovInterval>("monthly");
   const [seatsRaw, setSeatsRaw] = useState("1");
   const [promoCode, setPromoCode] = useState("");
+  const [billingCountry, setBillingCountry] = useState("");
+  const [billingLine1, setBillingLine1] = useState("");
+  const [billingLine2, setBillingLine2] = useState("");
+  const [billingCity, setBillingCity] = useState("");
+  const [billingState, setBillingState] = useState("");
+  const [billingPostalCode, setBillingPostalCode] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [phase, setPhase] = useState<Phase>("preparing");
   const [error, setError] = useState("");
   const [payError, setPayError] = useState("");
@@ -121,6 +130,15 @@ export function EmbeddedMgovCheckout() {
             quantity: seats,
             requestId,
             ...(promoCode.trim() ? { promotionCode: promoCode.trim() } : {}),
+            ...buildMgovBillingDetails({
+              country: billingCountry,
+              line1: billingLine1,
+              line2: billingLine2,
+              city: billingCity,
+              state: billingState,
+              postalCode: billingPostalCode,
+              taxId,
+            }),
           }),
         },
       );
@@ -203,6 +221,7 @@ export function EmbeddedMgovCheckout() {
               </div>
               <ul className="mt-7 space-y-3 text-sm text-slate-200">
                 <li>✓ Priced per developer seat — adjust the seat count before you pay</li>
+                <li>✓ Prices exclude tax — calculated from your billing country and added where applicable</li>
                 <li>✓ Combined-tree batching: test the tree that will land, once</li>
                 <li>✓ Merge only on FULL GREEN, with a written decision audit log</li>
                 <li>✓ Your code never leaves your infrastructure</li>
@@ -291,11 +310,97 @@ export function EmbeddedMgovCheckout() {
                   autoComplete="off"
                   className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
                 />
+                <label htmlFor="mgov-billing-country" className="mt-5 block text-sm font-semibold text-slate-700">Billing country (for tax)</label>
+                <select
+                  id="mgov-billing-country"
+                  value={billingCountry}
+                  onChange={(event) => setBillingCountry(event.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                >
+                  <option value="">No billing country — check out without tax details</option>
+                  {MGOV_BILLING_COUNTRIES.map((country) => (
+                    <option key={country.code} value={country.code}>{country.name}</option>
+                  ))}
+                </select>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Prices exclude tax. Choose your billing country and the tax for it is calculated and added where applicable. Your address and VAT or tax ID are saved to your Stripe customer record before the subscription starts.
+                </p>
+                {billingCountry ? (
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label htmlFor="mgov-billing-line1" className="block text-sm font-semibold text-slate-700">Address line 1 (optional)</label>
+                      <input
+                        id="mgov-billing-line1"
+                        type="text"
+                        value={billingLine1}
+                        onChange={(event) => setBillingLine1(event.target.value)}
+                        autoComplete="billing address-line1"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label htmlFor="mgov-billing-line2" className="block text-sm font-semibold text-slate-700">Address line 2 (optional)</label>
+                      <input
+                        id="mgov-billing-line2"
+                        type="text"
+                        value={billingLine2}
+                        onChange={(event) => setBillingLine2(event.target.value)}
+                        autoComplete="billing address-line2"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="mgov-billing-city" className="block text-sm font-semibold text-slate-700">City (optional)</label>
+                      <input
+                        id="mgov-billing-city"
+                        type="text"
+                        value={billingCity}
+                        onChange={(event) => setBillingCity(event.target.value)}
+                        autoComplete="billing address-level2"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="mgov-billing-state" className="block text-sm font-semibold text-slate-700">State or region (optional)</label>
+                      <input
+                        id="mgov-billing-state"
+                        type="text"
+                        value={billingState}
+                        onChange={(event) => setBillingState(event.target.value)}
+                        autoComplete="billing address-level1"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="mgov-billing-postal" className="block text-sm font-semibold text-slate-700">Postal code (optional)</label>
+                      <input
+                        id="mgov-billing-postal"
+                        type="text"
+                        value={billingPostalCode}
+                        onChange={(event) => setBillingPostalCode(event.target.value)}
+                        autoComplete="billing postal-code"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label htmlFor="mgov-tax-id" className="block text-sm font-semibold text-slate-700">VAT / Tax ID (optional)</label>
+                      <input
+                        id="mgov-tax-id"
+                        type="text"
+                        value={taxId}
+                        onChange={(event) => setTaxId(event.target.value)}
+                        placeholder="e.g. RO12345678"
+                        autoComplete="off"
+                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 <p className="mt-4 text-sm leading-6 text-slate-600">
                   {total !== null ? (
                     <>
-                      Total due today: <strong className="text-slate-950">${total}.00</strong>
-                      {promoCode.trim() ? " before any promotion discount is applied." : "."} Then ${total}/{periodWord} for {seats} developer{seats === 1 ? "" : "s"}, renewing {interval === "monthly" ? "monthly" : "annually"} until you cancel.
+                      Subtotal due today: <strong className="text-slate-950">${total}.00</strong> plus tax where applicable
+                      {promoCode.trim() ? ", before any promotion discount is applied" : ""}. Then ${total}/{periodWord} plus tax where applicable for {seats} developer{seats === 1 ? "" : "s"}, renewing {interval === "monthly" ? "monthly" : "annually"} until you cancel.
                     </>
                   ) : (
                     "Enter the number of developers to see the total."
@@ -335,7 +440,7 @@ export function EmbeddedMgovCheckout() {
                   </div>
                 ) : null}
                 <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Total due today: <strong className="text-slate-950">${total}.00</strong>. Then ${total}/{periodWord}, renewing until you cancel.
+                  Subtotal due today: <strong className="text-slate-950">${total}.00</strong> plus tax where applicable — the payment form shows the final amount, including any tax, before you confirm. Then ${total}/{periodWord} plus tax where applicable, renewing until you cancel.
                 </p>
                 <button
                   type="button"
@@ -343,7 +448,7 @@ export function EmbeddedMgovCheckout() {
                   onClick={() => void confirmPayment()}
                   className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {phase === "confirming" ? "Processing…" : `Subscribe and pay $${total}.00`}
+                  {phase === "confirming" ? "Processing…" : `Subscribe and pay $${total}.00 plus tax where applicable`}
                 </button>
               </div>
             ) : null}
