@@ -298,55 +298,55 @@ export function SubscriptionManager() {
     }
   }
 
-  if (loading) return <main className="grid min-h-screen place-items-center bg-slate-950 text-white">Loading subscription…</main>;
+  if (loading) return <main className="grid min-h-screen place-items-center bg-canvas text-ink">Loading subscription…</main>;
 
   return (
-    <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
+    <main className="min-h-screen bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-slate-300 hover:text-white">← Back to API account</Link>
-        <header className="mt-7 border-b border-white/10 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+        <Link href="/account/api-keys/" className="text-sm font-semibold text-body hover:text-ink">← Back to API account</Link>
+        <header className="mt-7 border-b border-line pb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang API</p>
           <h1 className="mt-3 text-4xl font-bold">Manage subscription</h1>
-          <p className="mt-3 text-slate-400">Change plans, manage payment methods, review invoices, or schedule cancellation without leaving SolveLang.</p>
+          <p className="mt-3 text-muted">Change plans, manage payment methods, review invoices, or schedule cancellation without leaving SolveLang.</p>
         </header>
 
-        {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-emerald-200">{notice}</p> : null}
-        {error ? <p className="mt-6 rounded-xl bg-red-400/10 p-4 text-red-200">{error}</p> : null}
+        {notice ? <p className="mt-6 rounded-xl bg-success-soft p-4 text-success">{notice}</p> : null}
+        {error ? <p className="mt-6 rounded-xl bg-danger-soft p-4 text-danger">{error}</p> : null}
 
         {management ? (
           <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_1fr]">
             <div className="space-y-8">
-              <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <section className="rounded-3xl border border-line bg-panel p-6">
                 <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm text-slate-400">Current plan</p>
+                    <p className="text-sm text-muted">Current plan</p>
                     <h2 className="mt-2 text-3xl font-bold capitalize">{management.subscription.plan}</h2>
-                    <p className="mt-2 capitalize text-slate-300">{management.subscription.status}</p>
-                    <p className="mt-3 text-sm text-slate-400">
+                    <p className="mt-2 capitalize text-body">{management.subscription.status}</p>
+                    <p className="mt-3 text-sm text-muted">
                       {management.subscription.cancelAtPeriodEnd ? "Scheduled to end" : "Renews"} {readableDate(management.subscription.currentPeriodEnd)}
                     </p>
                   </div>
                   {management.subscription.cancelAtPeriodEnd ? (
-                    <button disabled={busy} onClick={() => changeCancellation(false)} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Resume renewal</button>
+                    <button disabled={busy} onClick={() => changeCancellation(false)} className="rounded-xl bg-accent-solid px-4 py-2 font-bold text-ink disabled:opacity-60">Resume renewal</button>
                   ) : (
-                    <button disabled={busy} onClick={() => changeCancellation(true)} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Cancel at period end</button>
+                    <button disabled={busy} onClick={() => changeCancellation(true)} className="rounded-xl border border-danger px-4 py-2 font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Cancel at period end</button>
                   )}
                 </div>
 
-                <p className="mt-4 text-sm leading-6 text-slate-400">Scheduling cancellation stops renewal at the current period end. Access until then remains subject to subscription status and entitlement gates. Cancellation does not automatically refund a paid period; see the <Link className="underline" href="/refund-policy/">Refund Policy</Link>.</p>
+                <p className="mt-4 text-sm leading-6 text-muted">Scheduling cancellation stops renewal at the current period end. Access until then remains subject to subscription status and entitlement gates. Cancellation does not automatically refund a paid period; see the <Link className="underline" href="/refund-policy/">Refund Policy</Link>.</p>
 
-                <div className="mt-7 border-t border-white/10 pt-6">
+                <div className="mt-7 border-t border-line pt-6">
                   <h3 className="text-lg font-bold">Change plan</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">Plan changes apply immediately. Stripe calculates prorations for the remaining billing period, and changing plans resumes renewal if cancellation was scheduled.</p>
+                  <p className="mt-2 text-sm leading-6 text-muted">Plan changes apply immediately. Stripe calculates prorations for the remaining billing period, and changing plans resumes renewal if cancellation was scheduled.</p>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     {PLANS.map((plan) => {
                       const current = management.subscription.plan === plan.key;
                       return (
-                        <div key={plan.key} className={current ? "rounded-2xl border border-cyan-300/40 bg-cyan-300/10 p-4" : "rounded-2xl border border-white/10 bg-black/15 p-4"}>
+                        <div key={plan.key} className={current ? "rounded-2xl border border-accent bg-accent-soft p-4" : "rounded-2xl border border-line bg-black/15 p-4"}>
                           <p className="font-bold">{plan.name}</p>
-                          <p className="mt-1 text-sm text-cyan-100">{plan.price}</p>
-                          <p className="mt-2 text-xs text-slate-400">{plan.credits} · {plan.keys}</p>
-                          <button type="button" disabled={busy || current} onClick={() => changePlan(plan.key)} className="mt-4 w-full rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/5 disabled:cursor-default disabled:opacity-45">
+                          <p className="mt-1 text-sm text-accent">{plan.price}</p>
+                          <p className="mt-2 text-xs text-muted">{plan.credits} · {plan.keys}</p>
+                          <button type="button" disabled={busy || current} onClick={() => changePlan(plan.key)} className="mt-4 w-full rounded-lg border border-line px-3 py-2 text-sm font-semibold hover:bg-panel disabled:cursor-default disabled:opacity-45">
                             {current ? "Current" : `Switch to ${plan.name}`}
                           </button>
                         </div>
@@ -356,59 +356,59 @@ export function SubscriptionManager() {
                 </div>
               </section>
 
-              <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <section className="rounded-3xl border border-line bg-panel p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <p className="text-sm text-slate-400">Payment methods</p>
+                    <p className="text-sm text-muted">Payment methods</p>
                     <h2 className="mt-2 text-2xl font-bold">Billing cards</h2>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">Add cards, choose which saved card Stripe uses by default, or remove cards you no longer want saved.</p>
+                    <p className="mt-2 text-sm leading-6 text-muted">Add cards, choose which saved card Stripe uses by default, or remove cards you no longer want saved.</p>
                   </div>
-                  <button disabled={busy} onClick={openPaymentForm} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Add card</button>
+                  <button disabled={busy} onClick={openPaymentForm} className="rounded-xl bg-accent-solid px-4 py-2 font-bold text-ink disabled:opacity-60">Add card</button>
                 </div>
 
-                <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Current billing method</p>
+                <div className="mt-6 rounded-2xl border border-line bg-black/15 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Current billing method</p>
                   {management.paymentMethod ? (
                     <div className="mt-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-xl font-bold">{management.paymentMethod.label}</p>
-                        <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">Default</span>
+                        <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">Default</span>
                       </div>
                       {management.paymentMethod.type === "card" ? (
-                        <p className="mt-1 text-sm text-slate-400">Expires {management.paymentMethod.expMonth ?? "—"}/{management.paymentMethod.expYear ?? "—"}</p>
+                        <p className="mt-1 text-sm text-muted">Expires {management.paymentMethod.expMonth ?? "—"}/{management.paymentMethod.expYear ?? "—"}</p>
                       ) : (
-                        <p className="mt-1 text-sm text-slate-400">Saved with Stripe Link</p>
+                        <p className="mt-1 text-sm text-muted">Saved with Stripe Link</p>
                       )}
                     </div>
                   ) : (
-                    <p className="mt-3 text-sm text-amber-200">No billing default is currently visible. Add a card to create a managed default.</p>
+                    <p className="mt-3 text-sm text-warning">No billing default is currently visible. Add a card to create a managed default.</p>
                   )}
                 </div>
 
                 <div className="mt-6">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-lg font-bold">Saved cards</h3>
-                    <span className="text-sm text-slate-500">{management.attachedPaymentMethods.length} saved</span>
+                    <span className="text-sm text-muted">{management.attachedPaymentMethods.length} saved</span>
                   </div>
                   <div className="mt-3 space-y-3">
                     {management.attachedPaymentMethods.length === 0 ? (
-                      <p className="rounded-xl border border-dashed border-white/15 p-5 text-sm text-slate-400">No additional saved cards. Add a card to manage future billing directly from SolveLang.</p>
+                      <p className="rounded-xl border border-dashed border-line p-5 text-sm text-muted">No additional saved cards. Add a card to manage future billing directly from SolveLang.</p>
                     ) : management.attachedPaymentMethods.map((method) => (
-                      <article key={method.id ?? `${method.label}-${method.expMonth}-${method.expYear}`} className="rounded-2xl border border-white/10 bg-black/15 p-4">
+                      <article key={method.id ?? `${method.label}-${method.expMonth}-${method.expYear}`} className="rounded-2xl border border-line bg-black/15 p-4">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-bold">{method.label}</p>
-                              {method.isDefault ? <span className="rounded-full bg-cyan-300/10 px-2.5 py-1 text-xs font-semibold text-cyan-100">Default</span> : null}
+                              {method.isDefault ? <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">Default</span> : null}
                             </div>
-                            <p className="mt-1 text-sm text-slate-400">Expires {method.expMonth ?? "—"}/{method.expYear ?? "—"}</p>
+                            <p className="mt-1 text-sm text-muted">Expires {method.expMonth ?? "—"}/{method.expYear ?? "—"}</p>
                           </div>
                           {method.id ? (
                             <div className="flex flex-wrap gap-2">
                               {!method.isDefault ? (
-                                <button disabled={busy} onClick={() => setDefaultPaymentMethod(method.id!)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Set default</button>
+                                <button disabled={busy} onClick={() => setDefaultPaymentMethod(method.id!)} className="rounded-lg border border-accent px-3 py-2 text-sm font-semibold text-accent hover:bg-accent-soft disabled:opacity-60">Set default</button>
                               ) : null}
-                              <button disabled={busy || method.isDefault} title={method.isDefault ? "Choose another default card before removing this card." : undefined} onClick={() => removePaymentMethod(method.id!, method.label)} className="rounded-lg border border-red-300/30 px-3 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:cursor-not-allowed disabled:opacity-40">Remove</button>
+                              <button disabled={busy || method.isDefault} title={method.isDefault ? "Choose another default card before removing this card." : undefined} onClick={() => removePaymentMethod(method.id!, method.label)} className="rounded-lg border border-danger px-3 py-2 text-sm font-semibold text-danger hover:bg-danger-soft disabled:cursor-not-allowed disabled:opacity-40">Remove</button>
                             </div>
                           ) : null}
                         </div>
@@ -418,31 +418,31 @@ export function SubscriptionManager() {
                 </div>
 
                 {paymentFormOpen ? (
-                  <div className="mt-6 rounded-2xl bg-white p-5 text-slate-950">
+                  <div className="mt-6 rounded-2xl bg-panel p-5 text-ink">
                     <div ref={mountRef} className="min-h-[180px]" aria-label="Secure Stripe payment method form" />
                     <div className="mt-5 flex flex-wrap gap-3">
-                      <button type="button" disabled={busy || !paymentReady} onClick={submitPaymentMethod} className="rounded-xl bg-slate-950 px-5 py-3 font-bold text-white disabled:opacity-50">Save card</button>
-                      <button type="button" disabled={busy} onClick={destroyPaymentForm} className="rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 disabled:opacity-50">Cancel</button>
+                      <button type="button" disabled={busy || !paymentReady} onClick={submitPaymentMethod} className="rounded-xl bg-canvas px-5 py-3 font-bold text-ink disabled:opacity-50">Save card</button>
+                      <button type="button" disabled={busy} onClick={destroyPaymentForm} className="rounded-xl border border-line-strong px-5 py-3 font-semibold text-body disabled:opacity-50">Cancel</button>
                     </div>
-                    <p className="mt-4 text-xs text-slate-500">Card fields are securely provided by Stripe. SolveLang never receives or stores your full card number.</p>
+                    <p className="mt-4 text-xs text-muted">Card fields are securely provided by Stripe. SolveLang never receives or stores your full card number.</p>
                   </div>
                 ) : null}
               </section>
             </div>
 
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-6">
+            <section className="rounded-3xl border border-line bg-panel p-6">
               <h2 className="text-2xl font-bold">Invoice history</h2>
               <div className="mt-5 space-y-3">
                 {management.invoices.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No invoices yet.</p>
+                  <p className="rounded-xl border border-dashed border-line p-6 text-muted">No invoices yet.</p>
                 ) : management.invoices.map((invoice) => (
-                  <article key={invoice.id} className="rounded-2xl border border-white/10 bg-black/15 p-5">
+                  <article key={invoice.id} className="rounded-2xl border border-line bg-black/15 p-5">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <h3 className="font-bold">{invoice.number || "Invoice"}</h3>
-                        <p className="mt-1 text-sm text-slate-400">{readableDate(invoice.createdAt)}</p>
+                        <p className="mt-1 text-sm text-muted">{readableDate(invoice.createdAt)}</p>
                       </div>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold capitalize text-slate-200">{invoice.status}</span>
+                      <span className="rounded-full bg-panel-alt px-3 py-1 text-xs font-semibold capitalize text-body">{invoice.status}</span>
                     </div>
                     <p className="mt-4 text-xl font-bold">{money(invoice.amountPaid || invoice.amountDue, invoice.currency)}</p>
                   </article>

@@ -39,6 +39,13 @@ type ElementsCheckoutResponse = {
 
 type Phase = "preparing" | "code" | "creating" | "pay" | "confirming" | "free-done" | "success-done";
 
+function siteStripeTheme(): "stripe" | "night" {
+  // The embedded Stripe form follows the site theme resolved before
+  // first paint: a light site gets Stripe's light theme, a dark site
+  // gets its "night" theme. Read once, when the form is created.
+  return document.documentElement.getAttribute("data-theme") === "light" ? "stripe" : "night";
+}
+
 export function EmbeddedMgovCheckout() {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<Stripe | null>(null);
@@ -152,7 +159,7 @@ export function EmbeddedMgovCheckout() {
       stripeRef.current = stripe;
       const elements = stripe.elements({
         clientSecret: result.clientSecret,
-        appearance: { theme: "stripe", variables: { borderRadius: "12px" } },
+        appearance: { theme: siteStripeTheme(), variables: { borderRadius: "12px" } },
       });
       elementsRef.current = elements;
       const paymentElement = elements.create("payment", {
@@ -202,24 +209,24 @@ export function EmbeddedMgovCheckout() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
+    <main className="min-h-screen bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-slate-300 hover:text-white">
+        <Link href="/account/api-keys/" className="text-sm font-semibold text-body hover:text-ink">
           ← Back to your account
         </Link>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
-          <aside className="rounded-[2rem] border border-cyan-300/20 bg-gradient-to-b from-cyan-300/10 to-white/5 p-7 shadow-2xl sm:p-9">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang Merge Governance</p>
+          <aside className="rounded-[2rem] border border-accent bg-gradient-to-b from-accent-soft to-panel/5 p-7 shadow-2xl sm:p-9">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang Merge Governance</p>
             <h1 className="mt-3 text-3xl font-bold">{details.name} pack</h1>
-            <p className="mt-3 text-slate-300">{details.blurb}</p>
-            <p className="mt-3 text-slate-300">For {email || "your SolveLang account"}.</p>
-            <div className="mt-8 border-t border-white/10 pt-7">
+            <p className="mt-3 text-body">{details.blurb}</p>
+            <p className="mt-3 text-body">For {email || "your SolveLang account"}.</p>
+            <div className="mt-8 border-t border-line pt-7">
               <div className="flex items-end justify-between gap-4">
-                <span className="text-sm text-slate-400">Per developer</span>
-                <span className="text-4xl font-bold">${perSeat}<span className="text-base font-medium text-slate-400">/{periodWord}</span></span>
+                <span className="text-sm text-muted">Per developer</span>
+                <span className="text-4xl font-bold">${perSeat}<span className="text-base font-medium text-muted">/{periodWord}</span></span>
               </div>
-              <ul className="mt-7 space-y-3 text-sm text-slate-200">
+              <ul className="mt-7 space-y-3 text-sm text-body">
                 <li>✓ Priced per developer seat — adjust the seat count before you pay</li>
                 <li>✓ Prices exclude tax — calculated from your billing country and added where applicable</li>
                 <li>✓ Combined-tree batching: test the tree that will land, once</li>
@@ -227,23 +234,23 @@ export function EmbeddedMgovCheckout() {
                 <li>✓ Your code never leaves your infrastructure</li>
               </ul>
             </div>
-            <p className="mt-8 text-xs leading-5 text-slate-400">
+            <p className="mt-8 text-xs leading-5 text-muted">
               UPCOMINGSOUNDS S.R.L. is the operator and merchant; your statement may show that name. Stripe securely processes payment details, and SolveLang never receives your full card number. The subscription renews until canceled. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment.
             </p>
-            <p className="mt-3 text-xs leading-5 text-slate-400">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
+            <p className="mt-3 text-xs leading-5 text-muted">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
           </aside>
 
-          <section className="min-h-[620px] rounded-[2rem] bg-white p-4 text-slate-950 shadow-2xl sm:p-7">
+          <section className="min-h-[620px] rounded-[2rem] bg-panel p-4 text-ink shadow-2xl sm:p-7">
             <div className="mb-5 px-2 pt-2">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Secure payment</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">Secure payment</p>
               <h2 className="mt-2 text-2xl font-bold">Complete your Merge Governance subscription</h2>
-              <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe. We accept cards and Link, processed securely by Stripe.</p>
+              <p className="mt-2 text-sm text-muted">The payment form stays inside SolveLang and is securely provided by Stripe. We accept cards and Link, processed securely by Stripe.</p>
             </div>
 
-            {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
+            {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-muted">Loading secure checkout…</div> : null}
 
             {error && phase === "code" ? (
-              <div role="alert" className="mx-2 mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
+              <div role="alert" className="mx-2 mb-5 rounded-2xl border border-danger bg-danger-soft p-5 text-sm font-medium text-danger">
                 <p>{error}</p>
               </div>
             ) : null}
@@ -251,7 +258,7 @@ export function EmbeddedMgovCheckout() {
             {phase === "code" && accountReady ? (
               <div className="mx-2">
                 <fieldset>
-                  <legend className="text-sm font-semibold text-slate-700">Pack</legend>
+                  <legend className="text-sm font-semibold text-body">Pack</legend>
                   <div className="mt-2 grid grid-cols-2 gap-3">
                     {(Object.keys(PACK_DETAILS) as MgovPackKey[]).map((key) => (
                       <button
@@ -259,17 +266,17 @@ export function EmbeddedMgovCheckout() {
                         type="button"
                         aria-pressed={pack === key}
                         onClick={() => setPack(key)}
-                        className={pack === key ? "rounded-xl border-2 border-cyan-600 bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-slate-950" : "rounded-xl border border-slate-300 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-slate-400"}
+                        className={pack === key ? "rounded-xl border-2 border-accent bg-accent-soft px-4 py-3 text-left text-sm font-semibold text-ink" : "rounded-xl border border-line-strong px-4 py-3 text-left text-sm font-semibold text-body hover:border-line-strong"}
                       >
                         {PACK_DETAILS[key].name}
-                        <span className="block text-xs font-medium text-slate-500">${PACK_DETAILS[key].monthly}/dev/mo · ${PACK_DETAILS[key].annual}/dev/yr</span>
+                        <span className="block text-xs font-medium text-muted">${PACK_DETAILS[key].monthly}/dev/mo · ${PACK_DETAILS[key].annual}/dev/yr</span>
                       </button>
                     ))}
                   </div>
                 </fieldset>
 
                 <fieldset className="mt-5">
-                  <legend className="text-sm font-semibold text-slate-700">Billing period</legend>
+                  <legend className="text-sm font-semibold text-body">Billing period</legend>
                   <div className="mt-2 grid grid-cols-2 gap-3">
                     {(["monthly", "annual"] as MgovInterval[]).map((key) => (
                       <button
@@ -277,16 +284,16 @@ export function EmbeddedMgovCheckout() {
                         type="button"
                         aria-pressed={interval === key}
                         onClick={() => setInterval(key)}
-                        className={interval === key ? "rounded-xl border-2 border-cyan-600 bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-slate-950" : "rounded-xl border border-slate-300 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-slate-400"}
+                        className={interval === key ? "rounded-xl border-2 border-accent bg-accent-soft px-4 py-3 text-left text-sm font-semibold text-ink" : "rounded-xl border border-line-strong px-4 py-3 text-left text-sm font-semibold text-body hover:border-line-strong"}
                       >
                         {key === "monthly" ? "Monthly" : "Annual"}
-                        <span className="block text-xs font-medium text-slate-500">${key === "monthly" ? details.monthly : details.annual} per developer</span>
+                        <span className="block text-xs font-medium text-muted">${key === "monthly" ? details.monthly : details.annual} per developer</span>
                       </button>
                     ))}
                   </div>
                 </fieldset>
 
-                <label htmlFor="mgov-seats" className="mt-5 block text-sm font-semibold text-slate-700">Developers (seats)</label>
+                <label htmlFor="mgov-seats" className="mt-5 block text-sm font-semibold text-body">Developers (seats)</label>
                 <input
                   id="mgov-seats"
                   type="text"
@@ -294,13 +301,13 @@ export function EmbeddedMgovCheckout() {
                   value={seatsRaw}
                   onChange={(event) => setSeatsRaw(event.target.value)}
                   autoComplete="off"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                  className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 />
                 {seats === null ? (
-                  <p className="mt-2 text-sm font-medium text-red-700">Enter a whole number of developers between 1 and 999.</p>
+                  <p className="mt-2 text-sm font-medium text-danger">Enter a whole number of developers between 1 and 999.</p>
                 ) : null}
 
-                <label htmlFor="promo-code" className="mt-5 block text-sm font-semibold text-slate-700">Promotion code (optional)</label>
+                <label htmlFor="promo-code" className="mt-5 block text-sm font-semibold text-body">Promotion code (optional)</label>
                 <input
                   id="promo-code"
                   type="text"
@@ -308,82 +315,82 @@ export function EmbeddedMgovCheckout() {
                   onChange={(event) => setPromoCode(event.target.value)}
                   placeholder="Enter code"
                   autoComplete="off"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                  className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 />
-                <label htmlFor="mgov-billing-country" className="mt-5 block text-sm font-semibold text-slate-700">Billing country (for tax)</label>
+                <label htmlFor="mgov-billing-country" className="mt-5 block text-sm font-semibold text-body">Billing country (for tax)</label>
                 <select
                   id="mgov-billing-country"
                   value={billingCountry}
                   onChange={(event) => setBillingCountry(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                  className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 >
                   <option value="">No billing country — check out without tax details</option>
                   {MGOV_BILLING_COUNTRIES.map((country) => (
                     <option key={country.code} value={country.code}>{country.name}</option>
                   ))}
                 </select>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <p className="mt-2 text-sm leading-6 text-muted">
                   Prices exclude tax. Choose your billing country and the tax for it is calculated and added where applicable. Your address and VAT or tax ID are saved to your Stripe customer record before the subscription starts.
                 </p>
                 {billingCountry ? (
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                      <label htmlFor="mgov-billing-line1" className="block text-sm font-semibold text-slate-700">Address line 1 (optional)</label>
+                      <label htmlFor="mgov-billing-line1" className="block text-sm font-semibold text-body">Address line 1 (optional)</label>
                       <input
                         id="mgov-billing-line1"
                         type="text"
                         value={billingLine1}
                         onChange={(event) => setBillingLine1(event.target.value)}
                         autoComplete="billing address-line1"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label htmlFor="mgov-billing-line2" className="block text-sm font-semibold text-slate-700">Address line 2 (optional)</label>
+                      <label htmlFor="mgov-billing-line2" className="block text-sm font-semibold text-body">Address line 2 (optional)</label>
                       <input
                         id="mgov-billing-line2"
                         type="text"
                         value={billingLine2}
                         onChange={(event) => setBillingLine2(event.target.value)}
                         autoComplete="billing address-line2"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                     <div>
-                      <label htmlFor="mgov-billing-city" className="block text-sm font-semibold text-slate-700">City (optional)</label>
+                      <label htmlFor="mgov-billing-city" className="block text-sm font-semibold text-body">City (optional)</label>
                       <input
                         id="mgov-billing-city"
                         type="text"
                         value={billingCity}
                         onChange={(event) => setBillingCity(event.target.value)}
                         autoComplete="billing address-level2"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                     <div>
-                      <label htmlFor="mgov-billing-state" className="block text-sm font-semibold text-slate-700">State or region (optional)</label>
+                      <label htmlFor="mgov-billing-state" className="block text-sm font-semibold text-body">State or region (optional)</label>
                       <input
                         id="mgov-billing-state"
                         type="text"
                         value={billingState}
                         onChange={(event) => setBillingState(event.target.value)}
                         autoComplete="billing address-level1"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                     <div>
-                      <label htmlFor="mgov-billing-postal" className="block text-sm font-semibold text-slate-700">Postal code (optional)</label>
+                      <label htmlFor="mgov-billing-postal" className="block text-sm font-semibold text-body">Postal code (optional)</label>
                       <input
                         id="mgov-billing-postal"
                         type="text"
                         value={billingPostalCode}
                         onChange={(event) => setBillingPostalCode(event.target.value)}
                         autoComplete="billing postal-code"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                     <div className="sm:col-span-2">
-                      <label htmlFor="mgov-tax-id" className="block text-sm font-semibold text-slate-700">VAT / Tax ID (optional)</label>
+                      <label htmlFor="mgov-tax-id" className="block text-sm font-semibold text-body">VAT / Tax ID (optional)</label>
                       <input
                         id="mgov-tax-id"
                         type="text"
@@ -391,15 +398,15 @@ export function EmbeddedMgovCheckout() {
                         onChange={(event) => setTaxId(event.target.value)}
                         placeholder="e.g. RO12345678"
                         autoComplete="off"
-                        className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                        className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       />
                     </div>
                   </div>
                 ) : null}
-                <p className="mt-4 text-sm leading-6 text-slate-600">
+                <p className="mt-4 text-sm leading-6 text-muted">
                   {total !== null ? (
                     <>
-                      Subtotal due today: <strong className="text-slate-950">${total}.00</strong> plus tax where applicable
+                      Subtotal due today: <strong className="text-ink">${total}.00</strong> plus tax where applicable
                       {promoCode.trim() ? ", before any promotion discount is applied" : ""}. Then ${total}/{periodWord} plus tax where applicable for {seats} developer{seats === 1 ? "" : "s"}, renewing {interval === "monthly" ? "monthly" : "annually"} until you cancel.
                     </>
                   ) : (
@@ -410,23 +417,23 @@ export function EmbeddedMgovCheckout() {
                   type="button"
                   disabled={busy || seats === null}
                   onClick={() => void startPayment()}
-                  className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="mt-5 w-full rounded-xl bg-canvas px-4 py-3 text-sm font-semibold text-ink hover:bg-panel-alt disabled:opacity-60"
                 >
                   Continue to payment
                 </button>
               </div>
             ) : null}
 
-            {phase === "creating" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Preparing your secure payment form…</div> : null}
+            {phase === "creating" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-muted">Preparing your secure payment form…</div> : null}
 
             {phase === "free-done" ? (
-              <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
+              <div className="mx-2 rounded-2xl border border-success bg-success-soft p-5 text-sm font-medium text-success">
                 <p>Your Merge Governance {details.name} subscription is active. No payment was due — your promotion code covered the first period in full.</p>
               </div>
             ) : null}
 
             {phase === "success-done" ? (
-              <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
+              <div className="mx-2 rounded-2xl border border-success bg-success-soft p-5 text-sm font-medium text-success">
                 <p>Your Merge Governance {details.name} subscription is active. A receipt and subscription details are on their way to {email || "your account email"}.</p>
               </div>
             ) : null}
@@ -435,18 +442,18 @@ export function EmbeddedMgovCheckout() {
               <div className="mx-2">
                 <div ref={mountRef} aria-label="Secure Stripe payment form" />
                 {payError ? (
-                  <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+                  <div role="alert" className="mt-4 rounded-2xl border border-danger bg-danger-soft p-4 text-sm font-medium text-danger">
                     <p>{payError}</p>
                   </div>
                 ) : null}
-                <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Subtotal due today: <strong className="text-slate-950">${total}.00</strong> plus tax where applicable — the payment form shows the final amount, including any tax, before you confirm. Then ${total}/{periodWord} plus tax where applicable, renewing until you cancel.
+                <p className="mt-5 text-sm leading-6 text-muted">
+                  Subtotal due today: <strong className="text-ink">${total}.00</strong> plus tax where applicable — the payment form shows the final amount, including any tax, before you confirm. Then ${total}/{periodWord} plus tax where applicable, renewing until you cancel.
                 </p>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void confirmPayment()}
-                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="mt-4 w-full rounded-xl bg-canvas px-4 py-3 text-sm font-semibold text-ink hover:bg-panel-alt disabled:opacity-60"
                 >
                   {phase === "confirming" ? "Processing…" : `Subscribe and pay $${total}.00 plus tax where applicable`}
                 </button>
