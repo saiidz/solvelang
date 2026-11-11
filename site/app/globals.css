@@ -63,12 +63,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
+@keyframes lc-spin {
+  to { transform: rotate(360deg); }
+}
 .lc-enter { animation: lc-rise 0.45s ease both; }
 .lc-chip { transition: transform 0.35s ease, opacity 0.35s ease, border-color 0.35s ease, background-color 0.35s ease; }
 .lc-pulse-dot { animation: lc-pulse-dot 1.6s ease-in-out infinite; }
 .lc-step { animation: lc-step-glow 2.4s ease-in-out infinite; }
-.lc-paused .lc-enter, .lc-paused .lc-pulse-dot, .lc-paused .lc-step { animation-play-state: paused; }
+.lc-spin { animation: lc-spin 1.6s linear infinite; }
+.lc-paused .lc-enter, .lc-paused .lc-pulse-dot, .lc-paused .lc-step, .lc-paused .lc-spin { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) {
-  .lc-enter, .lc-pulse-dot, .lc-step { animation: none; }
+  .lc-enter, .lc-pulse-dot, .lc-step, .lc-spin { animation: none; }
   .lc-chip { transition: none; }
 }
