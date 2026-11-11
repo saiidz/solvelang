@@ -17,9 +17,9 @@ const kindLabels: Record<ServerAuditProcessRelationshipPresentationRow["kind"], 
 };
 
 const kindClasses: Record<ServerAuditProcessRelationshipPresentationRow["kind"], string> = {
-  "parent-process": "border-blue-200 bg-blue-50 text-blue-800",
-  "listener-process": "border-emerald-200 bg-emerald-50 text-emerald-800",
-  "ambiguous-listener-process": "border-amber-200 bg-amber-50 text-amber-900",
+  "parent-process": "border-accent bg-accent-soft text-accent",
+  "listener-process": "border-success bg-success-soft text-success",
+  "ambiguous-listener-process": "border-warning bg-warning-soft text-warning",
 };
 
 export function ServerAuditProcessRelationshipPanel({
@@ -30,36 +30,36 @@ export function ServerAuditProcessRelationshipPanel({
     <section
       aria-labelledby="server-audit-process-relationships-heading"
       aria-live="polite"
-      className={`rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm sm:p-8 ${className}`.trim()}
+      className={`rounded-[2rem] border border-line bg-panel p-6 shadow-sm sm:p-8 ${className}`.trim()}
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Process relationships</p>
-          <h2 id="server-audit-process-relationships-heading" className="mt-2 text-2xl font-semibold text-slate-950">Bounded structural attribution</h2>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Process relationships</p>
+          <h2 id="server-audit-process-relationships-heading" className="mt-2 text-2xl font-semibold text-ink">Bounded structural attribution</h2>
         </div>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           {presentation.summary.shownRows} shown · {presentation.summary.relationships} analyzed
         </p>
       </div>
 
-      <p className="mt-3 max-w-4xl leading-7 text-slate-700">
+      <p className="mt-3 max-w-4xl leading-7 text-body">
         SolveLang presents only sanitized snapshot references such as process and listening-socket indexes. Raw process names, command lines, and socket labels are not rendered by this surface.
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-        <span className="rounded-full bg-slate-100 px-3 py-1.5">{presentation.summary.parentRelationships} parent relationships</span>
-        <span className="rounded-full bg-slate-100 px-3 py-1.5">{presentation.summary.listenerRelationships} listener relationships</span>
-        <span className="rounded-full bg-slate-100 px-3 py-1.5">{presentation.summary.ambiguousListenerRelationships} ambiguous</span>
-        <span className="rounded-full bg-slate-100 px-3 py-1.5">{presentation.summary.unresolvedListenerAttributions} unresolved</span>
+      <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-body">
+        <span className="rounded-full bg-panel-alt px-3 py-1.5">{presentation.summary.parentRelationships} parent relationships</span>
+        <span className="rounded-full bg-panel-alt px-3 py-1.5">{presentation.summary.listenerRelationships} listener relationships</span>
+        <span className="rounded-full bg-panel-alt px-3 py-1.5">{presentation.summary.ambiguousListenerRelationships} ambiguous</span>
+        <span className="rounded-full bg-panel-alt px-3 py-1.5">{presentation.summary.unresolvedListenerAttributions} unresolved</span>
         {presentation.summary.hiddenRows > 0 ? (
-          <span className="rounded-full bg-amber-100 px-3 py-1.5 text-amber-900">{presentation.summary.hiddenRows} hidden by row limit</span>
+          <span className="rounded-full bg-warning-soft px-3 py-1.5 text-warning">{presentation.summary.hiddenRows} hidden by row limit</span>
         ) : null}
       </div>
 
       {presentation.notices.length ? (
         <div className="mt-5 grid gap-2">
           {presentation.notices.map((notice) => (
-            <p key={notice} className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+            <p key={notice} className="rounded-xl border border-warning bg-warning-soft p-3 text-sm font-semibold text-warning">
               {notice}
             </p>
           ))}
@@ -68,33 +68,33 @@ export function ServerAuditProcessRelationshipPanel({
 
       <div className="mt-6 grid gap-3">
         {presentation.rows.length ? presentation.rows.map((row) => (
-          <article key={row.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <article key={row.id} className="rounded-2xl border border-line bg-canvas p-5">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase ${kindClasses[row.kind]}`}>
                 {kindLabels[row.kind]}
               </span>
               {row.sourcesTruncated ? (
-                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-900">source fanout truncated</span>
+                <span className="rounded-full bg-warning-soft px-3 py-1 text-xs font-bold text-warning">source fanout truncated</span>
               ) : null}
             </div>
             <div className="mt-4 grid gap-2">
               {row.sources.map((source, index) => (
                 <div key={`${row.id}-${source}`} className="flex items-start gap-3">
-                  <span className="mt-0.5 text-xs font-bold text-slate-400">{index + 1}</span>
-                  <code className="break-all text-sm font-semibold text-slate-900">{source}</code>
+                  <span className="mt-0.5 text-xs font-bold text-muted">{index + 1}</span>
+                  <code className="break-all text-sm font-semibold text-ink">{source}</code>
                 </div>
               ))}
             </div>
-            <p className="mt-4 break-all font-mono text-xs text-slate-500">{row.id}</p>
+            <p className="mt-4 break-all font-mono text-xs text-muted">{row.id}</p>
           </article>
         )) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-line-strong bg-canvas p-8 text-center text-sm text-muted">
             No bounded process relationships were identified in the supplied snapshot.
           </div>
         )}
       </div>
 
-      <p className="mt-5 text-xs leading-5 text-slate-500">
+      <p className="mt-5 text-xs leading-5 text-muted">
         Schema {presentation.schema} · {presentation.status} evidence · network access disabled · write access disabled
       </p>
     </section>
