@@ -40,11 +40,11 @@ function runCategory(run: LiveCenterRun): RunFilter | "other" {
 
 function RunIcon({ run }: { run: LiveCenterRun }) {
   const category = runCategory(run);
-  if (category === "passed") return <span aria-hidden="true" className="text-emerald-400">✓</span>;
-  if (category === "failed") return <span aria-hidden="true" className="text-rose-400">✕</span>;
-  if (category === "running") return <span aria-hidden="true" className="lc-spin inline-block text-amber-300">◐</span>;
-  if (category === "queued") return <span aria-hidden="true" className="text-slate-400">○</span>;
-  return <span aria-hidden="true" className="text-slate-500">–</span>;
+  if (category === "passed") return <span aria-hidden="true" className="text-success">✓</span>;
+  if (category === "failed") return <span aria-hidden="true" className="text-danger">✕</span>;
+  if (category === "running") return <span aria-hidden="true" className="lc-spin inline-block text-warning">◐</span>;
+  if (category === "queued") return <span aria-hidden="true" className="text-muted">○</span>;
+  return <span aria-hidden="true" className="text-muted">–</span>;
 }
 
 export function LiveCenterRuns({ board }: { board: LiveCenterBoardView }) {
@@ -74,17 +74,17 @@ export function LiveCenterRuns({ board }: { board: LiveCenterBoardView }) {
       aria-pressed={filter === id}
       className={`inline-block rounded-full border px-3 py-1 text-sm transition ${
         filter === id
-          ? "border-sky-300/40 bg-sky-400/15 font-semibold text-sky-100"
-          : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+          ? "border-accent bg-accent-soft font-semibold text-accent"
+          : "border-line bg-panel text-body hover:bg-panel-alt"
       }`}
     >
-      {label} <span className="text-xs text-slate-400">{counts[id]}</span>
+      {label} <span className="text-xs text-muted">{counts[id]}</span>
     </button>
   );
 
   return (
     <section aria-label="Checks and workflow runs" className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted">
         Every workflow run GitHub reports for this repository — the checks in motion. A run is one
         workflow firing on one commit; its jobs are the individual pieces of work, and the Runners
         tab shows which machines they landed on.
@@ -108,7 +108,7 @@ export function LiveCenterRuns({ board }: { board: LiveCenterBoardView }) {
             </LcEmpty>
           </div>
         ) : (
-          <ul className="mt-2 divide-y divide-white/5">
+          <ul className="mt-2 divide-y divide-line">
             {visible.map((run) => {
               const prNumber = run.pullRequestNumbers[0] ?? null;
               const linked = prNumber !== null ? titleByNumber.get(prNumber) : undefined;
@@ -123,11 +123,11 @@ export function LiveCenterRuns({ board }: { board: LiveCenterBoardView }) {
                       href={githubRunUrl(board.repoLabel, run.runId)}
                       target="_blank"
                       rel="noreferrer"
-                      className="break-words font-semibold text-slate-100 underline-offset-2 hover:underline"
+                      className="break-words font-semibold text-ink underline-offset-2 hover:underline"
                     >
                       {title}
                     </a>
-                    <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
+                    <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted">
                       <span>
                         {run.workflowName}
                         {run.runId !== null ? ` #${run.runId}` : ""}
@@ -145,16 +145,16 @@ export function LiveCenterRuns({ board }: { board: LiveCenterBoardView }) {
                         · {run.jobs.length} job{run.jobs.length === 1 ? "" : "s"}
                       </span>
                       {run.headSha ? (
-                        <span className="font-mono text-[11px] text-slate-500">{shortSha(run.headSha)}</span>
+                        <span className="font-mono text-[11px] text-muted">{shortSha(run.headSha)}</span>
                       ) : null}
                       {run.headBranch ? (
-                        <span className="font-mono text-[11px] text-slate-500">{run.headBranch}</span>
+                        <span className="font-mono text-[11px] text-muted">{run.headBranch}</span>
                       ) : null}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-xs text-slate-400">{formatRelativeTime(run.updatedAt)}</p>
-                    <p className="text-xs font-medium text-slate-300">{run.status}</p>
+                    <p className="text-xs text-muted">{formatRelativeTime(run.updatedAt)}</p>
+                    <p className="text-xs font-medium text-body">{run.status}</p>
                   </div>
                 </li>
               );
@@ -182,8 +182,8 @@ export function LiveCenterRunners({ board }: { board: LiveCenterBoardView }) {
 
   return (
     <section aria-label="Runners" className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-400">
-        <strong className="text-slate-200">
+      <p className="max-w-3xl text-sm text-muted">
+        <strong className="text-body">
           {runners.busyCount} busy · {runners.waitingCount} jobs waiting
         </strong>{" "}
         — this is what GitHub reports on the current jobs themselves: a job in progress names the
@@ -191,19 +191,19 @@ export function LiveCenterRunners({ board }: { board: LiveCenterBoardView }) {
       </p>
 
       <div className={LC_PANEL}>
-        <h3 className="font-semibold text-slate-100">Working now</h3>
+        <h3 className="font-semibold text-ink">Working now</h3>
         {runners.busy.length === 0 && runningJobs.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-muted">
             No job is running at this moment, so no runner is reporting as busy. When a check
             starts, the runner doing the work appears here with the job it is on.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-white/5">
+          <ul className="mt-2 divide-y divide-line">
             {runners.busy.map((entry) => (
               <li key={`${entry.name}-${entry.jobName}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-                <span aria-hidden="true" className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-                <span className="font-mono text-sm font-semibold text-slate-100">{entry.name}</span>
-                <span className="text-sm text-slate-400">
+                <span aria-hidden="true" className="inline-block h-2 w-2 shrink-0 rounded-full bg-success" />
+                <span className="font-mono text-sm font-semibold text-ink">{entry.name}</span>
+                <span className="text-sm text-muted">
                   working now — {entry.jobName} ({entry.workflowName})
                 </span>
               </li>
@@ -213,13 +213,13 @@ export function LiveCenterRunners({ board }: { board: LiveCenterBoardView }) {
 
         {runningJobs.length > 0 ? (
           <>
-            <h3 className="mt-5 font-semibold text-slate-100">Jobs running</h3>
-            <ul className="mt-2 divide-y divide-white/5">
+            <h3 className="mt-5 font-semibold text-ink">Jobs running</h3>
+            <ul className="mt-2 divide-y divide-line">
               {runningJobs.map((job, index) => (
                 <li key={`${job.name}-${index}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-                  <span aria-hidden="true" className="lc-spin inline-block text-amber-300">◐</span>
-                  <span className="min-w-0 break-words text-sm font-medium text-slate-200">{job.name}</span>
-                  <span className="inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300">
+                  <span aria-hidden="true" className="lc-spin inline-block text-warning">◐</span>
+                  <span className="min-w-0 break-words text-sm font-medium text-body">{job.name}</span>
+                  <span className="inline-block rounded-full border border-line bg-panel px-2 py-0.5 text-[11px] text-body">
                     Running{job.runnerName ? ` · ${job.runnerName}` : " · runner not reported yet"}
                   </span>
                 </li>
@@ -228,32 +228,32 @@ export function LiveCenterRunners({ board }: { board: LiveCenterBoardView }) {
           </>
         ) : null}
 
-        <h3 className="mt-5 font-semibold text-slate-100">Waiting for a runner</h3>
+        <h3 className="mt-5 font-semibold text-ink">Waiting for a runner</h3>
         {runners.queuedJobs.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-400">
+          <p className="mt-2 text-sm text-muted">
             Nothing is queued. Every job GitHub knows about has either started or finished.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-white/5">
+          <ul className="mt-2 divide-y divide-line">
             {runners.queuedJobs.map((job, index) => (
               <li key={`${job.name}-${index}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
-                <span aria-hidden="true" className="text-slate-400">○</span>
-                <span className="min-w-0 break-words text-sm font-medium text-slate-200">{job.name}</span>
-                <span className="inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300">
+                <span aria-hidden="true" className="text-muted">○</span>
+                <span className="min-w-0 break-words text-sm font-medium text-body">{job.name}</span>
+                <span className="inline-block rounded-full border border-line bg-panel px-2 py-0.5 text-[11px] text-body">
                   Queued — waiting for a runner
                 </span>
-                <span className="text-xs text-slate-500">{job.workflowName}</span>
+                <span className="text-xs text-muted">{job.workflowName}</span>
               </li>
             ))}
           </ul>
         )}
       </div>
 
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-4 sm:p-5">
-        <h3 className="font-semibold text-slate-100">Your full runner fleet</h3>
-        <p className="mt-1 max-w-3xl text-sm text-slate-400">
+      <div className="rounded-2xl border border-dashed border-line bg-panel p-4 sm:p-5">
+        <h3 className="font-semibold text-ink">Your full runner fleet</h3>
+        <p className="mt-1 max-w-3xl text-sm text-muted">
           Seeing every machine in your fleet — including the ones sitting idle right now — needs
-          one more GitHub permission: <strong className="text-slate-200">Repository Administration, read-only</strong>.
+          one more GitHub permission: <strong className="text-body">Repository Administration, read-only</strong>.
           Until it is granted, this page can only show the runners GitHub reports on current jobs,
           which is everything above. No runner is being hidden from you by SolveLang; GitHub
           simply does not report idle machines without that permission.
