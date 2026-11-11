@@ -207,3 +207,114 @@ test("board route surfaces an upstream failure as 502", async () => {
   assert.equal(response.statusCode, 502);
   assert.equal(JSON.parse(response.body).code, "upstream_unavailable");
 });
+
+// --- pagination passthrough + the minutes seam -------------------------
+
+test("minutes pointers join the config only when both are set", () => {
+  const base = parseApiAccessEnvironment(baseEnvironment({
+    MGOV_PILOT_BASE_URL: "https://pilot.example.com",
+    MGOV_ADMIN_TOKEN: "pilot-admin-token",
+    MGOV_PILOT_TENANT: "saiidz-pilot",
+    MGOV_PILOT_OWNER: "saiidz",
+    MGOV_PILOT_REPO: "upcomingsounds-private",
+    MGOV_PILOT_INSTALLATION_ID: "179351888",
+  }));
+  assert.deepEqual(base.liveCenter, PILOT_CONFIG);
+
+  const half = parseApiAccessEnvironment(baseEnvironment({
+    RUNNERS_LEDGER_BASE_URL: "https://runners.example.com",
+  }));
+  assert.equal(half.liveCenter.minutesEnabled, undefined);
+
+  const wired = parseApiAccessEnvironment(baseEnvironment({
+    RUNNERS_LEDGER_BASE_URL: "https://runners.example.com",
+    RUNNERS_LEDGER_ADMIN_TOKEN: "runners-token",
+  }));
+  assert.equal(wired.liveCenter.minutesEnabled, true);
+  assert.equal(wired.liveCenter.minutesBaseUrl, "https://runners.example.com");
+});
+
+test("live center service forwards clean pagination params and drops dirty ones", async () => {
+  const seen = [];
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async (url) => { seen.push(url); return jsonResponse(BOARD); },
+  });
+  await service.getBoard({ page: "2", perPage: "25" });
+  assert.match(seen[0], /&page=2&perPage=25$/);
+  await service.getBoard({ page: "abc", perPage: "-1" });
+  assert.doesNotMatch(seen[1], /page=/);
+  await service.getBoard();
+  assert.doesNotMatch(seen[2], /page=/);
+});
+
+test("minutes seam answers not-configured until the ledger pointers exist", async () => {
+  let fetches = 0;
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => { fetches += 1; return jsonResponse({}); },
+  });
+  assert.deepEqual(await service.getMinutes(), { configured: false });
+  assert.equal(fetches, 0);
+
+  const disabled = createLiveCenterService({
+    config: { enabled: false },
+    fetchImpl: async () => { fetches += 1; return jsonResponse({}); },
+  });
+  await assert.rejects(
+    disabled.getMinutes(),
+    (error) => error instanceof ApiAccessError && error.statusCode === 503 && error.code === "mgov_not_configured",
+  );
+});
+
+test("minutes seam proxies the ledger summary and stamps it configured", async () => {
+  const seen = [];
+  const service = createLiveCenterService({
+    config: {
+      ...PILOT_CONFIG,
+      minutesEnabled: true,
+      minutesBaseUrl: "https://runners.example.com",
+      minutesAdminToken: "runners-token",
+    },
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return jsonResponse({ balances: [{ kind: "standard", minutesLeft: 812 }] });
+    },
+  });
+  const minutes = await service.getMinutes();
+  assert.equal(minutes.configured, true);
+  assert.equal(minutes.balances[0].minutesLeft, 812);
+  assert.equal(seen[0].url, "https://runners.example.com/accounts/saiidz-pilot/minutes-summary");
+  assert.equal(seen[0].options.headers["x-admin-token"], "runners-token");
+});
+
+const MINUTES_PATH = "/customer/live-center/minutes";
+
+function minutesEvent() {
+  return {
+    requestContext: { http: { method: "GET", sourceIp: "127.0.0.1" } },
+    rawPath: MINUTES_PATH,
+    headers: { cookie: "sl_api_session=sess_test" },
+  };
+}
+
+test("minutes route is session-gated and serves the seam answer", async () => {
+  const unauthenticated = handlerFixture({
+    authenticated: false,
+    liveCenter: { async getMinutes() { return { configured: false }; } },
+  });
+  const rejected = await unauthenticated.handler(minutesEvent());
+  assert.equal(rejected.statusCode, 401);
+
+  const unwired = handlerFixture({ liveCenter: undefined });
+  const missing = await unwired.handler(minutesEvent());
+  assert.equal(missing.statusCode, 503);
+  assert.equal(JSON.parse(missing.body).code, "mgov_not_configured");
+
+  const wired = handlerFixture({
+    liveCenter: { async getMinutes() { return { configured: false }; } },
+  });
+  const response = await wired.handler(minutesEvent());
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(JSON.parse(response.body), { configured: false });
+});
