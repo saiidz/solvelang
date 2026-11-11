@@ -70,7 +70,7 @@ export function InteractiveHero() {
       <div className="relative mx-auto grid max-w-[1440px] gap-6 px-5 pb-20 pt-12 sm:gap-12 sm:px-8 sm:pt-24 lg:min-h-[770px] lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:gap-10 lg:px-10 lg:pb-28 lg:pt-28">
         <div className="max-w-[670px]">
           <p className={styles.eyebrow}><span className={styles.eyebrowLine} /> WORKFLOW INTELLIGENCE · EVIDENCE FIRST</p>
-          <h1 id="homepage-title" className="mt-5 text-balance text-[clamp(2.65rem,5.6vw,6.5rem)] font-semibold leading-[0.99] tracking-[-0.07em] text-white sm:mt-7">See exactly what Solve can do <span className={styles.heroAccent}>— and exactly what it won&apos;t pretend to do.</span></h1>
+          <h1 id="homepage-title" className="mt-5 text-balance text-[clamp(2.65rem,5.6vw,6.5rem)] font-semibold leading-[0.99] tracking-[-0.07em] text-ink sm:mt-7">See exactly what Solve can do <span className={styles.heroAccent}>— and exactly what it won&apos;t pretend to do.</span></h1>
           <p className="mt-6 max-w-xl text-lg leading-8 text-[#b9c8db] sm:mt-8 sm:text-xl">Open a workflow, explore a repository analysis, or try a guided example. Watch Solve work — right now, in your browser.</p>
           <div className="mt-6 flex flex-wrap items-center gap-4 sm:mt-9">
             <Link href="/run/" className={styles.primaryButton}>Try Solve <span aria-hidden="true">↗</span></Link>
