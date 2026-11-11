@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { billingAvailability } from "../../product-capabilities";
+import RedirectToApiPricing from "./RedirectToApiPricing";
 
 export const metadata: Metadata = {
   title: "SolveLang Pricing",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 export default function PricingPage() {
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-950">
+      <RedirectToApiPricing />
       <meta httpEquiv="refresh" content="0; url=/api-pricing/" />
       <section className="mx-auto max-w-4xl rounded-3xl border bg-white p-8 sm:p-12">
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">SolveLang pricing</p>
