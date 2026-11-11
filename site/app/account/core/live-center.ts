@@ -57,15 +57,6 @@ export type LiveCenterActivityRow = {
   status: string;
 };
 
-// Legacy flat job shape, kept as an alias of the activity rows so the
-// pre-v2 board component keeps typechecking until the stacked UI PR
-// replaces it.
-export type LiveCenterJob = {
-  name: string;
-  runnerName: string;
-  status: string;
-};
-
 export type LiveCenterOwnerAction = {
   label: string;
   waitingOn: string;
@@ -104,7 +95,6 @@ export type LiveCenterBoardView = {
   stats: LiveCenterStats;
   queue: LiveCenterQueueEntry[];
   pullRequests: LiveCenterPullRequest[];
-  jobs: LiveCenterJob[];
   activity: LiveCenterActivityRow[];
   ownerActions: LiveCenterOwnerAction[];
   ownerActionGroups: LiveCenterOwnerActionGroup[];
@@ -447,7 +437,6 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     stats,
     queue,
     pullRequests,
-    jobs: activity.map((row) => ({ name: row.name, runnerName: row.runnerName, status: row.status })),
     activity,
     ownerActions,
     ownerActionGroups,
