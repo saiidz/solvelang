@@ -46,3 +46,29 @@ body {
 
 /* Visible keyboard focus across public forms and navigation. */
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline:3px solid #b45309; outline-offset:3px; }
+
+/* Live Center board motion. Transform/opacity only, so refreshes stay
+   cheap; the board adds .lc-paused when it scrolls off-screen, which
+   freezes every animation below; reduced-motion visitors get a fully
+   static board. */
+@keyframes lc-rise {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes lc-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@keyframes lc-step-glow {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.lc-enter { animation: lc-rise 0.45s ease both; }
+.lc-chip { transition: transform 0.35s ease, opacity 0.35s ease, border-color 0.35s ease, background-color 0.35s ease; }
+.lc-pulse-dot { animation: lc-pulse-dot 1.6s ease-in-out infinite; }
+.lc-step { animation: lc-step-glow 2.4s ease-in-out infinite; }
+.lc-paused .lc-enter, .lc-paused .lc-pulse-dot, .lc-paused .lc-step { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .lc-enter, .lc-pulse-dot, .lc-step { animation: none; }
+  .lc-chip { transition: none; }
+}

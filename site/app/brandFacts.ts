@@ -15,7 +15,7 @@ export const brandFacts = {
     { name: "Browser preview", status: "preview", description: "A pinned WebAssembly build of the canonical safe core; it is not the full hosted Rust runtime." },
     { name: "Workflow audit and support triage", status: "preview", description: previewAvailability },
     { name: "SolveLang API access and accounts", status: "deployed-gated", description: accountAvailability },
-    { name: "API subscriptions", status: "production-canary", description: billingAvailability },
+    { name: "API subscriptions", status: "production", description: billingAvailability },
     { name: "Provider-backed integrations", status: "experimental-test-mode", description: "Provider use requires independent qualification, scoped credentials, and explicit authorization." },
   ],
   services: ["Workflow discovery and explainability audits", "Workflow prototyping and implementation support", "Automation documentation and rescue work"],
