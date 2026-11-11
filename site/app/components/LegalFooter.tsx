@@ -3,7 +3,7 @@ import legalContent from "../legal-content.json";
 
 export function LegalFooter() {
   return <footer className="border-t border-slate-200 bg-white px-6 py-6 text-sm leading-7 text-slate-800">
-    <nav aria-label="Policies and business contact" className="mx-auto flex max-w-6xl flex-wrap gap-x-5 gap-y-2">
+    <nav aria-label="Policies and business contact" className="mx-auto flex max-w-6xl flex-col gap-y-2 sm:flex-row sm:flex-wrap sm:gap-x-5">
       <Link href="/privacy-policy/">Privacy policy</Link><Link href="/cookie-policy/">Cookie policy</Link>
       <Link href="/terms/">Terms of use</Link><Link href="/refund-policy/">Refund policy</Link><Link href="/data-processing/">Data processing</Link><Link href="/subprocessors/">Subprocessors</Link><Link href="/acceptable-use/">Acceptable use</Link><Link href="/withdraw/">Withdrawal</Link>
       <a href={`mailto:${legalContent.supportEmail}`}>{legalContent.supportEmail}</a>
