@@ -50,7 +50,7 @@ function PackButton({ pack, selected, onSelect }: { pack: RunnerMinutesPack; sel
       type="button"
       aria-pressed={selected}
       onClick={onSelect}
-      className={selected ? "rounded-xl border-2 border-cyan-600 bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-slate-950" : "rounded-xl border border-slate-300 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-slate-400"}
+      className={selected ? "flex h-full w-full flex-col rounded-xl border-2 border-cyan-600 bg-cyan-50 px-4 py-3 text-left text-sm font-semibold text-slate-950" : "flex h-full w-full flex-col rounded-xl border border-slate-300 px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-slate-400"}
     >
       {pack.label} · ${pack.totalDollars}
       <span className="block text-xs font-medium text-slate-500">{pack.detail}</span>
