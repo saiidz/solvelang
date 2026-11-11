@@ -99,6 +99,7 @@ export function SiteAccountMenu() {
         {error ? <p role="alert" className="px-3 pt-3 text-sm text-red-700">{error}</p> : null}
         <Link href="/account/api-keys/" className="mt-2 block rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Manage account</Link>
         <Link href="/account/live-center/" className="block rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Live Center</Link>
+        <Link href="/account/settings/" className="block rounded-xl px-3 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Settings</Link>
         <button type="button" onClick={() => void signOut()} disabled={busy} className="w-full rounded-xl px-3 py-3 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-wait disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">
           {busy ? "Signing out…" : "Sign out"}
         </button>
