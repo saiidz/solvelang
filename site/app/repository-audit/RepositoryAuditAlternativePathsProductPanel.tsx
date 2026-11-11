@@ -70,7 +70,7 @@ export function RepositoryAuditAlternativePathsProductPanel({
           <button
             type="button"
             onClick={() => onDownload(bundle.download)}
-            className="mt-5 rounded-xl bg-accent-solid px-5 py-3 text-sm font-semibold text-white hover:bg-accent-solid"
+            className="mt-5 rounded-xl bg-accent-solid px-5 py-3 text-sm font-semibold text-on-accent hover:bg-accent-solid"
           >
             Download alternative-path evidence
           </button>

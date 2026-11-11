@@ -44,7 +44,7 @@ export function RepositoryAuditDockerComposeRelationshipPanel({
         <span className="rounded-full bg-panel px-3 py-1.5">{presentation.summary.servicesSeen} services seen</span>
         <span className="rounded-full bg-panel px-3 py-1.5">{presentation.summary.relationshipsReturnedByEvidence} relationships returned</span>
         {presentation.summary.missingTargets > 0 ? (
-          <span className="rounded-full bg-danger-soft px-3 py-1.5 text-rose-900">{presentation.summary.missingTargets} missing targets</span>
+          <span className="rounded-full bg-danger-soft px-3 py-1.5 text-danger">{presentation.summary.missingTargets} missing targets</span>
         ) : null}
         {presentation.summary.unsupportedReferences > 0 ? (
           <span className="rounded-full bg-warning-soft px-3 py-1.5 text-warning">{presentation.summary.unsupportedReferences} unsupported references</span>
@@ -53,7 +53,7 @@ export function RepositoryAuditDockerComposeRelationshipPanel({
           <span className="rounded-full bg-warning-soft px-3 py-1.5 text-warning">{presentation.summary.relationshipsHiddenByEvidenceBound} hidden by evidence bound</span>
         ) : null}
         {presentation.summary.rowsHiddenByPresentationBound > 0 ? (
-          <span className="rounded-full bg-accent-soft px-3 py-1.5 text-sky-900">{presentation.summary.rowsHiddenByPresentationBound} hidden by row limit</span>
+          <span className="rounded-full bg-accent-soft px-3 py-1.5 text-accent">{presentation.summary.rowsHiddenByPresentationBound} hidden by row limit</span>
         ) : null}
       </div>
 
