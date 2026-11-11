@@ -596,8 +596,12 @@ export function LiveCenterBoard() {
   const pausedRef = useRef(false);
   const frozenRef = useRef(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  pausedRef.current = paused;
-  frozenRef.current = frozen;
+  // The interval callback reads the current pause/freeze state through
+  // refs; they are synced in an effect, never during render.
+  useEffect(() => {
+    pausedRef.current = paused;
+    frozenRef.current = frozen;
+  }, [paused, frozen]);
 
   function handleLoadError(caught: unknown) {
     if (caught instanceof CustomerApiError && caught.status === 503 && caught.code === "mgov_not_configured") {
