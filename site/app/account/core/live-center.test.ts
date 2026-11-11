@@ -524,7 +524,8 @@ test("the board page proves the session before fetching the board and handles th
   assert.ok(accountCheck >= 0 && boardFetch > accountCheck, "check the signed-in account before fetching the board");
   assert.ok(board.includes("mgov_not_configured"), "the 503 not-configured code is handled");
   assert.ok(board.includes("not switched on yet"), "the not-configured state is friendly");
-  for (const heading of ["Merge queue", "Pull requests", "Runners at work", "Needed from you"]) {
-    assert.ok(board.includes(heading), `section rendered: ${heading}`);
+  assert.ok(board.includes('"/customer/live-center/minutes"'), "the minutes seam is fetched");
+  for (const heading of ["Overview", "Pull requests", "Queue", "Checks", "Runners", "Statistics", "Inbox", "Minutes"]) {
+    assert.ok(board.includes(heading), `tab rendered: ${heading}`);
   }
 });
