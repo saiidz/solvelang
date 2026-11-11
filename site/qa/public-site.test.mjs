@@ -241,3 +241,12 @@ test("queue component honours the motion, pause, and accessibility contracts", (
     assert.doesNotMatch(source, /saiidz/);
   }
 });
+
+test("process solution hero pairs the headline with the queue animation", () => {
+  const page = read("app/(english)/process-solution/page.tsx");
+  assert.match(page, /import QueueAnimation from "\.\/QueueAnimation";/);
+  assert.match(page, /<QueueAnimation \/>/);
+  assert.match(page, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,430px\)\]/);
+  assert.match(page, /Become a design partner/);
+  assert.match(page, /hello@solve-lang\.com/);
+});
