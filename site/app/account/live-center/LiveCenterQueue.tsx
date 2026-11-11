@@ -36,12 +36,12 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
       aria-pressed={tab === id}
       className={`inline-block rounded-lg px-3 py-1.5 text-sm transition ${
         tab === id
-          ? "bg-sky-400/15 font-semibold text-sky-100"
-          : "text-slate-300 hover:bg-white/5"
+          ? "bg-accent-soft font-semibold text-accent"
+          : "text-body hover:bg-panel"
       }`}
     >
       {label}
-      <span className="ml-1.5 text-xs text-slate-400">{count}</span>
+      <span className="ml-1.5 text-xs text-muted">{count}</span>
     </button>
   );
 
@@ -61,10 +61,10 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
 
   return (
     <section aria-label="Merge queue" className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted">
         The queue is the order pull requests will merge in, head first.{" "}
-        <strong className="text-slate-200">Pause</strong> (in the header) stops this page from
-        refreshing while you read it. <strong className="text-slate-200">Freeze</strong> pins this
+        <strong className="text-body">Pause</strong> (in the header) stops this page from
+        refreshing while you read it. <strong className="text-body">Freeze</strong> pins this
         page to the snapshot you are looking at now, so the numbers cannot move while you compare
         them. The queue itself is governed by your repository&rsquo;s merge rules — these two
         controls change only what this page shows you.
@@ -72,12 +72,12 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
 
       <div className={`${LC_PANEL}`}>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
+          <div className="flex flex-wrap gap-1 rounded-xl border border-line bg-black/20 p-1">
             {tabBtn("queued", "Queued", board.pullRequests.length)}
             {tabBtn("merged", "Merged", merged.length)}
             {tabBtn("removed", "Removed", removed.length)}
           </div>
-          <p className="ml-auto text-xs text-slate-400">
+          <p className="ml-auto text-xs text-muted">
             Queue for {board.defaultBranch || "the default branch"} ·{" "}
             {board.runners.busyCount} runner{board.runners.busyCount === 1 ? "" : "s"} busy ·{" "}
             {board.runners.waitingCount} job{board.runners.waitingCount === 1 ? "" : "s"} waiting
@@ -87,14 +87,14 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
 
         {tab === "queued" ? (
           <>
-            <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-400/[0.06] px-3 py-2 text-sm text-slate-300">
-              <strong className="text-emerald-300">{ready.length} ready to queue</strong>
+            <div className="mt-4 rounded-xl border border-success bg-success-soft px-3 py-2 text-sm text-body">
+              <strong className="text-success">{ready.length} ready to queue</strong>
               {" · "}
               {waiting.length} waiting for their queue conditions — a pull request is ready only
               when its required gate has reported green on the newest commit, every check is
               finished, and it targets {board.defaultBranch || "the default branch"} directly.
             </div>
-            <p className="mt-3 rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-3 py-2 text-sm text-slate-400">
+            <p className="mt-3 rounded-xl border border-dashed border-line bg-panel px-3 py-2 text-sm text-muted">
               {formingNote}
             </p>
             {pageData.items.length === 0 ? (
@@ -108,7 +108,7 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
               </div>
             ) : (
               <>
-                <div className="mt-2 divide-y divide-white/5">
+                <div className="mt-2 divide-y divide-line">
                   {pageData.items.map((pr) => (
                     <PrRow key={pr.number ?? pr.title} pr={pr} repoLabel={board.repoLabel} showPosition />
                   ))}
@@ -137,19 +137,19 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
               </LcEmpty>
             </div>
           ) : (
-            <ul className="mt-2 divide-y divide-white/5">
+            <ul className="mt-2 divide-y divide-line">
               {merged.map((entry) => (
                 <li key={`${entry.number}-${entry.at}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-                  <span aria-hidden="true" className="text-emerald-400">✓</span>
+                  <span aria-hidden="true" className="text-success">✓</span>
                   <a
                     href={githubPrUrl(board.repoLabel, entry.number)}
                     target="_blank"
                     rel="noreferrer"
-                    className="min-w-0 break-words font-semibold text-slate-100 underline-offset-2 hover:underline"
+                    className="min-w-0 break-words font-semibold text-ink underline-offset-2 hover:underline"
                   >
                     {entry.title || "Untitled pull request"}
                   </a>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-muted">
                     #{entry.number ?? "—"} · merged {formatRelativeTime(entry.at)}
                     {entry.queueTimeMs !== null
                       ? ` · spent ${formatDurationMs(entry.queueTimeMs)} in the queue`
@@ -173,19 +173,19 @@ export function LiveCenterQueue({ board }: { board: LiveCenterBoardView }) {
               </LcEmpty>
             </div>
           ) : (
-            <ul className="mt-2 divide-y divide-white/5">
+            <ul className="mt-2 divide-y divide-line">
               {removed.map((entry) => (
                 <li key={`${entry.number}-${entry.at}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-                  <span aria-hidden="true" className="text-slate-400">○</span>
+                  <span aria-hidden="true" className="text-muted">○</span>
                   <a
                     href={githubPrUrl(board.repoLabel, entry.number)}
                     target="_blank"
                     rel="noreferrer"
-                    className="min-w-0 break-words font-semibold text-slate-100 underline-offset-2 hover:underline"
+                    className="min-w-0 break-words font-semibold text-ink underline-offset-2 hover:underline"
                   >
                     {entry.title || "Untitled pull request"}
                   </a>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-muted">
                     #{entry.number ?? "—"} · removed {formatRelativeTime(entry.at)}
                     {entry.reason ? ` · ${entry.reason}` : ""}
                   </span>

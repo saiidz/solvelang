@@ -14,7 +14,7 @@ function Sparkline({ values, label }: { values: (number | null)[]; label: string
   const nums = values.filter((value): value is number => value !== null);
   if (nums.length < 2) {
     return (
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="mt-2 text-xs text-muted">
         No history yet — recording starts with the queue-history addition; the first points
         appear as pull requests enter, merge, and leave the queue.
       </p>
@@ -36,7 +36,7 @@ function Sparkline({ values, label }: { values: (number | null)[]; label: string
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="mt-2 h-7 w-full text-sky-300"
+      className="mt-2 h-7 w-full text-accent"
       role="img"
       aria-label={label}
       preserveAspectRatio="none"
@@ -57,14 +57,14 @@ type StatCard = {
 function StatGroup({ title, cards }: { title: string; cards: StatCard[] }) {
   return (
     <div>
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h3>
+      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">{title}</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <div key={card.title} className={LC_PANEL}>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{card.title}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-50">{card.value}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{card.title}</p>
+            <p className="mt-1 text-2xl font-semibold text-ink">{card.value}</p>
             <Sparkline values={card.series} label={`${card.title}, last 14 days`} />
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">{card.note}</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted">{card.note}</p>
           </div>
         ))}
       </div>
@@ -149,7 +149,7 @@ export function LiveCenterStats({ board }: { board: LiveCenterBoardView }) {
 
   return (
     <section aria-label="Statistics" className="space-y-6">
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted">
         How the queue and its checks have been doing over the last {period.days || 14} days. Every
         card shows its latest recorded value and the shape of the days behind it — where a card
         says there is no history yet, that is the truth: recording began when queue history

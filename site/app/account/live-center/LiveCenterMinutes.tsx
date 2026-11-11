@@ -45,7 +45,7 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
 
   return (
     <section aria-label="Runner minutes" className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted">
         Your runner minutes: the time your own machines spend running checks. Spot minutes are
         spent first because they cost less; on-demand minutes cover the work that cannot wait for
         a spot machine. One credit is one minute on a standard machine — bigger machines draw
@@ -53,8 +53,8 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
       </p>
 
       {minutes.recommendation ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-300/25 bg-amber-400/[0.07] p-4 sm:p-5">
-          <p className="min-w-0 flex-1 basis-64 text-sm text-amber-100">{minutes.recommendation.text}</p>
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warning bg-warning-soft p-4 sm:p-5">
+          <p className="min-w-0 flex-1 basis-64 text-sm text-warning">{minutes.recommendation.text}</p>
           <a href={minutes.buyPath} className={LC_BTN}>
             {minutes.recommendation.actionLabel} — opens the checkout page
           </a>
@@ -64,52 +64,52 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {minutes.balances.map((balance) => (
           <div key={balance.kind || balance.label} className={LC_PANEL}>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{balance.label}</p>
-            <p className="mt-1 text-3xl font-semibold text-slate-50">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted">{balance.label}</p>
+            <p className="mt-1 text-3xl font-semibold text-ink">
               {minutesText(balance.minutesLeft)}
-              <span className="ml-2 text-sm font-normal text-slate-400">left</span>
+              <span className="ml-2 text-sm font-normal text-muted">left</span>
             </p>
             {balance.packMinutes !== null ? (
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-muted">
                 of {balance.packMinutes.toLocaleString("en-US")} minutes in the current pack
               </p>
             ) : null}
-            {balance.rateText ? <p className="mt-1 text-sm text-slate-400">{balance.rateText}</p> : null}
+            {balance.rateText ? <p className="mt-1 text-sm text-muted">{balance.rateText}</p> : null}
             {balance.lowBalance ? (
-              <p className="mt-2 rounded-lg border border-amber-300/25 bg-amber-400/10 px-2.5 py-1.5 text-sm text-amber-200">
+              <p className="mt-2 rounded-lg border border-warning bg-warning-soft px-2.5 py-1.5 text-sm text-warning">
                 Running low — top up soon so queued checks are not held back.
               </p>
             ) : null}
-            {balance.note ? <p className="mt-2 text-xs text-slate-500">{balance.note}</p> : null}
+            {balance.note ? <p className="mt-2 text-xs text-muted">{balance.note}</p> : null}
           </div>
         ))}
       </div>
 
       {minutes.lanes ? (
         <div className={LC_PANEL}>
-          <h3 className="font-semibold text-slate-100">Where the minutes went — {minutes.lanes.windowLabel}</h3>
+          <h3 className="font-semibold text-ink">Where the minutes went — {minutes.lanes.windowLabel}</h3>
           {lanesTotal > 0 ? (
             <div
               aria-hidden="true"
-              className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-white/10"
+              className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-panel-alt"
             >
               <span
-                className="bg-emerald-400"
+                className="bg-success"
                 style={{ width: `${(((minutes.lanes.spotMinutes ?? 0) / lanesTotal) * 100).toFixed(1)}%` }}
               />
               <span
-                className="bg-sky-400"
+                className="bg-accent"
                 style={{ width: `${(((minutes.lanes.onDemandMinutes ?? 0) / lanesTotal) * 100).toFixed(1)}%` }}
               />
             </div>
           ) : null}
-          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
+          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-body">
             <span>
-              <span aria-hidden="true" className="text-emerald-400">●</span> Spot:{" "}
+              <span aria-hidden="true" className="text-success">●</span> Spot:{" "}
               {minutesText(minutes.lanes.spotMinutes)} — cheaper machines that can be reclaimed
             </span>
             <span>
-              <span aria-hidden="true" className="text-sky-400">●</span> On-demand:{" "}
+              <span aria-hidden="true" className="text-accent">●</span> On-demand:{" "}
               {minutesText(minutes.lanes.onDemandMinutes)} — guaranteed machines, used when spot
               capacity is not there
             </span>
@@ -122,13 +122,13 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
 
       {minutes.byRepository.length > 0 ? (
         <div className={LC_PANEL}>
-          <h3 className="font-semibold text-slate-100">Usage by repository</h3>
-          <ul className="mt-2 divide-y divide-white/5">
+          <h3 className="font-semibold text-ink">Usage by repository</h3>
+          <ul className="mt-2 divide-y divide-line">
             {minutes.byRepository.map((row) => (
               <li key={row.repo} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-2.5 text-sm">
-                <span className="min-w-0 flex-1 basis-48 break-words font-medium text-slate-200">{row.repo}</span>
-                <span className="text-slate-300">{minutesText(row.minutes)}</span>
-                <span className="text-slate-500">
+                <span className="min-w-0 flex-1 basis-48 break-words font-medium text-body">{row.repo}</span>
+                <span className="text-body">{minutesText(row.minutes)}</span>
+                <span className="text-muted">
                   {row.jobs === null ? "" : `${row.jobs} job${row.jobs === 1 ? "" : "s"}`}
                 </span>
               </li>
@@ -139,15 +139,15 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
 
       {minutes.recentJobs.length > 0 ? (
         <div className={LC_PANEL}>
-          <h3 className="font-semibold text-slate-100">Recent jobs</h3>
-          <ul className="mt-2 divide-y divide-white/5">
+          <h3 className="font-semibold text-ink">Recent jobs</h3>
+          <ul className="mt-2 divide-y divide-line">
             {minutes.recentJobs.map((job, index) => (
               <li key={`${job.name}-${index}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 text-sm">
-                <span className="min-w-0 flex-1 basis-48 break-words font-medium text-slate-200">{job.name}</span>
-                <span className="text-slate-400">{job.repo}</span>
-                <span className="text-slate-400">{job.machine}</span>
+                <span className="min-w-0 flex-1 basis-48 break-words font-medium text-body">{job.name}</span>
+                <span className="text-muted">{job.repo}</span>
+                <span className="text-muted">{job.machine}</span>
                 <span
-                  className="inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-slate-300"
+                  className="inline-block rounded-full border border-line bg-panel px-2 py-0.5 text-[11px] text-body"
                   title={
                     job.lane === "spot"
                       ? "Ran on a spot machine — cheaper, and can be reclaimed by the provider."
@@ -156,8 +156,8 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
                 >
                   {job.lane === "spot" ? "Spot" : job.lane === "on_demand" ? "On-demand" : job.lane}
                 </span>
-                <span className="text-slate-300">{job.durationText}</span>
-                <span className="text-slate-500">
+                <span className="text-body">{job.durationText}</span>
+                <span className="text-muted">
                   {job.creditsDrawn === null ? "" : `${job.creditsDrawn} credits`}
                 </span>
               </li>
@@ -168,15 +168,15 @@ export function LiveCenterMinutes({ minutes }: { minutes: LiveCenterMinutesView 
 
       {minutes.cache ? (
         <div className={LC_PANEL}>
-          <h3 className="font-semibold text-slate-100">Build cache</h3>
-          <p className="mt-1 text-sm text-slate-300">
+          <h3 className="font-semibold text-ink">Build cache</h3>
+          <p className="mt-1 text-sm text-body">
             {minutes.cache.gbStored === null ? "—" : `${minutes.cache.gbStored} GB`} stored
             {minutes.cache.monthCostText ? ` · about ${minutes.cache.monthCostText} this month` : ""}
           </p>
           {minutes.cache.note ? (
-            <p className="mt-1 text-sm text-slate-400">{minutes.cache.note}</p>
+            <p className="mt-1 text-sm text-muted">{minutes.cache.note}</p>
           ) : null}
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             The cache keeps downloaded dependencies on your runners so repeat jobs start faster.
             It is billed by stored size, separately from minutes.
           </p>
