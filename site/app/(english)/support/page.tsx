@@ -16,19 +16,19 @@ const sections = [
 
 export default function SupportPage() {
   return (
-    <main className="min-h-screen bg-white text-slate-900">
+    <main className="min-h-screen bg-panel text-ink">
       <section className="mx-auto max-w-4xl px-6 py-20">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Self-service support</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Self-service support</p>
         <h1 className="mt-4 text-4xl font-semibold">SolveLang help</h1>
-        <p className="mt-5 text-lg leading-8 text-slate-600">Resolve common scanner, plugin, Studio, payment, and report issues without waiting for manual support.</p>
+        <p className="mt-5 text-lg leading-8 text-muted">Resolve common scanner, plugin, Studio, payment, and report issues without waiting for manual support.</p>
         <div className="mt-10 space-y-5">
-          {sections.map(([title, body]) => <section key={title} className="rounded-2xl border border-slate-200 p-6"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-3 leading-7 text-slate-600">{body}</p></section>)}
+          {sections.map(([title, body]) => <section key={title} className="rounded-2xl border border-line p-6"><h2 className="text-xl font-semibold">{title}</h2><p className="mt-3 leading-7 text-muted">{body}</p></section>)}
         </div>
         <div className="mt-10 flex flex-wrap gap-4">
-          <Link href="/check/" className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white">Return to scanner</Link>
-          <Link href="/billing/" className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Billing FAQ</Link>
-          <Link href="/refund-policy/" className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Refund Policy</Link>
-          <Link href="/terms/" className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold">Terms of Use</Link>
+          <Link href="/check/" className="rounded-xl bg-canvas px-5 py-3 text-sm font-semibold text-ink">Return to scanner</Link>
+          <Link href="/billing/" className="rounded-xl border border-line-strong px-5 py-3 text-sm font-semibold">Billing FAQ</Link>
+          <Link href="/refund-policy/" className="rounded-xl border border-line-strong px-5 py-3 text-sm font-semibold">Refund Policy</Link>
+          <Link href="/terms/" className="rounded-xl border border-line-strong px-5 py-3 text-sm font-semibold">Terms of Use</Link>
         </div>
       </section>
     </main>
