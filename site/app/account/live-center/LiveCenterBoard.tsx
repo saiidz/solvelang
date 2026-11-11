@@ -72,11 +72,11 @@ const PR_FILTERS: { id: LiveCenterBoardFilter; label: string }[] = [
 ];
 
 function runGlyph(status: string): { glyph: string; className: string } {
-  if (status === "Passed") return { glyph: "✓", className: "text-emerald-400" };
-  if (status === "Failed") return { glyph: "✕", className: "text-rose-400" };
-  if (status === "Running") return { glyph: "◐", className: "lc-spin text-amber-300" };
-  if (status === "Queued" || status === "Waiting") return { glyph: "○", className: "text-slate-400" };
-  return { glyph: "–", className: "text-slate-500" };
+  if (status === "Passed") return { glyph: "✓", className: "text-success" };
+  if (status === "Failed") return { glyph: "✕", className: "text-danger" };
+  if (status === "Running") return { glyph: "◐", className: "lc-spin text-warning" };
+  if (status === "Queued" || status === "Waiting") return { glyph: "○", className: "text-muted" };
+  return { glyph: "–", className: "text-muted" };
 }
 
 function Overview({
@@ -155,10 +155,10 @@ function Overview({
 
   const stageTotal = Math.max(1, stats.openPrs);
   const pulseSegments = [
-    { label: "ready", count: stats.readyPrs, className: "bg-emerald-400" },
-    { label: "checking", count: stats.checkingPrs, className: "bg-amber-300" },
-    { label: "failing", count: stats.failingPrs, className: "bg-rose-400" },
-    { label: "in queue", count: stats.inQueuePrs, className: "bg-slate-500" },
+    { label: "ready", count: stats.readyPrs, className: "bg-success" },
+    { label: "checking", count: stats.checkingPrs, className: "bg-warning" },
+    { label: "failing", count: stats.failingPrs, className: "bg-danger" },
+    { label: "in queue", count: stats.inQueuePrs, className: "bg-muted" },
   ];
   const authors = useMemo(() => {
     const counts = new Map<string, number>();
@@ -223,21 +223,21 @@ function Overview({
   return (
     <div className="space-y-4">
       <div className={LC_PANEL}>
-        <h2 className="font-semibold text-slate-100">
+        <h2 className="font-semibold text-ink">
           {attention.length} thing{attention.length === 1 ? "" : "s"} need attention
         </h2>
         {attention.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-muted">
             Nothing needs attention right now — no failing head, no conflicts, no drafts waiting.
             The queue is quiet.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-white/5">
+          <ul className="mt-2 divide-y divide-line">
             {attention.map((row) => (
               <li key={row.key} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
                 <div className="min-w-0 flex-1 basis-72">
-                  <p className="break-words font-medium text-slate-100">{row.title}</p>
-                  <p className="mt-0.5 text-sm text-slate-400">{row.text}</p>
+                  <p className="break-words font-medium text-ink">{row.title}</p>
+                  <p className="mt-0.5 text-sm text-muted">{row.text}</p>
                 </div>
                 <button type="button" onClick={row.go} className={LC_BTN}>
                   {row.action}
@@ -249,8 +249,8 @@ function Overview({
       </div>
 
       <div className={LC_PANEL}>
-        <h2 className="font-semibold text-slate-100">Queue pulse</h2>
-        <div aria-hidden="true" className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+        <h2 className="font-semibold text-ink">Queue pulse</h2>
+        <div aria-hidden="true" className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-panel-alt">
           {pulseSegments.map((segment) =>
             segment.count > 0 ? (
               <span
@@ -261,12 +261,12 @@ function Overview({
             ) : null,
           )}
         </div>
-        <p className="mt-2 text-sm text-slate-300">
+        <p className="mt-2 text-sm text-body">
           {stats.openPrs} active pull request{stats.openPrs === 1 ? "" : "s"} · {stats.readyPrs}{" "}
           ready · {stats.checkingPrs} checking · {stats.failingPrs} failing · {stats.inQueuePrs} in
           queue
         </p>
-        <p className="mt-1 text-sm text-slate-400">
+        <p className="mt-1 text-sm text-muted">
           {board.history.period.entered + board.history.period.merged + board.history.period.removed > 0
             ? `Last ${board.history.period.days || 14} days: ${board.history.period.entered} entered the queue · ${board.history.period.merged} merged · ${board.history.period.removed} removed. The Statistics tab has the day-by-day shape.`
             : "Merge history is being recorded — this line fills in as pull requests enter, merge, and leave the queue."}
@@ -275,58 +275,58 @@ function Overview({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className={LC_PANEL}>
-          <h2 className="font-semibold text-slate-100">Summary</h2>
+          <h2 className="font-semibold text-ink">Summary</h2>
           <dl className="mt-2 space-y-2 text-sm">
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-slate-400">Repository</dt>
+              <dt className="text-muted">Repository</dt>
               <dd>
-                <a href={githubRepoUrl(board.repoLabel)} target="_blank" rel="noreferrer" className="font-medium text-slate-100 underline-offset-2 hover:underline">
+                <a href={githubRepoUrl(board.repoLabel)} target="_blank" rel="noreferrer" className="font-medium text-ink underline-offset-2 hover:underline">
                   {board.repoLabel || "—"}
                 </a>{" "}
-                <span className="text-slate-500">— opens the repository on GitHub</span>
+                <span className="text-muted">— opens the repository on GitHub</span>
               </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-slate-400">Default branch</dt>
-              <dd className="font-medium text-slate-100">{board.defaultBranch || "—"}</dd>
+              <dt className="text-muted">Default branch</dt>
+              <dd className="font-medium text-ink">{board.defaultBranch || "—"}</dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-slate-400">Batch size</dt>
-              <dd className="text-slate-200">
+              <dt className="text-muted">Batch size</dt>
+              <dd className="text-body">
                 {board.batch.batchSize > 0
                   ? `Up to ${board.batch.batchSize} pull requests checked as one batch`
                   : "Not reported by the planner"}
               </dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-slate-400">Open pull requests</dt>
-              <dd className="font-medium text-slate-100">{stats.openPrs}</dd>
+              <dt className="text-muted">Open pull requests</dt>
+              <dd className="font-medium text-ink">{stats.openPrs}</dd>
             </div>
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-slate-400">Board data from</dt>
-              <dd className="text-slate-200">
+              <dt className="text-muted">Board data from</dt>
+              <dd className="text-body">
                 {board.generatedAt ? formatRelativeTime(board.generatedAt) || "just now" : "—"}
-                <span className="text-slate-500"> — the board re-reads GitHub every minute</span>
+                <span className="text-muted"> — the board re-reads GitHub every minute</span>
               </dd>
             </div>
           </dl>
         </div>
         <div className={LC_PANEL}>
-          <h2 className="font-semibold text-slate-100">Top authors</h2>
+          <h2 className="font-semibold text-ink">Top authors</h2>
           {authors.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-400">No open pull requests to count yet.</p>
+            <p className="mt-2 text-sm text-muted">No open pull requests to count yet.</p>
           ) : (
             <ul className="mt-2 space-y-2">
               {authors.map((entry) => (
                 <li key={entry.author} className="flex items-center gap-3 text-sm">
-                  <span className="w-32 min-w-0 truncate font-medium text-slate-200">{entry.author}</span>
-                  <span aria-hidden="true" className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                  <span className="w-32 min-w-0 truncate font-medium text-body">{entry.author}</span>
+                  <span aria-hidden="true" className="h-2 flex-1 overflow-hidden rounded-full bg-panel-alt">
                     <span
-                      className="block h-full bg-sky-400"
+                      className="block h-full bg-accent"
                       style={{ width: `${(entry.count / topAuthorCount) * 100}%` }}
                     />
                   </span>
-                  <span className="text-slate-400">
+                  <span className="text-muted">
                     {entry.count} PR{entry.count === 1 ? "" : "s"}
                   </span>
                 </li>
@@ -339,29 +339,29 @@ function Overview({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {kpis.map((kpi) => (
           <div key={kpi.label} className={LC_PANEL}>
-            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
               {kpi.label}
               <span
                 title={kpi.help}
                 aria-label={kpi.help}
-                className="inline-block cursor-help rounded-full border border-white/15 px-1 text-[10px] leading-tight text-slate-300"
+                className="inline-block cursor-help rounded-full border border-line px-1 text-[10px] leading-tight text-body"
               >
                 ?
               </span>
             </p>
-            <p className="mt-1 text-3xl font-semibold text-slate-50">{kpi.value}</p>
+            <p className="mt-1 text-3xl font-semibold text-ink">{kpi.value}</p>
             {kpi.share !== null ? (
-              <div aria-hidden="true" className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                <div className="h-full bg-sky-400" style={{ width: `${Math.round(kpi.share * 100)}%` }} />
+              <div aria-hidden="true" className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-panel-alt">
+                <div className="h-full bg-accent" style={{ width: `${Math.round(kpi.share * 100)}%` }} />
               </div>
             ) : null}
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">{kpi.sub}</p>
+            <p className="mt-2 text-xs leading-relaxed text-muted">{kpi.sub}</p>
           </div>
         ))}
       </div>
 
       <div className={LC_PANEL}>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
           How your queue works
         </h2>
         <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -383,22 +383,22 @@ function Overview({
             },
           ].map((step) => (
             <div key={step.n}>
-              <p className="text-sm font-bold text-sky-300">{step.n}</p>
-              <p className="mt-1 font-semibold text-slate-100">{step.title}</p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-400">{step.text}</p>
+              <p className="text-sm font-bold text-accent">{step.n}</p>
+              <p className="mt-1 font-semibold text-ink">{step.title}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted">{step.text}</p>
             </div>
           ))}
         </div>
       </div>
 
       <div className={LC_PANEL}>
-        <h2 className="font-semibold text-slate-100">Latest activity</h2>
+        <h2 className="font-semibold text-ink">Latest activity</h2>
         {board.runs.length === 0 ? (
-          <p className="mt-1 text-sm text-slate-400">
+          <p className="mt-1 text-sm text-muted">
             GitHub reports no recent workflow runs. Runs appear here as soon as a workflow starts.
           </p>
         ) : (
-          <ul className="mt-2 divide-y divide-white/5">
+          <ul className="mt-2 divide-y divide-line">
             {board.runs.slice(0, 8).map((run) => {
               const glyph = runGlyph(run.status);
               return (
@@ -407,13 +407,13 @@ function Overview({
                     {glyph.glyph}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="break-words font-medium text-slate-200">{run.workflowName}</p>
-                    <p className="text-xs text-slate-400">
+                    <p className="break-words font-medium text-body">{run.workflowName}</p>
+                    <p className="text-xs text-muted">
                       Commit {run.headSha ? run.headSha.slice(0, 7) : "—"} · {run.jobs.length} job
                       {run.jobs.length === 1 ? "" : "s"} · {run.status}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs text-slate-500">{formatRelativeTime(run.updatedAt)}</span>
+                  <span className="shrink-0 text-xs text-muted">{formatRelativeTime(run.updatedAt)}</span>
                 </li>
               );
             })}
@@ -489,7 +489,7 @@ function PullRequestsView({
             }}
             placeholder="Filter by number, title, or author — press / to jump here"
             aria-label="Filter pull requests by number, title, or author"
-            className="min-w-0 flex-1 basis-56 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-300/50 focus:outline-none"
+            className="min-w-0 flex-1 basis-56 rounded-lg border border-line bg-black/30 px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none"
           />
           {PR_FILTERS.map((entry) => (
             <button
@@ -502,66 +502,66 @@ function PullRequestsView({
               aria-pressed={filter === entry.id}
               className={`inline-block rounded-full border px-3 py-1.5 text-sm transition ${
                 filter === entry.id
-                  ? "border-sky-300/40 bg-sky-400/15 font-semibold text-sky-100"
-                  : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                  ? "border-accent bg-accent-soft font-semibold text-accent"
+                  : "border-line bg-panel text-body hover:bg-panel-alt"
               }`}
             >
-              {entry.label} <span className="text-xs text-slate-400">{counts[entry.id]}</span>
+              {entry.label} <span className="text-xs text-muted">{counts[entry.id]}</span>
             </button>
           ))}
         </div>
-        <details className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-          <summary className="cursor-pointer text-sm font-medium text-slate-200">
+        <details className="mt-3 rounded-xl border border-line bg-black/20 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-body">
             What the labels mean
           </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-400">
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
             <li>
-              <strong className="text-slate-200">Ready</strong> — the required gate reported green
+              <strong className="text-body">Ready</strong> — the required gate reported green
               on the newest commit, every check finished, and the pull request targets the default
               branch. Only then can it land.
             </li>
             <li>
-              <strong className="text-slate-200">Checking</strong> — at least one check is still
+              <strong className="text-body">Checking</strong> — at least one check is still
               running or queued.
             </li>
             <li>
-              <strong className="text-slate-200">Failing</strong> — at least one check failed. The
+              <strong className="text-body">Failing</strong> — at least one check failed. The
               row names them; expand the checks line to see every check.
             </li>
             <li>
-              <strong className="text-slate-200">In queue</strong> — waiting for its queue
+              <strong className="text-body">In queue</strong> — waiting for its queue
               conditions: the gate, the checks, or its turn. A required gate that has not
               reported yet is a wait, never a pass.
             </li>
             <li>
-              <strong className="text-slate-200">Draft</strong> — cannot merge; only its author
+              <strong className="text-body">Draft</strong> — cannot merge; only its author
               can mark it ready for review.
             </li>
             <li>
-              <strong className="text-slate-200">Stack child</strong> — builds on another pull
+              <strong className="text-body">Stack child</strong> — builds on another pull
               request&rsquo;s branch instead of the default branch. It joins the queue properly
               once its parent lands.
             </li>
             <li>
-              <strong className="text-slate-200">Waiting on you</strong> — something on it needs a
+              <strong className="text-body">Waiting on you</strong> — something on it needs a
               person. The Inbox tab lists exactly what.
             </li>
             <li>
-              <strong className="text-slate-200">Conflicts</strong> — the branch and the base
+              <strong className="text-body">Conflicts</strong> — the branch and the base
               branch changed the same lines; the author has to resolve it.
             </li>
           </ul>
         </details>
 
         {pageData.items.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-400">
+          <p className="mt-4 text-sm text-muted">
             {board.pullRequests.length === 0
               ? "No open pull requests right now. When someone opens one, it appears here and the checks start on their own."
               : "No pull requests match this search and filter. Clear the search, or pick a different filter above."}
           </p>
         ) : (
           <>
-            <div className="mt-2 divide-y divide-white/5">
+            <div className="mt-2 divide-y divide-line">
               {pageData.items.map((pr) => (
                 <PrRow key={pr.number ?? pr.title} pr={pr} repoLabel={board.repoLabel} />
               ))}
@@ -735,7 +735,7 @@ export function LiveCenterBoard() {
 
   if (phase === "loading") {
     return (
-      <main className="w-full bg-[#0a0e1a] text-slate-300">
+      <main className="w-full bg-loading-canvas text-loading-text">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <p className="text-sm">
           Loading your Live Center — first proving your session, then fetching the newest board
@@ -748,10 +748,10 @@ export function LiveCenterBoard() {
 
   if (phase === "signed-out") {
     return (
-      <main className="w-full bg-[#0a0e1a] text-slate-300">
+      <main className="w-full bg-canvas text-body">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-white">You are signed out</h1>
-        <p className="mt-2 max-w-xl text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-ink">You are signed out</h1>
+        <p className="mt-2 max-w-xl text-sm text-muted">
           Sign in to see your Live Center. There is no guest view — the board shows your
           repositories&rsquo; private merge queue, so it only ever renders behind your session.
         </p>
@@ -767,10 +767,10 @@ export function LiveCenterBoard() {
 
   if (phase === "not-configured") {
     return (
-      <main className="w-full bg-[#0a0e1a] text-slate-300">
+      <main className="w-full bg-canvas text-body">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-white">Live Center is not switched on yet</h1>
-        <p className="mt-2 max-w-xl text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-ink">Live Center is not switched on yet</h1>
+        <p className="mt-2 max-w-xl text-sm text-muted">
           This account&rsquo;s Live Center has not been connected to a repository yet, so there is
           no queue to show. Connecting a repository is what turns it on — the board then fills
           with that repository&rsquo;s pull requests, checks, runners, and minutes on its own.
@@ -787,10 +787,10 @@ export function LiveCenterBoard() {
 
   if (phase === "error" || !board) {
     return (
-      <main className="w-full bg-[#0a0e1a] text-slate-300">
+      <main className="w-full bg-canvas text-body">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-bold text-white">The Live Center could not be loaded</h1>
-        <p className="mt-2 max-w-xl text-sm text-slate-400">
+        <h1 className="text-2xl font-bold text-ink">The Live Center could not be loaded</h1>
+        <p className="mt-2 max-w-xl text-sm text-muted">
           {error || "Something went wrong while loading the board."} Nothing about your
           repositories changed — this page simply could not read the board just now.
         </p>
@@ -807,23 +807,23 @@ export function LiveCenterBoard() {
   const activeTabLabel = TABS.find((entry) => entry.id === tab)?.label ?? "Overview";
 
   return (
-    <main className="w-full bg-[#0a0e1a] text-slate-200">
+    <main className="w-full bg-canvas text-body">
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
       <div ref={wrapRef}>
-        <Link href="/account/" className="text-sm text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
+        <Link href="/account/" className="text-sm text-muted underline-offset-2 hover:text-body hover:underline">
           ← Back to your account
         </Link>
         <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 max-w-2xl">
-            <p className="text-xs text-slate-500">Live Center › {activeTabLabel}</p>
-            <h1 className="mt-0.5 text-2xl font-bold text-white">Live Center</h1>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="text-xs text-muted">Live Center › {activeTabLabel}</p>
+            <h1 className="mt-0.5 text-2xl font-bold text-ink">Live Center</h1>
+            <p className="mt-1 text-sm text-muted">
               Your merge queue, checks, runners, and minutes for{" "}
               <a
                 href={githubRepoUrl(board.repoLabel)}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-slate-200 underline-offset-2 hover:underline"
+                className="font-medium text-body underline-offset-2 hover:underline"
               >
                 {board.repoLabel || "your repository"}
               </a>{" "}
@@ -863,25 +863,25 @@ export function LiveCenterBoard() {
         </div>
 
         {frozen ? (
-          <p className="mt-3 rounded-xl border border-sky-300/25 bg-sky-400/[0.07] px-3 py-2 text-sm text-sky-100">
+          <p className="mt-3 rounded-xl border border-accent bg-accent-soft px-3 py-2 text-sm text-accent">
             This page is frozen on the snapshot from{" "}
             {board.generatedAt ? formatRelativeTime(board.generatedAt) || "just now" : "this load"} —
             the numbers cannot move while you compare them. Unfreeze to see fresh numbers.
           </p>
         ) : null}
         {paused && !frozen ? (
-          <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-300">
+          <p className="mt-3 rounded-xl border border-line bg-panel px-3 py-2 text-sm text-body">
             Automatic refresh is paused — you are reading the board as it was. Press Resume refresh
             or Refresh to see the newest numbers.
           </p>
         ) : null}
         {refreshNote ? (
-          <p className="mt-3 rounded-xl border border-amber-300/25 bg-amber-400/[0.07] px-3 py-2 text-sm text-amber-100">
+          <p className="mt-3 rounded-xl border border-warning bg-warning-soft px-3 py-2 text-sm text-warning">
             {refreshNote}
           </p>
         ) : null}
 
-        <nav aria-label="Live Center views" className="mt-5 flex flex-wrap gap-1 border-y border-white/10 py-2">
+        <nav aria-label="Live Center views" className="mt-5 flex flex-wrap gap-1 border-y border-line py-2">
           {TABS.map((entry) => {
             const counter = tabCounter(entry.id);
             return (
@@ -892,12 +892,12 @@ export function LiveCenterBoard() {
                 aria-current={tab === entry.id ? "page" : undefined}
                 className={`inline-block rounded-lg px-3 py-1.5 text-sm transition ${
                   tab === entry.id
-                    ? "bg-sky-400/15 font-semibold text-sky-100"
-                    : "text-slate-300 hover:bg-white/5"
+                    ? "bg-accent-soft font-semibold text-accent"
+                    : "text-body hover:bg-panel"
                 }`}
               >
                 {entry.label}
-                {counter !== null ? <span className="ml-1.5 text-xs text-slate-400">{counter}</span> : null}
+                {counter !== null ? <span className="ml-1.5 text-xs text-muted">{counter}</span> : null}
               </button>
             );
           })}
@@ -925,7 +925,7 @@ export function LiveCenterBoard() {
           {tab === "inbox" ? <LiveCenterInbox board={board} /> : null}
           {tab === "minutes" && minutes ? <LiveCenterMinutes minutes={minutes} /> : null}
           {tab === "minutes" && !minutes ? (
-            <p className="text-sm text-slate-400">Loading your minutes…</p>
+            <p className="text-sm text-muted">Loading your minutes…</p>
           ) : null}
         </div>
       </div>
