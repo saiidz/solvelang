@@ -26,6 +26,11 @@ on:
         required: false
         default: main
         type: string
+      fargate_subnets:
+        description: "Fargate subnets for the pilot stack: 'auto' resolves the account default VPC's subnets, a comma-separated subnet list is used as-is, 'none' leaves the stack parameter unset"
+        required: false
+        default: auto
+        type: string
 
 permissions:
   actions: read
@@ -117,6 +122,33 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
+      - name: Resolve Fargate subnets
+        id: fargate-subnets
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Fail-soft by construction: any failure or empty result leaves
+          # the output empty, and the deploy step then omits the
+          # FargateSubnets parameter entirely (the template default keeps
+          # the service step failing closed). This step must never fail
+          # the deploy, so no `set -e` here and every call is guarded.
+          resolved=""
+          input="${{ inputs.fargate_subnets }}"
+          if [[ "$input" == "auto" ]]; then
+            raw="$(aws ec2 describe-subnets --filters Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text 2>/dev/null || true)"
+            resolved="$(printf '%s' "$raw" | tr '\t' ',' | tr -s ',' | sed -e 's/^,//' -e 's/,$//' || true)"
+          elif [[ "$input" == *subnet-* ]]; then
+            resolved="$input"
+          fi
+          # 'none', an empty input, an empty lookup, or any error above
+          # lands here; only a clean comma-separated subnet-id list is
+          # accepted, anything else resolves to empty.
+          if [[ ! "$resolved" =~ ^subnet-[0-9a-f]+(,subnet-[0-9a-f]+)*$ ]]; then
+            resolved=""
+          fi
+          echo "resolved=$resolved" >> "$GITHUB_OUTPUT"
+          echo "Fargate subnets resolved: ${resolved:-<none>}"
+
       - name: Validate and build the pilot template
         shell: bash
         run: |
@@ -169,6 +201,10 @@ jobs:
           # The key travels base64-encoded because raw PEMs are corrupted
           # by parameter parsing; the service decodes it on receipt.
           [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY_B64")
+          # Fargate subnets travel only when the resolve step produced a
+          # clean list; empty leaves the parameter unset, and the template
+          # default keeps the service step failing closed.
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || parameters+=(FargateSubnets="${{ steps.fargate-subnets.outputs.resolved }}")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \
@@ -187,6 +223,8 @@ jobs:
           [[ -z "$GH_APP_ID" || -z "$GH_APP_PRIVATE_KEY" ]] || app_auth="on"
           static_reader="off"
           [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || static_reader="on"
+          fargate_subnets_line="not configured (service step will fail closed)"
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || fargate_subnets_line="configured (parameter passed)"
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
@@ -198,5 +236,6 @@ jobs:
             echo "- Pilot repos: \`$PILOT_REPOS\`"
             echo "- GitHub App auth configured: **$app_auth**"
             echo "- Static read token configured: **$static_reader**"
+            echo "- Fargate subnets: **$fargate_subnets_line**"
             echo "- Cost envelope: **D0** (on-demand serverless only)"
           } >> "$GITHUB_STEP_SUMMARY"
