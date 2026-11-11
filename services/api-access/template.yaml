@@ -34,6 +34,14 @@ Parameters:
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
+  PublicStatusExecutionHealthUrl:
+    Type: String
+    Default: https://2l346svz17.execute-api.us-east-2.amazonaws.com/health
+    Description: Public health URL of the managed-execution service (merge-governance pilot) probed by the public status collector; blank leaves that component unmonitored.
+  PublicStatusRunnerMinutesHealthUrl:
+    Type: String
+    Default: ""
+    Description: Public health URL of the runner-minutes service probed by the public status collector; blank until that service is deployed, and its status component reports unmonitored meanwhile.
   StudioAcceptanceOrigin:
     Type: String
     Default: ""
@@ -906,6 +914,8 @@ Resources:
         Variables:
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_API_HEALTH_URL: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/health
+          PUBLIC_STATUS_EXECUTION_HEALTH_URL: !Ref PublicStatusExecutionHealthUrl
+          PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL: !Ref PublicStatusRunnerMinutesHealthUrl
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
       Policies:
         - Statement:
