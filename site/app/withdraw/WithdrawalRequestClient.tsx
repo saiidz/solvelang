@@ -82,30 +82,30 @@ export function WithdrawalRequestClient() {
 
   return (
     <form
-      className="mt-8 space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+      className="mt-8 space-y-5 rounded-xl border border-line bg-panel p-6 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault();
         void submit(event.currentTarget);
       }}
     >
       {turnstileSiteKey ? <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onLoad={() => setTurnstileReady(true)} /> : null}
-      <label className="block text-sm font-semibold text-slate-900" htmlFor="withdraw-name">Name
-        <input id="withdraw-name" name="name" required maxLength={160} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
+      <label className="block text-sm font-semibold text-ink" htmlFor="withdraw-name">Name
+        <input id="withdraw-name" name="name" required maxLength={160} className="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 font-normal" />
       </label>
-      <label className="block text-sm font-semibold text-slate-900" htmlFor="withdraw-contract-reference">Payment or contract reference
-        <input id="withdraw-contract-reference" name="contractReference" required maxLength={160} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
+      <label className="block text-sm font-semibold text-ink" htmlFor="withdraw-contract-reference">Payment or contract reference
+        <input id="withdraw-contract-reference" name="contractReference" required maxLength={160} className="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 font-normal" />
       </label>
-      <label className="block text-sm font-semibold text-slate-900" htmlFor="withdraw-email">Email
-        <input id="withdraw-email" name="email" type="email" autoComplete="email" required maxLength={254} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
+      <label className="block text-sm font-semibold text-ink" htmlFor="withdraw-email">Email
+        <input id="withdraw-email" name="email" type="email" autoComplete="email" required maxLength={254} className="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 font-normal" />
       </label>
-      <label className="block text-sm font-semibold text-slate-900" htmlFor="withdraw-statement">Withdrawal statement
-        <textarea id="withdraw-statement" name="statement" required minLength={8} maxLength={1000} className="mt-1 min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" placeholder="I hereby withdraw from the contract for Workflow Preflight." />
+      <label className="block text-sm font-semibold text-ink" htmlFor="withdraw-statement">Withdrawal statement
+        <textarea id="withdraw-statement" name="statement" required minLength={8} maxLength={1000} className="mt-1 min-h-28 w-full rounded-lg border border-line-strong px-3 py-2 font-normal" placeholder="I hereby withdraw from the contract for Workflow Preflight." />
       </label>
       <div ref={turnstileContainerRef} className="cf-turnstile" data-sitekey={turnstileSiteKey} data-action="withdrawal" aria-label="Human verification" />
-      <p className="text-xs leading-5 text-slate-600">Do not include card numbers, workflow contents, credentials, or secrets. Submission records your request with a server timestamp and sends a durable confirmation only after the required provider is available. It does not decide eligibility or promise a refund.</p>
-      {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
-      {status ? <p role="status" className="text-sm font-medium text-emerald-700">{status}</p> : null}
-      <button type="submit" disabled={submitting || !turnstileToken} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+      <p className="text-xs leading-5 text-muted">Do not include card numbers, workflow contents, credentials, or secrets. Submission records your request with a server timestamp and sends a durable confirmation only after the required provider is available. It does not decide eligibility or promise a refund.</p>
+      {error ? <p role="alert" className="text-sm font-medium text-danger">{error}</p> : null}
+      {status ? <p role="status" className="text-sm font-medium text-success">{status}</p> : null}
+      <button type="submit" disabled={submitting || !turnstileToken} className="rounded-lg bg-accent-solid px-4 py-2 text-sm font-semibold text-ink disabled:opacity-60">
         {submitting ? "Sending..." : "Submit withdrawal request"}
       </button>
     </form>
