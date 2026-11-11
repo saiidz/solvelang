@@ -60,7 +60,7 @@ test("deployed configuration is not manufactured health evidence", () => {
   assert.equal(observedState(undefined, now), "not_monitored");
   assert.equal(overallState(statusPage.components.map(() => undefined), now), "not_monitored");
   assert.ok(statusPage.components.some((component) => component.monitored));
-  assert.ok(statusPage.components.some((component) => !component.monitored));
+  assert.ok(statusPage.components.every((component) => component.monitored), "every registered component is wired to a live signal");
 });
 test("a single healthy component cannot hide unknown components", () => {
   assert.equal(overallState([healthy, { ...healthy, state: "not_monitored" }], now), "not_monitored");
@@ -83,7 +83,7 @@ test("live payload parser requires every monitored observation and discards malf
   const observations = Object.fromEntries(statusPage.components.filter((component) => component.monitored).map((component) => [component.id, healthy]));
   const valid = parseStatusObservations({ observations });
   assert.equal(Object.keys(valid).length, Object.keys(observations).length);
-  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "not_monitored", "unmonitored components prevent an all-green claim");
+  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "operational", "only a complete set of healthy observations supports an all-green claim");
   assert.deepEqual(parseStatusObservations({ observations: { ...observations, website: { ...healthy, state: "invented" } } }), {});
   assert.deepEqual(parseStatusObservations({ observations: { website: healthy } }), {});
   assert.deepEqual(parseStatusObservations({ observations: null }), {});
@@ -110,8 +110,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
   assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
-  for (const id of ["account-persistence", "billing", "support", "ci-deployment"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
-  for (const id of ["provider-execution", "posthog"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, false, `${id} has no live signal and stays unmonitored`);
+  for (const id of ["account-persistence", "billing", "support", "ci-deployment", "provider-execution", "posthog", "runner-minutes"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
 });
 test("incident history survives refresh without a fabricated resolution", () => {
   const history = statusPage.incidents.find((incident) => incident.id === "2026-08-06-github-actions");
