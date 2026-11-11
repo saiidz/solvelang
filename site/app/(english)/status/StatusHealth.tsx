@@ -13,12 +13,12 @@ const labels: Record<ComponentState, string> = {
   not_monitored: "Current health not fully verified",
 };
 const tones: Record<ComponentState, string> = {
-  operational: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  degraded: "border-amber-200 bg-amber-50 text-amber-800",
+  operational: "border-success bg-success-soft text-success",
+  degraded: "border-warning bg-warning-soft text-warning",
   partial_outage: "border-orange-200 bg-orange-50 text-orange-800",
-  major_outage: "border-red-200 bg-red-50 text-red-800",
-  maintenance: "border-blue-200 bg-blue-50 text-blue-800",
-  not_monitored: "border-slate-200 bg-slate-100 text-slate-700",
+  major_outage: "border-danger bg-danger-soft text-danger",
+  maintenance: "border-accent bg-accent-soft text-accent",
+  not_monitored: "border-line bg-panel-alt text-body",
 };
 function subscribe(tick: () => void) {
   const timer = window.setInterval(tick, 1000);
@@ -60,12 +60,12 @@ export function StatusDashboard() {
   const { observations, now, loading, overall } = useLiveStatus();
   return <section className="mt-10" aria-labelledby="components-heading">
     <h2 id="components-heading" className="text-2xl font-semibold">Current observations and component boundaries</h2>
-    <div className="mt-4" aria-live="polite"><StatusBadge state={overall} />{loading ? <span className="ml-3 text-sm text-slate-600">Live check has not completed yet — treat status as unverified.</span> : null}</div>
-    <div className="mt-5 divide-y divide-slate-200 overflow-hidden rounded-3xl border border-slate-200 bg-white">
+    <div className="mt-4" aria-live="polite"><StatusBadge state={overall} />{loading ? <span className="ml-3 text-sm text-muted">Live check has not completed yet — treat status as unverified.</span> : null}</div>
+    <div className="mt-5 divide-y divide-line overflow-hidden rounded-3xl border border-line bg-panel">
       {statusPage.components.map((component) => {
         const observation = component.monitored ? observations[component.id] : undefined;
         const state = observedState(observation, now);
-        return <article key={component.id} className="p-6"><h3 className="text-lg font-semibold">{component.name}</h3><p className="mt-2 text-sm leading-6 text-slate-600">{component.description}</p><p className="mt-3 text-sm leading-7 text-slate-700">{component.note}</p><p className="mt-3 text-xs font-semibold text-slate-600">{component.monitored ? "Live public read-only check" : "Not independently monitored"}</p><div className="mt-3"><StatusBadge state={state} /></div>{observation ? <p className="mt-2 text-xs text-slate-600">Check attempted <time dateTime={observation.checkedAt}>{new Date(observation.checkedAt).toLocaleString("en", { timeZone: "UTC" })} UTC</time>; observation valid for up to {Math.floor(observation.validForMs / 1000)} seconds.{state === "not_monitored" ? " This check is unavailable or expired." : ""}</p> : null}</article>;
+        return <article key={component.id} className="p-6"><h3 className="text-lg font-semibold">{component.name}</h3><p className="mt-2 text-sm leading-6 text-muted">{component.description}</p><p className="mt-3 text-sm leading-7 text-body">{component.note}</p><p className="mt-3 text-xs font-semibold text-muted">{component.monitored ? "Live public read-only check" : "Not independently monitored"}</p><div className="mt-3"><StatusBadge state={state} /></div>{observation ? <p className="mt-2 text-xs text-muted">Check attempted <time dateTime={observation.checkedAt}>{new Date(observation.checkedAt).toLocaleString("en", { timeZone: "UTC" })} UTC</time>; observation valid for up to {Math.floor(observation.validForMs / 1000)} seconds.{state === "not_monitored" ? " This check is unavailable or expired." : ""}</p> : null}</article>;
       })}
     </div>
   </section>;
@@ -73,8 +73,8 @@ export function StatusDashboard() {
 
 export function StatusSummary() {
   const { overall } = useLiveStatus();
-  return <div className="mt-8 flex flex-wrap items-center gap-4 rounded-xl border border-white/20 bg-white/5 p-5 text-white" aria-live="polite">
+  return <div className="mt-8 flex flex-wrap items-center gap-4 rounded-xl border border-line-strong bg-panel p-5 text-ink" aria-live="polite">
     <div><p className="text-xs font-semibold uppercase tracking-widest text-[#93b6df]">Current public status</p><p className="mt-2 text-sm">{labels[overall]}</p></div>
-    <Link href="/status/" className="ml-auto text-sm font-semibold text-[#a9cdff] underline underline-offset-4 hover:text-white">View system status →</Link>
+    <Link href="/status/" className="ml-auto text-sm font-semibold text-[#a9cdff] underline underline-offset-4 hover:text-ink">View system status →</Link>
   </div>;
 }
