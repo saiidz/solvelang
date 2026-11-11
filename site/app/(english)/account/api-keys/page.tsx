@@ -407,22 +407,22 @@ export default function ApiKeysPage() {
 
   if (screen === "loading") {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+      <main className="min-h-screen bg-loading-canvas px-6 py-16 text-loading-text">
         <div className="mx-auto max-w-3xl">
-          <p className="text-slate-300">Loading your API account…</p>
-          <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+          <p className="text-loading-muted">Loading your API account…</p>
+          <section className="mt-8 rounded-3xl border border-loading-panel bg-loading-panel p-8 shadow-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang API</p>
             <h1 className="mt-3 text-4xl font-bold">API account</h1>
-            <p className="mt-4 leading-7 text-slate-300">This is your API account page. Once the session check finishes, this page will ask you to sign in — with your password, or with a secure email link if this is your first sign-in or you need recovery — before showing your keys, subscription, and credits.</p>
+            <p className="mt-4 leading-7 text-loading-muted">This is your API account page. Once the session check finishes, this page will ask you to sign in — with your password, or with a secure email link if this is your first sign-in or you need recovery — before showing your keys, subscription, and credits.</p>
             <h2 className="mt-8 text-2xl font-bold">API plans</h2>
-            <ul className="mt-4 space-y-3 text-slate-200">
+            <ul className="mt-4 space-y-3 text-loading-muted">
               <li><strong>Developer</strong> — $49/month, 1,000 weighted credits, 2 active API keys</li>
               <li><strong>Pro</strong> — $199/month, 10,000 weighted credits, 3 active API keys</li>
               <li><strong>Business</strong> — $699/month, 50,000 weighted credits, 5 active API keys</li>
             </ul>
-            <Link className="mt-8 inline-flex rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-200" href="/api-pricing/">View API pricing</Link>
+            <Link className="mt-8 inline-flex rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent hover:bg-accent" href="/api-pricing/">View API pricing</Link>
             <noscript>
-              <p className="mt-6 rounded-xl bg-amber-300/10 p-4 text-sm text-amber-100">Sign-in on this page needs JavaScript. Please enable JavaScript to sign in and manage your API account.</p>
+              <p className="mt-6 rounded-xl bg-warning-soft p-4 text-sm text-warning">Sign-in on this page needs JavaScript. Please enable JavaScript to sign in and manage your API account.</p>
             </noscript>
           </section>
         </div>
@@ -432,11 +432,11 @@ export default function ApiKeysPage() {
 
   if (screen === "signed-out" && mfaChallenge) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-950 px-6 py-16 text-white">
-        <section className="w-full max-w-lg rounded-3xl border border-cyan-300/30 bg-white/5 p-8 shadow-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">Extra security</p>
+      <main className="grid min-h-screen place-items-center bg-canvas px-6 py-16 text-ink">
+        <section className="w-full max-w-lg rounded-3xl border border-accent bg-panel p-8 shadow-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">Extra security</p>
           <h1 className="mt-3 text-3xl font-bold">Authenticator verification</h1>
-          <p className="mt-4 text-slate-300">Enter the current 6-digit code from your authenticator app, or one unused backup code.</p>
+          <p className="mt-4 text-body">Enter the current 6-digit code from your authenticator app, or one unused backup code.</p>
           <form className="mt-8 space-y-4" onSubmit={verifyMfa}>
             <label className="block text-sm font-medium" htmlFor="mfa-code">Authenticator or backup code</label>
             <input
@@ -446,15 +446,15 @@ export default function ApiKeysPage() {
               onChange={(event) => setMfaCode(event.target.value)}
               autoComplete="one-time-code"
               inputMode="text"
-              className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-wider outline-none focus:border-cyan-300"
+              className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 font-mono tracking-wider outline-none focus:border-accent"
               placeholder="123456 or XXXX-XXXX-XXXX-XXXX"
             />
-            <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">
+            <button disabled={busy} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">
               {busy ? "Verifying…" : "Verify and sign in"}
             </button>
           </form>
-          {error ? <p className="mt-5 rounded-xl bg-red-400/10 p-4 text-sm text-red-200">{error}</p> : null}
-          <button type="button" onClick={() => { setMfaChallenge(""); setMfaCode(""); setError(""); }} className="mt-5 text-sm text-slate-400 hover:text-white">Cancel sign-in</button>
+          {error ? <p className="mt-5 rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}</p> : null}
+          <button type="button" onClick={() => { setMfaChallenge(""); setMfaCode(""); setError(""); }} className="mt-5 text-sm text-muted hover:text-ink">Cancel sign-in</button>
         </section>
       </main>
     );
@@ -462,38 +462,38 @@ export default function ApiKeysPage() {
 
   if (screen === "signed-out") {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+      <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
         <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-2">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
-            <Link href="/api-pricing/" className="text-sm text-slate-300 hover:text-white">← API pricing</Link>
-            <p className="mt-8 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+          <section className="rounded-3xl border border-line bg-panel p-8 shadow-2xl">
+            <Link href="/api-pricing/" className="text-sm text-body hover:text-ink">← API pricing</Link>
+            <p className="mt-8 text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang API</p>
             <h1 className="mt-3 text-4xl font-bold">Sign in</h1>
-            <p className="mt-4 text-slate-300">Use your email address or username and password. Normal password sign-ins do not send email.</p>
+            <p className="mt-4 text-body">Use your email address or username and password. Normal password sign-ins do not send email.</p>
             {API_BASE ? (
               <div className="mt-8">
-                <a href={githubAuthorizeUrl(API_BASE)} className="flex w-full items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-slate-950 hover:bg-slate-200">Continue with GitHub</a>
-                <p className="mt-3 text-sm text-slate-400">GitHub sign-in uses the verified email address on your GitHub account.</p>
+                <a href={githubAuthorizeUrl(API_BASE)} className="flex w-full items-center justify-center rounded-xl bg-chrome px-5 py-3 font-bold text-chrome-text hover:bg-chrome-hover">Continue with GitHub</a>
+                <p className="mt-3 text-sm text-muted">GitHub sign-in uses the verified email address on your GitHub account.</p>
               </div>
             ) : null}
             <form className="mt-8 space-y-4" onSubmit={passwordLogin}>
               <label className="block text-sm font-medium" htmlFor="identifier">Email or username</label>
-              <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com or username" />
+              <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" placeholder="you@company.com or username" />
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
-              <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-              <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
+              <button disabled={busy} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
             </form>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-400">First sign-in or recovery</p>
+          <section className="rounded-3xl border border-line bg-panel p-8 shadow-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-muted">First sign-in or recovery</p>
             <h2 className="mt-3 text-2xl font-bold">Use a secure email link</h2>
-            <p className="mt-4 text-slate-300">New accounts verify their email once here. If authenticator 2FA is enabled, recovery still requires the authenticator or a backup code.</p>
+            <p className="mt-4 text-body">New accounts verify their email once here. If authenticator 2FA is enabled, recovery still requires the authenticator or a backup code.</p>
             <form className="mt-8 space-y-4" onSubmit={requestLink}>
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
-              <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com" />
+              <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" placeholder="you@company.com" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-              <button disabled={busy} className="w-full rounded-xl border border-cyan-300/40 px-5 py-3 font-bold text-cyan-100 disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+              <button disabled={busy} className="w-full rounded-xl border border-accent px-5 py-3 font-bold text-accent disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
             </form>
           </section>
         </div>
@@ -501,8 +501,8 @@ export default function ApiKeysPage() {
           <SignInTurnstile onToken={setTurnstileToken} resetSignal={botResetSignal} />
         </div>
         <div className="mx-auto mt-6 max-w-5xl">
-          {notice ? <p className="rounded-xl bg-emerald-400/10 p-4 text-sm text-emerald-200">{notice}</p> : null}
-          {error ? <p className="rounded-xl bg-red-400/10 p-4 text-sm text-red-200">{error}</p> : null}
+          {notice ? <p className="rounded-xl bg-success-soft p-4 text-sm text-success">{notice}</p> : null}
+          {error ? <p className="rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}</p> : null}
         </div>
       </main>
     );
@@ -512,175 +512,175 @@ export default function ApiKeysPage() {
   const activeKeys = dashboard.keys.filter((key) => !key.revokedAt);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
+    <main className="min-h-screen bg-canvas px-6 py-12 text-ink">
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-col gap-5 border-b border-white/10 pb-8 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-5 border-b border-line pb-8 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">API account</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">API account</p>
             <h1 className="mt-2 text-4xl font-bold">Keys, subscription, and credits</h1>
-            <p className="mt-2 text-slate-400">{dashboard.email}</p>
+            <p className="mt-2 text-muted">{dashboard.email}</p>
           </div>
           <div className="flex gap-3">
-            <Link href="/account/live-center/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Live Center</Link>
-            <Link href="/api-pricing/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Plans</Link>
+            <Link href="/account/live-center/" className="rounded-xl border border-line px-4 py-2 text-sm font-semibold hover:bg-panel">Live Center</Link>
+            <Link href="/api-pricing/" className="rounded-xl border border-line px-4 py-2 text-sm font-semibold hover:bg-panel">Plans</Link>
           </div>
         </header>
 
-        {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-emerald-200">{notice}</p> : null}
-        {error ? <p className="mt-6 rounded-xl bg-red-400/10 p-4 text-red-200">{error}</p> : null}
+        {notice ? <p className="mt-6 rounded-xl bg-success-soft p-4 text-success">{notice}</p> : null}
+        {error ? <p className="mt-6 rounded-xl bg-danger-soft p-4 text-danger">{error}</p> : null}
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
+        <section className="mt-8 rounded-3xl border border-line bg-panel p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Account security</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Account security</p>
               <h2 className="mt-2 text-2xl font-bold">{dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}</h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+              <p className="mt-2 max-w-2xl text-sm text-body">
                 {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Changing your password asks for your current password${dashboard.auth.totpEnabled ? " and an authenticator code" : ""}. Right after an email recovery link, you can set a new password directly.` : "Choose a username and password once. Future sign-ins will not need an email link."}
               </p>
             </div>
-            {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span> : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
+            {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-success-soft px-3 py-1 text-sm text-success">Ready</span> : <span className="rounded-full bg-warning-soft px-3 py-1 text-sm text-warning">Setup needed</span>}
           </div>
           <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-2 md:items-end">
             <div>
               <label htmlFor="credential-username" className="block text-sm font-medium">Username</label>
-              <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60" />
+              <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent disabled:opacity-60" />
             </div>
             {dashboard.auth.passwordConfigured ? (
               <div>
                 <label htmlFor="credential-current-password" className="block text-sm font-medium">Current password</label>
-                <input id="credential-current-password" type="password" value={credentialCurrentPassword} onChange={(event) => setCredentialCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+                <input id="credential-current-password" type="password" value={credentialCurrentPassword} onChange={(event) => setCredentialCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
               </div>
             ) : null}
             <div>
               <label htmlFor="credential-password" className="block text-sm font-medium">{dashboard.auth.passwordConfigured ? "New password" : "Password"}</label>
-              <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
             </div>
             {dashboard.auth.passwordConfigured && dashboard.auth.totpEnabled ? (
               <div>
                 <label htmlFor="credential-code" className="block text-sm font-medium">Authenticator or backup code</label>
-                <input id="credential-code" type="text" value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+                <input id="credential-code" type="text" value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
               </div>
             ) : null}
-            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40 md:justify-self-start">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
+            <button disabled={busy} className="rounded-xl bg-chrome px-5 py-3 font-bold text-chrome-text disabled:opacity-40 md:justify-self-start">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
           </form>
 
-          <div className="mt-8 border-t border-white/10 pt-6">
+          <div className="mt-8 border-t border-line pt-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Authenticator app</p>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">Authenticator app</p>
                 <h3 className="mt-2 text-xl font-bold">{dashboard.auth.totpEnabled ? "Two-factor authentication enabled" : "Optional two-factor authentication"}</h3>
-                <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                <p className="mt-2 max-w-2xl text-sm text-body">
                   {dashboard.auth.totpEnabled
                     ? `Password and recovery-link sign-ins require your authenticator or one unused backup code. ${dashboard.auth.backupCodesRemaining ?? 0} backup codes remain.`
                     : "Add a standards-compatible authenticator app for an extra factor after password or email recovery."}
                 </p>
               </div>
-              {dashboard.auth.totpEnabled ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Enabled</span> : null}
+              {dashboard.auth.totpEnabled ? <span className="rounded-full bg-success-soft px-3 py-1 text-sm text-success">Enabled</span> : null}
             </div>
 
             {!dashboard.auth.totpAvailable ? (
-              <p className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4 text-sm text-slate-400">Authenticator setup is not enabled on this environment yet.</p>
+              <p className="mt-5 rounded-xl border border-line bg-black/10 p-4 text-sm text-muted">Authenticator setup is not enabled on this environment yet.</p>
             ) : !dashboard.auth.totpEnabled ? (
               <div className="mt-5">
                 {!totpSetup ? (
-                  <button type="button" disabled={busy || !dashboard.auth.passwordConfigured} onClick={beginAuthenticatorSetup} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-40">Set up authenticator app</button>
+                  <button type="button" disabled={busy || !dashboard.auth.passwordConfigured} onClick={beginAuthenticatorSetup} className="rounded-xl border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-40">Set up authenticator app</button>
                 ) : (
-                  <form onSubmit={confirmAuthenticator} className="rounded-2xl border border-cyan-300/25 bg-cyan-300/5 p-5">
-                    <p className="text-sm text-slate-300">Add this key to Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another TOTP app.</p>
+                  <form onSubmit={confirmAuthenticator} className="rounded-2xl border border-accent bg-accent-soft p-5">
+                    <p className="text-sm text-body">Add this key to Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another TOTP app.</p>
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <code className="break-all rounded-lg bg-black/30 px-3 py-2 text-sm text-cyan-100">{totpSetup.secret}</code>
-                      <button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">Copy key</button>
-                      <a href={totpSetup.otpauthUri} className="rounded-lg border border-white/15 px-3 py-2 text-center text-sm">Open authenticator app</a>
+                      <code className="break-all rounded-lg bg-black/30 px-3 py-2 text-sm text-accent">{totpSetup.secret}</code>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="rounded-lg border border-line px-3 py-2 text-sm">Copy key</button>
+                      <a href={totpSetup.otpauthUri} className="rounded-lg border border-line px-3 py-2 text-center text-sm">Open authenticator app</a>
                     </div>
                     <div className="mt-5 grid gap-4 md:grid-cols-2">
                       <div>
                         <label htmlFor="totp-enable-password" className="block text-sm font-medium">Current password</label>
-                        <input id="totp-enable-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                        <input id="totp-enable-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3" />
                       </div>
                       <div>
                         <label htmlFor="totp-enable-code" className="block text-sm font-medium">6-digit authenticator code</label>
-                        <input id="totp-enable-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-widest" placeholder="123456" />
+                        <input id="totp-enable-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 font-mono tracking-widest" placeholder="123456" />
                       </div>
                     </div>
                     <div className="mt-5 flex gap-3">
-                      <button disabled={busy} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Enable authenticator 2FA</button>
-                      <button type="button" onClick={() => { setTotpSetup(null); setTotpPassword(""); setTotpCode(""); }} className="rounded-xl border border-white/15 px-4 py-2">Cancel</button>
+                      <button disabled={busy} className="rounded-xl bg-accent-solid px-4 py-2 font-bold text-on-accent disabled:opacity-60">Enable authenticator 2FA</button>
+                      <button type="button" onClick={() => { setTotpSetup(null); setTotpPassword(""); setTotpCode(""); }} className="rounded-xl border border-line px-4 py-2">Cancel</button>
                     </div>
                   </form>
                 )}
               </div>
             ) : (
-              <form onSubmit={regenerateBackupCodes} className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-5">
-                <p className="text-sm text-slate-300">Security changes require your current password plus a fresh authenticator code or unused backup code. Reusing a TOTP time-step is rejected.</p>
+              <form onSubmit={regenerateBackupCodes} className="mt-5 rounded-2xl border border-line bg-black/10 p-5">
+                <p className="text-sm text-body">Security changes require your current password plus a fresh authenticator code or unused backup code. Reusing a TOTP time-step is rejected.</p>
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
                   <div>
                     <label htmlFor="totp-security-password" className="block text-sm font-medium">Current password</label>
-                    <input id="totp-security-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                    <input id="totp-security-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3" />
                   </div>
                   <div>
                     <label htmlFor="totp-security-code" className="block text-sm font-medium">Fresh authenticator or backup code</label>
-                    <input id="totp-security-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono" />
+                    <input id="totp-security-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 font-mono" />
                   </div>
                 </div>
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <button disabled={busy} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-60">Regenerate backup codes</button>
-                  <button type="button" disabled={busy} onClick={disableAuthenticator} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 disabled:opacity-60">Disable authenticator 2FA</button>
+                  <button disabled={busy} className="rounded-xl border border-accent px-4 py-2 font-semibold text-accent disabled:opacity-60">Regenerate backup codes</button>
+                  <button type="button" disabled={busy} onClick={disableAuthenticator} className="rounded-xl border border-danger px-4 py-2 font-semibold text-danger disabled:opacity-60">Disable authenticator 2FA</button>
                 </div>
               </form>
             )}
 
             {backupCodes.length > 0 ? (
-              <div className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-5">
-                <h4 className="font-bold text-amber-100">Save these one-time backup codes now</h4>
-                <p className="mt-2 text-sm text-amber-100/80">Each code works once. SolveLang stores only keyed fingerprints and will not show these plaintext codes again.</p>
-                <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-black/30 p-4 font-mono text-sm text-amber-50">{backupCodes.join("\n")}</pre>
-                <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy backup codes</button>
+              <div className="mt-5 rounded-2xl border border-warning bg-warning-soft p-5">
+                <h4 className="font-bold text-warning">Save these one-time backup codes now</h4>
+                <p className="mt-2 text-sm text-warning">Each code works once. SolveLang stores only keyed fingerprints and will not show these plaintext codes again.</p>
+                <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-black/30 p-4 font-mono text-sm text-warning">{backupCodes.join("\n")}</pre>
+                <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-warning-soft px-4 py-2 font-bold text-warning">Copy backup codes</button>
               </div>
             ) : null}
           </div>
 
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Sessions</p>
+          <div className="mt-8 border-t border-line pt-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">Sessions</p>
             <h3 className="mt-2 text-xl font-bold">Sign out everywhere</h3>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
+            <p className="mt-2 max-w-2xl text-sm text-body">
               Ends every signed-in session for this account on all devices, including this browser. Use this if a device is lost or you think someone else may have access. You will need to sign in again afterwards.
             </p>
-            <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Sign out of all devices</button>
+            <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-danger px-4 py-2 font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Sign out of all devices</button>
           </div>
         </section>
 
         <section className="mt-8 grid gap-5 md:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Plan</p>
+          <div className="rounded-2xl border border-line bg-panel p-6">
+            <p className="text-sm text-muted">Plan</p>
             <p className="mt-2 text-2xl font-bold capitalize">{dashboard.subscription.plan ?? "No subscription"}</p>
-            <p className="mt-1 text-sm capitalize text-slate-300">{dashboard.subscription.status}</p>
-            {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Manage subscription</button> : null}
+            <p className="mt-1 text-sm capitalize text-body">{dashboard.subscription.status}</p>
+            {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-accent px-4 py-2 text-sm font-semibold text-accent hover:bg-accent-soft disabled:opacity-60">Manage subscription</button> : null}
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Credits used</p>
+          <div className="rounded-2xl border border-line bg-panel p-6">
+            <p className="text-sm text-muted">Credits used</p>
             <p className="mt-2 text-2xl font-bold">{dashboard.usage.used ?? 0} / {dashboard.usage.limit ?? "—"}</p>
-            <p className="mt-1 text-sm text-slate-300">Remaining {dashboard.usage.remaining ?? "—"} · Period {dashboard.usage.period}</p>
+            <p className="mt-1 text-sm text-body">Remaining {dashboard.usage.remaining ?? "—"} · Period {dashboard.usage.period}</p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Active API keys</p>
+          <div className="rounded-2xl border border-line bg-panel p-6">
+            <p className="text-sm text-muted">Active API keys</p>
             <p className="mt-2 text-2xl font-bold">{activeKeys.length}</p>
-            <p className="mt-1 text-sm text-slate-300">Current period ends {readableDate(dashboard.subscription.currentPeriodEnd)}</p>
+            <p className="mt-1 text-sm text-body">Current period ends {readableDate(dashboard.subscription.currentPeriodEnd)}</p>
           </div>
         </section>
 
-        <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.</section>
+        <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-body">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.</section>
 
         {!dashboard.subscription.plan ? (
-          <section className="mt-8 rounded-3xl border border-cyan-300/30 bg-cyan-300/5 p-6">
+          <section className="mt-8 rounded-3xl border border-accent bg-accent-soft p-6">
             <h2 className="text-2xl font-bold">Choose an API plan</h2>
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               {plans.map((plan) => (
-                <div key={plan.key} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5">
+                <div key={plan.key} className="rounded-2xl border border-line bg-canvas/50 p-5">
                   <h3 className="text-xl font-bold">{plan.name}</h3>
-                  <p className="mt-2 font-semibold text-cyan-200">{plan.price}</p>
-                  <p className="mt-3 text-sm text-slate-300">{plan.credits}</p>
-                  <p className="mt-1 text-sm text-slate-300">{plan.keys}</p>
-                  <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Start checkout</button>
+                  <p className="mt-2 font-semibold text-accent">{plan.price}</p>
+                  <p className="mt-3 text-sm text-body">{plan.credits}</p>
+                  <p className="mt-1 text-sm text-body">{plan.keys}</p>
+                  <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-accent-solid px-4 py-2 font-bold text-on-accent disabled:opacity-60">Start checkout</button>
                 </div>
               ))}
             </div>
@@ -688,33 +688,33 @@ export default function ApiKeysPage() {
         ) : null}
 
         {issued ? (
-          <section className="mt-8 rounded-3xl border border-amber-300/40 bg-amber-300/10 p-6">
-            <h2 className="text-2xl font-bold text-amber-100">Copy this key now</h2>
-            <p className="mt-2 text-sm text-amber-100/80">For security, the complete key will not be shown again.</p>
-            <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-amber-50">{issued.env}</pre>
-            <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy .env values</button>
+          <section className="mt-8 rounded-3xl border border-warning bg-warning-soft p-6">
+            <h2 className="text-2xl font-bold text-warning">Copy this key now</h2>
+            <p className="mt-2 text-sm text-warning">For security, the complete key will not be shown again.</p>
+            <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-warning">{issued.env}</pre>
+            <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-warning-soft px-4 py-2 font-bold text-warning">Copy .env values</button>
           </section>
         ) : null}
 
         <section className="mt-8 grid gap-8 lg:grid-cols-[360px_1fr]">
-          <form onSubmit={issueKey} className="h-fit rounded-3xl border border-white/10 bg-white/5 p-6">
+          <form onSubmit={issueKey} className="h-fit rounded-3xl border border-line bg-panel p-6">
             <h2 className="text-2xl font-bold">Create API key</h2>
-            <p className="mt-2 text-sm text-slate-400">Keys receive the repository audit scope assigned by your plan.</p>
+            <p className="mt-2 text-sm text-muted">Keys receive the repository audit scope assigned by your plan.</p>
             <label htmlFor="key-name" className="mt-6 block text-sm font-medium">Key name</label>
-            <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
-            <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-slate-950 disabled:opacity-40">Create one-time key</button>
+            <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
+            <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-chrome px-4 py-3 font-bold text-chrome-text disabled:opacity-40">Create one-time key</button>
           </form>
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+          <div className="rounded-3xl border border-line bg-panel p-6">
             <h2 className="text-2xl font-bold">API keys</h2>
             <div className="mt-5 space-y-3">
-              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No API keys yet.</p> : dashboard.keys.map((key) => (
-                <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
+              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-line p-6 text-muted">No API keys yet.</p> : dashboard.keys.map((key) => (
+                <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-line bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
                   <div>
                     <h3 className="font-bold">{key.name}</h3>
-                    <p className="mt-1 font-mono text-sm text-slate-300">{key.prefix}…{key.lastFour}</p>
-                    <p className="mt-2 text-xs text-slate-500">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
+                    <p className="mt-1 font-mono text-sm text-body">{key.prefix}…{key.lastFour}</p>
+                    <p className="mt-2 text-xs text-muted">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
                   </div>
-                  {key.revokedAt ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-sm text-red-200">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-red-300/30 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Revoke</button>}
+                  {key.revokedAt ? <span className="rounded-full bg-danger-soft px-3 py-1 text-sm text-danger">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-danger px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Revoke</button>}
                 </article>
               ))}
             </div>

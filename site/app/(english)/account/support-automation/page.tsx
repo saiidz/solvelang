@@ -106,12 +106,12 @@ export default function SupportAutomationPage() {
 
   if (!SUPPORT_AUTOMATION_RELEASED) {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-20 text-white">
-        <section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-white/5 p-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Support automation</p>
+      <main className="min-h-screen bg-canvas px-6 py-20 text-ink">
+        <section className="mx-auto max-w-3xl rounded-3xl border border-line bg-panel p-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Support automation</p>
           <h1 className="mt-3 text-4xl font-bold">Connected support automation is not activated.</h1>
-          <p className="mt-5 text-slate-300">The repository path can be qualified while inbox reads, provider actions, and email sending remain separately disabled.</p>
-          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+          <p className="mt-5 text-body">The repository path can be qualified while inbox reads, provider actions, and email sending remain separately disabled.</p>
+          <Link className="mt-8 inline-block font-semibold text-accent underline" href="/account/api-keys/">Return to API account</Link>
         </section>
       </main>
     );
@@ -159,25 +159,25 @@ export default function SupportAutomationPage() {
 
   const state = status?.automationState ?? "NOT_CONFIGURED";
   return (
-    <main className="min-h-screen bg-slate-950 px-5 py-16 text-white sm:px-8">
+    <main className="min-h-screen bg-canvas px-5 py-16 text-ink sm:px-8">
       <div className="mx-auto max-w-5xl space-y-8">
-        <header className="rounded-3xl border border-white/10 bg-white/5 p-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Support automation</p>
+        <header className="rounded-3xl border border-line bg-panel p-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Support automation</p>
           <h1 className="mt-3 text-4xl font-bold">Inbox connection and controls</h1>
-          <p className="mt-4 max-w-3xl text-slate-300">Connect the existing SolveLang mailbox through a tenant-scoped secret reference. Saving never activates processing; activation and email sending remain independent protected gates.</p>
+          <p className="mt-4 max-w-3xl text-body">Connect the existing SolveLang mailbox through a tenant-scoped secret reference. Saving never activates processing; activation and email sending remain independent protected gates.</p>
           <div className="mt-6 flex flex-wrap gap-3 text-sm">
-            <span className="rounded-full bg-white/10 px-4 py-2">State: <strong>{state}</strong></span>
-            <span className="rounded-full bg-white/10 px-4 py-2">Activation gate: <strong>{status?.activationEnabled ? "enabled" : "off"}</strong></span>
-            {status?.provider === "imap_smtp" && <span className="rounded-full bg-white/10 px-4 py-2">Cutover: <strong>{status.sourceInitialized ? "captured" : "not captured"}</strong></span>}
+            <span className="rounded-full bg-panel-alt px-4 py-2">State: <strong>{state}</strong></span>
+            <span className="rounded-full bg-panel-alt px-4 py-2">Activation gate: <strong>{status?.activationEnabled ? "enabled" : "off"}</strong></span>
+            {status?.provider === "imap_smtp" && <span className="rounded-full bg-panel-alt px-4 py-2">Cutover: <strong>{status.sourceInitialized ? "captured" : "not captured"}</strong></span>}
           </div>
-          {error && <p role="alert" className="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-red-100">{error}</p>}
-          {notice && <p className="mt-5 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4 text-emerald-100">{notice}</p>}
+          {error && <p role="alert" className="mt-5 rounded-xl border border-danger bg-danger-soft p-4 text-danger">{error}</p>}
+          {notice && <p className="mt-5 rounded-xl border border-success bg-success-soft p-4 text-success">{notice}</p>}
         </header>
 
         <section className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <form onSubmit={configure} className="rounded-3xl border border-white/10 bg-white/5 p-7">
+          <form onSubmit={configure} className="rounded-3xl border border-line bg-panel p-7">
             <h2 className="text-2xl font-bold">Mailcow / IMAP setup</h2>
-            <p className="mt-2 text-sm text-slate-400">Enter references to credentials already stored in the approved secret namespace. Never paste mailbox passwords or provider keys into this form.</p>
+            <p className="mt-2 text-sm text-muted">Enter references to credentials already stored in the approved secret namespace. Never paste mailbox passwords or provider keys into this form.</p>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {([
                 ["Inbox", "inboxEmail", form.inboxEmail],
@@ -185,60 +185,60 @@ export default function SupportAutomationPage() {
                 ["Folder", "mailFolder", form.mailFolder],
                 ["Linear team ID", "linearTeamId", form.linearTeamId],
               ] as const).map(([label, key, value]) => (
-                <label key={key} className="text-sm font-medium text-slate-200">{label}
-                  <input required value={value} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-white outline-none focus:border-cyan-400" />
+                <label key={key} className="text-sm font-medium text-body">{label}
+                  <input required value={value} onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))} className="mt-2 w-full rounded-xl border border-line bg-panel px-3 py-2 text-ink outline-none focus:border-accent" />
                 </label>
               ))}
             </div>
-            <label className="mt-4 block text-sm font-medium text-slate-200">Mailbox credential secret ARN
-              <input required value={form.mailCredentialSecretArn} autoComplete="off" onChange={(event) => setForm((current) => ({ ...current, mailCredentialSecretArn: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-cyan-400" />
+            <label className="mt-4 block text-sm font-medium text-body">Mailbox credential secret ARN
+              <input required value={form.mailCredentialSecretArn} autoComplete="off" onChange={(event) => setForm((current) => ({ ...current, mailCredentialSecretArn: event.target.value }))} className="mt-2 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-xs text-ink outline-none focus:border-accent" />
             </label>
-            <label className="mt-4 block text-sm font-medium text-slate-200">Linear credential secret ARN
-              <input required value={form.linearCredentialSecretArn} autoComplete="off" onChange={(event) => setForm((current) => ({ ...current, linearCredentialSecretArn: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 font-mono text-xs text-white outline-none focus:border-cyan-400" />
+            <label className="mt-4 block text-sm font-medium text-body">Linear credential secret ARN
+              <input required value={form.linearCredentialSecretArn} autoComplete="off" onChange={(event) => setForm((current) => ({ ...current, linearCredentialSecretArn: event.target.value }))} className="mt-2 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-xs text-ink outline-none focus:border-accent" />
             </label>
-            <label className="mt-5 flex items-start gap-3 rounded-xl border border-white/10 p-4 text-sm text-slate-300">
+            <label className="mt-5 flex items-start gap-3 rounded-xl border border-line p-4 text-sm text-body">
               <input type="checkbox" checked={form.allowReply} onChange={(event) => setForm((current) => ({ ...current, allowReply: event.target.checked }))} className="mt-1" />
-              <span><strong className="text-white">Permit reply action in policy.</strong><br />This does not turn sending on; the environment send gate must also be separately authorized and enabled.</span>
+              <span><strong className="text-ink">Permit reply action in policy.</strong><br />This does not turn sending on; the environment send gate must also be separately authorized and enabled.</span>
             </label>
-            <button disabled={busy || !dashboard} className="mt-6 rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50">Save paused configuration</button>
+            <button disabled={busy || !dashboard} className="mt-6 rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:cursor-not-allowed disabled:opacity-50">Save paused configuration</button>
           </form>
 
-          <aside className="rounded-3xl border border-white/10 bg-white/5 p-7">
+          <aside className="rounded-3xl border border-line bg-panel p-7">
             <h2 className="text-2xl font-bold">Current connection</h2>
             <dl className="mt-5 space-y-3 text-sm">
-              <div><dt className="text-slate-400">Provider</dt><dd>{status?.provider ?? "Not configured"}</dd></div>
-              <div><dt className="text-slate-400">Inbox</dt><dd>{status?.inboxEmail ?? "—"}</dd></div>
-              <div><dt className="text-slate-400">Host / folder</dt><dd>{status?.mailHost ? `${status.mailHost} / ${status.mailFolder}` : "—"}</dd></div>
-              <div><dt className="text-slate-400">Actions</dt><dd>{status?.allowedActions?.join(", ") ?? "—"}</dd></div>
-              <div><dt className="text-slate-400">Policy</dt><dd>{status?.policyVersion ?? "—"}</dd></div>
+              <div><dt className="text-muted">Provider</dt><dd>{status?.provider ?? "Not configured"}</dd></div>
+              <div><dt className="text-muted">Inbox</dt><dd>{status?.inboxEmail ?? "—"}</dd></div>
+              <div><dt className="text-muted">Host / folder</dt><dd>{status?.mailHost ? `${status.mailHost} / ${status.mailFolder}` : "—"}</dd></div>
+              <div><dt className="text-muted">Actions</dt><dd>{status?.allowedActions?.join(", ") ?? "—"}</dd></div>
+              <div><dt className="text-muted">Policy</dt><dd>{status?.policyVersion ?? "—"}</dd></div>
             </dl>
             <div className="mt-7 grid gap-3">
-              <button disabled={busy || !status?.configured || state === "PAUSED"} onClick={() => runControl("pause")} className="rounded-xl border border-white/15 px-4 py-3 font-semibold disabled:opacity-40">Pause</button>
-              <button disabled={busy || !status?.configured || state === "ACTIVE"} onClick={() => runControl("resume")} className="rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 font-semibold text-cyan-200 disabled:opacity-40">Resume / initialize cutover</button>
-              <button disabled={busy || !status?.configured || state === "REVOKED"} onClick={() => runControl("revoke")} className="rounded-xl border border-red-300/30 bg-red-300/5 px-4 py-3 font-semibold text-red-200 disabled:opacity-40">Revoke connection</button>
+              <button disabled={busy || !status?.configured || state === "PAUSED"} onClick={() => runControl("pause")} className="rounded-xl border border-line px-4 py-3 font-semibold disabled:opacity-40">Pause</button>
+              <button disabled={busy || !status?.configured || state === "ACTIVE"} onClick={() => runControl("resume")} className="rounded-xl border border-accent bg-accent-soft px-4 py-3 font-semibold text-accent disabled:opacity-40">Resume / initialize cutover</button>
+              <button disabled={busy || !status?.configured || state === "REVOKED"} onClick={() => runControl("revoke")} className="rounded-xl border border-danger bg-danger-soft px-4 py-3 font-semibold text-danger disabled:opacity-40">Revoke connection</button>
             </div>
           </aside>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-7">
+        <section className="rounded-3xl border border-line bg-panel p-7">
           <div className="flex items-center justify-between gap-4">
-            <div><h2 className="text-2xl font-bold">Processing history</h2><p className="mt-1 text-sm text-slate-400">Redacted event outcomes only; raw support message bodies are not shown here.</p></div>
-            <button disabled={busy || !dashboard} onClick={() => dashboard && refresh(dashboard).catch((caught) => setError(errorMessage(caught)))} className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold disabled:opacity-40">Refresh</button>
+            <div><h2 className="text-2xl font-bold">Processing history</h2><p className="mt-1 text-sm text-muted">Redacted event outcomes only; raw support message bodies are not shown here.</p></div>
+            <button disabled={busy || !dashboard} onClick={() => dashboard && refresh(dashboard).catch((caught) => setError(errorMessage(caught)))} className="rounded-xl border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40">Refresh</button>
           </div>
           <div className="mt-5 space-y-3">
-            {events.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-5 text-slate-400">No retained processing events.</p>}
+            {events.length === 0 && <p className="rounded-xl border border-dashed border-line p-5 text-muted">No retained processing events.</p>}
             {events.map((item) => (
-              <article key={item.eventId} className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-                <div className="flex flex-wrap items-center gap-2"><strong>{item.state}</strong><span className="text-slate-400">{item.category ?? "unclassified"}</span>{item.requiresReview && <span className="rounded-full bg-amber-300/15 px-2 py-1 text-xs text-amber-200">review required</span>}</div>
-                <p className="mt-2 break-all font-mono text-xs text-slate-500">{item.eventId}</p>
-                {item.sensitiveReasons.length > 0 && <p className="mt-2 text-sm text-amber-200">Reasons: {item.sensitiveReasons.join(", ")}</p>}
-                {item.actions.length > 0 && <p className="mt-2 text-sm text-slate-300">Actions: {item.actions.map((action) => `${action.action}:${action.status}`).join(" · ")}</p>}
+              <article key={item.eventId} className="rounded-xl border border-line bg-panel/60 p-4">
+                <div className="flex flex-wrap items-center gap-2"><strong>{item.state}</strong><span className="text-muted">{item.category ?? "unclassified"}</span>{item.requiresReview && <span className="rounded-full bg-warning-soft px-2 py-1 text-xs text-warning">review required</span>}</div>
+                <p className="mt-2 break-all font-mono text-xs text-muted">{item.eventId}</p>
+                {item.sensitiveReasons.length > 0 && <p className="mt-2 text-sm text-warning">Reasons: {item.sensitiveReasons.join(", ")}</p>}
+                {item.actions.length > 0 && <p className="mt-2 text-sm text-body">Actions: {item.actions.map((action) => `${action.action}:${action.status}`).join(" · ")}</p>}
               </article>
             ))}
           </div>
         </section>
 
-        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+        <Link className="inline-block font-semibold text-accent underline" href="/account/api-keys/">Return to API account</Link>
       </div>
     </main>
   );
