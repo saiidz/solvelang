@@ -6,6 +6,7 @@ import { LanguageSuggestion } from "../components/LanguageSuggestion";
 import "../globals.css";
 import { LegalFooter } from "../components/LegalFooter";
 import { SiteHeader } from "../components/SiteHeader";
+import { ThemeDeviceListener } from "../components/ThemeDeviceListener";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
   openGraph: { siteName: brandFacts.publicName, title, description, url: `${brandFacts.canonicalDomain}/`, type: "website", images: [{ url: socialImagePath, width: 1200, height: 630, alt: "SolveLang — Understand first. Automate second." }] },
   twitter: { card: "summary_large_image", title, description, images: [socialImagePath] },
 };
+const themePrePaintScript = `(function(){try{var t=window.localStorage.getItem("solvelang-theme");var r="dark";if(t==="light"||t==="dark"){r=t;}else if(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches){r="light";}document.documentElement.setAttribute("data-theme",r);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
 const organizationId = `${brandFacts.canonicalDomain}/#organization`;
 const websiteId = `${brandFacts.canonicalDomain}/#website`;
 const softwareId = `${brandFacts.canonicalDomain}/#software`;
@@ -34,13 +36,18 @@ const siteJsonLd = {
 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" dir="ltr" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" dir="ltr" data-theme="dark" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <head>
+        <style>{`html{background:#0a0e1a}`}</style>
+        <script dangerouslySetInnerHTML={{ __html: themePrePaintScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
         <SiteHeader />
         <div id="site-content" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-24 outline-none">{children}</div>
         <LegalFooter />
         <LanguageSuggestion countryHintEndpoint="" />
+        <ThemeDeviceListener />
       </body>
     </html>
   );
