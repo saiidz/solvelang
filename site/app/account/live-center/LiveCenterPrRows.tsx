@@ -18,7 +18,7 @@ import {
   shortSha,
 } from "@/app/account/core/live-center";
 
-export const LC_PANEL = "rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5";
+export const LC_PANEL = "rounded-2xl border border-white/10 bg-[#16203a] p-4 sm:p-5";
 export const LC_BTN =
   "inline-block rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10";
 export const LC_BTN_SMALL =

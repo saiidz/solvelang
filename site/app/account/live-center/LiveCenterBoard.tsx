@@ -799,7 +799,8 @@ export function LiveCenterBoard() {
   const activeTabLabel = TABS.find((entry) => entry.id === tab)?.label ?? "Overview";
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 text-slate-200 sm:px-6 lg:px-8">
+    <main className="w-full bg-[#0a0e1a] text-slate-200">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
       <div ref={wrapRef}>
         <Link href="/account/" className="text-sm text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
           ← Back to your account
@@ -919,6 +920,7 @@ export function LiveCenterBoard() {
             <p className="text-sm text-slate-400">Loading your minutes…</p>
           ) : null}
         </div>
+      </div>
       </div>
     </main>
   );
