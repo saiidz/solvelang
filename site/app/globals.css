@@ -34,6 +34,10 @@
   --warning-soft: rgba(210, 153, 34, 0.14);
   --chrome-bg: #ffffff;
   --chrome-text: #0f172a;
+  --chrome-muted: #526179;
+  --chrome-line: #d7dee8;
+  --chrome-hover: #f1f5f9;
+  --chrome-danger: #cf222e;
   --grid-line: rgba(255, 255, 255, 0.035);
   /* Loading is always dark, in both themes. */
   --loading-canvas: #0a0e1a;
@@ -66,6 +70,10 @@
   --warning-soft: rgba(154, 103, 0, 0.1);
   --chrome-bg: #ffffff;
   --chrome-text: #0f172a;
+  --chrome-muted: #526179;
+  --chrome-line: #d7dee8;
+  --chrome-hover: #f1f5f9;
+  --chrome-danger: #cf222e;
   --grid-line: rgba(15, 23, 42, 0.05);
   /* Loading tokens intentionally not overridden: loading stays dark. */
 }
@@ -94,6 +102,10 @@
   --color-warning-soft: var(--warning-soft);
   --color-chrome: var(--chrome-bg);
   --color-chrome-text: var(--chrome-text);
+  --color-chrome-muted: var(--chrome-muted);
+  --color-chrome-line: var(--chrome-line);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-chrome-danger: var(--chrome-danger);
   --color-loading-canvas: var(--loading-canvas);
   --color-loading-panel: var(--loading-panel);
   --color-loading-text: var(--loading-text);
