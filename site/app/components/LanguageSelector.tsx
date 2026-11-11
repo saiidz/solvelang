@@ -11,15 +11,15 @@ export function LanguageSelector({ current }: { current: LocaleDefinition }) {
   if (reviewedLocales.length <= 1) return null;
   return (
     <details className="relative text-sm">
-      <summary className="cursor-pointer list-none rounded-lg px-2 py-1.5 font-semibold text-slate-700 hover:bg-slate-100" aria-label="Choose language">
+      <summary className="cursor-pointer list-none rounded-lg px-2 py-1.5 font-semibold text-chrome-text hover:bg-chrome-hover" aria-label="Choose language">
         {current.nativeName}
       </summary>
-      <div className="absolute right-0 z-50 mt-2 max-h-80 w-64 overflow-auto rounded-lg border border-slate-200 bg-white p-2 shadow-xl" role="menu" aria-label="Language">
+      <div className="absolute right-0 z-50 mt-2 max-h-80 w-64 overflow-auto rounded-lg border border-chrome-line bg-chrome p-2 shadow-xl" role="menu" aria-label="Language">
         {reviewedLocales.map((locale) => {
           const path = safeLocalePath(locale, pathname, new URLSearchParams(searchParams.toString()));
           const isCurrent = locale.code === current.code;
           return (
-            <Link key={locale.code} role="menuitem" aria-current={isCurrent ? "page" : undefined} href={path} className="block rounded px-3 py-2 text-slate-800 hover:bg-slate-100">
+            <Link key={locale.code} role="menuitem" aria-current={isCurrent ? "page" : undefined} href={path} className="block rounded px-3 py-2 text-chrome-text hover:bg-chrome-hover">
               {locale.nativeName}
             </Link>
           );
