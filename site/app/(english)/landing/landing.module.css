@@ -3,7 +3,9 @@
   background-image: linear-gradient(rgba(143, 185, 238, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(143, 185, 238, .045) 1px, transparent 1px);
   background-size: 72px 72px;
 }
-.heroGlow { position: absolute; inset: -15% -10% auto auto; width: 58%; height: 85%; pointer-events: none; background: radial-gradient(circle, rgba(28, 105, 227, .22), transparent 65%); }
+.heroGlow { position: absolute; inset: -15% -10% auto auto; width: 58%; height: 85%; pointer-events: none; background: radial-gradient(circle, rgba(28, 105, 227, .22), transparent 65%); animation: heroGlowDrift 16s ease-in-out infinite alternate; }
+@keyframes heroGlowDrift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(-4%, 6%, 0) scale(1.12); } }
+[data-landing-paused="true"] .heroGlow { animation-play-state: paused; }
 .eyebrow, .sectionEyebrow, .experienceHeader, .experienceCaption, .capabilityKicker, .builtEyebrow { font-family: var(--font-geist-mono), monospace; font-size: .72rem; font-weight: 700; letter-spacing: .16em; }
 .eyebrow { display: inline-flex; align-items: center; gap: .75rem; color: #a6caff; }
 .eyebrowLine { display: inline-block; width: 1.8rem; height: 1px; background: #70a7f4; }
@@ -18,7 +20,7 @@
 .darkInlineLink:hover { gap: 1.2rem; color: #063685; }
 .heroBoundary { display: flex; align-items: center; gap: .55rem; margin-top: 2.1rem; color: #91a9c1; font-family: var(--font-geist-mono), monospace; font-size: .67rem; line-height: 1.6; letter-spacing: .035em; }
 .statusDot, .ledgerPulse { flex: 0 0 auto; width: .45rem; height: .45rem; border-radius: 50%; background: #75ceae; box-shadow: 0 0 0 4px rgba(117, 206, 174, .12); }
-.heroInteractive { position: relative; min-width: 0; padding: .8rem; border: 1px solid rgba(147, 191, 249, .24); border-radius: 1.2rem; background: rgba(8, 24, 43, .82); box-shadow: 0 32px 90px rgba(0, 0, 0, .35); }
+.heroInteractive { position: relative; min-width: 0; transform: translateY(calc(var(--py, 0) * 1px)); padding: .8rem; border: 1px solid rgba(147, 191, 249, .24); border-radius: 1.2rem; background: rgba(8, 24, 43, .82); box-shadow: 0 32px 90px rgba(0, 0, 0, .35); }
 .experienceHeader { display: flex; justify-content: space-between; padding: .65rem .75rem 1rem; color: #7296bd; font-size: .63rem; }
 .experienceTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; margin-bottom: .75rem; }
 .experienceTab, .experienceTabActive { min-height: 2.9rem; padding: .6rem .65rem; border: 1px solid transparent; border-radius: .55rem; color: #94aeca; font-size: .73rem; font-weight: 700; text-align: center; transition: background .2s, color .2s, border-color .2s; }
@@ -221,4 +223,6 @@
 @media (prefers-reduced-motion: reduce) {
   .primaryButton, .textLink, .lightInlineLink, .darkInlineLink, .experienceTab, .experienceTabActive, .experienceCta, .studioButton, .builtLink { transition: none; }
   .primaryButton:hover { transform: none; }
+  .heroGlow { animation: none; }
+  .heroInteractive { transform: none; }
 }

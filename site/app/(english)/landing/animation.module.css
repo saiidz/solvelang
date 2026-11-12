@@ -6,7 +6,7 @@
    [data-landing-anim="armed"] attribute that LandingAnimation sets
    on the page root when it hydrates, so with JS off — and before
    hydration — the page is the finished static page. The state
-   classes the orchestrator toggles (.in) are global hooks. */
+   classes the orchestrator toggles (.in, .on) are global hooks. */
 
 /* ---------- base reveals: fade + rise, staggered via --i ---------- */
 [data-landing-anim="armed"] [data-reveal] { opacity: 0; transform: translateY(28px); }
@@ -27,9 +27,32 @@
 [data-glow-trigger]:global(.in) .ctaGlow { animation: ctaGlow 2s ease .4s 1 both; }
 @keyframes ctaGlow { 0% { opacity: 0; } 35% { opacity: .9; } 100% { opacity: .4; } }
 
+/* ---------- hero line sequence (rise in on load) ---------- */
+[data-landing-anim="armed"] [data-hero-line] { opacity: 0; transform: translateY(36px); animation: heroRise .95s cubic-bezier(.22, .61, .21, 1) forwards; animation-delay: calc(var(--i, 0) * 140ms + 80ms); }
+@keyframes heroRise { to { opacity: 1; transform: translateY(0); } }
+
+/* ---------- solve context: sticky-pin showcase ----------
+   The wrap wears the section's light background end to end, so no
+   scroll position inside the pin can show a foreign band. The
+   sticky frame is viewport-height and centers the section content;
+   stages and flow chips warm continuously with scroll progress
+   (LandingAnimation drives inline opacity from the wrap's bounding
+   rect). Below the pin gate the section is normal flow and the
+   orchestrator finishes the sequence with a staggered reveal. */
+.scPinWrap { background: #eaf0f3; }
+.scProgress { height: 3px; margin-top: 3rem; background: rgba(12, 99, 182, .15); }
+.scProgress i { display: block; height: 100%; background: #0c63b6; transform: scaleX(0); transform-origin: left; }
+.scStep, .scChip { transition: opacity .55s ease; }
+@media (min-width: 960px) and (min-height: 720px) {
+  .scPinWrap { height: 190vh; position: relative; }
+  .scPin { position: sticky; top: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+}
+
 /* ---------- reduced motion: finished state, no motion ---------- */
 @media (prefers-reduced-motion: reduce) {
-  [data-landing-anim="armed"] [data-reveal], [data-landing-anim="armed"] [data-scale] { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+  [data-landing-anim="armed"] [data-reveal], [data-landing-anim="armed"] [data-scale], [data-landing-anim="armed"] [data-hero-line] { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
   .evCard::before { opacity: 1 !important; transition: none !important; }
   .ctaGlow { display: none !important; }
+  .scStep, .scChip { opacity: 1 !important; transition: none !important; }
+  .scProgress i { transform: scaleX(1) !important; }
 }
