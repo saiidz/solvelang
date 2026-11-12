@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SettingsPane } from "../../../components/account-shell/AccountSidebar";
 import TotpQrEnhancer from "./TotpQrEnhancer";
 
 export const metadata: Metadata = {
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 export default function ApiAccountLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <>
-      {children}
+      <SettingsPane active="api-keys">{children}</SettingsPane>
       <TotpQrEnhancer />
     </>
   );

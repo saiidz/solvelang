@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SettingsPane } from "../../../components/account-shell/AccountSidebar";
 
 export const metadata: Metadata = {
   title: "GitHub App",
@@ -11,5 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function GitHubAccountLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <>{children}</>;
+  return <SettingsPane active="github">{children}</SettingsPane>;
 }

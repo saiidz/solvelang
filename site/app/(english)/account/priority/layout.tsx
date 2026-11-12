@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SettingsPane } from "../../../components/account-shell/AccountSidebar";
 
 export const metadata: Metadata = {
   title: "Customer Priority",
@@ -6,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function CustomerPriorityLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <SettingsPane active="priority">{children}</SettingsPane>;
 }
