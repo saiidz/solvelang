@@ -255,5 +255,6 @@ test("legal footer stays compact on phones: wrapped link flow, never the tall co
   const footer = read("app/components/LegalFooter.tsx");
   assert.match(footer, /<nav aria-label="Policies and business contact" className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 sm:gap-x-5 sm:gap-y-2">/);
   assert.doesNotMatch(footer, /<nav[^>]*flex-col/);
-  assert.match(footer, /px-6 py-4 text-sm leading-6 text-slate-800 sm:py-6 sm:leading-7/);
+  assert.match(footer, /<footer className="border-t border-white\/10 bg-\[#0a0e1a\] px-6 py-4 text-sm leading-6 text-slate-300 sm:py-6 sm:leading-7">/);
+  assert.doesNotMatch(footer, /<footer[^>]*bg-white/);
 });
