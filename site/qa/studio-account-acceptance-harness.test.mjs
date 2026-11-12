@@ -114,7 +114,7 @@ test("account connection waits for its refresh and new UI state before reading p
       throw new Error("Unexpected page lookup");
     },
     waitForResponse: (matches, options) => {
-      assert.equal(matches({ url: () => "https://3l3y008e94.execute-api.us-east-2.amazonaws.com/customer/studio/workspace", request: () => ({ method: () => "GET" }) }), true);
+      assert.equal(matches({ url: () => "https://api.solve-lang.com/customer/studio/workspace", request: () => ({ method: () => "GET" }) }), true);
       assert.equal(options.timeout, 20_000);
       return response;
     },
@@ -235,7 +235,7 @@ test("a fresh profile's pristine starter is qualified once and later modificatio
 
 test("the harness cannot point at a different origin or API", () => {
   const origin = "https://studio-acceptance.d3j3fgk4gcxxg2.amplifyapp.com";
-  const api = "https://3l3y008e94.execute-api.us-east-2.amazonaws.com";
+  const api = "https://api.solve-lang.com";
   assert.doesNotThrow(() => assertAcceptanceTargets(origin, api));
   assert.throws(() => assertAcceptanceTargets("https://www.solve-lang.com", api), /exact protected preview/);
   assert.throws(() => assertAcceptanceTargets(origin, "https://other.example"), /exact protected preview/);

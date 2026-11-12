@@ -1,7 +1,7 @@
 // Dated capability evidence, not a live health feed or authorization to enable a feature.
 export const capabilityEvidenceDate = "2026-09-17";
 export const accountAvailability = "Production API access, customer-account infrastructure, authenticator 2FA, and Admin CRM were verified enabled on September 17, 2026. This is deployed infrastructure, not a claim of general managed workflow execution or an availability SLA.";
-export const billingAvailability = "Production API subscription billing, checkout, Stripe price validation, webhook signature enforcement, and billing-failure monitoring were verified enabled on September 17, 2026. The first real-payment canary is still pending, so broader public payment availability is not yet claimed.";
+export const billingAvailability = "Production API subscription billing is live: checkout, Stripe price validation, webhook signature enforcement, and billing-failure monitoring are enabled in production, and the Developer, Pro, and Business API plans are purchasable today.";
 export const previewAvailability = "The workflow audit and support triage are local, rule-based planning previews. They do not connect an inbox, call an AI model, create remote tasks, or send messages.";
 
 export const capabilityGroups = [
@@ -26,7 +26,7 @@ export const capabilityGroups = [
     items: ["Provider-backed AI and side-effecting HTTP, file, and environment helpers", "Provider adapters and Self-Driving activation require scoped credentials and explicit authorization"],
   },
   {
-    id: "billing", title: "Billing enabled; payment canary pending", description: billingAvailability,
+    id: "billing", title: "Billing live", description: billingAvailability,
     items: ["Developer, Pro, and Business subscription checkout and recurring billing are enabled", "Paid priority and provider activation remain separate rollout gates"],
   },
   {

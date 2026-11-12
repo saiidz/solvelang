@@ -18,6 +18,10 @@ applications:
       cache:
         paths:
           - node_modules/**/*
+    customRules:
+      - source: '/<*>'
+        target: '/404.html'
+        status: '404'
     customHeaders:
       - pattern: '**'
         headers:

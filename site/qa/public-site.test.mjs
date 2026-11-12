@@ -133,9 +133,10 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   for (const page of ["api-pricing/page.tsx", "billing/page.tsx", "pricing/page.tsx"]) assert.match(read(`app/(english)/${page}`), /billingAvailability/);
   assert.match(read("app/(english)/status/status-data.ts"), /Live probe:/);
   assert.match(billingAvailability, /Production API subscription billing/);
-  assert.match(billingAvailability, /real-payment canary is still pending/);
-  assert.match(read("app/brandFacts.ts"), /status: "production-canary"/);
-  assert.match(read("public/llms.txt"), /Production API subscription billing and checkout verified enabled/);
+  assert.match(billingAvailability, /API plans are purchasable today/);
+  assert.doesNotMatch(billingAvailability, /canary is still pending/);
+  assert.match(read("app/brandFacts.ts"), /status: "production"/);
+  assert.match(read("public/llms.txt"), /Production API subscription billing and checkout are live/);
   assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
   for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
 });
@@ -239,4 +240,13 @@ test("queue component honours the motion, pause, and accessibility contracts", (
     assert.doesNotMatch(source, /upcomingsounds/i);
     assert.doesNotMatch(source, /saiidz/);
   }
+});
+
+test("process solution hero pairs the headline with the queue animation", () => {
+  const page = read("app/(english)/process-solution/page.tsx");
+  assert.match(page, /import QueueAnimation from "\.\/QueueAnimation";/);
+  assert.match(page, /<QueueAnimation \/>/);
+  assert.match(page, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,430px\)\]/);
+  assert.match(page, /Become a design partner/);
+  assert.match(page, /hello@solve-lang\.com/);
 });

@@ -69,7 +69,8 @@ test("API pricing and account copy preserve the shared billing boundary and curr
     source("app/product-capabilities.ts"),
   ]);
   for (const page of [apiPricing, pricing, billing]) assert.match(page, /\{billingAvailability\}/);
-  assert.match(capabilities, /first real-payment canary is still pending/);
+  assert.match(capabilities, /API plans are purchasable today/);
+  assert.doesNotMatch(capabilities, /canary is still pending|payment canary pending/);
   assert.match(apiPricing, /weighted credits per UTC calendar month/);
   assert.match(apiPricing, /UPCOMINGSOUNDS S\.R\.L\./);
   assert.match(apiPricing, /href="\/refund-policy\/"/);
