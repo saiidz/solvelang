@@ -305,3 +305,9 @@ test("shell navigation is labelled, current-marked, honest about state, and touc
   assert.match(css, /:focus-visible/);
   assert.match(css, /prefers-reduced-motion: no-preference/);
 });
+
+test("account shell fills the available page height without viewport units", () => {
+  const css = read("app/components/account-shell/account-shell.module.css");
+  assert.match(css, /:global\(#site-content\) \{\s*display: flex;\s*flex-direction: column;/);
+  assert.match(css, /\.shell \{\s*flex: 1 0 auto;/);
+});

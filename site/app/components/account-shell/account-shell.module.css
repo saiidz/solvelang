@@ -5,7 +5,19 @@
    markup: fixed grid tracks, no sticky positioning, no
    viewport-height containers, nothing hidden before JavaScript. */
 
+/* The site content region is a flex item in the page column; making
+   it a column flex container on account routes (this module only
+   loads there) lets the shell grow to fill the exact available
+   height — no viewport units, and taller content still pushes the
+   page taller. Without this the frame stops at its content height
+   and short pages strand the rail mid-page. */
+:global(#site-content) {
+  display: flex;
+  flex-direction: column;
+}
+
 .shell {
+  flex: 1 0 auto;
   --canvas: #0a0e1a;
   --rail: #070b13;
   --side: #0e1626;
