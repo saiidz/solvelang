@@ -295,3 +295,10 @@
     min-height: 44px;
   }
 }
+
+/* Wide variant (Live Center): the content takes the full remaining
+   width beside the rail; the board keeps its own measure inside. */
+.wide {
+  min-width: 0;
+  height: 100%;
+}
