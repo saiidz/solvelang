@@ -456,6 +456,26 @@ test("inbox groups name the draft, review, and gate waits in plain words", () =>
   assert.match(deployment.items[0].blocker, /waiting for approval/);
 });
 
+test("inboxItems is the Inbox total: every item in every group", () => {
+  const view = normalizeLiveCenterBoard(pilotBoardV2);
+  // pilotBoardV2 waits on a person twice: PR 202 waits for its review
+  // and PR 201 waits for its required gate — two groups, one item each.
+  assert.equal(view.inboxItems, 2);
+  assert.equal(
+    view.inboxItems,
+    view.inboxGroups.reduce((sum, group) => sum + group.items.length, 0),
+  );
+
+  // A deployment approval is a third waiting item, in its own group.
+  const withDeployment = normalizeLiveCenterBoard({
+    ...pilotBoardV2,
+    ownerActions: [
+      { type: "deployment_approval", pr: null, runId: 4242, waitingOn: "Deployment to production is waiting for approval" },
+    ],
+  });
+  assert.equal(withDeployment.inboxItems, 3);
+});
+
 test("state labels and formatters speak plainly", () => {
   assert.equal(reviewStateLabel("approved"), "Approved");
   assert.equal(reviewStateLabel("review_required"), "Review requested");
