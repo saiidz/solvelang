@@ -250,3 +250,10 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("legal footer stays compact on phones: wrapped link flow, never the tall column", () => {
+  const footer = read("app/components/LegalFooter.tsx");
+  assert.match(footer, /<nav aria-label="Policies and business contact" className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 sm:gap-x-5 sm:gap-y-2">/);
+  assert.doesNotMatch(footer, /<nav[^>]*flex-col/);
+  assert.match(footer, /px-6 py-4 text-sm leading-6 text-slate-800 sm:py-6 sm:leading-7/);
+});
