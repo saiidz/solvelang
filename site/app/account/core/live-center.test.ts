@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs";
 import {
   activityStatusLabel,
   deriveRunnerView,
+  describeFreezeWindow,
   filterLiveCenterPullRequests,
   formatDurationMs,
+  formatFreezeInstant,
   formatRelativeTime,
   gateStateLabel,
   groupPullRequestsByStage,
@@ -527,7 +529,85 @@ test("the board page proves the session before fetching the board and handles th
   assert.ok(board.includes("mgov_not_configured"), "the 503 not-configured code is handled");
   assert.ok(board.includes("not switched on yet"), "the not-configured state is friendly");
   assert.ok(board.includes('"/customer/live-center/minutes"'), "the minutes seam is fetched");
-  for (const heading of ["Overview", "Pull requests", "Queue", "Checks", "Runners", "Statistics", "Inbox", "Minutes"]) {
+  for (const heading of ["Overview", "Pull requests", "Queue", "Checks", "Runners", "Statistics", "Configuration", "Inbox", "Minutes"]) {
     assert.ok(board.includes(heading), `tab rendered: ${heading}`);
   }
+});
+
+test("the board carries the rules in force and the queue summary", () => {
+  const view = normalizeLiveCenterBoard({
+    queue: [],
+    rules: {
+      inForce: {
+        batchSize: 4,
+        widenTo: 8,
+        widenBelowFailureRate: 0.25,
+        priorityLabels: ["urgent"],
+        requiredChecks: ["Hosted CI - required gate"],
+        freezeWindows: [
+          { daysOfWeek: [1, 2, 3, 4, 5], startHHMM: "09:00", endHHMM: "17:00", timezone: "America/New_York" },
+        ],
+      },
+      version: 3,
+    },
+    summary: {
+      paused: false,
+      frozen: true,
+      frozenUntil: "2026-11-16T22:00:00.000Z",
+      nextFreezeAt: null,
+    },
+  });
+  assert.equal(view.rules?.batchSize, 4);
+  assert.equal(view.rules?.widenTo, 8);
+  assert.equal(view.rules?.widenBelowFailureRate, 0.25);
+  assert.deepEqual(view.rules?.priorityLabels, ["urgent"]);
+  assert.deepEqual(view.rules?.requiredChecks, ["Hosted CI - required gate"]);
+  assert.equal(view.rules?.freezeWindows[0].timezone, "America/New_York");
+  assert.equal(view.rules?.version, 3);
+  assert.equal(view.summary.frozen, true);
+  assert.equal(view.summary.frozenUntil, "2026-11-16T22:00:00.000Z");
+  assert.equal(view.summary.nextFreezeAt, "");
+});
+
+test("an older payload without rules normalizes to no rules and a quiet summary", () => {
+  const view = normalizeLiveCenterBoard({ queue: [] });
+  assert.equal(view.rules, null);
+  assert.deepEqual(view.summary, { paused: false, frozen: false, frozenUntil: "", nextFreezeAt: "" });
+});
+
+test("describeFreezeWindow speaks plain language, including past-midnight spans", () => {
+  assert.equal(
+    describeFreezeWindow({ daysOfWeek: [1, 2, 3, 4, 5], startHHMM: "09:00", endHHMM: "17:00", timezone: "America/New_York" }),
+    "Weekdays, 09:00 – 17:00 (America/New_York)",
+  );
+  assert.equal(
+    describeFreezeWindow({ daysOfWeek: [0, 6], startHHMM: "22:00", endHHMM: "06:00", timezone: "UTC" }),
+    "Weekends, 22:00 – 06:00 the next day (UTC)",
+  );
+  assert.equal(
+    describeFreezeWindow({ daysOfWeek: [0, 1, 2, 3, 4, 5, 6], startHHMM: "00:00", endHHMM: "00:00", timezone: "UTC" }),
+    "Every day, 00:00 – 00:00 the next day (UTC)",
+  );
+  assert.equal(
+    describeFreezeWindow({ daysOfWeek: [3], startHHMM: "12:00", endHHMM: "13:00", timezone: "UTC" }),
+    "Wednesday, 12:00 – 13:00 (UTC)",
+  );
+});
+
+test("formatFreezeInstant renders the boundary in the window's own zone", () => {
+  // 22:00Z is 17:00 EST on Monday 2026-11-16.
+  assert.equal(formatFreezeInstant("2026-11-16T22:00:00.000Z", "America/New_York"), "Mon 5:00 PM");
+  assert.equal(formatFreezeInstant("not a date", "America/New_York"), "");
+  assert.equal(formatFreezeInstant("", "UTC"), "");
+});
+
+test("the Configuration view shows the rules and names the admin as their setter", () => {
+  const board = readFileSync("app/account/live-center/LiveCenterBoard.tsx", "utf8");
+  assert.ok(board.includes("LiveCenterConfig"), "the board renders the Configuration view");
+  assert.ok(board.includes('"Configuration"') || board.includes("Configuration"), "the tab is labelled Configuration");
+  const config = readFileSync("app/account/live-center/LiveCenterConfig.tsx", "utf8");
+  assert.ok(config.includes("Merge rules in force"), "the rules in force are shown");
+  assert.ok(config.includes("Scheduled merge freezes"), "the freezes are shown");
+  assert.ok(config.includes("workspace admin"), "the page says the workspace admin sets the rules");
+  assert.ok(!config.includes("onSubmit"), "no write UI in this version");
 });
