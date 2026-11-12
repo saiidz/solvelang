@@ -1,0 +1,53 @@
+name: Board Probe Harness
+
+# ONE-OFF OPERATOR HARNESS (owner-reported Live Center stuck-loading,
+# Nov 11, 2026). Times the pilot board endpoint exactly as the site
+# proxy experiences it, using the api-access-production environment's
+# MGOV_ADMIN_TOKEN (never printed). Read-only: it performs GET board
+# reads only. Dispatch is manual, gated by the api-access-production
+# environment, and requires the confirm_board_probe input.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_board_probe:
+        description: Confirm read-only board timing probes against the PILOT tenant only
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    env:
+      MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
+      BOARD_URL: "https://2l346svz17.execute-api.us-east-2.amazonaws.com/tenants/saiidz-pilot/board?owner=saiidz&repo=upcomingsounds-private&installationId=179351888"
+    steps:
+      - name: Enforce probe boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Board probe harness must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_board_probe }}" == "true" ]] || { echo "Explicit probe confirmation is required." >&2; exit 1; }
+          [[ -n "$MGOV_ADMIN_TOKEN" ]] || { echo "MGOV_ADMIN_TOKEN secret must be set." >&2; exit 1; }
+
+      - name: Probe board read (cold, then immediate repeat)
+        shell: bash
+        run: |
+          set -uo pipefail
+          for i in 1 2; do
+            out="$RUNNER_TEMP/board-$i.json"
+            meta=$(curl -s -o "$out" -w "http=%{http_code} time=%{time_total}s size=%{size_download}" --max-time 150 -H "x-admin-token: $MGOV_ADMIN_TOKEN" "$BOARD_URL")
+            echo "probe $i: $meta"
+            echo "probe $i: $meta" >> "$GITHUB_STEP_SUMMARY"
+            if command -v jq >/dev/null 2>&1 && jq -e . "$out" >/dev/null 2>&1; then
+              jq -r '"keys=" + (keys | join(","))' "$out" | head -1
+              jq -r '"generatedAt=" + (.generatedAt // "n/a") + " prs=" + ((.prs // []) | length | tostring)' "$out" | head -1
+            else
+              head -c 300 "$out"; echo
+            fi
+          done
