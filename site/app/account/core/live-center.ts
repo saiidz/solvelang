@@ -230,6 +230,15 @@ export type LiveCenterPagination = {
   pages: number;
 };
 
+export type LiveCenterAutomationState = "active" | "paused" | "unknown";
+
+export type LiveCenterAutomation = {
+  state: LiveCenterAutomationState;
+  rulesVersion: string;
+  lastEvaluatedAt: string | null;
+  reposPaused: boolean;
+};
+
 export type LiveCenterBoardView = {
   repoLabel: string;
   generatedAt: string;
@@ -244,6 +253,7 @@ export type LiveCenterBoardView = {
   ownerActionGroups: LiveCenterOwnerActionGroup[];
   inboxGroups: LiveCenterInboxGroup[];
   history: LiveCenterHistory;
+  automation: LiveCenterAutomation;
   pagination: LiveCenterPagination;
   batch: LiveCenterBatch;
 };
@@ -403,6 +413,28 @@ export function formatRelativeTime(iso: string, now: Date = new Date()): string 
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
+}
+
+// The same relative stamps in words, for sentences a customer
+// reads aloud: "just now", "12 minutes ago", "1 hour ago". A null
+// or unparsable value stays empty — the board never dresses a
+// missing time up as a real one.
+export function formatRelativeTimeWords(iso: string | null, now: Date = new Date()): string {
+  if (!iso) return "";
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return "";
+  const seconds = Math.max(0, Math.floor((now.getTime() - then) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return days === 1 ? "1 day ago" : `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return months === 1 ? "1 month ago" : `${months} months ago`;
+  const years = Math.floor(months / 12);
+  return years === 1 ? "1 year ago" : `${years} years ago`;
 }
 
 // Compact durations for check rows and queue times: "45s", "3m 20s",
@@ -600,6 +632,30 @@ export function deriveRunnerView(runs: LiveCenterRun[]): LiveCenterRunnerView {
     queuedJobs,
     busyCount: busy.length,
     waitingCount: queuedJobs.length,
+  };
+}
+
+// The pilot's proof-of-life block. A payload from before the block
+// existed (or a malformed one) normalizes to state "unknown" with a
+// null timestamp: the page then says the board did not report it,
+// instead of guessing Active. A timestamp that does not parse is
+// dropped to null for the same reason.
+function normalizeAutomation(raw: unknown): LiveCenterAutomation {
+  const automation = asRecord(raw);
+  const stateText = asText(automation.state);
+  const reposPaused = automation.reposPaused === true || stateText === "paused";
+  const state: LiveCenterAutomationState =
+    stateText === "paused" || stateText === "active"
+      ? stateText
+      : reposPaused
+        ? "paused"
+        : "unknown";
+  const last = asText(automation.lastEvaluatedAt);
+  return {
+    state,
+    rulesVersion: asText(automation.rulesVersion),
+    lastEvaluatedAt: last && Number.isFinite(Date.parse(last)) ? last : null,
+    reposPaused,
   };
 }
 
@@ -1036,6 +1092,7 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     ownerActionGroups,
     inboxGroups,
     history: normalizeHistory(board.history),
+    automation: normalizeAutomation(board.automation),
     pagination,
     batch,
   };

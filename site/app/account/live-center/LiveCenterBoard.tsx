@@ -28,6 +28,7 @@ import {
   type LiveCenterBoardFilter,
   filterLiveCenterPullRequests,
   formatRelativeTime,
+  formatRelativeTimeWords,
   normalizeLiveCenterBoard,
   normalizeLiveCenterMinutes,
   paginateList,
@@ -271,6 +272,65 @@ function Overview({
             ? `Last ${board.history.period.days || 14} days: ${board.history.period.entered} entered the queue · ${board.history.period.merged} merged · ${board.history.period.removed} removed. The Statistics tab has the day-by-day shape.`
             : "Merge history is being recorded — this line fills in as pull requests enter, merge, and leave the queue."}
         </p>
+      </div>
+
+      <div className={LC_PANEL}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 className="font-semibold text-slate-100">Automation</h2>
+          {board.automation.state === "active" ? (
+            <span className="inline-block rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-medium leading-tight text-emerald-300">
+              Active
+            </span>
+          ) : board.automation.state === "paused" ? (
+            <span className="inline-block rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-medium leading-tight text-amber-300">
+              Paused
+            </span>
+          ) : (
+            <span className="inline-block rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium leading-tight text-slate-300">
+              Not reported
+            </span>
+          )}
+        </div>
+        {board.automation.state === "paused" ? (
+          <p className="mt-2 text-sm text-slate-300">
+            Planning is off for this repository — the automation will not plan or merge batches
+            until it is resumed.
+          </p>
+        ) : board.automation.state === "active" ? (
+          <p className="mt-2 text-sm text-slate-300">
+            The automation is watching this repository and planning batches under its merge
+            rules.
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-slate-300">
+            This board read does not say whether the automation is active — it was served by a
+            version that does not report it yet.
+          </p>
+        )}
+        <dl className="mt-2 space-y-2 text-sm">
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-slate-400">Rules in force</dt>
+            <dd className="text-slate-200">
+              {board.automation.rulesVersion ? (
+                <>Rules {board.automation.rulesVersion} in force</>
+              ) : (
+                "Not reported"
+              )}
+            </dd>
+          </div>
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-slate-400">Last evaluation</dt>
+            <dd className="text-slate-200">
+              {board.automation.lastEvaluatedAt ? (
+                <span title={board.automation.lastEvaluatedAt}>
+                  {formatRelativeTimeWords(board.automation.lastEvaluatedAt) || "just now"}
+                </span>
+              ) : (
+                "No evaluations recorded yet"
+              )}
+            </dd>
+          </div>
+        </dl>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
