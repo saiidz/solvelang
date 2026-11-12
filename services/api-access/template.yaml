@@ -515,12 +515,6 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /admin/status
             Method: GET
-        PublicStatusHealth:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/{proxy+}
-            Method: GET
         CustomerMagicLink:
           Type: HttpApi
           Properties:
@@ -562,12 +556,6 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/account
-            Method: GET
-        CustomerLiveCenterBoard:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/live-center/{proxy+}
             Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
@@ -647,12 +635,6 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/merge-governance/elements-checkout
             Method: POST
-        CustomerConnectRepositories:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/connect/{proxy+}
-            Method: GET
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
