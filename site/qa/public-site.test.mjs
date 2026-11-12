@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks, normalizePath, isCurrentLink } = require("../.studio-test-dist/public-site/components/site-navigation.js");
@@ -51,7 +51,7 @@ test("one global header has no route exclusions and a real skip target", () => {
   assert.match(header, /Escape/);
   assert.match(header, /pointerdown/);
   assert.match(header, /key=\{route\}/);
-  for (const route of ["landing", "about", "api-pricing", "check", "repository-audit", "run"]) {
+  for (const route of ["about", "api-pricing", "check", "repository-audit", "run"]) {
     const page = read(`app/(english)/${route}/page.tsx`);
     assert.doesNotMatch(page, /<SiteHeader|aria-label="SolveLang home"/);
   }
@@ -108,7 +108,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(view, /export function StatusDashboard\(\)/);
   assert.match(view, /export function StatusSummary\(\)/);
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
-  assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
+  assert.match(read("app/components/homepage/LandingPage.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
   for (const id of ["account-persistence", "billing", "support", "ci-deployment"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
   for (const id of ["provider-execution", "posthog"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, false, `${id} has no live signal and stays unmonitored`);
@@ -124,7 +124,7 @@ test("incident history survives refresh without a fabricated resolution", () => 
   assert.doesNotMatch(read("app/(english)/status/page.tsx"), /No recorded incidents\./);
 });
 test("homepage, About, pricing, and status preserve controlled-rollout billing boundaries", () => {
-  const landing = read("app/(english)/landing/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
   assert.match(landing, /import \{ billingAvailability \} from "\.\.\/\.\.\/product-capabilities"/);
   assert.match(landing, /account saving are deployed\. \{billingAvailability\} Paid priority/);
   assert.doesNotMatch(landing, /Billing is enabled for controlled rollout; the first real-payment canary remains pending/);
@@ -138,7 +138,19 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   assert.match(read("app/brandFacts.ts"), /status: "production"/);
   assert.match(read("public/llms.txt"), /Production API subscription billing and checkout are live/);
   assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
-  for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+  for (const page of ["about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+  assert.doesNotMatch(landing, /Test-mode API access, account|only in the protected SolveLang test environment/);
+});
+
+test("homepage renders its sections from the shared component and landing is not a route", () => {
+  const homepage = read("app/(english)/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.match(homepage, /import LandingPage from "\.\.\/components\/homepage\/LandingPage";/);
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  let previous = -1;
+  for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
+  assert.equal(existsSync(new URL("../app/(english)/landing", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../app/(english)/landing/page.tsx", import.meta.url)), false);
 });
 
 const {
