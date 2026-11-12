@@ -250,3 +250,58 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("account shell frame is server-only, fixed-track, and free of sticky or viewport-height sizing", () => {
+  const shellFiles = [
+    "app/components/account-shell/AccountShell.tsx",
+    "app/components/account-shell/AccountRail.tsx",
+    "app/components/account-shell/AccountSidebar.tsx",
+    "app/(english)/account/layout.tsx",
+  ];
+  for (const path of shellFiles) {
+    const source = read(path);
+    assert.doesNotMatch(source, /"use client"/, path);
+    assert.doesNotMatch(source, /fetch\(|customerApi|usePathname|useState/, path);
+  }
+  const css = read("app/components/account-shell/account-shell.module.css");
+  assert.match(css, /grid-template-columns:\s*48px minmax\(0, 1fr\)/);
+  assert.match(css, /grid-template-columns:\s*232px minmax\(0, 1fr\)/);
+  assert.doesNotMatch(css, /position:\s*sticky/);
+  assert.doesNotMatch(css, /\d+(?:\.\d+)?vh/);
+});
+
+test("every account page renders inside the shell and settings segments adopt the sidebar", () => {
+  const accountLayout = read("app/(english)/account/layout.tsx");
+  assert.match(accountLayout, /<AccountShell>/);
+  const segments = [
+    ["app/(english)/account/github/layout.tsx", "github"],
+    ["app/(english)/account/api-keys/layout.tsx", "api-keys"],
+    ["app/(english)/account/api-subscription/layout.tsx", "api-subscription"],
+    ["app/(english)/account/priority/layout.tsx", "priority"],
+    ["app/(english)/account/support-automation/layout.tsx", "support-automation"],
+  ];
+  for (const [path, key] of segments) {
+    assert.match(read(path), new RegExp(`<SettingsPane active="${key}">`), path);
+  }
+  const liveCenter = read("app/(english)/account/live-center/layout.tsx");
+  assert.match(liveCenter, /styles\.wide/);
+});
+
+test("shell navigation is labelled, current-marked, honest about state, and touch-safe", () => {
+  const rail = read("app/components/account-shell/AccountRail.tsx");
+  assert.match(rail, /aria-label="Primary"/);
+  assert.match(rail, /role="img" aria-label="Review Assist — in design"/);
+  const sidebar = read("app/components/account-shell/AccountSidebar.tsx");
+  assert.match(sidebar, /aria-labelledby="account-ws-label"/);
+  assert.match(sidebar, /aria-labelledby="account-your-label"/);
+  assert.match(sidebar, /aria-current=\{current \? "page" : undefined\}/);
+  assert.match(sidebar, /Not installed/);
+  assert.match(sidebar, /badge="Building"/);
+  const css = read("app/components/account-shell/account-shell.module.css");
+  assert.match(css, /@media \(max-width: 860px\)/);
+  assert.match(css, /@media \(pointer: coarse\)/);
+  assert.match(css, /min-height: 44px/);
+  assert.match(css, /width: 44px/);
+  assert.match(css, /:focus-visible/);
+  assert.match(css, /prefers-reduced-motion: no-preference/);
+});
