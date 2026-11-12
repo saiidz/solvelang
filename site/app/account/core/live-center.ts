@@ -230,6 +230,39 @@ export type LiveCenterPagination = {
   pages: number;
 };
 
+export type LiveCenterFreezeWindow = {
+  daysOfWeek: number[];
+  startHHMM: string;
+  endHHMM: string;
+  timezone: string;
+};
+
+// The merge rules in force for this repository, as the board
+// payload reports them (`rules.inForce` + `rules.version`): the
+// per-repo rules record the planner obeys. A payload without the
+// rules block (an older pilot) normalizes to null and the
+// Configuration view says the rules were not reported — nothing
+// about them is guessed.
+export type LiveCenterRules = {
+  batchSize: number;
+  widenTo: number;
+  widenBelowFailureRate: number;
+  priorityLabels: string[];
+  requiredChecks: string[] | null;
+  freezeWindows: LiveCenterFreezeWindow[];
+  version: number;
+};
+
+// The board payload's per-request queue state: paused (the owner's
+// kill state, the stronger one) and the scheduled-freeze state with
+// the current window's end and the next window's start.
+export type LiveCenterSummary = {
+  paused: boolean;
+  frozen: boolean;
+  frozenUntil: string;
+  nextFreezeAt: string;
+};
+
 export type LiveCenterBoardView = {
   repoLabel: string;
   generatedAt: string;
@@ -246,6 +279,8 @@ export type LiveCenterBoardView = {
   history: LiveCenterHistory;
   pagination: LiveCenterPagination;
   batch: LiveCenterBatch;
+  rules: LiveCenterRules | null;
+  summary: LiveCenterSummary;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -763,6 +798,107 @@ function buildInboxGroups(
   return groups;
 }
 
+function normalizeFreezeWindow(value: unknown): LiveCenterFreezeWindow {
+  const window = asRecord(value);
+  return {
+    daysOfWeek: asArray(window.daysOfWeek)
+      .map((day) => asNumber(day))
+      .filter((day): day is number => day !== null),
+    startHHMM: asText(window.startHHMM),
+    endHHMM: asText(window.endHHMM),
+    timezone: asText(window.timezone),
+  };
+}
+
+function normalizeRules(raw: unknown): LiveCenterRules | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const root = asRecord(raw);
+  const inForce = asRecord(root.inForce);
+  if (Object.keys(inForce).length === 0) return null;
+  const rate = inForce.widenBelowFailureRate;
+  return {
+    batchSize: asCount(inForce.batchSize),
+    widenTo: asCount(inForce.widenTo),
+    widenBelowFailureRate:
+      typeof rate === "number" && Number.isFinite(rate) ? rate : 0,
+    priorityLabels: asArray(inForce.priorityLabels)
+      .map((name) => asText(name))
+      .filter(Boolean),
+    requiredChecks: Array.isArray(inForce.requiredChecks)
+      ? inForce.requiredChecks.map((name) => asText(name)).filter(Boolean)
+      : null,
+    freezeWindows: asArray(inForce.freezeWindows).map(normalizeFreezeWindow),
+    version: asCount(root.version),
+  };
+}
+
+function normalizeSummary(raw: unknown): LiveCenterSummary {
+  const summary = asRecord(raw);
+  return {
+    paused: summary.paused === true,
+    frozen: summary.frozen === true,
+    frozenUntil: asText(summary.frozenUntil),
+    nextFreezeAt: asText(summary.nextFreezeAt),
+  };
+}
+
+const WEEKDAY_LONG = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+// One freeze window in plain words: "Weekdays, 09:00 – 17:00
+// (America/New_York)". A window whose end is not after its start
+// runs past midnight, and the sentence says so.
+export function describeFreezeWindow(window: LiveCenterFreezeWindow): string {
+  const days = [...new Set(window.daysOfWeek)].sort((a, b) => a - b);
+  let dayText = "Every day";
+  if (days.length > 0 && days.length < 7) {
+    if (days.join(",") === "1,2,3,4,5") dayText = "Weekdays";
+    else if (days.join(",") === "0,6") dayText = "Weekends";
+    else {
+      dayText = days
+        .map((day) => WEEKDAY_LONG[day] ?? "")
+        .filter(Boolean)
+        .join(", ");
+    }
+  }
+  const spansMidnight = window.endHHMM <= window.startHHMM;
+  const span = spansMidnight
+    ? `${window.startHHMM} – ${window.endHHMM} the next day`
+    : `${window.startHHMM} – ${window.endHHMM}`;
+  return `${dayText}, ${span}${window.timezone ? ` (${window.timezone})` : ""}`;
+}
+
+// A freeze boundary as a short local stamp ("Mon 17:00"). The
+// window's own timezone wins when one is given; an unparsable or
+// unformattable value stays empty rather than dressing a bad value
+// up as a time.
+export function formatFreezeInstant(iso: string, timezone?: string): string {
+  const then = Date.parse(iso || "");
+  if (!Number.isFinite(then)) return "";
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  };
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat("en-US", { ...options, timeZone: timezone }).format(
+        new Date(then),
+      );
+    } catch {
+      // Fall through to the viewer's own zone.
+    }
+  }
+  return new Intl.DateTimeFormat("en-US", options).format(new Date(then));
+}
+
 export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
   const board = asRecord(raw);
   const checksByNumber = asRecord(board.checks);
@@ -1038,6 +1174,8 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     history: normalizeHistory(board.history),
     pagination,
     batch,
+    rules: normalizeRules(board.rules),
+    summary: normalizeSummary(board.summary),
   };
 }
 
