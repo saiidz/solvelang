@@ -19,7 +19,7 @@ import {
 
 export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
   const [pages, setPages] = useState<Record<string, number>>({});
-  const totalItems = board.inboxGroups.reduce((sum, group) => sum + group.items.length, 0);
+  const totalItems = board.inboxItems;
 
   return (
     <section aria-label="Inbox — waiting on you" className="space-y-4">

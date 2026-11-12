@@ -710,24 +710,25 @@ export function LiveCenterBoard() {
     return () => observer.disconnect();
   }, [phase]);
 
+  // Tab counts read the same totals the views themselves show: Pull
+  // requests and Queue both page over every open pull request, Checks
+  // counts the runs its list shows, Runners headlines its busy count,
+  // and Inbox totals every item waiting in its groups. Overview,
+  // Statistics, and Minutes carry no count — the approved design
+  // keeps those tabs plain.
   const tabCounter = (id: TabId): string | null => {
     if (!board) return null;
     switch (id) {
       case "prs":
-        return String(board.stats.openPrs);
+        return String(board.pullRequests.length);
       case "queue":
-        return String(board.stats.openPrs);
+        return String(board.pullRequests.length);
       case "runs":
         return String(board.runs.length);
       case "runners":
         return String(board.runners.busyCount);
       case "inbox":
-        return String(board.stats.waitingOnYou);
-      case "minutes": {
-        if (!minutes?.configured) return null;
-        const total = minutes.balances.reduce((sum, balance) => sum + (balance.minutesLeft ?? 0), 0);
-        return total > 0 ? total.toLocaleString("en-US") : null;
-      }
+        return String(board.inboxItems);
       default:
         return null;
     }
@@ -897,7 +898,11 @@ export function LiveCenterBoard() {
                 }`}
               >
                 {entry.label}
-                {counter !== null ? <span className="ml-1.5 text-xs text-slate-400">{counter}</span> : null}
+                {counter !== null ? (
+                  <span className={`ml-1.5 text-xs ${tab === entry.id ? "text-sky-200/75" : "text-slate-400"}`}>
+                    {counter}
+                  </span>
+                ) : null}
               </button>
             );
           })}

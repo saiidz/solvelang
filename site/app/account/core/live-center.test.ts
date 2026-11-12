@@ -290,6 +290,7 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     ownerActions: [],
     ownerActionGroups: [],
     inboxGroups: [],
+    inboxItems: 0,
     history: { merged: [], removed: [], daily: [], period: { days: 0, entered: 0, merged: 0, removed: 0 } },
     pagination: { total: 0, page: 1, perPage: 25, pages: 1 },
     batch: { proposed: false, size: 0, batchSize: 0, baseRef: "", members: [], blockedBy: null, stoppedReason: "" },

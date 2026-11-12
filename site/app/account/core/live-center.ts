@@ -243,6 +243,7 @@ export type LiveCenterBoardView = {
   ownerActions: LiveCenterOwnerAction[];
   ownerActionGroups: LiveCenterOwnerActionGroup[];
   inboxGroups: LiveCenterInboxGroup[];
+  inboxItems: number;
   history: LiveCenterHistory;
   pagination: LiveCenterPagination;
   batch: LiveCenterBatch;
@@ -1013,6 +1014,11 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
       runId: asNumber(action.runId ?? action.run_id),
     }));
   const inboxGroups = buildInboxGroups(pullRequests, deploymentActions);
+  // The Inbox view's own total: every item in every group. The view
+  // prints this same sum ("N items waiting across G groups"), and
+  // the Inbox tab counter reads it from here, so the tab number and
+  // the view can never disagree.
+  const inboxItems = inboxGroups.reduce((sum, group) => sum + group.items.length, 0);
 
   const rawPagination = asRecord(board.pagination);
   const pagination: LiveCenterPagination = {
@@ -1035,6 +1041,7 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     ownerActions,
     ownerActionGroups,
     inboxGroups,
+    inboxItems,
     history: normalizeHistory(board.history),
     pagination,
     batch,
