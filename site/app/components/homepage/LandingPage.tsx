@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { billingAvailability } from "../../product-capabilities";
 import { InteractiveHero } from "./InteractiveHero";
-import { StatusSummary } from "../status/StatusHealth";
+import { StatusSummary } from "@/app/(english)/status/StatusHealth";
 import styles from "./landing.module.css";
 
 const contextStages = [
@@ -16,7 +16,7 @@ function SectionEyebrow({ children, light = false }: { children: React.ReactNode
   return <p className={`${styles.sectionEyebrow} ${light ? styles.sectionEyebrowLight : ""}`}>{children}</p>;
 }
 
-export default function Page() {
+export default function LandingPage() {
   return (
     <div className="bg-[#f5f6f4] text-[#102036]">
       <main>

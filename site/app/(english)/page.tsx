@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import LandingPage from "./landing/page";
+import LandingPage from "../components/homepage/LandingPage";
 import { alternatesForRoute } from "../i18n/seo";
 
 const homeTitle =
