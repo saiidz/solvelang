@@ -7,6 +7,7 @@ import {
   filterLiveCenterPullRequests,
   formatDurationMs,
   formatRelativeTime,
+  formatRelativeTimeWords,
   gateStateLabel,
   groupPullRequestsByStage,
   normalizeLiveCenterBoard,
@@ -291,6 +292,7 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     ownerActionGroups: [],
     inboxGroups: [],
     history: { merged: [], removed: [], daily: [], period: { days: 0, entered: 0, merged: 0, removed: 0 } },
+    automation: { state: "unknown", rulesVersion: "", lastEvaluatedAt: null, reposPaused: false },
     pagination: { total: 0, page: 1, perPage: 25, pages: 1 },
     batch: { proposed: false, size: 0, batchSize: 0, baseRef: "", members: [], blockedBy: null, stoppedReason: "" },
   };
@@ -528,4 +530,68 @@ test("the board page proves the session before fetching the board and handles th
   for (const heading of ["Overview", "Pull requests", "Queue", "Checks", "Runners", "Statistics", "Inbox", "Minutes"]) {
     assert.ok(board.includes(heading), `tab rendered: ${heading}`);
   }
+});
+
+test("normalizeLiveCenterBoard carries the automation proof-of-life block through", () => {
+  const view = normalizeLiveCenterBoard({
+    ...pilotBoard,
+    automation: {
+      state: "active",
+      rulesVersion: "pilot-0",
+      lastEvaluatedAt: "2026-11-10T03:33:14.266Z",
+      reposPaused: false,
+    },
+  });
+  assert.deepEqual(view.automation, {
+    state: "active",
+    rulesVersion: "pilot-0",
+    lastEvaluatedAt: "2026-11-10T03:33:14.266Z",
+    reposPaused: false,
+  });
+});
+
+test("normalizeLiveCenterBoard reports a paused repo as paused, from either field", () => {
+  const byState = normalizeLiveCenterBoard({
+    ...pilotBoard,
+    automation: { state: "paused", rulesVersion: "pilot-0", lastEvaluatedAt: null, reposPaused: true },
+  });
+  assert.equal(byState.automation.state, "paused");
+  assert.equal(byState.automation.reposPaused, true);
+  assert.equal(byState.automation.lastEvaluatedAt, null);
+  const byFlagOnly = normalizeLiveCenterBoard({
+    ...pilotBoard,
+    automation: { reposPaused: true },
+  });
+  assert.equal(byFlagOnly.automation.state, "paused");
+  assert.equal(byFlagOnly.automation.reposPaused, true);
+});
+
+test("normalizeLiveCenterBoard never invents automation state or times", () => {
+  // A payload from before the block existed: unknown, not "active".
+  const missing = normalizeLiveCenterBoard(pilotBoard);
+  assert.deepEqual(missing.automation, {
+    state: "unknown",
+    rulesVersion: "",
+    lastEvaluatedAt: null,
+    reposPaused: false,
+  });
+  // A timestamp that does not parse is dropped, not dressed up.
+  const malformed = normalizeLiveCenterBoard({
+    ...pilotBoard,
+    automation: { state: "active", rulesVersion: "pilot-0", lastEvaluatedAt: "not-a-date", reposPaused: false },
+  });
+  assert.equal(malformed.automation.lastEvaluatedAt, null);
+});
+
+test("formatRelativeTimeWords speaks in full words and stays honest about missing times", () => {
+  const now = new Date("2026-11-10T12:00:00.000Z");
+  assert.equal(formatRelativeTimeWords("2026-11-10T11:59:30.000Z", now), "just now");
+  assert.equal(formatRelativeTimeWords("2026-11-10T11:59:00.000Z", now), "1 minute ago");
+  assert.equal(formatRelativeTimeWords("2026-11-10T11:48:00.000Z", now), "12 minutes ago");
+  assert.equal(formatRelativeTimeWords("2026-11-10T11:00:00.000Z", now), "1 hour ago");
+  assert.equal(formatRelativeTimeWords("2026-11-10T08:00:00.000Z", now), "4 hours ago");
+  assert.equal(formatRelativeTimeWords("2026-11-09T12:00:00.000Z", now), "1 day ago");
+  assert.equal(formatRelativeTimeWords("2026-11-07T12:00:00.000Z", now), "3 days ago");
+  assert.equal(formatRelativeTimeWords(null, now), "");
+  assert.equal(formatRelativeTimeWords("not-a-date", now), "");
 });

@@ -250,3 +250,22 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("the Live Center Overview shows the automation proof of life", () => {
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  const model = read("app/account/core/live-center.ts");
+  // The model carries the pilot's automation block through, honestly.
+  assert.match(model, /automation: normalizeAutomation\(board\.automation\)/);
+  assert.match(model, /lastEvaluatedAt: last && Number\.isFinite\(Date\.parse\(last\)\) \? last : null/);
+  assert.match(model, /formatRelativeTimeWords/);
+  // The Overview renders it: pill, rules in force, last evaluation.
+  assert.match(board, />Automation</);
+  assert.match(board, />\s*Active\s*</);
+  assert.match(board, />\s*Paused\s*</);
+  assert.match(board, /Rules \{board\.automation\.rulesVersion\} in force/);
+  assert.match(board, /Planning is off for this repository/);
+  assert.match(board, /No evaluations recorded yet/);
+  // The absolute time rides the title attribute next to the relative words.
+  assert.match(board, /title=\{board\.automation\.lastEvaluatedAt\}/);
+  assert.match(board, /formatRelativeTimeWords\(board\.automation\.lastEvaluatedAt\)/);
+});
