@@ -519,19 +519,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/health
-            Method: GET
-        PublicStatusAccount:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/account
-            Method: GET
-        PublicStatusBilling:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/billing
+            Path: /public/status/{proxy+}
             Method: GET
         CustomerMagicLink:
           Type: HttpApi
@@ -579,13 +567,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/live-center/board
-            Method: GET
-        CustomerLiveCenterMinutes:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/live-center/minutes
+            Path: /customer/live-center/{proxy+}
             Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
@@ -669,13 +651,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/connect/repositories
-            Method: GET
-        CustomerConnectAudit:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/connect/audit
+            Path: /customer/connect/{proxy+}
             Method: GET
         SubscriptionCheckout:
           Type: HttpApi
