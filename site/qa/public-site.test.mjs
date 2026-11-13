@@ -250,3 +250,10 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("live center overview carries the queue panel with per-PR progress rows", () => {
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.match(board, /The queue/);
+  assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
+  assert.match(board, /showPosition \/>/);
+});
