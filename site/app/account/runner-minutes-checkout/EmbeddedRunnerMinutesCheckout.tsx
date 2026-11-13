@@ -38,7 +38,26 @@ type ElementsCheckoutResponse = {
   amountCents: number;
 };
 
-type Phase = "preparing" | "select" | "creating" | "pay" | "confirming" | "success-done";
+// Verification purchase: when the buyer supplies a valid verification
+// code, the Runner Minutes service credits the pack without Stripe and
+// answers with this shape instead of an Elements session — there is no
+// clientSecret and no charge. Contract as pinned with the runners
+// service build (Nov 12, 2026): verification: true, amountCents: 0,
+// pack, minutes.
+type VerificationCheckoutResponse = {
+  verification: true;
+  amountCents: 0;
+  pack: string;
+  minutes: number | null;
+};
+
+type CheckoutResponse = ElementsCheckoutResponse | VerificationCheckoutResponse;
+
+function isVerificationCheckoutResponse(result: CheckoutResponse): result is VerificationCheckoutResponse {
+  return "verification" in result && result.verification === true && result.amountCents === 0;
+}
+
+type Phase = "preparing" | "select" | "creating" | "pay" | "confirming" | "success-done" | "verified-done";
 
 function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -71,6 +90,8 @@ export function EmbeddedRunnerMinutesCheckout() {
   const [phase, setPhase] = useState<Phase>("preparing");
   const [error, setError] = useState("");
   const [payError, setPayError] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verified, setVerified] = useState<VerificationCheckoutResponse | null>(null);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -119,15 +140,31 @@ export function EmbeddedRunnerMinutesCheckout() {
     setPayError("");
     try {
       const requestId = persistApiCheckoutRequestId(window.location, window.history, newRequestId);
-      const result = await customerApi<ElementsCheckoutResponse>(
+      // The verification code rides along only when one was actually
+      // entered; with no code the request body is exactly today's.
+      const trimmedCode = verificationCode.trim();
+      const result = await customerApi<CheckoutResponse>(
         RUNNERS_API_BASE,
         "/customer/runner-minutes/elements-checkout",
         {
           method: "POST",
           csrfToken: account.csrfToken,
-          body: JSON.stringify({ pack: pack.key, requestId }),
+          body: JSON.stringify(
+            trimmedCode
+              ? { pack: pack.key, requestId, verificationCode: trimmedCode }
+              : { pack: pack.key, requestId },
+          ),
         },
       );
+      // A verification purchase never touches Stripe: the service has
+      // already credited the pack, so go straight to the $0.00 success.
+      // A rejected code throws from customerApi like any other service
+      // error and lands in the catch below, leaving the paid path as is.
+      if (isVerificationCheckoutResponse(result)) {
+        setVerified(result);
+        setPhase("verified-done");
+        return;
+      }
       if (!result.clientSecret || !result.publishableKey) throw new Error("Stripe checkout did not return a secure payment session.");
       const stripe = await loadStripe(result.publishableKey);
       if (!stripe) throw new Error("Stripe checkout could not be loaded.");
@@ -276,6 +313,22 @@ export function EmbeddedRunnerMinutesCheckout() {
                     <p className="mt-6 text-sm leading-6 text-slate-600">
                       Due today: <strong className="text-slate-950">${pack.totalDollars}.00</strong> for {pack.label.toLowerCase()}. This is a one-time purchase — nothing renews and nothing is charged again unless you buy more.
                     </p>
+                    <label htmlFor="runner-minutes-verification-code" className="mt-6 block text-sm font-semibold text-slate-700">
+                      Have a verification code?
+                    </label>
+                    <input
+                      id="runner-minutes-verification-code"
+                      type="text"
+                      value={verificationCode}
+                      onChange={(event) => setVerificationCode(event.target.value)}
+                      placeholder="Enter your code"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 placeholder:text-slate-400 focus:border-cyan-600 focus:outline-none"
+                    />
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      If your code covers this pack, we credit the minutes right away and charge $0.00 — no card needed. Leave it empty to pay as usual.
+                    </p>
                     <button
                       type="button"
                       disabled={busy}
@@ -294,6 +347,19 @@ export function EmbeddedRunnerMinutesCheckout() {
             {phase === "success-done" ? (
               <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
                 <p>Payment received. Your {pack.label.toLowerCase()} are credited as soon as Stripe confirms — usually a few seconds — and appear in your account balance, ready for the recommendation step below.</p>
+              </div>
+            ) : null}
+
+            {phase === "verified-done" && verified ? (
+              <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
+                <p>
+                  Verification code accepted — <strong>{dollars(verified.amountCents)} charged</strong>.{" "}
+                  {verified.minutes !== null ? (
+                    <>Your {verified.minutes.toLocaleString("en-US")} minutes are credited to your account balance, ready to use.</>
+                  ) : (
+                    <>Your {pack.label.toLowerCase()} are credited to your account balance, ready to use.</>
+                  )}
+                </p>
               </div>
             ) : null}
 
