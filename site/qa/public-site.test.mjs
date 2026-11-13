@@ -250,3 +250,11 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("the runners view renders the registered fleet when the payload carries it", () => {
+  const runs = read("app/account/live-center/LiveCenterRuns.tsx");
+  assert.match(runs, /Your full runner fleet/);
+  assert.match(runs, /board\.fleet\.available/);
+  assert.match(runs, /board\.fleet\.runners\.map/);
+  assert.match(runs, /Repository Administration, read-only/);
+});
