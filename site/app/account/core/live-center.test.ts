@@ -287,6 +287,7 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     activity: [],
     runs: [],
     runners: { busy: [], runningUnassigned: 0, queuedJobs: [], busyCount: 0, waitingCount: 0 },
+    fleet: { available: false, total: null, online: 0, busy: 0, runners: [] },
     ownerActions: [],
     ownerActionGroups: [],
     inboxGroups: [],
