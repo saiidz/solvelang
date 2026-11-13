@@ -292,6 +292,7 @@ test("runner minutes verified success shows $0.00 and the credited minutes, and 
   // required, and the not-configured notice still reads as before.
   assert.match(checkout, /if \(!result\.clientSecret \|\| !result\.publishableKey\) throw new Error\("Stripe checkout did not return a secure payment session\."\);/);
   assert.match(checkout, /Runner Minutes checkout is being switched on\. The packs and prices above are final/);
+});
 
 test("runner minutes buy page shows the selection and the honest not-yet-on state at the point of selection", () => {
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
