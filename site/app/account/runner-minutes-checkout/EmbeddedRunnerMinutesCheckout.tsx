@@ -23,12 +23,12 @@ import {
 
 // The account session is gated against the account API (like every
 // account page); the purchase itself is served by the Runner Minutes
-// service at its own base URL. Until that base is configured, the page
-// renders the full catalogue and terms with checkout in its
-// being-switched-on state — the launch flip is configuration, not a
-// page change.
+// service at its own base URL. The service's production home is
+// https://runners.solve-lang.com — the page points there by default;
+// NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL overrides the base when set
+// (for example in a test environment).
 const ACCOUNT_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
-const RUNNERS_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL);
+const RUNNERS_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL || "https://runners.solve-lang.com");
 const CHECKOUT_CONFIGURED = RUNNERS_API_BASE !== "";
 
 type ElementsCheckoutResponse = {
