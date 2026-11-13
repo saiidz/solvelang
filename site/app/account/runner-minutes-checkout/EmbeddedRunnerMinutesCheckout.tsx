@@ -217,7 +217,11 @@ export function EmbeddedRunnerMinutesCheckout() {
             <div className="mb-5 px-2 pt-2">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Secure payment</p>
               <h2 className="mt-2 text-2xl font-bold">Buy runner minutes</h2>
-              <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe. Minutes are credited as soon as Stripe confirms your payment — usually a few seconds.</p>
+              {CHECKOUT_CONFIGURED ? (
+                <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe. Minutes are credited as soon as Stripe confirms your payment — usually a few seconds.</p>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">Choose a pack below — the packs and prices are final. Payment is not switched on yet: when sales open, it switches on right here on this page, with the payment form inside SolveLang and securely provided by Stripe.</p>
+              )}
             </div>
 
             {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
@@ -259,9 +263,14 @@ export function EmbeddedRunnerMinutesCheckout() {
                 </fieldset>
 
                 {!CHECKOUT_CONFIGURED ? (
-                  <div className="mt-6 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm font-medium text-cyan-900">
-                    <p>Runner Minutes checkout is being switched on. The packs and prices above are final — when sales open, payment switches on right here on this page.</p>
-                  </div>
+                  <>
+                    <p className="mt-6 text-sm leading-6 text-slate-600" aria-live="polite">
+                      Selected: <strong className="text-slate-950">{pack.label} — ${pack.totalDollars}</strong>
+                    </p>
+                    <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm font-medium text-cyan-900">
+                      <p>Runner Minutes checkout is being switched on. The packs and prices above are final — when sales open, payment switches on right here on this page.</p>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <p className="mt-6 text-sm leading-6 text-slate-600">
