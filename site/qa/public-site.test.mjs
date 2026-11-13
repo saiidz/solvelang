@@ -292,4 +292,26 @@ test("runner minutes verified success shows $0.00 and the credited minutes, and 
   // required, and the not-configured notice still reads as before.
   assert.match(checkout, /if \(!result\.clientSecret \|\| !result\.publishableKey\) throw new Error\("Stripe checkout did not return a secure payment session\."\);/);
   assert.match(checkout, /Runner Minutes checkout is being switched on\. The packs and prices above are final/);
+
+test("runner minutes buy page shows the selection and the honest not-yet-on state at the point of selection", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The header copy branches on the configuration state: only the
+  // configured copy may promise the Stripe payment form.
+  assert.match(checkout, /\{CHECKOUT_CONFIGURED \? \(/);
+  assert.match(checkout, /Payment is not switched on yet: when sales open, it switches on right here on this page/);
+  // In the unconfigured block, the selection echo sits directly above the
+  // switched-on notice, and the block renders no button at all — the
+  // honest message is the state, never a fake disabled Continue.
+  const start = checkout.indexOf("{!CHECKOUT_CONFIGURED ? (");
+  assert.ok(start >= 0, "the unconfigured selection block exists");
+  const block = checkout.slice(start, checkout.indexOf(") : (", start));
+  const echoAt = block.indexOf("Selected:");
+  const noticeAt = block.indexOf("Runner Minutes checkout is being switched on");
+  assert.ok(echoAt >= 0 && noticeAt > echoAt, "the selection echo sits directly above the switched-on notice");
+  assert.match(block, /\{pack\.label\} — \$\{pack\.totalDollars\}/);
+  assert.doesNotMatch(block, /<button/);
+  // Continue to payment exists exactly once — inside the configured
+  // branch — and starting payment stays impossible while unconfigured.
+  assert.equal(checkout.split("Continue to payment").length - 1, 1);
+  assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
 });
