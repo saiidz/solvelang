@@ -250,3 +250,8 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+
+test("runner minutes checkout points at the live service by default", () => {
+  const component = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+});
