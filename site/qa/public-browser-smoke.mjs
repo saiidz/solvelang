@@ -192,8 +192,8 @@ try {
 
     await navigate("/run/");
     await fill("#solve-preview-source", generatedScript);
-    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Run preview').click()`);
-    await waitFor(() => evaluate(`document.querySelector('[aria-labelledby="output-heading"] pre')?.textContent !== 'Run the preview to see output here.'`), "Generated planning script did not produce a runtime result");
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim() === 'Run').click()`);
+    await waitFor(() => evaluate(`document.querySelector('[aria-labelledby="output-heading"] pre')?.textContent !== 'Run the workspace to see output here.'`), "Generated planning script did not produce a runtime result");
     const result = await evaluate(`document.querySelector('[aria-labelledby="output-heading"] pre').textContent`);
     assert.ok(!result.startsWith("Error:"), `Canonical runtime rejected generated planning script: ${result}`);
     assert.ok(result.includes("Review this proposed workflow before connecting production"), "Canonical runtime did not execute the actual generated script");
