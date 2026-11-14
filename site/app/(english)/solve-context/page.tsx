@@ -7,27 +7,27 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://www.solve-lang.com/solve-context/" },
 };
 
-const code = "rounded bg-slate-200/70 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-900";
+const code = "rounded bg-panel-alt/70 px-1.5 py-0.5 font-mono text-[0.9em] text-ink";
 
 export default function SolveContextPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-canvas text-ink">
       <section className="mx-auto max-w-4xl px-6 py-14 sm:py-20">
-        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-blue-700">
+        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-accent">
           <Link href="/">SolveLang</Link>
           <Link href="/technical-evidence/">Technical evidence</Link>
           <Link href="/mcp-setup/">MCP setup</Link>
         </nav>
-        <header className="mt-10 border-b border-slate-200 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">SolveLang documentation</p>
+        <header className="mt-10 border-b border-line pb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">SolveLang documentation</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Solve Context v0</h1>
         </header>
 
         <div className="mt-10 space-y-10">
           <section aria-labelledby="current-verification">
             <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-09-20</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
-              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-blue-700 underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
+            <div className="mt-4 space-y-4 leading-7 text-body">
+              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
               <p>Status: <strong>implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.3.0 package; not yet proven by complete real-agent/provider measurements</strong></p>
               <p>Tracking epic: #898</p>
               <p>Repository status reconciled through #920 on 2026-09-15.</p>
@@ -36,7 +36,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="purpose">
             <h2 id="purpose" className="text-2xl font-semibold tracking-tight">Purpose</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Solve Context is a separate product layer for Claude Code and Codex. It is not part of SolveLang language semantics and it is not Solve Runners. SolveLang can dogfood it, but the context engine is designed for arbitrary repositories.</p>
               <p>The product thesis is: <strong>prevent irrelevant context from being read first; compact only when necessary and only when correctness can be preserved.</strong></p>
             </div>
@@ -44,7 +44,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="implemented-today">
             <h2 id="implemented-today" className="text-2xl font-semibold tracking-tight">Implemented today</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Current repository source includes:</p>
               <ol className="list-decimal space-y-2 pl-6">
                 <li><code className={code}>solvelang_context_plan</code> — bounded deterministic task-aware planning;</li>
@@ -64,7 +64,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="what-is-not-established-yet">
             <h2 id="what-is-not-established-yet" className="text-2xl font-semibold tracking-tight">What is not established yet</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The repository does <strong>not</strong> currently establish:</p>
               <ul className="list-disc space-y-2 pl-6">
                 <li>verified managed-workspace installation or public Plugin Directory listing for the published MCP v0.3.0 package;</li>
@@ -82,7 +82,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="context-pack-contract">
             <h2 id="context-pack-contract" className="text-2xl font-semibold tracking-tight">Context-pack contract</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>A context pack contains:</p>
               <ul className="list-disc space-y-2 pl-6">
                 <li>a schema identifier;</li>
@@ -103,7 +103,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="selection-behavior">
             <h2 id="selection-behavior" className="text-2xl font-semibold tracking-tight">Selection behavior</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Selection is local and deterministic. It combines lexical evidence with optional explicit changed paths and an optional supplied Solve Graph. Current behavior includes:</p>
               <ul className="list-disc space-y-2 pl-6">
                 <li>local task-token/path/source matching;</li>
@@ -125,36 +125,36 @@ export default function SolveContextPage() {
             <div className="mt-6 space-y-8">
               <section aria-labelledby="local-first-and-read-only">
                 <h3 id="local-first-and-read-only" className="text-xl font-semibold tracking-tight">Local-first and read-only</h3>
-                <p className="mt-3 leading-7 text-slate-700">Context optimization does not imply a model call, network call, repository write, credential read, dependency installation or repository-source execution.</p>
+                <p className="mt-3 leading-7 text-body">Context optimization does not imply a model call, network call, repository write, credential read, dependency installation or repository-source execution.</p>
               </section>
               <section aria-labelledby="source-identity">
                 <h3 id="source-identity" className="text-xl font-semibold tracking-tight">Source identity</h3>
-                <p className="mt-3 leading-7 text-slate-700">Every selected excerpt retains complete-source and excerpt identity. Retrieval rejects stale source when the workspace content no longer matches the handle.</p>
+                <p className="mt-3 leading-7 text-body">Every selected excerpt retains complete-source and excerpt identity. Retrieval rejects stale source when the workspace content no longer matches the handle.</p>
               </section>
               <section aria-labelledby="path-and-privacy-bounds">
                 <h3 id="path-and-privacy-bounds" className="text-xl font-semibold tracking-tight">Path and privacy bounds</h3>
-                <p className="mt-3 leading-7 text-slate-700">Paths are normalized workspace-relative identities; unsafe/traversal-style paths and likely sensitive paths are rejected according to the reviewed runtime policy. Workspace discovery remains bounded.</p>
+                <p className="mt-3 leading-7 text-body">Paths are normalized workspace-relative identities; unsafe/traversal-style paths and likely sensitive paths are rejected according to the reviewed runtime policy. Workspace discovery remains bounded.</p>
               </section>
               <section aria-labelledby="budget-truth">
                 <h3 id="budget-truth" className="text-xl font-semibold tracking-tight">Budget truth</h3>
-                <p className="mt-3 leading-7 text-slate-700"><code className={code}>selectedBytes</code> is measured from exact UTF-8 content. Content that cannot fit is omitted or represented by an explicitly bounded exact fragment according to the reviewed algorithm; no hidden summary is presented as exact source.</p>
+                <p className="mt-3 leading-7 text-body"><code className={code}>selectedBytes</code> is measured from exact UTF-8 content. Content that cannot fit is omitted or represented by an explicitly bounded exact fragment according to the reviewed algorithm; no hidden summary is presented as exact source.</p>
               </section>
               <section aria-labelledby="provider-cache-truth">
                 <h3 id="provider-cache-truth" className="text-xl font-semibold tracking-tight">Provider/cache truth</h3>
-                <p className="mt-3 leading-7 text-slate-700">Current context-pack operation does not mutate provider request prefixes. Future safe-mode measurement requires <code className={code}>cacheHotBytesChanged: 0</code> to be measured, not inferred from missing data.</p>
+                <p className="mt-3 leading-7 text-body">Current context-pack operation does not mutate provider request prefixes. Future safe-mode measurement requires <code className={code}>cacheHotBytesChanged: 0</code> to be measured, not inferred from missing data.</p>
               </section>
             </div>
           </section>
 
           <section aria-labelledby="evaluation-status">
             <h2 id="evaluation-status" className="text-2xl font-semibold tracking-tight">Evaluation status</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The evaluation stack now has three layers:</p>
             </div>
             <div className="mt-6 space-y-8">
               <section aria-labelledby="synthetic-deterministic-suite">
                 <h3 id="synthetic-deterministic-suite" className="text-xl font-semibold tracking-tight">Synthetic deterministic suite</h3>
-                <div className="mt-3 space-y-4 leading-7 text-slate-700">
+                <div className="mt-3 space-y-4 leading-7 text-body">
                   <p>Covers all six acceptance categories:</p>
                   <ul className="list-disc space-y-2 pl-6">
                     <li>monorepo bug fix;</li>
@@ -169,7 +169,7 @@ export default function SolveContextPage() {
               </section>
               <section aria-labelledby="pinned-source-regressions">
                 <h3 id="pinned-source-regressions" className="text-xl font-semibold tracking-tight">Pinned source regressions</h3>
-                <div className="mt-3 space-y-4 leading-7 text-slate-700">
+                <div className="mt-3 space-y-4 leading-7 text-body">
                   <ul className="list-disc space-y-2 pl-6">
                     <li>first-party SolveLang source subset;</li>
                     <li>independent external subsets from Chalk and node-fetch.</li>
@@ -179,7 +179,7 @@ export default function SolveContextPage() {
               </section>
               <section aria-labelledby="real-agent-record-report-contract">
                 <h3 id="real-agent-record-report-contract" className="text-xl font-semibold tracking-tight">Real-agent record/report contract</h3>
-                <div className="mt-3 space-y-4 leading-7 text-slate-700">
+                <div className="mt-3 space-y-4 leading-7 text-body">
                   <p>Future separately authorized baseline-vs-Solve-Context runs can be summarized only when records pass strict identity and measurement validation. <code className={code}>benchmarkEvidenceComplete</code> remains false until measured pairs cover all six categories, both Claude and Codex, both handoff directions, no quality regression, provider-reported tokens for every measured pair, measured latency, measured selection precision/recall and measured zero safe-mode cache-hot mutation for every context arm.</p>
                   <p>Even a complete engineering matrix keeps publication/public-percentage authorization false until separately approved.</p>
                 </div>
@@ -189,7 +189,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="distribution-truth">
             <h2 id="distribution-truth" className="text-2xl font-semibold tracking-tight">Distribution truth</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>MCP <code className={code}>@solvelang/mcp-server@0.3.0</code> is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
               <p>External distribution verification remains a distinct milestone from repository source/tag state.</p>
             </div>
@@ -197,7 +197,7 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="projected-next-work">
             <h2 id="projected-next-work" className="text-2xl font-semibold tracking-tight">Projected next work</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>These are priorities, not promised dates:</p>
               <ol className="list-decimal space-y-2 pl-6">
                 <li>add broader independent/blinded repository fixtures without weakening budgets/evidence;</li>
@@ -212,14 +212,14 @@ export default function SolveContextPage() {
 
           <section aria-labelledby="optional-provider-proxy-boundary">
             <h2 id="optional-provider-proxy-boundary" className="text-2xl font-semibold tracking-tight">Optional provider proxy boundary</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>A provider proxy is not part of current v0 activation. If later approved, it must be fixture-locked for raw-byte/streaming fidelity: untouched material byte-identical, cache-hot prefixes preserved, Anthropic cache-control boundaries respected, OpenAI Responses fields such as <code className={code}>phase</code> preserved, numeric/tool/content ordering stable, UTF-8 handled at byte boundaries and streaming errors/termination truth retained. If safe transformation cannot be proven, optimization must fail open to the original content.</p>
             </div>
           </section>
 
           <section aria-labelledby="success-criterion">
             <h2 id="success-criterion" className="text-2xl font-semibold tracking-tight">Success criterion</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Solve Context succeeds when Claude and Codex complete coding tasks with less irrelevant context <strong>without measurable quality regression</strong>, while exact source evidence remains recoverable and provider/cache behavior stays truthful. Compression percentage alone is not the product goal.</p>
             </div>
           </section>
