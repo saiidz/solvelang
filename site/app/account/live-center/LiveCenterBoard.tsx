@@ -1,11 +1,11 @@
 "use client";
 
-// The Live Center board: one signed-in page with eight tabs —
+// The Live Center board: one signed-in page with nine tabs —
 // Overview, Pull requests, Queue, Checks, Runners, Statistics,
-// Inbox, and Minutes — fed by the Merge Governance pilot through
-// the session-gated api-access proxy. The session is proven first
-// (GET /customer/account); the board is never requested without it,
-// and there is no guest view.
+// Configuration, Inbox, and Minutes — fed by the Merge Governance
+// pilot through the session-gated api-access proxy. The session is
+// proven first (GET /customer/account); the board is never requested
+// without it, and there is no guest view.
 //
 // Header controls, in plain words: Pause stops the automatic
 // refresh while you read; Freeze pins the page to the snapshot on
@@ -42,6 +42,7 @@ import {
 import { LiveCenterQueue } from "@/app/account/live-center/LiveCenterQueue";
 import { LiveCenterRuns, LiveCenterRunners } from "@/app/account/live-center/LiveCenterRuns";
 import { LiveCenterStats } from "@/app/account/live-center/LiveCenterStats";
+import { LiveCenterConfig } from "@/app/account/live-center/LiveCenterConfig";
 import { LiveCenterInbox } from "@/app/account/live-center/LiveCenterInbox";
 import { LiveCenterMinutes } from "@/app/account/live-center/LiveCenterMinutes";
 
@@ -49,7 +50,7 @@ const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const REFRESH_MS = 60_000;
 
 type Phase = "loading" | "ready" | "not-configured" | "signed-out" | "error";
-type TabId = "overview" | "prs" | "queue" | "runs" | "runners" | "stats" | "inbox" | "minutes";
+type TabId = "overview" | "prs" | "queue" | "runs" | "runners" | "stats" | "config" | "inbox" | "minutes";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -58,6 +59,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "runs", label: "Checks" },
   { id: "runners", label: "Runners" },
   { id: "stats", label: "Statistics" },
+  { id: "config", label: "Configuration" },
   { id: "inbox", label: "Inbox" },
   { id: "minutes", label: "Minutes" },
 ];
@@ -943,6 +945,7 @@ export function LiveCenterBoard() {
           {tab === "runs" ? <LiveCenterRuns board={board} /> : null}
           {tab === "runners" ? <LiveCenterRunners board={board} /> : null}
           {tab === "stats" ? <LiveCenterStats board={board} /> : null}
+          {tab === "config" ? <LiveCenterConfig board={board} /> : null}
           {tab === "inbox" ? <LiveCenterInbox board={board} /> : null}
           {tab === "minutes" && minutes ? <LiveCenterMinutes minutes={minutes} /> : null}
           {tab === "minutes" && !minutes ? (
