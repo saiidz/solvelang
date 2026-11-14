@@ -336,3 +336,34 @@ test("the runners view renders the registered fleet when the payload carries it"
   assert.match(runs, /board\.fleet\.runners\.map/);
   assert.match(runs, /Repository Administration, read-only/);
 });
+
+test("runner minutes admin page exists, is noindexed, and carries the owner controls", () => {
+  const page = read("app/(english)/account/runner-minutes-admin/page.tsx");
+  // The owner panel is a real page, noindexed like its sibling
+  // account pages, rendering the admin component.
+  assert.match(page, /robots: \{ index: false, follow: false \}/);
+  assert.match(page, /<RunnerMinutesAdmin \/>/);
+  const panel = read("app/account/runner-minutes-admin/RunnerMinutesAdmin.tsx");
+  // It reads the owner proxy's account list and shows balances and
+  // status in plain words, with the account id labeled, never raw.
+  assert.match(panel, /ADMIN_ACCOUNTS_PATH/);
+  assert.match(panel, /Account ID:/);
+  assert.match(panel, /Standard minutes/);
+  assert.match(panel, /High-power minutes/);
+  assert.match(panel, /Paused/);
+  assert.match(panel, /Active/);
+  // The four owner controls are all there.
+  assert.match(panel, /Add minutes/);
+  assert.match(panel, /Take minutes/);
+  assert.match(panel, /Pause account/);
+  assert.match(panel, /Resume account/);
+  // Destructive actions pass an explicit confirm step before firing.
+  assert.match(panel, /Yes, take them/);
+  assert.match(panel, /Yes, pause it/);
+  assert.match(panel, /This cannot be undone/);
+  // Anyone who is not the owner gets the plain not-available state.
+  assert.match(panel, /This page is not available for your account\./);
+  // The admin token is a server-side secret: nothing in the page may
+  // ever name it or the upstream admin surface.
+  assert.doesNotMatch(panel, /ADMIN_TOKEN|x-admin-token|\/admin\/accounts/);
+});
