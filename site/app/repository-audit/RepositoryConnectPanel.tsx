@@ -129,14 +129,14 @@ export function RepositoryConnectPanel() {
     }
   }
 
-  const inputClasses = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none";
-  const labelClasses = "block text-sm font-semibold text-slate-800";
+  const inputClasses = "w-full rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none";
+  const labelClasses = "block text-sm font-semibold text-body";
 
   return (
-    <section className="mb-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40 sm:p-8" aria-label="Connect a repository with GitHub">
-      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Connect a repository</p>
+    <section className="mb-8 rounded-[2rem] border border-line bg-panel p-6 shadow-xl shadow-slate-200/40 sm:p-8" aria-label="Connect a repository with GitHub">
+      <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Connect a repository</p>
       <h2 className="mt-2 text-2xl font-semibold tracking-tight">Connect a repository with GitHub</h2>
-      <p className="mt-3 max-w-2xl leading-7 text-slate-600">
+      <p className="mt-3 max-w-2xl leading-7 text-muted">
         Install the SolveLang Process Solution app on a repository and the audit runs on the connected
         repo — the app connection is the sign-in, and nothing is uploaded. Prefer not to connect?
         The archive upload below stays as the no-connect option.
@@ -146,21 +146,21 @@ export function RepositoryConnectPanel() {
           href={PRODUCT_APP_INSTALL_URL}
           target="_blank"
           rel="noreferrer"
-          className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+          className="rounded-xl bg-canvas px-5 py-3 text-sm font-semibold text-ink hover:bg-panel-alt"
         >
           Connect with GitHub
         </a>
-        <span className="text-sm text-slate-500">You choose the repositories on GitHub. Read-only audit summary; no file contents leave GitHub.</span>
+        <span className="text-sm text-muted">You choose the repositories on GitHub. Read-only audit summary; no file contents leave GitHub.</span>
       </div>
 
-      <div className="mt-8 border-t border-slate-200 pt-6">
+      <div className="mt-8 border-t border-line pt-6">
         <h3 className="text-lg font-semibold tracking-tight">Audit a connected repository</h3>
         {session === "checking" ? (
-          <p className="mt-3 text-sm text-slate-500">Checking your session…</p>
+          <p className="mt-3 text-sm text-muted">Checking your session…</p>
         ) : session === "signed-out" ? (
-          <p className="mt-3 text-sm leading-6 text-slate-600">
+          <p className="mt-3 text-sm leading-6 text-muted">
             Sign in to read a connected repository&apos;s audit.{" "}
-            <Link href="/account/api-keys/" className="font-semibold text-blue-700 hover:text-blue-900">Sign in to your account</Link>
+            <Link href="/account/api-keys/" className="font-semibold text-accent hover:text-accent">Sign in to your account</Link>
           </p>
         ) : (
           <>
@@ -192,7 +192,7 @@ export function RepositoryConnectPanel() {
                 type="button"
                 onClick={() => void loadRepositories()}
                 disabled={busy !== null}
-                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                className="rounded-xl border border-line-strong bg-panel px-4 py-2 text-sm font-semibold text-body hover:bg-panel-alt disabled:opacity-60"
               >
                 {busy === "repos" ? "Loading…" : "List connected repositories"}
               </button>
@@ -200,7 +200,7 @@ export function RepositoryConnectPanel() {
                 type="button"
                 onClick={() => void runAudit()}
                 disabled={busy !== null}
-                className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                className="rounded-xl bg-canvas px-4 py-2 text-sm font-semibold text-ink hover:bg-panel-alt disabled:opacity-60"
               >
                 {busy === "audit" ? "Reading…" : "Run repository audit"}
               </button>
@@ -213,10 +213,10 @@ export function RepositoryConnectPanel() {
                     <button
                       type="button"
                       onClick={() => setRepoRaw(repo.fullName)}
-                      className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:border-slate-400"
+                      className="flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-canvas px-4 py-3 text-left hover:border-line-strong"
                     >
-                      <span className="text-sm font-semibold text-slate-900">{repo.fullName}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-sm font-semibold text-ink">{repo.fullName}</span>
+                      <span className="text-xs text-muted">
                         {repo.private ? "Private" : "Public"} · default branch {repo.defaultBranch ?? "unknown"}
                       </span>
                     </button>
@@ -226,43 +226,43 @@ export function RepositoryConnectPanel() {
             ) : null}
 
             {audit ? (
-              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <div className="mt-6 rounded-2xl border border-line bg-canvas p-5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-base font-semibold text-slate-900">{audit.repo.fullName}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-base font-semibold text-ink">{audit.repo.fullName}</p>
+                  <p className="text-xs text-muted">
                     {audit.repo.private ? "Private" : "Public"} · default branch {audit.repo.defaultBranch ?? "unknown"}
                   </p>
                 </div>
-                {audit.repo.description ? <p className="mt-2 text-sm leading-6 text-slate-600">{audit.repo.description}</p> : null}
+                {audit.repo.description ? <p className="mt-2 text-sm leading-6 text-muted">{audit.repo.description}</p> : null}
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                  <div className="rounded-xl bg-white p-3">
-                    <dt className="text-slate-500">Open pull requests</dt>
-                    <dd className="mt-1 text-lg font-semibold text-slate-900">{audit.queue.openPrs}</dd>
+                  <div className="rounded-xl bg-panel p-3">
+                    <dt className="text-muted">Open pull requests</dt>
+                    <dd className="mt-1 text-lg font-semibold text-ink">{audit.queue.openPrs}</dd>
                   </div>
-                  <div className="rounded-xl bg-white p-3">
-                    <dt className="text-slate-500">Draft pull requests</dt>
-                    <dd className="mt-1 text-lg font-semibold text-slate-900">{audit.queue.drafts}</dd>
+                  <div className="rounded-xl bg-panel p-3">
+                    <dt className="text-muted">Draft pull requests</dt>
+                    <dd className="mt-1 text-lg font-semibold text-ink">{audit.queue.drafts}</dd>
                   </div>
-                  <div className="rounded-xl bg-white p-3">
-                    <dt className="text-slate-500">Checks reachable</dt>
-                    <dd className="mt-1 text-lg font-semibold text-slate-900">{audit.checksReachable ? "Yes" : "No"}</dd>
+                  <div className="rounded-xl bg-panel p-3">
+                    <dt className="text-muted">Checks reachable</dt>
+                    <dd className="mt-1 text-lg font-semibold text-ink">{audit.checksReachable ? "Yes" : "No"}</dd>
                   </div>
                 </dl>
                 {audit.languages.length > 0 ? (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {audit.languages.map((language) => (
-                      <span key={language} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700">{language}</span>
+                      <span key={language} className="rounded-full border border-line bg-panel px-3 py-1 text-xs font-medium text-body">{language}</span>
                     ))}
                   </div>
                 ) : null}
                 {audit.tree.length > 0 ? (
                   <div className="mt-4">
-                    <p className="text-sm font-semibold text-slate-800">Top level</p>
-                    <ul className="mt-2 grid gap-1 text-sm text-slate-600 sm:grid-cols-2">
+                    <p className="text-sm font-semibold text-body">Top level</p>
+                    <ul className="mt-2 grid gap-1 text-sm text-muted sm:grid-cols-2">
                       {audit.tree.map((entry) => (
-                        <li key={entry.name} className="flex justify-between gap-3 rounded-lg bg-white px-3 py-2">
+                        <li key={entry.name} className="flex justify-between gap-3 rounded-lg bg-panel px-3 py-2">
                           <span className="break-all">{entry.name}</span>
-                          <span className="text-xs uppercase tracking-wide text-slate-400">{entry.type === "tree" ? "Folder" : "File"}</span>
+                          <span className="text-xs uppercase tracking-wide text-muted">{entry.type === "tree" ? "Folder" : "File"}</span>
                         </li>
                       ))}
                     </ul>
@@ -272,8 +272,8 @@ export function RepositoryConnectPanel() {
             ) : null}
           </>
         )}
-        {notice ? <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-900">{notice}</div> : null}
-        {error ? <div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">{error}</div> : null}
+        {notice ? <div className="mt-5 rounded-2xl border border-accent bg-accent-soft p-4 text-sm font-medium text-accent">{notice}</div> : null}
+        {error ? <div role="alert" className="mt-5 rounded-2xl border border-danger bg-danger-soft p-4 text-sm font-medium text-danger">{error}</div> : null}
       </div>
     </section>
   );
