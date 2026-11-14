@@ -598,6 +598,7 @@ test("account sidebar carries both approved groups in order with exact plain-lin
     "/check/",
     "/repository-audit/",
     "/server-audit/",
+    "/audit/",
     "/run/",
     "/process-solution/",
   ]);
@@ -612,6 +613,7 @@ test("account sidebar carries both approved groups in order with exact plain-lin
     "Workflow check",
     "Repository audit",
     "Server audit",
+    "Audit",
     "Run in browser",
     "Process Solution",
   ]);
@@ -626,19 +628,19 @@ test("account sidebar carries both approved groups in order with exact plain-lin
   assert.doesNotMatch(board, /searchParams|URLSearchParams/);
 });
 
-test("sidebar active state follows the current page across both groups, and /audit/ highlights nothing", () => {
+test("sidebar active state follows the current page across both groups", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   // Every Work entry matches its own route prefix; account entries
   // match only /account routes, so a tool page can never falsely
   // highlight an account entry (and vice versa).
-  for (const target of ["/studio", "/check", "/repository-audit", "/server-audit", "/run", "/process-solution"]) {
+  for (const target of ["/studio", "/check", "/repository-audit", "/server-audit", "/audit", "/run", "/process-solution"]) {
     assert.ok(sidebar.includes("onPath(" + JSON.stringify(target) + ")"), target);
   }
   assert.match(sidebar, /aria-current=\{active \? "page" : undefined\}/);
-  // /audit/ has no entry in either group: it must not appear as a
-  // target and must not be mapped onto Repository audit.
-  assert.doesNotMatch(sidebar, /href: "\/audit\/"/);
-  assert.doesNotMatch(sidebar, /onPath\("\/audit"\)/);
+  // /audit/ carries its own Work entry (owner order Nov 14, 2026):
+  // it appears as a target with its own active mapping.
+  assert.match(sidebar, /href: "\/audit\/"/);
+  assert.match(sidebar, /onPath\("\/audit"\)/);
 });
 
 test("account sidebar is a full-height left column attached to the edge, and a wrapping strip on phones", () => {
@@ -675,7 +677,7 @@ test("tool pages shell wraps only the signed-in work routes with the shared side
   assert.match(layout, /<ToolPagesShell>\{children\}<\/ToolPagesShell>/);
   const shell = read("app/components/ToolPagesShell.tsx");
   // Route gate: exactly the work/tool pages plus the Studio
-  // workspace (and /audit/, which is wrapped but highlights nothing).
+  // workspace (and /audit/, which carries its own sidebar entry).
   for (const route of ["/studio", "/check", "/repository-audit", "/server-audit", "/audit", "/run", "/process-solution"]) {
     assert.ok(shell.includes("\"" + route + "\""), route);
   }
@@ -694,7 +696,7 @@ test("tool pages shell wraps only the signed-in work routes with the shared side
   assert.match(shell, /<div className="order-2 min-w-0 flex-1">\{children\}<\/div>/);
 });
 
-test("tool pages stack carries the same sidebar with both plain-line groups and no /audit/ entry", () => {
+test("tool pages stack carries the same sidebar with both plain-line groups and the Audit entry", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   assert.match(sidebar, /head: "Your account", entries: ACCOUNT_ENTRIES/);
   assert.match(sidebar, /head: "Work", entries: WORK_ENTRIES/);
@@ -709,6 +711,7 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
     "/check/",
     "/repository-audit/",
     "/server-audit/",
+    "/audit/",
     "/run/",
     "/process-solution/",
   ]);
@@ -723,11 +726,12 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
     "Workflow check",
     "Repository audit",
     "Server audit",
+    "Audit",
     "Run in browser",
     "Process Solution",
   ]);
   assert.doesNotMatch(sidebar, /sub: "|entry\.sub|buy-minutes|label: "Buy minutes"/);
-  assert.doesNotMatch(sidebar, /href: "\/audit\/"/);
+  assert.match(sidebar, /href: "\/audit\/"/);
 });
 
 test("homepage hero: dark island keeps light mode from hiding the headline", () => {
