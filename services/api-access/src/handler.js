@@ -30,6 +30,7 @@ import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscripti
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
+import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
 import { createGitHubBindingsService } from "./github-bindings.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
@@ -58,6 +59,18 @@ import { createTurnstileVerifier } from "./turnstile.js";
 // this must change with them.
 const GITHUB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const GITHUB_SESSION_COOKIE = "sl_api_session";
+
+// Mirrors sessionCookies in customer-auth.js: the Domain cookie plus a
+// host-only twin carrying the same token, so a stale host-only jar entry
+// is overwritten by the fresh token instead of shadowing it.
+function githubSessionCookies(token) {
+  const maxAge = Math.floor(GITHUB_SESSION_TTL_MS / 1_000);
+  const value = encodeURIComponent(token);
+  return [
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+  ];
+}
 
 function githubDigest(pepper, purpose, value) {
   return createHmac("sha256", pepper).update(`${purpose}:${value}`).digest("hex");
@@ -142,6 +155,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
         accountId,
         email,
         cookie: `${GITHUB_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${Math.floor(GITHUB_SESSION_TTL_MS / 1_000)}`,
+        cookies: githubSessionCookies(token),
       };
     },
 
@@ -286,6 +300,17 @@ const mergeGovernanceConnect = environment.mergeGovernanceService.enabled
     })
   : undefined;
 
+// Zero-step onboarding (S2): the product connect link exists only
+// when the binding secret is configured (see config.js). Unset ->
+// undefined -> the connect-link route answers 503
+// connect_not_configured, never a half-wired minter.
+const productConnectLink = environment.productConnect.enabled
+  ? createProductConnectLinkService({
+      bindingSecret: environment.productConnect.bindingSecret,
+      slug: environment.productConnect.slug,
+    })
+  : undefined;
+
 const botProtection = environment.turnstileSecretKey
   ? createTurnstileVerifier({ secret: environment.turnstileSecretKey, expectedHostname: new URL(environment.siteOrigin).hostname })
   : undefined;
@@ -312,6 +337,7 @@ const application = createApiAccessHandler({
   elementsCheckout,
   mergeGovernanceCheckout,
   mergeGovernanceConnect,
+  productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
   githubBindings,
   subscriptionPortal,
