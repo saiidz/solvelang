@@ -336,3 +336,95 @@ test("the runners view renders the registered fleet when the payload carries it"
   assert.match(runs, /board\.fleet\.runners\.map/);
   assert.match(runs, /Repository Administration, read-only/);
 });
+
+// --- S5c: connected repositories + auto-run state (account GitHub page) ---
+const {
+  normalizeGitHubBindings,
+  normalizeRunnerMinutesAccount,
+} = require("../.studio-test-dist/public-site/account/core/github-auto-run.js");
+const connectedRepositories = read("app/(english)/account/github/ConnectedRepositories.tsx");
+const githubAccountPage = read("app/(english)/account/github/page.tsx");
+
+test("S5c section carries the heading and the plain-language intro verbatim", () => {
+  assert.match(connectedRepositories, /Your repositories run themselves/);
+  assert.match(connectedRepositories, /When a repository is connected, its checks run on SolveLang runners and use your prepaid minutes\. You do not need to do anything else\./);
+  assert.match(githubAccountPage, /<ConnectedRepositories apiBase=\{API_BASE\} runnersApiBase=\{RUNNERS_API_BASE\} \/>/);
+});
+
+test("S5c customer copy keeps the banned words out of the new component", () => {
+  assert.doesNotMatch(connectedRepositories, /tenant/i);
+  assert.doesNotMatch(connectedRepositories, /installation/i);
+  assert.doesNotMatch(connectedRepositories, /webhook/i);
+  assert.doesNotMatch(connectedRepositories, /provision/i);
+  assert.doesNotMatch(connectedRepositories, /\bJIT\b/);
+  assert.doesNotMatch(connectedRepositories, /ledger/i);
+});
+
+test("S5c not-connected state connects through the connect-link route with a page fallback", () => {
+  assert.match(connectedRepositories, /Connect GitHub/);
+  assert.match(connectedRepositories, /customerApi<ConnectLinkResponse>\(apiBase, "\/customer\/github\/connect-link", \{ method: "GET" \}\)/);
+  assert.match(connectedRepositories, /window\.location\.assign\(result\.installUrl\)/);
+  assert.match(connectedRepositories, /githubInstallStartUrl\(apiBase\)/);
+  assert.match(connectedRepositories, /Install the SolveLang app/);
+});
+
+test("S5c reads both contracts with the checkout fetch pattern", () => {
+  assert.match(connectedRepositories, /customerApi<unknown>\(apiBase, "\/customer\/github\/bindings", \{ method: "GET" \}\)/);
+  assert.match(connectedRepositories, /customerApi<unknown>\(runnersApiBase, "\/customer\/runner-minutes\/account", \{ method: "GET" \}\)/);
+  assert.match(githubAccountPage, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+});
+
+test("S5c connected state lists repositories and the account login in plain words", () => {
+  assert.match(connectedRepositories, /Connected GitHub account:/);
+  assert.match(connectedRepositories, /Connected — checks run on your minutes/);
+  assert.match(connectedRepositories, /repository\.fullName/);
+});
+
+test("S5c auto-run state lines are verbatim", () => {
+  assert.match(connectedRepositories, /Paused — your checks will not run and no minutes will be used\./);
+  assert.match(connectedRepositories, /On — checks run automatically\./);
+  assert.match(connectedRepositories, /minutesAccount\.status === "paused"/);
+});
+
+test("S5c totals render from the autoRun shape and stay absent without it", () => {
+  const view = normalizeRunnerMinutesAccount({
+    status: "paused",
+    autoRun: {
+      jobsServed: 7,
+      minutesUsed: 42.5,
+      secondsUsed: 2550,
+      recentServes: [
+        { repository: "octo/older", jobId: 11, minutes: 2, lane: "spot", outcome: "success", ranOnSolveLangRunner: true, at: "2026-11-10T10:00:00Z" },
+        { repository: "octo/newer", jobId: 12, minutes: 3.5, lane: "spot", outcome: "success", ranOnSolveLangRunner: true, at: "2026-11-12T10:00:00Z" },
+      ],
+    },
+  });
+  assert.equal(view.status, "paused");
+  assert.equal(view.autoRun.jobsServed, 7);
+  assert.equal(view.autoRun.minutesUsed, 42.5);
+  assert.equal(view.autoRun.secondsUsed, 2550);
+  assert.deepEqual(view.autoRun.recentServes.map((serve) => serve.repository), ["octo/newer", "octo/older"]);
+  const older = normalizeRunnerMinutesAccount({ balances: [] });
+  assert.equal(older.status, "active");
+  assert.equal(older.autoRun, null);
+  assert.match(connectedRepositories, /Jobs run so far:/);
+  assert.match(connectedRepositories, /Minutes used:/);
+  assert.match(connectedRepositories, /autoRun\.recentServes\.slice\(0, 5\)/);
+  assert.match(connectedRepositories, /\{autoRun \? \(/);
+});
+
+test("S5c bindings shape maps to the connected view and failures map to not connected", () => {
+  const view = normalizeGitHubBindings({
+    connected: true,
+    installations: [{ accountLogin: "octo", state: "active" }],
+    repositories: [{ fullName: "octo/repo", installationId: 42 }],
+  });
+  assert.equal(view.connected, true);
+  assert.deepEqual(view.accounts, [{ login: "octo", state: "active" }]);
+  assert.deepEqual(view.repositories, [{ fullName: "octo/repo", installationId: 42 }]);
+  assert.equal(normalizeGitHubBindings(null).connected, false);
+  assert.equal(normalizeGitHubBindings({}).connected, false);
+  assert.equal(normalizeGitHubBindings({ connected: false }).connected, false);
+  assert.match(connectedRepositories, /setBindings\(normalizeGitHubBindings\(null\)\)/);
+  assert.match(connectedRepositories, /No GitHub account is connected yet\./);
+});
