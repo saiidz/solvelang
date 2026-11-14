@@ -9,7 +9,14 @@ permissions:
 jobs:
   audit:
     name: WASM artifact security
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    # Placement is by capability, not OS. The audit is host-portable by
+    # design: the build is path-remapped and reproducible via rust-lld, and
+    # the conformance loader carries a darwin Chrome path plus a CHROME_BIN
+    # override. Any self-hosted ARM64 runner carrying this repo's
+    # solvelang-ci label may take the job - today the Oracle Linux box and
+    # the Mac. Windows (X64) cannot: wrong architecture for the qualified
+    # artifact and no POSIX audit shell.
+    runs-on: [self-hosted, ARM64, solvelang-ci]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
