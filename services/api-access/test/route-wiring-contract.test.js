@@ -56,27 +56,10 @@ function isWired(route, wired) {
   return greedyPrefixes(wired).some((prefix) => route.startsWith(prefix));
 }
 
-// TRANSITIONAL (Nov 11, 2026): the three greedy events are removed for
-// exactly one deploy so CloudFormation deletes their Lambda permissions
-// before the replacements are created — creating first overflows the
-// 20,480-byte resource-policy ceiling mid-update and rolls the stack
-// back. The child PR restores the greedy events and this exemption
-// together; while this exemption exists, the routes below answer 404
-// at the gateway.
-const TRANSITIONAL_UNWIRED_PREFIXES = [
-  "/public/status/",
-  "/customer/live-center/",
-  "/customer/connect/",
-];
-
 test("every API handler route has a template HttpApi event", async () => {
   const { handler, template } = await loadSources();
   const wired = templatePaths(template);
-  const missing = [...handlerRoutes(handler)].filter(
-    (route) =>
-      !isWired(route, wired) &&
-      !TRANSITIONAL_UNWIRED_PREFIXES.some((prefix) => route.startsWith(prefix)),
-  );
+  const missing = [...handlerRoutes(handler)].filter((route) => !isWired(route, wired));
   assert.deepEqual(missing, [], `handler routes missing template events: ${missing.join(", ")}`);
 });
 
