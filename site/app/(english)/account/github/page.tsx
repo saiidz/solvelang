@@ -8,8 +8,12 @@ import {
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
 import { githubInstallStartUrl, parseGitHubSetupParams } from "@/app/account/core/github-install";
+import { ConnectedRepositories } from "./ConnectedRepositories";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
+// The runners service base, exactly as the runner-minutes checkout
+// builds it: the live service by default, env override when set.
+const RUNNERS_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL || "https://runners.solve-lang.com");
 
 type GitHubInstallation = {
   installationId: number;
@@ -157,6 +161,8 @@ export default function GitHubAccountPage() {
           ) : null}
           <p className="mt-4 text-sm text-slate-400">The button takes you to GitHub to pick the account and repositories. GitHub returns you here afterwards and the installation is linked to your account.</p>
         </section>
+
+        <ConnectedRepositories apiBase={API_BASE} runnersApiBase={RUNNERS_API_BASE} />
       </div>
     </main>
   );
