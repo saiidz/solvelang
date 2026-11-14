@@ -123,7 +123,17 @@ function liveCenter(environment) {
     installationId: environment.MGOV_PILOT_INSTALLATION_ID || undefined,
   };
   const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
-  return { liveCenter: { enabled, ...config } };
+  // The Minutes seam: the runners-ledger pointers join the parsed
+  // config ONLY when both are present, so the parsed shape is
+  // unchanged until the day the runners service is actually wired —
+  // and a half-set pair never enables a half-wired minutes read.
+  const minutesBaseUrl = environment.RUNNERS_LEDGER_BASE_URL || undefined;
+  const minutesAdminToken = environment.RUNNERS_LEDGER_ADMIN_TOKEN || undefined;
+  const minutes =
+    minutesBaseUrl && minutesAdminToken
+      ? { minutesEnabled: true, minutesBaseUrl, minutesAdminToken }
+      : {};
+  return { liveCenter: { enabled, ...config, ...minutes } };
 }
 
 function githubApp(environment) {
