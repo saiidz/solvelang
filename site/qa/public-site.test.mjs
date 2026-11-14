@@ -669,3 +669,63 @@ test("account sidebar is a full-height left column attached to the edge, and a w
   // sidebar stays first in the shell, above the content.
   assert.match(sidebar, /<ul className="flex flex-row flex-wrap gap-\[2px\] sm:flex-col sm:flex-nowrap">/);
 });
+
+test("tool pages shell wraps only the signed-in work routes with the shared sidebar", () => {
+  const layout = read("app/(english)/layout.tsx");
+  assert.match(layout, /<ToolPagesShell>\{children\}<\/ToolPagesShell>/);
+  const shell = read("app/components/ToolPagesShell.tsx");
+  // Route gate: exactly the work/tool pages plus the Studio
+  // workspace (and /audit/, which is wrapped but highlights nothing).
+  for (const route of ["/studio", "/check", "/repository-audit", "/server-audit", "/audit", "/run", "/process-solution"]) {
+    assert.ok(shell.includes("\"" + route + "\""), route);
+  }
+  assert.match(shell, /const WORK_ROUTES = \[/);
+  // Session gate: the same client-side detection as the account
+  // menu and the account layout.
+  assert.match(shell, /customerApi<CustomerDashboard>\(API_BASE, "\/customer\/account", \{ method: "GET" \}\)/);
+  assert.match(shell, /customerSessionChangedEvent/);
+  // Signed out or off-route renders children exactly as before.
+  assert.match(shell, /if \(!isWorkPage \|\| sessionState !== "signed-in"\) \{\n    return <>\{children\}<\/>;\n  \}/);
+  // Signed in on a work page: the same edge-attached left column
+  // shell as the account area.
+  assert.match(shell, /data-tool-shell="signed-in"/);
+  assert.match(shell, /flex w-full flex-col sm:flex-row sm:items-stretch/);
+  assert.match(shell, /<AccountSidebar className="order-1" \/>/);
+  assert.match(shell, /<div className="order-2 min-w-0 flex-1">\{children\}<\/div>/);
+});
+
+test("tool pages stack carries the same sidebar with both plain-line groups and no /audit/ entry", () => {
+  const sidebar = read("app/components/AccountSidebar.tsx");
+  assert.match(sidebar, /head: "Your account", entries: ACCOUNT_ENTRIES/);
+  assert.match(sidebar, /head: "Work", entries: WORK_ENTRIES/);
+  const hrefs = [...sidebar.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(hrefs, [
+    "/account/",
+    "/account/api-keys/",
+    "/account/live-center/",
+    "/account/live-center/",
+    "/account/api-keys/#sign-in-security",
+    "/studio/",
+    "/check/",
+    "/repository-audit/",
+    "/server-audit/",
+    "/run/",
+    "/process-solution/",
+  ]);
+  const labels = [...sidebar.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(labels, [
+    "Account home",
+    "API account",
+    "Live Center",
+    "Runner minutes",
+    "Sign-in & security",
+    "Studio",
+    "Workflow check",
+    "Repository audit",
+    "Server audit",
+    "Run in browser",
+    "Process Solution",
+  ]);
+  assert.doesNotMatch(sidebar, /sub: "|entry\.sub|buy-minutes|label: "Buy minutes"/);
+  assert.doesNotMatch(sidebar, /href: "\/audit\/"/);
+});
