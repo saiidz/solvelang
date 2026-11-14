@@ -34,6 +34,14 @@ Parameters:
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
+  PublicStatusExecutionHealthUrl:
+    Type: String
+    Default: https://2l346svz17.execute-api.us-east-2.amazonaws.com/health
+    Description: Public health URL of the managed-execution service (merge-governance pilot) probed by the public status collector; blank leaves that component unmonitored.
+  PublicStatusRunnerMinutesHealthUrl:
+    Type: String
+    Default: ""
+    Description: Public health URL of the runner-minutes service probed by the public status collector; blank until that service is deployed, and its status component reports unmonitored meanwhile.
   StudioAcceptanceOrigin:
     Type: String
     Default: ""
@@ -519,19 +527,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/health
-            Method: GET
-        PublicStatusAccount:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/account
-            Method: GET
-        PublicStatusBilling:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/billing
+            Path: /public/status/{proxy+}
             Method: GET
         CustomerMagicLink:
           Type: HttpApi
@@ -579,7 +575,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/live-center/board
+            Path: /customer/live-center/{proxy+}
             Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
@@ -663,13 +659,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/connect/repositories
-            Method: GET
-        CustomerConnectAudit:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref ApiAccessHttpApi
-            Path: /customer/connect/audit
+            Path: /customer/connect/{proxy+}
             Method: GET
         SubscriptionCheckout:
           Type: HttpApi
@@ -900,6 +890,8 @@ Resources:
         Variables:
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_API_HEALTH_URL: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/health
+          PUBLIC_STATUS_EXECUTION_HEALTH_URL: !Ref PublicStatusExecutionHealthUrl
+          PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL: !Ref PublicStatusRunnerMinutesHealthUrl
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
       Policies:
         - Statement:
