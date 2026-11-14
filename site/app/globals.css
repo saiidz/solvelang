@@ -1,13 +1,103 @@
 @import "tailwindcss";
 
+/* SolveLang theme tokens.
+   Dark is the default theme (the approved design); [data-theme="light"]
+   carries the light option. Components consume the semantic tokens
+   (bg-canvas, bg-panel, text-ink, text-body, text-muted, border-line,
+   text-accent, ...) instead of raw palette values, so one attribute on
+   <html> re-themes the whole site. The pre-paint script in the root
+   layout sets data-theme from the saved choice before first paint; when
+   nothing is saved the theme is dark. The page canvas is the body
+   background in both themes, so a page is one theme top to bottom at
+   any viewport height — no off-theme band below short content.
+   Loading surfaces use the loading tokens, which stay dark in BOTH
+   themes by design (they are never overridden below). */
 :root {
-  --background: #f6f7fb;
-  --foreground: #0f172a;
+  --canvas: #0a0e1a;
+  --panel: #16203a;
+  --panel-alt: #1e293b;
+  --panel-inset: #0d1526;
+  --line: #26314d;
+  --line-strong: #3b4c74;
+  --ink: #e6edf3;
+  --body-text: #c9d1d9;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --accent-solid: #1f6feb;
+  --on-accent: #ffffff;
+  --success: #3fb950;
+  --danger: #f85149;
+  --warning: #d29922;
+  --accent-soft: rgba(88, 166, 255, 0.12);
+  --success-soft: rgba(63, 185, 80, 0.12);
+  --danger-soft: rgba(248, 81, 73, 0.12);
+  --warning-soft: rgba(210, 153, 34, 0.14);
+  --chrome-bg: #ffffff;
+  --chrome-text: #0f172a;
+  --grid-line: rgba(255, 255, 255, 0.035);
+  /* Loading is always dark, in both themes. */
+  --loading-canvas: #0a0e1a;
+  --loading-panel: #16203a;
+  --loading-text: #e6edf3;
+  --loading-muted: #8b949e;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+}
+
+[data-theme="light"] {
+  --canvas: #f6f7fb;
+  --panel: #ffffff;
+  --panel-alt: #eef2f7;
+  --panel-inset: #f1f5f9;
+  --line: #d7dee8;
+  --line-strong: #b6c2d2;
+  --ink: #0f172a;
+  --body-text: #1e293b;
+  --muted: #526179;
+  --accent: #0969da;
+  --accent-solid: #0969da;
+  --on-accent: #ffffff;
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --warning: #9a6700;
+  --accent-soft: rgba(9, 105, 218, 0.08);
+  --success-soft: rgba(26, 127, 55, 0.08);
+  --danger-soft: rgba(207, 34, 46, 0.07);
+  --warning-soft: rgba(154, 103, 0, 0.1);
+  --chrome-bg: #ffffff;
+  --chrome-text: #0f172a;
+  --grid-line: rgba(15, 23, 42, 0.05);
+  /* Loading tokens intentionally not overridden: loading stays dark. */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-panel: var(--panel);
+  --color-panel-alt: var(--panel-alt);
+  --color-panel-inset: var(--panel-inset);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-body: var(--body-text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-accent-soft: var(--accent-soft);
+  --color-success-soft: var(--success-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-chrome: var(--chrome-bg);
+  --color-chrome-text: var(--chrome-text);
+  --color-loading-canvas: var(--loading-canvas);
+  --color-loading-panel: var(--loading-panel);
+  --color-loading-text: var(--loading-text);
+  --color-loading-muted: var(--loading-muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -18,12 +108,13 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--canvas);
 }
 
 body {
   margin: 0;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--body-text);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
@@ -34,8 +125,8 @@ body {
 
 .hero-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 64px 64px;
   background-position: center top;
 }
