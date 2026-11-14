@@ -201,6 +201,10 @@ jobs:
           # The key travels base64-encoded because raw PEMs are corrupted
           # by parameter parsing; the service decodes it on receipt.
           [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY_B64")
+          # Fargate subnets travel only when the resolve step produced a
+          # clean list; empty leaves the parameter unset, and the template
+          # default keeps the service step failing closed.
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || parameters+=(FargateSubnets="${{ steps.fargate-subnets.outputs.resolved }}")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \
@@ -219,6 +223,8 @@ jobs:
           [[ -z "$GH_APP_ID" || -z "$GH_APP_PRIVATE_KEY" ]] || app_auth="on"
           static_reader="off"
           [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || static_reader="on"
+          fargate_subnets_line="not configured (service step will fail closed)"
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || fargate_subnets_line="configured (parameter passed)"
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
@@ -230,5 +236,6 @@ jobs:
             echo "- Pilot repos: \`$PILOT_REPOS\`"
             echo "- GitHub App auth configured: **$app_auth**"
             echo "- Static read token configured: **$static_reader**"
+            echo "- Fargate subnets: **$fargate_subnets_line**"
             echo "- Cost envelope: **D0** (on-demand serverless only)"
           } >> "$GITHUB_STEP_SUMMARY"
