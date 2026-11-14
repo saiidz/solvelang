@@ -448,6 +448,35 @@ export function createApiAccessHandler({
         if (typeof liveCenter.getMinutes !== "function") return response(200, { configured: false });
         return response(200, await liveCenter.getMinutes());
       }
+      const minutesAdminMatch = path.match(/\/customer\/runner-minutes-admin\/accounts(?:\/([^/]+)\/(credit|debit|pause|resume))?$/);
+      if (minutesAdminMatch && (method === "GET" || method === "POST")) {
+        const actionTenant = minutesAdminMatch[1] ? decodeURIComponent(minutesAdminMatch[1]) : null;
+        const action = minutesAdminMatch[2] || null;
+        if ((method === "GET" && action) || (method === "POST" && !action)) {
+          throw new ApiAccessError(404, "not_found", "Route not found.");
+        }
+        const session = method === "POST" ? await customerSession(event, true) : await customerSession(event);
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        // Owner gate: the panel exists for exactly one signed-in
+        // account — the owner's own. A read for anyone else answers
+        // the plain not-configured shape (the page renders its
+        // not-available state; no account data ever leaves this
+        // route for them), and a write for anyone else is refused.
+        const isOwner = typeof liveCenter.isMinutesOwner === "function" && liveCenter.isMinutesOwner(session);
+        if (method === "GET") {
+          if (!isOwner || typeof liveCenter.getMinutesAdminAccounts !== "function") {
+            return response(200, { configured: false });
+          }
+          return response(200, await liveCenter.getMinutesAdminAccounts());
+        }
+        if (!isOwner) {
+          throw new ApiAccessError(403, "owner_panel_unavailable", "This page is not available for your account.");
+        }
+        if (typeof liveCenter.minutesAdminAction !== "function") {
+          throw new ApiAccessError(503, "minutes_not_configured", "Runner minutes are not configured.");
+        }
+        return response(200, await liveCenter.minutesAdminAction(actionTenant, action, parseJson(event)));
+      }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
