@@ -58,6 +58,18 @@ import { createTurnstileVerifier } from "./turnstile.js";
 const GITHUB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const GITHUB_SESSION_COOKIE = "sl_api_session";
 
+// Mirrors sessionCookies in customer-auth.js: the Domain cookie plus a
+// host-only twin carrying the same token, so a stale host-only jar entry
+// is overwritten by the fresh token instead of shadowing it.
+function githubSessionCookies(token) {
+  const maxAge = Math.floor(GITHUB_SESSION_TTL_MS / 1_000);
+  const value = encodeURIComponent(token);
+  return [
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+  ];
+}
+
 function githubDigest(pepper, purpose, value) {
   return createHmac("sha256", pepper).update(`${purpose}:${value}`).digest("hex");
 }
@@ -141,6 +153,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
         accountId,
         email,
         cookie: `${GITHUB_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${Math.floor(GITHUB_SESSION_TTL_MS / 1_000)}`,
+        cookies: githubSessionCookies(token),
       };
     },
 
