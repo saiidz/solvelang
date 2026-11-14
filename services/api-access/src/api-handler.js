@@ -61,6 +61,7 @@ export function createApiAccessHandler({
   mergeGovernanceCheckout,
   mergeGovernanceConnect = null,
   liveCenter,
+  githubBindings = null,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -355,6 +356,25 @@ export function createApiAccessHandler({
         const session = await customerSession(event, true);
         if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
         return response(200, await githubApp.runAudit({ accountId: session.accountId, ...parseJson(event) }));
+      }
+      // Session-authed bindings read (S5b): which GitHub
+      // installations and repositories are bound for THIS
+      // customer. The tenant is always the session's accountId —
+      // a client-supplied tenant id is never read, let alone
+      // forwarded. The upstream mgov pair is server-side only;
+      // unconfigured or any upstream failure fails closed with
+      // the exact plain body { error: "bindings_unavailable" }
+      // and no upstream internals.
+      if (method === "GET" && path.endsWith("/customer/github/bindings")) {
+        const session = await customerSession(event);
+        if (!githubBindings || typeof githubBindings.getBindings !== "function") {
+          return response(503, { error: "bindings_unavailable" });
+        }
+        try {
+          return response(200, await githubBindings.getBindings(session.accountId));
+        } catch {
+          return response(503, { error: "bindings_unavailable" });
+        }
       }
       // "Connect a repository by app sign-in": read-only proxies to
       // the merge-governance pilot service's product-app routes. The
