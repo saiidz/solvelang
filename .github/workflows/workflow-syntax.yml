@@ -15,7 +15,7 @@ permissions:
 jobs:
   actionlint:
     name: Workflow syntax (actionlint)
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +26,7 @@ jobs:
           case "$(uname -s)-$(uname -m)" in
             Linux-aarch64|Linux-arm64) asset="actionlint_${version}_linux_arm64.tar.gz" ;;
             Darwin-arm64) asset="actionlint_${version}_darwin_arm64.tar.gz" ;;
+            Linux-x86_64) asset="actionlint_${version}_linux_amd64.tar.gz" ;;
             *) echo "unsupported runner platform: $(uname -s)-$(uname -m)"; exit 1 ;;
           esac
           base="https://github.com/rhysd/actionlint/releases/download/v${version}"
