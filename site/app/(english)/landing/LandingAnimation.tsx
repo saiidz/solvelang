@@ -17,7 +17,7 @@
 //     never sit invisible if an observer entry lags.
 
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { heroParallax, pinProgress, revealDue, warmth } from "./animation";
+import { FLOW_BEATS, STUDIO_DWELL_MS, STUDIO_START_MS, flowPaint, heroParallax, pinProgress, revealDue, warmth } from "./animation";
 
 const REVEAL_SELECTOR = "[data-reveal], [data-scale], [data-glow-trigger]";
 
@@ -209,6 +209,214 @@ export function LandingAnimation({ className, children }: { className?: string; 
       window.removeEventListener("resize", queue);
       pinMq.removeEventListener("change", queue);
       fallbackObserver?.disconnect();
+    };
+  }, []);
+
+  /* Studio choreography: the workspace panel's flow runs FIRST —
+     Incoming request activates, its connector lights, Urgency route
+     activates, its connector lights, Financial change activates
+     last; the scenario-path steps highlight in sync and the
+     Workflow Canvas sidebar item softly glows while its subject
+     plays. Then the four action cards (Model → Inspect → Test →
+     Preserve) take their moments one by one. Both sequences share
+     STUDIO_DWELL_MS pacing, their clocks accumulate only while the
+     tab is visible and the subject is on screen, both rest in the
+     finished state (no loop), and both replay after the subject
+     scrolls fully away and back. */
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const graph = root.querySelector<HTMLElement>("[data-studio-graph]");
+    const panelBox = root.querySelector<HTMLElement>("[data-studio-panel]");
+    const actionsBox = root.querySelector<HTMLElement>("[data-studio-actions]");
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-flow-node]"));
+    const conns = Array.from(root.querySelectorAll<HTMLElement>("[data-flow-conn]"));
+    const pathSteps = Array.from(root.querySelectorAll<HTMLElement>("[data-tp]"));
+    const cards = Array.from(root.querySelectorAll<HTMLElement>("[data-action]"));
+    const sideCanvas = root.querySelector<HTMLElement>("[data-side-canvas]");
+    if (!graph || !panelBox || !actionsBox || nodes.length !== 3 || cards.length === 0) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return; /* the finished state is the plain markup */
+
+    let flowDone = false;
+    let actionsWanted = false;
+    let startActions: (() => void) | null = null;
+
+    /* ---- panel flow ---- */
+    let fBeat = -1;
+    let fElapsed = 0;
+    let fLast = 0;
+    let fRunning = false;
+    let fDone = false;
+    let fInView = false;
+    let fExited = true;
+    let fTimer: number | null = null;
+    let fStartTimer: number | null = null;
+
+    const paintFlow = () => {
+      const paint = flowPaint(fBeat);
+      nodes.forEach((node, i) => {
+        node.classList.toggle("flow-active", i === paint.activeNode);
+        node.classList.toggle("flow-done", paint.doneNodes.includes(i));
+      });
+      conns.forEach((conn, j) => {
+        conn.classList.toggle("flow-active", j === paint.activeConnector);
+        conn.classList.toggle("flow-done", paint.doneConnectors.includes(j));
+      });
+      pathSteps.forEach((step, k) => {
+        step.classList.toggle("flow-active", k === paint.activePathStep);
+      });
+    };
+    const finishFlow = () => {
+      fDone = true;
+      fRunning = false;
+      if (fTimer !== null) window.clearInterval(fTimer);
+      fTimer = null;
+      nodes.forEach((node) => node.classList.remove("flow-active", "flow-done"));
+      conns.forEach((conn) => conn.classList.remove("flow-active", "flow-done"));
+      pathSteps.forEach((step) => step.classList.remove("flow-active"));
+      sideCanvas?.classList.remove("flow-live");
+      graph.classList.remove("flow-armed");
+      graph.classList.add("flow-rest");
+      flowDone = true;
+      if (actionsWanted && startActions) startActions();
+    };
+    const tickFlow = () => {
+      const now = Date.now();
+      const dt = fLast ? now - fLast : 0;
+      fLast = now;
+      if (document.hidden || !fInView || fBeat < 0) return;
+      fElapsed += dt;
+      if (fElapsed >= STUDIO_DWELL_MS) {
+        fElapsed = 0;
+        fBeat += 1;
+        if (fBeat >= FLOW_BEATS) finishFlow();
+        else paintFlow();
+      }
+    };
+    /* Action-sequence state, reset when a flow replay re-arms it. */
+    let sIdx = -1;
+    let sRunning = false;
+    let sDone = false;
+    const startFlow = () => {
+      fDone = false;
+      fBeat = -1;
+      fElapsed = 0;
+      fLast = 0;
+      fRunning = true;
+      flowDone = false;
+      sDone = false;
+      sRunning = false;
+      sIdx = -1;
+      graph.classList.remove("flow-rest");
+      graph.classList.add("flow-armed");
+      sideCanvas?.classList.add("flow-live");
+      fStartTimer = window.setTimeout(() => {
+        if (!fRunning || fDone) return;
+        fBeat = 0;
+        paintFlow();
+        fTimer = window.setInterval(tickFlow, 100);
+      }, STUDIO_START_MS);
+    };
+    const flowObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          fInView = entry.isIntersecting;
+          if (entry.intersectionRatio === 0) fExited = true;
+          if (entry.intersectionRatio >= 0.3 && !fRunning && (!fDone || fExited)) {
+            fExited = false;
+            startFlow();
+          }
+        });
+      },
+      { threshold: [0, 0.3] },
+    );
+    flowObserver.observe(panelBox);
+
+    /* ---- action cards ---- */
+    let sElapsed = 0;
+    let sLast = 0;
+    let sInView = false;
+    let sExited = true;
+    let sTimer: number | null = null;
+    let sStartTimer: number | null = null;
+
+    const paintStudio = () => {
+      cards.forEach((card, i) => {
+        card.classList.toggle("seq-active", i === sIdx);
+        card.classList.toggle("seq-done", i < sIdx);
+      });
+    };
+    const finishStudio = () => {
+      sDone = true;
+      sRunning = false;
+      if (sTimer !== null) window.clearInterval(sTimer);
+      sTimer = null;
+      cards.forEach((card) => card.classList.remove("seq-active", "seq-done"));
+      actionsBox.classList.add("seq-rest");
+    };
+    const tickStudio = () => {
+      const now = Date.now();
+      const dt = sLast ? now - sLast : 0;
+      sLast = now;
+      if (document.hidden || !sInView || sIdx < 0) return;
+      sElapsed += dt;
+      if (sElapsed >= STUDIO_DWELL_MS) {
+        sElapsed = 0;
+        sIdx += 1;
+        if (sIdx >= cards.length) finishStudio();
+        else paintStudio();
+      }
+    };
+    const startStudio = () => {
+      sDone = false;
+      sIdx = -1;
+      sElapsed = 0;
+      sLast = 0;
+      sRunning = true;
+      actionsBox.classList.remove("seq-rest");
+      actionsBox.classList.add("seq-armed");
+      cards.forEach((card) => card.classList.remove("seq-active", "seq-done"));
+      sStartTimer = window.setTimeout(() => {
+        if (!sRunning || sDone) return;
+        sIdx = 0;
+        paintStudio();
+        sTimer = window.setInterval(tickStudio, 100);
+      }, STUDIO_START_MS);
+    };
+    startActions = () => {
+      if (!sRunning && (!sDone || sExited)) {
+        sExited = false;
+        startStudio();
+      }
+    };
+    const actionsObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          sInView = entry.isIntersecting;
+          if (entry.intersectionRatio === 0) {
+            sExited = true;
+            actionsWanted = false;
+          }
+          if (entry.intersectionRatio >= 0.3) actionsWanted = true;
+          if (entry.intersectionRatio >= 0.3 && flowDone && !sRunning && (!sDone || sExited)) {
+            sExited = false;
+            startStudio();
+          }
+        });
+      },
+      { threshold: [0, 0.3] },
+    );
+    actionsObserver.observe(actionsBox);
+
+    return () => {
+      flowObserver.disconnect();
+      actionsObserver.disconnect();
+      if (fTimer !== null) window.clearInterval(fTimer);
+      if (sTimer !== null) window.clearInterval(sTimer);
+      if (fStartTimer !== null) window.clearTimeout(fStartTimer);
+      if (sStartTimer !== null) window.clearTimeout(sStartTimer);
     };
   }, []);
 
