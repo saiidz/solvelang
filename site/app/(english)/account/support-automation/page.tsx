@@ -111,7 +111,7 @@ export default function SupportAutomationPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Support automation</p>
           <h1 className="mt-3 text-4xl font-bold">Connected support automation is not activated.</h1>
           <p className="mt-5 text-slate-300">The repository path can be qualified while inbox reads, provider actions, and email sending remain separately disabled.</p>
-          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/">Return to API account</Link>
         </section>
       </main>
     );
@@ -238,7 +238,7 @@ export default function SupportAutomationPage() {
           </div>
         </section>
 
-        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/">Return to API account</Link>
       </div>
     </main>
   );
