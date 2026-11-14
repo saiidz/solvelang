@@ -59,7 +59,7 @@ jobs:
         env:
           SOLVELANG_OPS_ROOT: ${{ github.workspace }}/solvelang-ops
         run: |
-          node --test ops/launch/launch-control.test.mjs
+          node --test ops/launch/launch-control.test.mjs ops/launch/entitlements-ops-checkout.test.mjs
           node ops/launch/assert-entitlement-gates.mjs
       - uses: aws-actions/setup-sam@v2
       - run: sam validate --lint --template template.yaml
