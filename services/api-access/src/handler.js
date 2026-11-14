@@ -32,6 +32,7 @@ import { createMergeGovernanceCheckoutService } from "./merge-governance-checkou
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
 import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
+import { createGitHubBindingsService } from "./github-bindings.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -285,6 +286,13 @@ if (environment.subscriptionBillingEnabled) {
 // The repository-connect proxy exists only when the merge-governance
 // pilot service is fully configured (base URL + admin token); see
 // config.js. Unset pair -> undefined -> the connect routes answer 503.
+// The bindings read shares the merge-governance pilot pointers
+// (MGOV_PILOT_BASE_URL + MGOV_ADMIN_TOKEN, see config.js): the
+// service is constructed unconditionally like Live Center, and
+// fails closed with 503 bindings_unavailable until both pointers
+// are configured — a partial pair never enables it.
+const githubBindings = createGitHubBindingsService({ config: environment.mergeGovernanceService });
+
 const mergeGovernanceConnect = environment.mergeGovernanceService.enabled
   ? createMergeGovernanceConnectService({
       baseUrl: environment.mergeGovernanceService.baseUrl,
@@ -331,6 +339,7 @@ const application = createApiAccessHandler({
   mergeGovernanceConnect,
   productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
+  githubBindings,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
