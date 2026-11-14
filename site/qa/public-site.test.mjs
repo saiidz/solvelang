@@ -328,3 +328,69 @@ test("live center overview carries the queue panel with per-PR progress rows", (
   assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
   assert.match(board, /showPosition \/>/);
 });
+
+test("manage page dashboard is regrouped under the five approved headings in order", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  const dashboard = page.slice(page.indexOf('id="sign-in-security"'));
+  const headings = [
+    ">Sign-in & security</h2>",
+    ">API keys</h2>",
+    ">Plan & billing</h2>",
+    ">Runner minutes</h2>",
+    ">Connected accounts</h2>",
+  ];
+  let last = -1;
+  for (const heading of headings) {
+    const at = dashboard.indexOf(heading);
+    assert.ok(at > last, `heading ${heading} is present and in order`);
+    last = at;
+  }
+  // The security group container carries the exact sidebar anchor.
+  assert.match(page, /<section id="sign-in-security" className="mt-10">/);
+  // Existing dashboard sections live inside their groups.
+  const securityAt = dashboard.indexOf('id="sign-in-security"');
+  const accountSecurityAt = dashboard.indexOf("Account security");
+  const apiKeysGroupAt = dashboard.indexOf(">API keys</h2>");
+  assert.ok(accountSecurityAt > securityAt && accountSecurityAt < apiKeysGroupAt, "account security card sits in the sign-in & security group");
+  const revealAt = dashboard.indexOf("Copy this key now");
+  const createAt = dashboard.indexOf("Create API key");
+  const planGroupAt = dashboard.indexOf(">Plan & billing</h2>");
+  assert.ok(revealAt > apiKeysGroupAt && revealAt < planGroupAt, "key reveal sits in the API keys group");
+  assert.ok(createAt > apiKeysGroupAt && createAt < planGroupAt, "create key form sits in the API keys group");
+  const chooseAt = dashboard.indexOf("Choose an API plan");
+  const minutesGroupAt = dashboard.indexOf(">Runner minutes</h2>");
+  assert.ok(chooseAt > planGroupAt && chooseAt < minutesGroupAt, "choose-a-plan cards sit in the plan & billing group");
+  // The runner minutes group is navigation only: it links to the Live
+  // Center minutes view and the buy-minutes checkout.
+  const minutesBlock = dashboard.slice(minutesGroupAt, dashboard.indexOf(">Connected accounts</h2>"));
+  assert.match(minutesBlock, /\/account\/live-center\//);
+  assert.match(minutesBlock, /\/account\/runner-minutes-checkout\//);
+  assert.match(minutesBlock, />Buy minutes</);
+  // The connected accounts group links to the GitHub page.
+  const connectedBlock = dashboard.slice(dashboard.indexOf(">Connected accounts</h2>"));
+  assert.match(connectedBlock, /\/account\/github\//);
+});
+
+test("manage page sign-in views keep their endpoints and logic markers", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  // Password sign-in card and its endpoint.
+  assert.match(page, /onSubmit=\{passwordLogin\}/);
+  assert.match(page, /"\/customer\/auth\/password"/);
+  // Email-link card and its endpoint.
+  assert.match(page, /onSubmit=\{requestLink\}/);
+  assert.match(page, /"\/customer\/auth\/magic-link"/);
+  // GitHub sign-in button, Turnstile widget, and magic-token redemption.
+  assert.match(page, /githubAuthorizeUrl\(API_BASE\)/);
+  assert.match(page, /Continue with GitHub/);
+  assert.match(page, /<SignInTurnstile onToken=\{setTurnstileToken\} resetSignal=\{botResetSignal\} \/>/);
+  assert.match(page, /magicTokenFromHash\(window\.location\.hash\)/);
+  assert.match(page, /"\/customer\/auth\/verify"/);
+  // MFA view handler and endpoint.
+  assert.match(page, /onSubmit=\{verifyMfa\}/);
+  assert.match(page, /"\/customer\/auth\/totp\/verify"/);
+  // The three screens are still the top-level views, in source order.
+  const loadingAt = page.indexOf('if (screen === "loading")');
+  const mfaAt = page.indexOf('if (screen === "signed-out" && mfaChallenge)');
+  const signedOutAt = page.indexOf('if (screen === "signed-out") {');
+  assert.ok(loadingAt !== -1 && mfaAt > loadingAt && signedOutAt > mfaAt, "loading, MFA, and signed-out views keep their order");
+});
