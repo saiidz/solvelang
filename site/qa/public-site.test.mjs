@@ -328,3 +328,107 @@ test("live center overview carries the queue panel with per-PR progress rows", (
   assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
   assert.match(board, /showPosition \/>/);
 });
+
+test("account layout exists, detects the session like the account menu, and renders the sidebar only when signed in", () => {
+  const layout = read("app/(english)/account/layout.tsx");
+  // Same client-side session detection as SiteAccountMenu: no server
+  // session exists, so the layout asks the customer API directly.
+  assert.match(layout, /customerApi<CustomerDashboard>\(API_BASE, "\/customer\/account", \{ method: "GET" \}\)/);
+  assert.match(layout, /customerSessionChangedEvent/);
+  assert.match(layout, /caught\.status === 401 \? "signed-out" : "unavailable"/);
+  // Signed out (and loading/unavailable) renders children exactly as
+  // before: no shell, no sidebar, no visual change.
+  assert.match(layout, /if \(sessionState !== "signed-in"\) \{\n    return <>\{children\}<\/>;\n  \}/);
+  // Signed in renders the shared sidebar component inside the shell.
+  assert.match(layout, /data-account-shell="signed-in"/);
+  assert.match(layout, /<AccountSidebar className="order-1" \/>/);
+  assert.match(read("app/components/AccountSidebar.tsx"), /data-account-sidebar="true"/);
+});
+
+test("account sidebar carries both approved groups in order with exact plain-line targets", () => {
+  const sidebar = read("app/components/AccountSidebar.tsx");
+  assert.match(sidebar, /\{group\.head\}/);
+  assert.match(sidebar, /head: "Your account", entries: ACCOUNT_ENTRIES/);
+  assert.match(sidebar, /head: "Work", entries: WORK_ENTRIES/);
+  const hrefs = [...sidebar.matchAll(/href: "([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(hrefs, [
+    "/account/",
+    "/account/api-keys/",
+    "/account/live-center/",
+    "/account/live-center/",
+    "/account/api-keys/#sign-in-security",
+    "/studio/",
+    "/check/",
+    "/repository-audit/",
+    "/server-audit/",
+    "/run/",
+    "/process-solution/",
+  ]);
+  const labels = [...sidebar.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(labels, [
+    "Account home",
+    "API account",
+    "Live Center",
+    "Runner minutes",
+    "Sign-in & security",
+    "Studio",
+    "Workflow check",
+    "Repository audit",
+    "Server audit",
+    "Run in browser",
+    "Process Solution",
+  ]);
+  // Plain single lines only: no sub-caption field, no sub rendering,
+  // and no Buy minutes entry in the sidebar at all.
+  assert.doesNotMatch(sidebar, /sub: "|entry\.sub|buy-minutes|label: "Buy minutes"/);
+  // Runner minutes is not deep-linkable: the Live Center board keeps
+  // its tab in internal state, so the entry links to the Live Center.
+  assert.match(sidebar, /Minutes view is not deep-linkable|not deep-linkable/);
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.match(board, /const \[tab, setTab\] = useState<TabId>\("overview"\)/);
+  assert.doesNotMatch(board, /searchParams|URLSearchParams/);
+});
+
+test("sidebar active state follows the current page across both groups, and /audit/ highlights nothing", () => {
+  const sidebar = read("app/components/AccountSidebar.tsx");
+  // Every Work entry matches its own route prefix; account entries
+  // match only /account routes, so a tool page can never falsely
+  // highlight an account entry (and vice versa).
+  for (const target of ["/studio", "/check", "/repository-audit", "/server-audit", "/run", "/process-solution"]) {
+    assert.ok(sidebar.includes("onPath(" + JSON.stringify(target) + ")"), target);
+  }
+  assert.match(sidebar, /aria-current=\{active \? "page" : undefined\}/);
+  // /audit/ has no entry in either group: it must not appear as a
+  // target and must not be mapped onto Repository audit.
+  assert.doesNotMatch(sidebar, /href: "\/audit\/"/);
+  assert.doesNotMatch(sidebar, /onPath\("\/audit"\)/);
+});
+
+test("account sidebar is a full-height left column attached to the edge, and a wrapping strip on phones", () => {
+  const layout = read("app/(english)/account/layout.tsx");
+  const sidebar = read("app/components/AccountSidebar.tsx");
+  // Edge-attached shell: the sidebar is first (left), the content
+  // second; the row stretches so the column runs the full height of
+  // the account area, with no gap and no outer padding around it.
+  assert.match(layout, /flex w-full flex-col sm:flex-row sm:items-stretch/);
+  assert.match(layout, /<AccountSidebar className="order-1" \/>/);
+  assert.match(layout, /<div className="order-2 min-w-0 flex-1">\{children\}<\/div>/);
+  // The column itself mirrors the approved preview: square corners,
+  // the darker #0f1626 panel, a #26314d right border only, and the
+  // preview widths (184px up to 900px, then 232px). Not a card: no
+  // rounding, no shadow, no sticky floating.
+  assert.match(sidebar, /bg-\[#0f1626\]/);
+  assert.match(sidebar, /border-\[#26314d\]/);
+  assert.match(sidebar, /sm:border-r/);
+  assert.match(sidebar, /sm:w-\[184px\][^"]*min-\[901px\]:w-\[232px\]/);
+  assert.doesNotMatch(sidebar, /rounded-3xl|shadow-2xl|sticky/);
+  // Always fully visible: both group headings render above their
+  // entries and every entry renders at every width — no hiding, no
+  // details/dropdown collapse, no toggle button.
+  assert.match(sidebar, /head: "Your account"/);
+  assert.match(sidebar, /head: "Work"/);
+  assert.doesNotMatch(sidebar, /\bhidden\b|<details|<button/);
+  // Phones: the entry lists become horizontal wrapping strips; the
+  // sidebar stays first in the shell, above the content.
+  assert.match(sidebar, /<ul className="flex flex-row flex-wrap gap-\[2px\] sm:flex-col sm:flex-nowrap">/);
+});
