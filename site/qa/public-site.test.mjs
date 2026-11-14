@@ -335,3 +335,28 @@ test("the runners view renders the registered fleet when the payload carries it"
   assert.match(runs, /board\.fleet\.runners\.map/);
   assert.match(runs, /Repository Administration, read-only/);
 });
+
+test("account home page exists and carries the three account cards", () => {
+  const page = read("app/(english)/account/page.tsx");
+  // The bare /account/ address is a real page now, noindexed like its
+  // sibling account pages, rendering the account home component.
+  assert.match(page, /robots: \{ index: false, follow: false \}/);
+  assert.match(page, /<AccountHome \/>/);
+  const home = read("app/account/home/AccountHome.tsx");
+  // All three cards are there, with their exact destinations.
+  assert.match(home, />API account</);
+  assert.match(home, /href="\/account\/api-keys\/"/);
+  assert.match(home, />Live Center</);
+  assert.match(home, /href="\/account\/live-center\/"/);
+  assert.match(home, />Runner minutes</);
+  assert.match(home, /href="\/account\/runner-minutes-checkout\/"/);
+  assert.match(home, /Buy a minutes pack/);
+  // The session gate is the same account read every account page makes.
+  assert.match(home, /"\/customer\/account"/);
+  // The balance is the same Runner Minutes account read the checkout
+  // page makes — same endpoint, same default service address and
+  // override — and it is never guessed when the read fails.
+  assert.match(home, /"\/customer\/runner-minutes\/account"/);
+  assert.match(home, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+  assert.match(home, /could not load your balance/i);
+});
