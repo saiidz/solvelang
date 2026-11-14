@@ -328,3 +328,31 @@ test("live center overview carries the queue panel with per-PR progress rows", (
   assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
   assert.match(board, /showPosition \/>/);
 });
+
+test("account back links point to the account home, one target everywhere", () => {
+  const touched = [
+    ["app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx", 1],
+    ["app/account/api-checkout/EmbeddedApiCheckout.tsx", 2],
+    ["app/account/merge-governance-checkout/EmbeddedMgovCheckout.tsx", 1],
+    ["app/account/api-subscription/SubscriptionManager.tsx", 1],
+    ["app/(english)/account/priority/page.tsx", 2],
+    ["app/(english)/account/support-automation/page.tsx", 2],
+  ];
+  for (const [path, expected] of touched) {
+    const source = read(path);
+    assert.doesNotMatch(source, /href="\/account\/api-keys\/"/, `${path} must not carry a back-link href to /account/api-keys/`);
+    assert.equal((source.match(/href="\/account\/"/g) || []).length, expected, `${path} back links must target /account/`);
+  }
+  // Labels are unchanged; only the hrefs moved.
+  assert.match(read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx"), /href="\/account\/"[\s\S]*?Back to your account/);
+  assert.match(read("app/account/api-checkout/EmbeddedApiCheckout.tsx"), /href="\/account\/"[\s\S]*?Back to API account/);
+  assert.match(read("app/account/api-checkout/EmbeddedApiCheckout.tsx"), /href="\/account\/"[\s\S]*?Go to your API account/);
+  assert.match(read("app/account/merge-governance-checkout/EmbeddedMgovCheckout.tsx"), /href="\/account\/"[\s\S]*?Back to your account/);
+  assert.match(read("app/account/api-subscription/SubscriptionManager.tsx"), /href="\/account\/"[^>]*>← Back to API account/);
+  assert.match(read("app/(english)/account/priority/page.tsx"), /href="\/account\/">Return to API account/);
+  assert.match(read("app/(english)/account/support-automation/page.tsx"), /href="\/account\/">Return to API account/);
+  // The Live Center already pointed at the account home; it stays that way.
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.equal((board.match(/href="\/account\/"/g) || []).length, 3);
+  assert.doesNotMatch(board, /href="\/account\/api-keys\/"/);
+});
