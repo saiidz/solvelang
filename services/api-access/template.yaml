@@ -161,6 +161,15 @@ Parameters:
     Type: String
     Default: ""
     Description: GitHub App installation id for the Live Center board repository.
+  RunnersLedgerBaseUrl:
+    Type: String
+    Default: ""
+    Description: Runners ledger base URL for the Live Center Minutes tab; blank (with the admin token blank) leaves the Minutes section empty.
+  RunnersLedgerAdminToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Admin token presented to the runners ledger minutes-summary endpoint.
 
 Rules:
   CustomerAccountsRequirements:
@@ -462,6 +471,8 @@ Resources:
           MGOV_PILOT_OWNER: !Ref MgovPilotOwner
           MGOV_PILOT_REPO: !Ref MgovPilotRepo
           MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
+          RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl
+          RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -820,6 +831,8 @@ Resources:
           MGOV_PILOT_OWNER: !Ref MgovPilotOwner
           MGOV_PILOT_REPO: !Ref MgovPilotRepo
           MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
+          RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl
+          RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
