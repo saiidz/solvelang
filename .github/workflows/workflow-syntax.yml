@@ -15,11 +15,13 @@ permissions:
 jobs:
   actionlint:
     name: Workflow syntax (actionlint)
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: [self-hosted, solvelang-ci]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Install actionlint 1.7.12 (pinned, checksum-verified)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           set -euo pipefail
           version="1.7.12"
@@ -50,8 +52,37 @@ jobs:
           PYEOF
           tar -xzf "/tmp/${asset}" -C /tmp actionlint
           /tmp/actionlint --version
+      - name: Install actionlint 1.7.12 on Windows (pinned, checksum-verified)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '1.7.12'
+          $asset = "actionlint_${version}_windows_x86_64.zip"
+          $base = "https://github.com/rhysd/actionlint/releases/download/v${version}"
+          $dir = Join-Path $env:RUNNER_TEMP 'actionlint-win'
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Invoke-WebRequest "$base/$asset" -OutFile (Join-Path $dir $asset)
+          Invoke-WebRequest "$base/actionlint_${version}_checksums.txt" -OutFile (Join-Path $dir 'checksums.txt')
+          $expected = $null
+          foreach ($line in Get-Content (Join-Path $dir 'checksums.txt')) {
+            $parts = $line -split '\s+'
+            if ($parts.Count -eq 2 -and $parts[1].TrimStart('*') -eq $asset) { $expected = $parts[0]; break }
+          }
+          if (-not $expected) { throw "no checksum entry for $asset" }
+          $digest = (Get-FileHash (Join-Path $dir $asset) -Algorithm SHA256).Hash.ToLower()
+          if ($digest -ne $expected.ToLower()) { throw "checksum mismatch for $asset" }
+          Expand-Archive (Join-Path $dir $asset) -DestinationPath $dir -Force
+          & (Join-Path $dir 'actionlint.exe') --version
       - name: Lint all workflow files
+        if: runner.os != 'Windows'
         # Shellcheck integration is disabled on purpose: the guard targets
         # syntax/expression/action errors (the silent-failure class). The
         # repo's legacy shellcheck style notes are a separate cleanup.
         run: /tmp/actionlint -color -shellcheck=
+      - name: Lint all workflow files (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RUNNER_TEMP 'actionlint-win\actionlint.exe'
+          & $exe '-color' '-shellcheck='

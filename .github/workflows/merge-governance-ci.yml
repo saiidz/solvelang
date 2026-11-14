@@ -11,9 +11,10 @@ on:
 jobs:
   test:
     name: Merge governance tests
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: [self-hosted, solvelang-ci]
     defaults:
       run:
+        shell: bash
         working-directory: services/merge-governance
     steps:
       - uses: actions/checkout@v4
