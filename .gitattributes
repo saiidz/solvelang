@@ -4,4 +4,4 @@
 # The pinned WASM site artifact is byte-exact (its manifest sha256 is
 # verified against the pin on every host): LF on every platform, so a
 # Windows checkout cannot rewrite it to CRLF and break the hash.
-/site/public/wasm/** text eol=lf
+/site/public/wasm/** binary
