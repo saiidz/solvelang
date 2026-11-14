@@ -428,3 +428,140 @@ test("sign-in buttons wait for the bot check only when it is configured", () => 
   assert.equal((page.match(/disabled=\{busy \|\| botCheckPending\}/g) || []).length, 2);
   assert.equal((page.match(/Complete the quick check above, then this button turns on\./g) || []).length, 2);
 });
+
+const {
+  STUDIO_DWELL_MS,
+  STUDIO_START_MS,
+  REVEAL_SWEEP_LINE,
+  clamp01,
+  pinProgress,
+  traversalProgress,
+  warmth,
+  revealDue,
+  heroParallax,
+  flowPaint,
+} = require("../.studio-test-dist/public-site/(english)/landing/animation.js");
+const landingAnimation = read("app/(english)/landing/LandingAnimation.tsx");
+const landingAnimCss = read("app/(english)/landing/animation.module.css");
+const landingAnimEngine = read("app/(english)/landing/animation.ts");
+const landingPage = read("app/(english)/landing/page.tsx");
+const landingCss = read("app/(english)/landing/landing.module.css");
+
+test("homepage animation math: pin and traversal progress clamp to the frame", () => {
+  assert.equal(pinProgress(10, 1900, 1000), 0);
+  assert.equal(pinProgress(0, 1900, 1000), 0);
+  assert.equal(pinProgress(-450, 1900, 1000), 0.5);
+  assert.equal(pinProgress(-900, 1900, 1000), 1);
+  assert.equal(pinProgress(-5000, 1900, 1000), 1);
+  assert.equal(traversalProgress(1000, 800, 1000), 0);
+  assert.equal(traversalProgress(100, 800, 1000), 0.5);
+  assert.equal(traversalProgress(-800, 800, 1000), 1);
+  assert.equal(clamp01(Number.NaN), 0);
+  assert.equal(clamp01(-2), 0);
+  assert.equal(clamp01(2), 1);
+});
+
+test("homepage animation math: context stages warm continuously in quarters", () => {
+  assert.deepEqual(warmth(0, 0), { opacity: 0.35, arrived: false });
+  assert.equal(warmth(0.25, 0).arrived, true);
+  assert.equal(warmth(0.25, 1).opacity, 0.35);
+  assert.ok(Math.abs(warmth(0.5, 1).opacity - 1) < 1e-9);
+  assert.equal(warmth(0.5, 2).opacity, 0.35);
+  assert.equal(warmth(1, 3).arrived, true);
+  for (let i = 0; i < 4; i += 1) assert.equal(warmth(1, i).opacity, 1);
+});
+
+test("homepage animation math: sweep line, parallax cap, studio pacing, flow beats", () => {
+  assert.equal(REVEAL_SWEEP_LINE, 0.85);
+  assert.equal(revealDue(849, 1000), true);
+  assert.equal(revealDue(850, 1000), false);
+  assert.equal(heroParallax(0), 0);
+  assert.equal(heroParallax(100), 5);
+  assert.equal(heroParallax(100000), 18);
+  assert.equal(STUDIO_DWELL_MS, 1600);
+  assert.equal(STUDIO_START_MS, 900);
+  assert.deepEqual(flowPaint(0), { activeNode: 0, doneNodes: [], activeConnector: -1, doneConnectors: [], activePathStep: 0 });
+  assert.deepEqual(flowPaint(1), { activeNode: 0, doneNodes: [], activeConnector: 0, doneConnectors: [], activePathStep: 0 });
+  assert.deepEqual(flowPaint(2), { activeNode: 1, doneNodes: [0], activeConnector: -1, doneConnectors: [0], activePathStep: 1 });
+  assert.deepEqual(flowPaint(3), { activeNode: 1, doneNodes: [0], activeConnector: 1, doneConnectors: [0], activePathStep: 1 });
+  assert.deepEqual(flowPaint(4), { activeNode: 2, doneNodes: [0, 1], activeConnector: -1, doneConnectors: [0, 1], activePathStep: 2 });
+});
+
+test("homepage animation: hidden states exist only behind the JS-armed gate", () => {
+  const hiddenRules = landingAnimCss
+    .split("}")
+    .filter((rule) => /opacity:\s*0/.test(rule) && /\[data-(reveal|scale|hero-line)\]/.test(rule));
+  assert.ok(hiddenRules.length >= 3, "reveal, scale and hero-line pre-states exist");
+  for (const rule of hiddenRules) assert.match(rule, /\[data-landing-anim="armed"\]/);
+  assert.match(landingAnimation, /dataset\.landingAnim = "armed"/);
+  assert.match(landingAnimation, /useLayoutEffect/);
+  /* the page is wrapped by the orchestrator, so arming covers every section */
+  assert.match(landingPage, /<LandingAnimation className="bg-\[#f5f6f4\] text-\[#102036\]">/);
+  assert.match(landingPage, /<\/LandingAnimation>/);
+});
+
+test("homepage animation: observers, sweep fallback, and reduced-motion finish", () => {
+  assert.match(landingAnimation, /new IntersectionObserver/);
+  assert.match(landingAnimation, /window\.setTimeout\(sweep, 1500\)/);
+  assert.match(landingAnimation, /revealDue\(el\.getBoundingClientRect\(\)\.top, vh\)/);
+  assert.match(landingAnimation, /prefers-reduced-motion: reduce/);
+  assert.match(landingAnimation, /visibilitychange/);
+  const reduced = landingAnimCss.slice(landingAnimCss.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduced, /\[data-reveal\][^}]*opacity: 1 !important/);
+  assert.match(reduced, /\[data-hero-line\]/);
+  assert.match(reduced, /\.scProgress i \{ transform: scaleX\(1\) !important; \}/);
+  assert.match(reduced, /\.ctaGlow \{ display: none !important; \}/);
+  assert.match(landingCss, /prefers-reduced-motion: reduce/);
+});
+
+test("homepage animation: only transform and opacity animate (plus studio emphasis)", () => {
+  const keyframeBodies = [...landingAnimCss.matchAll(/@keyframes[^{]+\{([\s\S]*?)\n\}/g)].map((match) => match[1]);
+  assert.ok(keyframeBodies.length >= 2, "the hero rise and CTA glow keyframes exist");
+  for (const body of keyframeBodies) {
+    const properties = [...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]);
+    assert.ok(properties.length >= 1, "keyframes declare at least one property");
+    for (const property of properties) {
+      assert.ok(property === "transform" || property === "opacity", `keyframe animates ${property}`);
+    }
+  }
+  const transitions = [...landingAnimCss.matchAll(/transition:[^;]+/g)].map((match) => match[0]);
+  assert.ok(transitions.length >= 5, "the reveal and walkthrough transitions exist");
+  for (const declaration of transitions) {
+    assert.doesNotMatch(declaration, /\b(width|height|top|left|right|bottom|margin|padding|gap|font-size)\b/);
+  }
+  const drift = landingCss.slice(landingCss.indexOf("@keyframes heroGlowDrift"), landingCss.indexOf("@keyframes heroGlowDrift") + 220);
+  assert.match(drift, /transform: translate3d/);
+  assert.doesNotMatch(drift, /\b(width|height|top|left)\s*:/);
+  assert.doesNotMatch(landingAnimEngine, /document\.|window\.|requestAnimationFrame/);
+});
+
+test("homepage animation: solve context pin structure and continuous progress", () => {
+  assert.match(landingAnimCss, /\.scPinWrap \{ background: #eaf0f3; \}/);
+  assert.match(landingAnimCss, /\.scPinWrap \{ height: 190vh; position: relative; \}/);
+  assert.match(landingAnimCss, /\.scPin \{ position: sticky; top: 0; min-height: 100vh;/);
+  assert.match(landingAnimation, /pinProgress\(rect\.top, rect\.height, window\.innerHeight\)/);
+  assert.match(landingAnimation, /warmth\(progress, Number\(el\.dataset\.scStep/);
+  assert.match(landingAnimation, /matchMedia\("\(min-width: 960px\) and \(min-height: 720px\)"\)/);
+  assert.match(landingPage, /data-sc-wrap=""/);
+  assert.match(landingPage, /data-sc-bar=""/);
+  assert.equal((landingPage.match(/data-sc-chip="/g) || []).length, 4);
+  assert.match(landingPage, /data-sc-step=\{index\}/);
+});
+
+test("homepage animation: studio hooks and light-section heading contrast", () => {
+  assert.equal((landingPage.match(/data-flow-node/g) || []).length, 3);
+  assert.equal((landingPage.match(/data-flow-conn/g) || []).length, 2);
+  assert.equal((landingPage.match(/data-tp=""/g) || []).length, 3);
+  assert.equal((landingPage.match(/data-action=""/g) || []).length, 1);
+  assert.match(landingPage, /data-studio-panel=""/);
+  assert.match(landingPage, /data-studio-actions=""/);
+  assert.match(landingAnimation, /STUDIO_DWELL_MS/);
+  /* light sections inherit the root's dark ink; none of their h2s re-lightens */
+  const context = landingPage.slice(landingPage.indexOf('id="solve-context"'), landingPage.indexOf('id="evidence"'));
+  assert.doesNotMatch(context.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
+  assert.match(context, /bg-\[#eaf0f3\]/);
+  const capabilities = landingPage.slice(landingPage.indexOf('id="capabilities"'), landingPage.indexOf('id="studio"'));
+  assert.doesNotMatch(capabilities.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
+  const quickstart = landingPage.slice(landingPage.indexOf('id="quickstart"'));
+  assert.doesNotMatch(quickstart.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
+});
