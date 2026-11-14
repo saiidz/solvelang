@@ -32,7 +32,7 @@ cd "$repo_root"
 compiler="$(rustup which --toolchain 1.95.0 rustc)"
 # On Windows the rustup path carries backslashes, which break the TOML
 # --config embedding below; forward slashes work on every host.
-compiler="${compiler//\\/}"
+compiler="$(printf '%s' "$compiler" | tr '\\' '/')"
 linker="$("$compiler" --print sysroot)/lib/rustlib/$("$compiler" -vV | sed -n 's/^host: //p')/bin/rust-lld"
 test -x "$linker"
 
