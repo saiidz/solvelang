@@ -9,7 +9,21 @@ permissions:
 jobs:
   audit:
     name: WASM artifact security
-    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    # Placement: every self-hosted runner in this repo's fleet carries the
+    # solvelang-ci label, so this job can land on any of them - the Oracle
+    # Linux box, the Mac, or the Windows box. Nothing here is host-bound:
+    # the audit builds a path-remapped, reproducible artifact with rust-lld
+    # (host CPU and OS do not enter the bytes), the conformance loader
+    # resolves Chrome per platform (linux PATH, darwin app bundle, and the
+    # CHROME_BIN set below on Windows), and every shell step is pinned to
+    # bash so Windows runs them under Git Bash instead of PowerShell.
+    runs-on: [self-hosted, solvelang-ci]
+    env:
+      # A Windows checkout must not rewrite line endings: the audit's first
+      # act is a clean-tree assertion and its snapshot comes from the commit.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: "false"
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -17,6 +31,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Verify source identity
+        shell: bash
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
@@ -28,8 +43,23 @@ jobs:
         with:
           node-version: 24
       - name: Install pinned binding generator
-        run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked
+        shell: bash
+        run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked --force
+      - name: Resolve Chrome for the conformance loader (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          for pair in "/c/Program Files/Google/Chrome/Application/chrome.exe|C:/Program Files/Google/Chrome/Application/chrome.exe" "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe|C:/Program Files (x86)/Google/Chrome/Application/chrome.exe"; do
+            if [ -f "${pair%%|*}" ]; then
+              echo "CHROME_BIN=${pair##*|}" >> "$GITHUB_ENV"
+              echo "CHROME_BIN set to ${pair##*|}"
+              exit 0
+            fi
+          done
+          echo "no Chrome executable found at the standard Windows install paths" >&2
+          exit 1
       - name: Reproduce and audit browser artifact under hostile caller Cargo config
+        shell: bash
         run: |
           hostile="$RUNNER_TEMP/hostile-cargo-home"
           mkdir -p "$hostile"
@@ -48,7 +78,8 @@ jobs:
             solvec-wasm/target/artifact-security-evidence/package/
           if-no-files-found: error
           retention-days: 7
-      - name: Compare site pin with qualified Linux artifact
+      - name: Compare site pin with qualified artifact
+        shell: bash
         run: |
           node --test solvec-wasm/qa/verify-site-artifact.test.cjs
           node solvec-wasm/qa/verify-site-artifact.cjs solvec-wasm/target/artifact-security-evidence/package "$(git rev-parse HEAD)"
