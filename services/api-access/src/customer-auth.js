@@ -132,19 +132,24 @@ function parseOpaqueToken(value, prefix, code = "invalid_session", message = "Si
   return { id: match[1], secret: match[2], token: value };
 }
 
-function cookieValue(cookieHeader, name) {
-  if (typeof cookieHeader !== "string") return undefined;
+// Every value presented under `name`, in header order. A Cookie header
+// can legitimately carry the same name twice (a Domain cookie and a
+// host-only twin are distinct jar entries), so session parsing must
+// consider all of them, not just the first.
+function cookieValues(cookieHeader, name) {
+  if (typeof cookieHeader !== "string") return [];
+  const values = [];
   for (const part of cookieHeader.split(";")) {
     const [key, ...rest] = part.trim().split("=");
     if (key === name) {
       try {
-        return decodeURIComponent(rest.join("="));
+        values.push(decodeURIComponent(rest.join("=")));
       } catch {
-        return undefined;
+        // Skip an undecodable duplicate; a later twin may still parse.
       }
     }
   }
-  return undefined;
+  return values;
 }
 
 // Domain=.solve-lang.com is load-bearing, not cosmetic: the session has
@@ -156,10 +161,25 @@ function cookieValue(cookieHeader, name) {
 // The session is only ever set by responses served under solve-lang.com
 // (the custom domain fronts sign-in and the GitHub callback), so the
 // browser always accepts the Domain attribute when it is emitted.
-// handler.js mirrors this cookie for GitHub-issued sessions; the two
+// handler.js mirrors these cookies for GitHub-issued sessions; the two
 // emitters must change together.
 function sessionCookie(token, maxAge) {
   return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
+}
+
+// Host-only twin of the session cookie: identical attributes, no Domain.
+// A browser that picked up a host-only sl_api_session before the Domain
+// cookie existed keeps that stale entry as a DISTINCT jar entry and may
+// present it first; a Domain-only re-issue never overwrites it, so the
+// stale token shadows every fresh sign-in. Emitting the fresh token in
+// both variants overwrites the twin and ends the shadow.
+function hostOnlySessionCookie(token, maxAge) {
+  return `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`;
+}
+
+// Every session emission (and every clear) carries both variants.
+function sessionCookies(token, maxAge) {
+  return [sessionCookie(token, maxAge), hostOnlySessionCookie(token, maxAge)];
 }
 
 async function derivePassword(password, salt) {
@@ -293,6 +313,7 @@ export function createCustomerAuthService({
       email,
       csrfToken: digest(pepper, "csrf", session.token),
       cookie: sessionCookie(session.token, Math.floor(SESSION_TTL_MS / 1_000)),
+      cookies: sessionCookies(session.token, Math.floor(SESSION_TTL_MS / 1_000)),
       mfaRequired: false,
     };
   }
@@ -795,11 +816,11 @@ export function createCustomerAuthService({
       accountId: session.accountId,
       currentSessionRevoked: true,
       cookie: sessionCookie("", 0),
+      cookies: sessionCookies("", 0),
     };
   }
 
-  async function authenticate(cookieHeader) {
-    const raw = cookieValue(cookieHeader, SESSION_COOKIE);
+  async function authenticateToken(raw) {
     const parsed = parseOpaqueToken(raw, "sess");
     const record = await store.getSession(parsed.id);
     const timestamp = Math.floor(now() / 1_000);
@@ -839,13 +860,37 @@ export function createCustomerAuthService({
     };
   }
 
+  async function authenticate(cookieHeader) {
+    // A browser jar can hold two sl_api_session entries at once — the
+    // Domain cookie this service sets and a stale host-only twin from
+    // before it — and the header order between them is not ours to
+    // choose: the stale twin may be presented first. Try EVERY value
+    // and accept the first that verifies; fail closed only when none
+    // does. Only an invalid_session rejection moves to the next
+    // candidate — a store or account failure must not be masked by a
+    // second cookie.
+    let lastError;
+    for (const raw of cookieValues(cookieHeader, SESSION_COOKIE)) {
+      try {
+        return await authenticateToken(raw);
+      } catch (error) {
+        if (!(error instanceof ApiAccessError) || error.code !== "invalid_session") throw error;
+        lastError = error;
+      }
+    }
+    throw lastError ?? new ApiAccessError(401, "invalid_session", "Sign in again to continue.");
+  }
+
   function assertCsrf(session, presented) {
     if (!secureEqual(session?.csrfToken, presented)) throw new ApiAccessError(403, "invalid_csrf", "The request could not be verified.");
   }
 
   async function logout(cookieHeader) {
-    const raw = cookieValue(cookieHeader, SESSION_COOKIE);
-    if (raw) {
+    // Revoke every parseable session the header presents (a jar can
+    // carry the Domain cookie and a host-only twin naming different
+    // sessions), then clear BOTH jar entries so neither variant
+    // survives sign-out.
+    for (const raw of cookieValues(cookieHeader, SESSION_COOKIE)) {
       try {
         const parsed = parseOpaqueToken(raw, "sess");
         await store.revokeSession(parsed.id, new Date(now()).toISOString());
@@ -853,7 +898,7 @@ export function createCustomerAuthService({
         if (!(error instanceof ApiAccessError)) throw error;
       }
     }
-    return sessionCookie("", 0);
+    return sessionCookies("", 0);
   }
 
   return {
