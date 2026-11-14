@@ -54,6 +54,8 @@ jobs:
       MGOV_WEBHOOK_SECRET: ${{ secrets.MGOV_WEBHOOK_SECRET }}
       GH_APP_ID: ${{ secrets.GH_APP_ID }}
       GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      MGOV_PRODUCT_APP_ID: ${{ secrets.MGOV_PRODUCT_APP_ID }}
+      MGOV_PRODUCT_APP_PRIVATE_KEY: ${{ secrets.MGOV_PRODUCT_APP_PRIVATE_KEY }}
 
     steps:
       - name: Check out the private product source
@@ -183,6 +185,10 @@ jobs:
           if [[ -n "$GH_APP_PRIVATE_KEY" ]]; then
             printf 'GH_APP_PRIVATE_KEY_B64=%s\n' "$(printf '%s' "$GH_APP_PRIVATE_KEY" | base64 -w 0)" >> "$GITHUB_ENV"
           fi
+          # Same transport for the branded product app's key.
+          if [[ -n "$MGOV_PRODUCT_APP_PRIVATE_KEY" ]]; then
+            printf 'MGOV_PRODUCT_APP_PRIVATE_KEY_B64=%s\n' "$(printf '%s' "$MGOV_PRODUCT_APP_PRIVATE_KEY" | base64 -w 0)" >> "$GITHUB_ENV"
+          fi
 
       - name: Deploy the merge-governance pilot stack
         env:
@@ -201,6 +207,10 @@ jobs:
           # The key travels base64-encoded because raw PEMs are corrupted
           # by parameter parsing; the service decodes it on receipt.
           [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY_B64")
+          # The branded product app (SolveLang Process Solution) is
+          # configured the same conditional way; the slug is the app's own.
+          [[ -z "$MGOV_PRODUCT_APP_ID" ]] || parameters+=(ProductAppId="$MGOV_PRODUCT_APP_ID" ProductAppSlug="solvelang-process-solution")
+          [[ -z "$MGOV_PRODUCT_APP_PRIVATE_KEY" ]] || parameters+=(ProductAppPrivateKeyB64="$MGOV_PRODUCT_APP_PRIVATE_KEY_B64")
           # Fargate subnets travel only when the resolve step produced a
           # clean list; empty leaves the parameter unset, and the template
           # default keeps the service step failing closed.
@@ -225,6 +235,8 @@ jobs:
           [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || static_reader="on"
           fargate_subnets_line="not configured (service step will fail closed)"
           [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || fargate_subnets_line="configured (parameter passed)"
+          product_app_line="not configured"
+          [[ -z "$MGOV_PRODUCT_APP_ID" ]] || product_app_line="configured (parameters passed)"
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
@@ -237,5 +249,6 @@ jobs:
             echo "- GitHub App auth configured: **$app_auth**"
             echo "- Static read token configured: **$static_reader**"
             echo "- Fargate subnets: **$fargate_subnets_line**"
+            echo "- Product app: **$product_app_line**"
             echo "- Cost envelope: **D0** (on-demand serverless only)"
           } >> "$GITHUB_STEP_SUMMARY"
