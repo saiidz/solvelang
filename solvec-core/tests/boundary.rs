@@ -118,6 +118,7 @@ fn core_library_root_is_approved(source: &str) -> bool {
             "pub mod formatter;",
             "pub mod lexer;",
             "pub mod lint;",
+            "pub mod memory_modules;",
             "pub mod parser;",
             "pub mod semantic;",
             "pub mod value;",

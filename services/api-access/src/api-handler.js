@@ -153,6 +153,17 @@ export function createApiAccessHandler({
     return origin;
   }
 
+  // Auth results carry `cookies` (every Set-Cookie variant to emit);
+  // the singular `cookie` (the Domain variant alone) remains on older
+  // result shapes, and logout returns its clear pair directly.
+  // Normalize any of them to the array the response builder expects.
+  function resultCookies(result) {
+    if (Array.isArray(result)) return result;
+    if (typeof result === "string") return [result];
+    if (Array.isArray(result?.cookies)) return result.cookies;
+    return result?.cookie ? [result.cookie] : [];
+  }
+
   function authResponse(verified) {
     if (verified?.mfaRequired) {
       return response(200, {
@@ -166,7 +177,7 @@ export function createApiAccessHandler({
       email: verified.email,
       csrfToken: verified.csrfToken,
       mfaRequired: false,
-    }, {}, [verified.cookie]);
+    }, {}, resultCookies(verified));
   }
 
   async function statusProbeResponse(probe) {
@@ -230,7 +241,7 @@ export function createApiAccessHandler({
         if (typeof code !== "string" || !code || typeof state !== "string" || !state) return failure;
         try {
           const result = await githubApp.completeSignIn({ code, state });
-          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, [result.cookie]);
+          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, resultCookies(result));
         } catch {
           return failure;
         }
@@ -285,8 +296,8 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/logout")) {
         const session = await customerSession(event, true);
-        const cookie = await customerAuth.logout(cookieHeader(event));
-        return response(200, { signedOut: true, accountId: session.accountId }, {}, [cookie]);
+        const cleared = await customerAuth.logout(cookieHeader(event));
+        return response(200, { signedOut: true, accountId: session.accountId }, {}, resultCookies(cleared));
       }
       if (method === "POST" && path.endsWith("/customer/auth/sessions/revoke-all")) {
         const session = await customerSession(event, true);
@@ -295,7 +306,7 @@ export function createApiAccessHandler({
           signedOutEverywhere: true,
           currentSessionRevoked: true,
           accountId: session.accountId,
-        }, {}, [revoked.cookie]);
+        }, {}, resultCookies(revoked));
       }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
