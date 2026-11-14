@@ -747,3 +747,21 @@ test("homepage hero: dark island keeps light mode from hiding the headline", () 
   /* the headline stays on the token; the island is what makes it resolve dark */
   assert.match(hero, /id="homepage-title"[^>]*text-ink/);
 });
+
+test("sidebar Work group carries the Audit entry after Server audit, active on /audit/", () => {
+  const sidebar = read("app/components/AccountSidebar.tsx");
+  // One plain single-line entry: the Audit label, the /audit/ target,
+  // and the same onPath active-state rule as its Work-group neighbours.
+  assert.match(
+    sidebar,
+    /id: "audit",\s+label: "Audit",\s+href: "\/audit\/",\s+isActive: \(path\) => onPath\("\/audit"\)\(path\)/,
+  );
+  // Position inside the Work group: after "Server audit", before
+  // "Run in browser" (owner order Nov 14, 2026).
+  const serverAt = sidebar.indexOf('label: "Server audit"');
+  const auditAt = sidebar.indexOf('label: "Audit"');
+  const runAt = sidebar.indexOf('label: "Run in browser"');
+  assert.ok(serverAt >= 0 && auditAt > serverAt && runAt > auditAt, "Audit sits between Server audit and Run in browser");
+  // Exactly one /audit/ target in the whole sidebar.
+  assert.equal(sidebar.split('href: "/audit/"').length - 1, 1);
+});
