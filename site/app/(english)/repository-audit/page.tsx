@@ -7,12 +7,12 @@ export const metadata: Metadata = {
 };
 export default function RepositoryAuditPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 text-slate-950">
+    <main className="min-h-screen bg-gradient-to-b from-canvas via-panel to-canvas text-ink">
       <section className="mx-auto max-w-6xl px-6 pb-12 pt-12 text-center lg:px-8 lg:pt-20">
-        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-blue-700">SolveLang Repository Audit</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang Repository Audit</p>
         <h1 className="mx-auto mt-5 max-w-5xl text-balance text-4xl font-semibold tracking-tight sm:text-6xl">See what is inside a repository before changing it.</h1>
-        <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">Upload a repository archive and get a deterministic read-only inventory, architecture signals, duplicate and backup candidates, generated-output warnings, and downloadable evidence. The scan stays in your browser.</p>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-slate-600"><span className="rounded-full border border-slate-200 bg-white px-4 py-2">No account required</span><span className="rounded-full border border-slate-200 bg-white px-4 py-2">Runs locally</span><span className="rounded-full border border-slate-200 bg-white px-4 py-2">No code execution</span><span className="rounded-full border border-slate-200 bg-white px-4 py-2">Evidence export</span></div>
+        <p className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-muted sm:text-xl">Upload a repository archive and get a deterministic read-only inventory, architecture signals, duplicate and backup candidates, generated-output warnings, and downloadable evidence. The scan stays in your browser.</p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3 text-sm text-muted"><span className="rounded-full border border-line bg-panel px-4 py-2">No account required</span><span className="rounded-full border border-line bg-panel px-4 py-2">Runs locally</span><span className="rounded-full border border-line bg-panel px-4 py-2">No code execution</span><span className="rounded-full border border-line bg-panel px-4 py-2">Evidence export</span></div>
       </section>
       <RepositoryAuditApp />
     </main>
