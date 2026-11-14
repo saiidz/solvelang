@@ -321,3 +321,10 @@ test("runner minutes buy page shows the selection and the honest not-yet-on stat
   assert.equal(checkout.split("Continue to payment").length - 1, 1);
   assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
 });
+
+test("live center overview carries the queue panel with per-PR progress rows", () => {
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.match(board, /The queue/);
+  assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
+  assert.match(board, /showPosition \/>/);
+});
