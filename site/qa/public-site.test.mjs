@@ -328,3 +328,11 @@ test("live center overview carries the queue panel with per-PR progress rows", (
   assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
   assert.match(board, /showPosition \/>/);
 });
+
+test("the runners view renders the registered fleet when the payload carries it", () => {
+  const runs = read("app/account/live-center/LiveCenterRuns.tsx");
+  assert.match(runs, /Your full runner fleet/);
+  assert.match(runs, /board\.fleet\.available/);
+  assert.match(runs, /board\.fleet\.runners\.map/);
+  assert.match(runs, /Repository Administration, read-only/);
+});
