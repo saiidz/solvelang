@@ -48,8 +48,16 @@ jobs:
         run: |
           npm ci
           npm run test:studio
+      - name: Check out the private ops repo for the legal checklist gate
+        uses: actions/checkout@v4
+        with:
+          repository: saiidz/solvelang-ops
+          ssh-key: ${{ secrets.OPS_REPO_DEPLOY_KEY }}
+          path: solvelang-ops
       - name: Assert entitlement launch code gates
         working-directory: ${{ github.workspace }}
+        env:
+          SOLVELANG_OPS_ROOT: ${{ github.workspace }}/solvelang-ops
         run: |
           node --test ops/launch/launch-control.test.mjs
           node ops/launch/assert-entitlement-gates.mjs
