@@ -15,7 +15,7 @@ import {
 } from "@/app/account/core/customer-api";
 import { buildBotFields } from "@/app/account/core/bot-fields";
 import { githubAuthorizeUrl, githubSignInOutcome } from "@/app/account/core/github-install";
-import { SignInHoneypot, SignInTurnstile } from "@/app/account/core/signin-bot-check";
+import { SignInHoneypot, SignInTurnstile, signInTurnstileConfigured } from "@/app/account/core/signin-bot-check";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const plans = [
@@ -92,12 +92,23 @@ export default function ApiKeysPage() {
         if (githubOutcome === "error") setError("GitHub sign-in didn't complete. You can keep using your password or a secure email link.");
         const token = magicTokenFromHash(window.location.hash);
         if (token) {
-          const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/verify", {
-            method: "POST",
-            body: JSON.stringify({ token }),
-          });
+          let result: AuthResult | null = null;
+          let verifyFailed = false;
+          try {
+            result = await customerApi<AuthResult>(API_BASE, "/customer/auth/verify", {
+              method: "POST",
+              body: JSON.stringify({ token }),
+            });
+          } catch {
+            verifyFailed = true;
+          }
           window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
           if (!active) return;
+          if (verifyFailed || !result) {
+            setError("That sign-in link is invalid or expired — request a fresh one below.");
+            setScreen("signed-out");
+            return;
+          }
           if (result.mfaRequired && result.challengeToken) {
             setMfaChallenge(result.challengeToken);
             setScreen("signed-out");
@@ -460,6 +471,8 @@ export default function ApiKeysPage() {
     );
   }
 
+  const botCheckPending = signInTurnstileConfigured && !turnstileToken;
+
   if (screen === "signed-out") {
     return (
       <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
@@ -481,7 +494,8 @@ export default function ApiKeysPage() {
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
               <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-              <button disabled={busy} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
+<button disabled={busy || botCheckPending} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
+              {botCheckPending ? <p className="text-sm text-muted">Complete the quick check above, then this button turns on.</p> : null}
             </form>
           </section>
 
@@ -493,7 +507,8 @@ export default function ApiKeysPage() {
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
               <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" placeholder="you@company.com" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-              <button disabled={busy} className="w-full rounded-xl border border-accent px-5 py-3 font-bold text-accent disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+<button disabled={busy || botCheckPending} className="w-full rounded-xl border border-accent px-5 py-3 font-bold text-accent disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+              {botCheckPending ? <p className="text-sm text-muted">Complete the quick check above, then this button turns on.</p> : null}
             </form>
           </section>
         </div>
