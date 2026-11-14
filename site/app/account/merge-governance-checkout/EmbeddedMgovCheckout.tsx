@@ -211,7 +211,7 @@ export function EmbeddedMgovCheckout() {
   return (
     <main className="min-h-screen bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-body hover:text-ink">
+        <Link href="/account/" className="text-sm font-semibold text-body hover:text-ink">
           ← Back to your account
         </Link>
 
