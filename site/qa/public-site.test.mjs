@@ -523,3 +523,17 @@ test("homepage animation: studio hooks and light-section heading contrast", () =
   const quickstart = landingPage.slice(landingPage.indexOf('id="quickstart"'));
   assert.doesNotMatch(quickstart.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
 });
+
+test("homepage hero: dark island keeps light mode from hiding the headline", () => {
+  const hero = read("app/(english)/landing/InteractiveHero.tsx");
+  const globals = read("app/globals.css");
+  /* the hero artwork stays dark in both themes; the section re-pins dark tokens */
+  assert.match(hero, /styles\.hero} dark-island relative isolate overflow-hidden/);
+  assert.match(globals, /\.dark-island \{/);
+  const island = globals.slice(globals.indexOf(".dark-island {"));
+  assert.match(island, /--ink: #e6edf3;/);
+  assert.match(island, /--body-text: #c9d1d9;/);
+  assert.match(island, /--accent: #58a6ff;/);
+  /* the headline stays on the token; the island is what makes it resolve dark */
+  assert.match(hero, /id="homepage-title"[^>]*text-ink/);
+});
