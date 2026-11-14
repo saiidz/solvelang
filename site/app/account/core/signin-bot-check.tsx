@@ -5,6 +5,12 @@ import { useEffect, useRef, useState } from "react";
 
 const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 
+// Whether the sign-in bot check is configured on this page at all. The
+// sign-in forms use it to hold their submit buttons until a token
+// exists; when no site key is configured the widget renders nothing
+// and the forms behave exactly as they did before the gate existed.
+export const signInTurnstileConfigured = turnstileSiteKey.length > 0;
+
 type Turnstile = {
   render(
     container: HTMLElement,

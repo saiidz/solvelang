@@ -1,0 +1,58 @@
+/* Homepage animation system (approved preview, Nov 12 2026).
+   Discipline (shared with QueueAnimation): transform + opacity are
+   the only animated properties, plus the color/shadow emphasis of
+   the Studio walkthrough exactly as in the approved preview; zero
+   layout shift. Every pre-animation state is gated behind the
+   [data-landing-anim="armed"] attribute that LandingAnimation sets
+   on the page root when it hydrates, so with JS off — and before
+   hydration — the page is the finished static page. The state
+   classes the orchestrator toggles (.in, .on) are global hooks. */
+
+/* ---------- base reveals: fade + rise, staggered via --i ---------- */
+:global([data-landing-anim="armed"]) :global([data-reveal]) { opacity: 0; transform: translateY(28px); }
+:global([data-landing-anim="armed"]) :global([data-reveal].in) { opacity: 1; transform: translateY(0); transition: opacity .9s cubic-bezier(.22, .61, .21, 1), transform .9s cubic-bezier(.22, .61, .21, 1); transition-delay: calc(var(--i, 0) * 95ms); }
+
+/* ---------- settle reveal (Studio product panel) ---------- */
+:global([data-landing-anim="armed"]) :global([data-scale]) { opacity: 0; transform: scale(.96) translateY(24px); }
+:global([data-landing-anim="armed"]) :global([data-scale].in) { opacity: 1; transform: scale(1) translateY(0); transition: opacity 1.5s cubic-bezier(.22, .61, .21, 1), transform 1.5s cubic-bezier(.22, .61, .21, 1); }
+
+/* ---------- evidence cards: sequential highlight wash ---------- */
+.evCard { position: relative; }
+.evCard::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(88, 166, 255, .12), transparent 70%); opacity: 0; transition: opacity .9s ease; transition-delay: calc(var(--i, 0) * 180ms); pointer-events: none; }
+.evCard:global(.in)::before { opacity: 1; }
+
+/* ---------- final CTA: one soft button glow on first appearance ---------- */
+.ctaGlowWrap { position: relative; isolation: isolate; }
+.ctaGlow { position: absolute; inset: -16px; background: radial-gradient(circle, rgba(88, 166, 255, .55), transparent 70%); opacity: 0; z-index: -1; filter: blur(8px); pointer-events: none; }
+:global([data-glow-trigger].in) .ctaGlow { animation: ctaGlow 2s ease .4s 1 both; }
+@keyframes ctaGlow { 0% { opacity: 0; } 35% { opacity: .9; } 100% { opacity: .4; } }
+/* ---------- hero line sequence (rise in on load) ---------- */
+:global([data-landing-anim="armed"]) :global([data-hero-line]) { opacity: 0; transform: translateY(36px); animation: heroRise .95s cubic-bezier(.22, .61, .21, 1) forwards; animation-delay: calc(var(--i, 0) * 140ms + 80ms); }
+@keyframes heroRise { to { opacity: 1; transform: translateY(0); } }
+
+/* ---------- solve context: sticky-pin showcase ----------
+   The wrap wears the section's light background end to end, so no
+   scroll position inside the pin can show a foreign band. The
+   sticky frame is viewport-height and centers the section content;
+   stages and flow chips warm continuously with scroll progress
+   (LandingAnimation drives inline opacity from the wrap's bounding
+   rect). Below the pin gate the section is normal flow and the
+   orchestrator finishes the sequence with a staggered reveal. */
+.scPinWrap { background: #eaf0f3; }
+.scProgress { height: 3px; margin-top: 3rem; background: rgba(12, 99, 182, .15); }
+.scProgress i { display: block; height: 100%; background: #0c63b6; transform: scaleX(0); transform-origin: left; }
+.scStep, .scChip { transition: opacity .55s ease; }
+@media (min-width: 960px) and (min-height: 720px) {
+  .scPinWrap { height: 190vh; position: relative; }
+  .scPin { position: sticky; top: 0; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+}
+
+
+/* ---------- reduced motion: finished state, no motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  :global([data-landing-anim="armed"]) :global([data-reveal]), :global([data-landing-anim="armed"]) :global([data-scale]), :global([data-landing-anim="armed"]) :global([data-hero-line]) { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+  .evCard::before { opacity: 1 !important; transition: none !important; }
+  .ctaGlow { display: none !important; }
+  .scStep, .scChip { opacity: 1 !important; transition: none !important; }
+  .scProgress i { transform: scaleX(1) !important; }
+}
