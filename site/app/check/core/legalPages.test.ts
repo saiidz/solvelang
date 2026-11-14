@@ -42,7 +42,7 @@ test("the public sitemap and legal navigation include the legal and withdrawal r
   const [routeRegistry, sitemap, landing, checkout, privacy, support] = await Promise.all([
     source("app/i18n/routes.ts"),
     source("app/sitemap.ts"),
-    source("app/(english)/landing/page.tsx"),
+    source("app/components/homepage/LandingPage.tsx"),
     source("app/checkout/PaymentElementClient.tsx"),
     source("app/(english)/preflight-privacy/page.tsx"),
     source("app/(english)/support/page.tsx"),
@@ -115,7 +115,7 @@ test("Romanian legal routes, withdrawal flow, and current ANPC SAL asset are pre
     source("app/(english)/withdraw/page.tsx"),
     source("app/i18n/romanianLegal.tsx"),
     source("i18n-preview-source/[locale]/[[...route]]/page.tsx"),
-    source("app/(english)/landing/page.tsx"),
+    source("app/components/homepage/LandingPage.tsx"),
     source("app/sitemap.ts"),
   ]);
   assert.match(romanianLegal, /J2026027621002/);
