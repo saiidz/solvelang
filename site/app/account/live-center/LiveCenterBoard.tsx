@@ -273,6 +273,27 @@ function Overview({
         </p>
       </div>
 
+      <div className={LC_PANEL}>
+        <h2 className="font-semibold text-slate-100">The queue</h2>
+        {board.pullRequests.length === 0 ? (
+          <p className="mt-1 text-sm text-slate-400">
+            No open pull requests right now. When someone opens one, it appears here and the
+            checks start on their own.
+          </p>
+        ) : (
+          <>
+            <div className="mt-2 divide-y divide-white/5">
+              {board.pullRequests.slice(0, 25).map((pr) => (
+                <PrRow key={pr.number ?? pr.title} pr={pr} repoLabel={board.repoLabel} showPosition />
+              ))}
+            </div>
+            <button type="button" onClick={onOpenQueue} className={`${LC_BTN} mt-3`}>
+              Open the Queue tab
+            </button>
+          </>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className={LC_PANEL}>
           <h2 className="font-semibold text-slate-100">Summary</h2>
