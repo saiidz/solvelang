@@ -7,33 +7,33 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://www.solve-lang.com/technical-evidence/" },
 };
 
-const code = "rounded bg-slate-200/70 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-900";
-const ext = "font-semibold text-blue-700 underline";
-const th = "border border-slate-200 px-4 py-3 text-left align-top font-semibold";
-const td = "border border-slate-200 px-4 py-3 align-top";
+const code = "rounded bg-panel-alt/70 px-1.5 py-0.5 font-mono text-[0.9em] text-ink";
+const ext = "font-semibold text-accent underline";
+const th = "border border-line px-4 py-3 text-left align-top font-semibold";
+const td = "border border-line px-4 py-3 align-top";
 
 export default function TechnicalEvidencePage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-canvas text-ink">
       <section className="mx-auto max-w-4xl px-6 py-14 sm:py-20">
-        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-blue-700">
+        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-accent">
           <Link href="/">SolveLang</Link>
           <Link href="/solve-context/">Solve Context</Link>
           <Link href="/mcp-setup/">MCP setup</Link>
         </nav>
-        <header className="mt-10 border-b border-slate-200 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">SolveLang documentation</p>
+        <header className="mt-10 border-b border-line pb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">SolveLang documentation</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">SolveLang full-project completion evidence</h1>
         </header>
 
-        <div className="mt-10 space-y-4 leading-7 text-slate-700">
+        <div className="mt-10 space-y-4 leading-7 text-body">
           <p>Repository source status was re-audited on 2026-09-22 at main <code className={code}>59ab9ff271850454a2029495c2faf34cb93a10c7</code> after #945. Production/runtime and native-platform observations below were checked on 2026-09-20 through main <code className={code}>632b6ff82f2f54babe46e4e11e672675e4ca838e</code> (#938–#942); each external observation is separately identified and keeps its own collection date. The goal includes the existing roadmap and requested Studio account persistence. It excludes the separately deferred Solve Runners/Solblend product and does not invent a 1.0 language/platform promise. Completion requires evidence, not a percentage estimate or a count of merged PRs.</p>
         </div>
 
         <div className="mt-10 overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm leading-6 text-slate-700">
+          <table className="w-full border-collapse text-left text-sm leading-6 text-body">
             <thead>
-              <tr className="bg-slate-100 text-slate-950">
+              <tr className="bg-panel-alt text-ink">
                 <th className={th}>Requirement</th>
                 <th className={th}>Evidence/status</th>
                 <th className={th}>Remaining acceptance</th>
@@ -131,7 +131,7 @@ export default function TechnicalEvidencePage() {
 
         <section aria-labelledby="directly-inspected-sources" className="mt-12">
           <h2 id="directly-inspected-sources" className="text-2xl font-semibold tracking-tight">Directly inspected sources</h2>
-          <div className="mt-4 leading-7 text-slate-700">
+          <div className="mt-4 leading-7 text-body">
             <ul className="list-disc space-y-2 pl-6">
               <li><a className={ext} href="https://github.com/saiidz/solvelang/pull/938">PR #938</a></li>
               <li><a className={ext} href="https://github.com/saiidz/solvelang/pull/943">PR #943</a>, exact PR-head workflows <a className={ext} href="https://github.com/saiidz/solvelang/actions/runs/35531758510">MCP CI</a>, <a className={ext} href="https://github.com/saiidz/solvelang/actions/runs/35531758506">Rust</a>, <a className={ext} href="https://github.com/saiidz/solvelang/actions/runs/35531758515">Release Candidate CI</a>, <a className={ext} href="https://github.com/saiidz/solvelang/actions/runs/35531758509">CI</a>, and <a className={ext} href="https://github.com/saiidz/solvelang/actions/runs/35531758514">WASM artifact security</a></li>
@@ -149,7 +149,7 @@ export default function TechnicalEvidencePage() {
               <li>Live Stripe read-only search in the configured SolveLang merchant account: <code className={code}>metadata[&apos;plan&apos;]:&apos;developer&apos; OR metadata[&apos;plan&apos;]:&apos;pro&apos; OR metadata[&apos;plan&apos;]:&apos;business&apos;</code>. Empty results with no further page are limited search evidence, not a claim that the merchant has no payments or that the checkout is defective.</li>
             </ul>
           </div>
-          <div className="mt-6 space-y-4 leading-7 text-slate-700">
+          <div className="mt-6 space-y-4 leading-7 text-body">
             <p>No charges, refunds, inbox messages, customer data changes, provider activation, or secret provisioning were performed for this evidence record.</p>
             <p>The changed-boundary verification record covers failure classifications and the limits of repository evidence.</p>
           </div>
