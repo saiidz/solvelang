@@ -175,7 +175,7 @@ export function EmbeddedApiCheckout() {
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-slate-300 hover:text-white">
+        <Link href="/account/" className="text-sm font-semibold text-slate-300 hover:text-white">
           ← Back to API account
         </Link>
 
@@ -251,7 +251,7 @@ export function EmbeddedApiCheckout() {
             {phase === "free-done" ? (
               <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
                 <p>Your {details?.name} subscription is active. No payment was due — your promotion code covered the first period in full.</p>
-                <Link href="/account/api-keys/" className="mt-4 inline-block rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                <Link href="/account/" className="mt-4 inline-block rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
                   Go to your API account
                 </Link>
               </div>

@@ -86,7 +86,7 @@ export default function CustomerPriorityPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Customer priority</p>
           <h1 className="mt-3 text-4xl font-bold">Priority processing is not released yet.</h1>
           <p className="mt-5 text-slate-300">The queue, source-storage, and provider-execution gates remain disabled. No weighted priority credits can be consumed from this page.</p>
-          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/">Return to API account</Link>
         </section>
       </main>
     );
@@ -184,7 +184,7 @@ export default function CustomerPriorityPage() {
           </>
         ) : null}
         {error ? <p className="rounded-xl bg-red-400/10 p-4 text-red-200">{error}</p> : null}
-        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Back to API account</Link>
+        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/">Back to API account</Link>
       </section>
     </main>
   );

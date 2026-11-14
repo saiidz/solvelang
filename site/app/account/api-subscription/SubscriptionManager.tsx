@@ -303,7 +303,7 @@ export function SubscriptionManager() {
   return (
     <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-slate-300 hover:text-white">← Back to API account</Link>
+        <Link href="/account/" className="text-sm font-semibold text-slate-300 hover:text-white">← Back to API account</Link>
         <header className="mt-7 border-b border-white/10 pb-8">
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
           <h1 className="mt-3 text-4xl font-bold">Manage subscription</h1>
