@@ -140,6 +140,7 @@ export function createConfirmationWorker({
     await ses.send(new SendEmailCommand({
       FromEmailAddress: sender,
       Destination: { ToAddresses: [message.payload.email] },
+      EmailTags: [{ Name: "project", Value: "solvelang" }],
       Content: { Simple: { Subject: { Data: subject }, Body: { Text: { Data: body } } } },
     }));
     // If this update is ambiguous after SES accepts, retain the lease. A later
