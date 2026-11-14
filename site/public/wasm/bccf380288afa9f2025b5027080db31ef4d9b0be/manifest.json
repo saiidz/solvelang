@@ -1,0 +1,81 @@
+{
+  "schema": "solvelang.wasm-artifact-audit",
+  "version": 1,
+  "sourceCommit": "bccf380288afa9f2025b5027080db31ef4d9b0be",
+  "publishable": false,
+  "browserPreviewReplaced": false,
+  "rust": "1.95.0",
+  "wasmBindgen": "0.2.127",
+  "node": "24.8.0",
+  "policySha256": "284fa6e1135b3a2bceac258b1c714dc44285fb15a628cc6ec74455b858d4c0c8",
+  "totalBytes": 658522,
+  "files": [
+    {
+      "name": "solvec_wasm.js",
+      "bytes": 217,
+      "sha256": "9a3d80af621564b6910054e808f2e7af40b4fac7bfeb59a928c650f4d3db890d",
+      "integrity": "sha256-mj2Ar2IVZLaRAFToCPLnr0C0+se/61mpKMZQ9NPbiQ0="
+    },
+    {
+      "name": "solvec_wasm_bg.js",
+      "bytes": 5285,
+      "sha256": "cfbf1525f1ba89bacb91518e868bc564b9322d958025f0af45c13c5c10d9e474",
+      "integrity": "sha256-z78VJfG6ibrLkVGOhovFZLkyLZWAJfCvRcE8XBDZ5HQ="
+    },
+    {
+      "name": "solvec_wasm_bg.wasm",
+      "bytes": 653020,
+      "sha256": "ed0ca5b99b54c055430bf200566189dda082eb7125f5b699e4fc0e1d5a1e3eaf",
+      "integrity": "sha256-7QyluZtUwFVDC/IAVmGJ3aCC63El9baZ5PwOHVoePq8="
+    }
+  ],
+  "imports": [
+    {
+      "module": "./solvec_wasm_bg.js",
+      "name": "__wbindgen_init_externref_table",
+      "kind": "function"
+    }
+  ],
+  "exports": [
+    {
+      "name": "memory",
+      "kind": "memory"
+    },
+    {
+      "name": "run_full_v1",
+      "kind": "function"
+    },
+    {
+      "name": "run_pure_v1",
+      "kind": "function"
+    },
+    {
+      "name": "__abort_handler",
+      "kind": "global"
+    },
+    {
+      "name": "__instance_terminated",
+      "kind": "global"
+    },
+    {
+      "name": "__wbindgen_externrefs",
+      "kind": "table"
+    },
+    {
+      "name": "__wbindgen_malloc",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_realloc",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_free",
+      "kind": "function"
+    },
+    {
+      "name": "__wbindgen_start",
+      "kind": "function"
+    }
+  ]
+}
