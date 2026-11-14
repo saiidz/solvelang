@@ -1,0 +1,56 @@
+/* "The Queue" hero animation mechanics.
+   Hard contract (SHARED-SPEC, Nov 10 2026): only transform and opacity
+   are ever animated — compositor-only, zero layout shift. State colors
+   swap instantly at beat boundaries; the motion itself is positional
+   and opacity crossfades via overlay layers. */
+
+.anim {
+  transition-property: transform, opacity;
+  transition-timing-function: cubic-bezier(0.22, 0.68, 0.32, 1);
+  will-change: transform, opacity;
+}
+
+.durFast {
+  transition-duration: 350ms;
+}
+
+.durMed {
+  transition-duration: 600ms;
+}
+
+.durSlow {
+  transition-duration: 850ms;
+}
+
+/* Progress shimmer that sweeps the batch frame during the batch beat.
+   The bar is a gradient layer moved purely by transform. */
+.shimmer {
+  animation: queueShimmer 1.5s ease-in-out forwards;
+}
+
+@keyframes queueShimmer {
+  from {
+    transform: translateX(-140%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(260%) skewX(-12deg);
+  }
+}
+
+/* One-frame snap while the loop resets: no element may animate back. */
+.resetting,
+.resetting * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Belt and braces: the component already renders a still end state for
+   reduced-motion visitors; this guarantees no transition or keyframe
+   can run under the preference even if state changes. */
+@media (prefers-reduced-motion: reduce) {
+  .anim,
+  .shimmer {
+    transition: none !important;
+    animation: none !important;
+  }
+}

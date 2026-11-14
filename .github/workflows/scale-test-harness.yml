@@ -1,0 +1,237 @@
+name: Scale Test Harness
+
+# ONE-OFF OPERATOR HARNESS (owner-commissioned Nov 11, 2026) for the live
+# end-to-end test of the scale engine in saiidz/solvelang-merge-governance.
+# It assumes the same pilot deploy role as the pilot dispatcher and writes
+# ONLY test-shaped data into the pilot table (stack
+# solvelang-merge-governance-pilot): USAGE# daily counters for the pilot
+# tenant saiidz-pilot and, in later modes, the PLATFORM scale state. The
+# seed-crossing mode backs up every row it can touch (to the SAM artifact
+# bucket at scale-test/backup.json, and into the step summary) before it
+# writes anything, so the test can be unwound exactly. Dispatch is manual,
+# gated by the api-access-production environment, and requires the
+# confirm_scale_test input. This workflow never deploys anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Harness mode: seed-crossing backs up the pilot tenant's last 7 USAGE days + SCALE_STATE, then seeds those days at 12000 events/day"
+        required: true
+        type: choice
+        options:
+          - seed-crossing
+      confirm_scale_test:
+        description: Confirm writing test-shaped scale data into the PILOT table only (stack solvelang-merge-governance-pilot, tenant saiidz-pilot)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  harness:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: solvelang-merge-governance-pilot
+      PILOT_TENANT_ID: saiidz-pilot
+
+    steps:
+      - name: Enforce scale test boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Scale test harness must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_scale_test }}" == "true" ]] || { echo "Explicit scale-test confirmation is required." >&2; exit 1; }
+          [[ "$STACK_NAME" == "solvelang-merge-governance-pilot" ]] || { echo "Unexpected stack name." >&2; exit 1; }
+          test -n "$AWS_REGION"
+          test -n "$PILOT_TENANT_ID"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          for f in "$RUNNER_TEMP/aws/install" "$RUNNER_TEMP/aws/dist/aws" "$RUNNER_TEMP/aws/dist/aws_completer"; do
+            if [[ -f "$f" ]]; then chmod +x "$f"; fi
+          done
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
+
+      - name: Assume pilot deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Resolve pilot table and artifact bucket
+        id: targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]]
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          table="$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?OutputKey=='MergeGovernanceTableName'].OutputValue" --output text)"
+          [[ -n "$table" && "$table" != "None" ]] || { echo "MergeGovernanceTableName output not found on stack $STACK_NAME." >&2; exit 1; }
+          echo "table=$table" >> "$GITHUB_OUTPUT"
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+          echo "Pilot table: $table"
+          echo "Artifact bucket: $bucket"
+
+      - name: Run scale test harness
+        env:
+          HARNESS_MODE: ${{ inputs.mode }}
+          TABLE_NAME: ${{ steps.targets.outputs.table }}
+          BACKUP_BUCKET: ${{ steps.targets.outputs.bucket }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/scale-harness"
+          mkdir -p "$work"
+          cat > "$work/harness.mjs" <<'HARNESS_EOF'
+          // Scale test harness — runs ONLY inside the Scale Test Harness
+          // workflow, under the pilot deploy role, against the pilot table.
+          // Key formats are the service's stable contract (state-store.js):
+          // tenant PK "TENANT#<tenantId>", usage SK "USAGE#<yyyy-mm-dd>",
+          // platform PK "PLATFORM", scale-state SK "SCALE_STATE".
+          import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+          import {
+            DynamoDBDocumentClient,
+            GetCommand,
+            PutCommand,
+          } from "@aws-sdk/lib-dynamodb";
+          import { execFileSync } from "node:child_process";
+          import { appendFileSync, writeFileSync } from "node:fs";
+
+          const MODE = process.env.HARNESS_MODE;
+          const TABLE = process.env.TABLE_NAME;
+          const BUCKET = process.env.BACKUP_BUCKET;
+          const REGION = process.env.AWS_REGION;
+          const TENANT_ID = process.env.PILOT_TENANT_ID || "saiidz-pilot";
+          const TENANT_PK = `TENANT#${TENANT_ID}`;
+          const PLATFORM_PK = "PLATFORM";
+          const SCALE_STATE_SK = "SCALE_STATE";
+          const BACKUP_KEY = "scale-test/backup.json";
+          const SEED_EVENTS = 12000;
+
+          if (!MODE || !TABLE || !BUCKET || !REGION) {
+            console.error("HARNESS_MODE, TABLE_NAME, BACKUP_BUCKET and AWS_REGION are required.");
+            process.exit(1);
+          }
+
+          const doc = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }));
+
+          function summary(text) {
+            console.log(text);
+            if (process.env.GITHUB_STEP_SUMMARY) {
+              appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${text}\n`);
+            }
+          }
+
+          function dayString(date) {
+            return date.toISOString().slice(0, 10);
+          }
+
+          // Last 7 UTC days, today first.
+          function lastSevenDays() {
+            const days = [];
+            const now = new Date();
+            for (let i = 0; i < 7; i++) {
+              const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+              d.setUTCDate(d.getUTCDate() - i);
+              days.push(dayString(d));
+            }
+            return days;
+          }
+
+          const usageKey = (day) => ({ PK: TENANT_PK, SK: `USAGE#${day}` });
+          const scaleStateKey = () => ({ PK: PLATFORM_PK, SK: SCALE_STATE_SK });
+
+          async function getItem(key) {
+            const out = await doc.send(new GetCommand({ TableName: TABLE, Key: key }));
+            return out.Item ?? null;
+          }
+
+          async function readback(label) {
+            const state = await getItem(scaleStateKey());
+            summary("");
+            summary(`## Readback — ${label}`);
+            summary(`SCALE_STATE: ${JSON.stringify(state)}`);
+            for (const day of lastSevenDays()) {
+              const item = await getItem(usageKey(day));
+              summary(`USAGE ${day}: eventsReceived=${item?.eventsReceived ?? null}`);
+            }
+          }
+
+          async function seedCrossing() {
+            const days = lastSevenDays();
+            // (1) Backup every row this test can touch, exactly as found
+            // (present item, or null when the row does not exist).
+            const entries = [];
+            for (const day of days) {
+              const key = usageKey(day);
+              entries.push({ key, item: await getItem(key) });
+            }
+            const stateKey = scaleStateKey();
+            entries.push({ key: stateKey, item: await getItem(stateKey) });
+            const backup = {
+              table: TABLE,
+              tenantId: TENANT_ID,
+              createdAt: new Date().toISOString(),
+              entries,
+            };
+            const backupJson = JSON.stringify(backup, null, 2);
+            const backupFile = `${process.env.RUNNER_TEMP || "/tmp"}/scale-test-backup.json`;
+            writeFileSync(backupFile, backupJson);
+            execFileSync("aws", ["s3", "cp", backupFile, `s3://${BUCKET}/${BACKUP_KEY}`], { stdio: "inherit" });
+            summary("## Backup written before seeding");
+            summary(`Bucket: ${BUCKET}  Key: ${BACKUP_KEY}`);
+            summary("```json");
+            summary(backupJson);
+            summary("```");
+            // (2) Seed: the same 7 days at SEED_EVENTS, preserving any
+            // other fields already on each row.
+            summary("## Seed — crossing");
+            for (const day of days) {
+              const key = usageKey(day);
+              const existing = entries.find((e) => e.key.SK === key.SK)?.item ?? null;
+              const item = existing
+                ? { ...existing }
+                : { PK: key.PK, SK: key.SK, tenantId: TENANT_ID, day };
+              const before = item.eventsReceived ?? null;
+              item.eventsReceived = SEED_EVENTS;
+              item.updatedAt = new Date().toISOString();
+              await doc.send(new PutCommand({ TableName: TABLE, Item: item }));
+              summary(`USAGE ${day}: eventsReceived ${before} -> ${SEED_EVENTS}`);
+            }
+          }
+
+          const modes = { "seed-crossing": seedCrossing };
+          const run = modes[MODE];
+          if (!run) {
+            console.error(`Unknown harness mode: ${MODE}`);
+            process.exit(1);
+          }
+          await run();
+          await readback(`after ${MODE}`);
+          summary(`Harness mode ${MODE} complete.`);
+          HARNESS_EOF
+          cd "$work"
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund @aws-sdk/client-dynamodb@3 @aws-sdk/lib-dynamodb@3
+          node harness.mjs

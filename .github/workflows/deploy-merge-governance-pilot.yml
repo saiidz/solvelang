@@ -1,0 +1,241 @@
+name: Deploy Merge Governance Pilot
+
+# FREE-ROUTE DISPATCH (owner-approved Nov 7, 2026): this workflow is only a
+# dispatcher. The approval gate stays HERE, on the public repo's
+# api-access-production environment, where required-reviewers works. The
+# product code it deploys no longer lives in this repo: it is checked out
+# from the private repo saiidz/solvelang-merge-governance (input private_ref)
+# through the read-only deploy key in the MGOV_PRIVATE_REPO_DEPLOY_KEY
+# environment secret. Nothing in this repo is deployed anymore.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_pilot_deploy:
+        description: Confirm deploying the merge-governance pilot stack (new stack, pilot tenant only, no production traffic)
+        required: true
+        default: false
+        type: boolean
+      confirm_cost_d0_only:
+        description: Confirm this deploy stays inside the D0 cost envelope (on-demand Lambda, DynamoDB, SQS and API Gateway only; no provisioned capacity, no paid add-ons)
+        required: true
+        default: false
+        type: boolean
+      private_ref:
+        description: Ref of saiidz/solvelang-merge-governance to deploy (the private product code source)
+        required: false
+        default: main
+        type: string
+      fargate_subnets:
+        description: "Fargate subnets for the pilot stack: 'auto' resolves the account default VPC's subnets, a comma-separated subnet list is used as-is, 'none' leaves the stack parameter unset"
+        required: false
+        default: auto
+        type: string
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    defaults:
+      run:
+        working-directory: private-src/services/merge-governance
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: solvelang-merge-governance-pilot
+      PILOT_TENANT_ID: saiidz-pilot
+      PILOT_REPOS: saiidz/upcomingsounds-private@179351888,saiidz/solvelang
+      MGOV_GITHUB_READ_TOKEN: ${{ secrets.MGOV_GITHUB_READ_TOKEN }}
+      MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
+      MGOV_WEBHOOK_SECRET: ${{ secrets.MGOV_WEBHOOK_SECRET }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+    steps:
+      - name: Check out the private product source
+        uses: actions/checkout@v4
+        with:
+          repository: saiidz/solvelang-merge-governance
+          ref: ${{ inputs.private_ref }}
+          ssh-key: ${{ secrets.MGOV_PRIVATE_REPO_DEPLOY_KEY }}
+          path: private-src
+
+      - name: Enforce pilot deploy boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || { echo "Pilot deploy must run from main." >&2; exit 1; }
+          [[ "${{ inputs.confirm_pilot_deploy }}" == "true" ]] || { echo "Explicit pilot deploy confirmation is required." >&2; exit 1; }
+          [[ "${{ inputs.confirm_cost_d0_only }}" == "true" ]] || { echo "Explicit D0 cost-envelope confirmation is required." >&2; exit 1; }
+          [[ "$STACK_NAME" == "solvelang-merge-governance-pilot" ]] || { echo "Unexpected pilot stack name." >&2; exit 1; }
+          test -n "$AWS_REGION"
+          test -n "$PILOT_TENANT_ID"
+          test -n "$PILOT_REPOS"
+          # The optional credentials (static read token, GitHub App) may be
+          # empty: the stack deploys dark for whichever is missing and the
+          # function fails closed per repo. The two pilot secrets below may
+          # NOT be empty: without them the admin route and the webhook
+          # ingress would deploy permanently dark by accident.
+          [[ -n "$MGOV_ADMIN_TOKEN" ]] || { echo "MGOV_ADMIN_TOKEN secret must be set before the pilot deploy." >&2; exit 1; }
+          [[ -n "$MGOV_WEBHOOK_SECRET" ]] || { echo "MGOV_WEBHOOK_SECRET secret must be set before the pilot deploy." >&2; exit 1; }
+          # The deployable code comes from the private repo checkout, never
+          # from this repo: prove the checkout landed before doing any work.
+          # (working-directory is private-src/services/merge-governance.)
+          test -f template.yaml
+          test -f package.json
+          test -f src/handler.js
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate merge-governance candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund
+          npm test
+          node scripts/check-licences.mjs --from-node-modules
+
+      - uses: aws-actions/setup-sam@v2
+
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          for f in "$RUNNER_TEMP/aws/install" "$RUNNER_TEMP/aws/dist/aws" "$RUNNER_TEMP/aws/dist/aws_completer"; do
+            if [[ -f "$f" ]]; then chmod +x "$f"; fi
+          done
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
+
+      - name: Assume pilot deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Resolve Fargate subnets
+        id: fargate-subnets
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Fail-soft by construction: any failure or empty result leaves
+          # the output empty, and the deploy step then omits the
+          # FargateSubnets parameter entirely (the template default keeps
+          # the service step failing closed). This step must never fail
+          # the deploy, so no `set -e` here and every call is guarded.
+          resolved=""
+          input="${{ inputs.fargate_subnets }}"
+          if [[ "$input" == "auto" ]]; then
+            raw="$(aws ec2 describe-subnets --filters Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text 2>/dev/null || true)"
+            resolved="$(printf '%s' "$raw" | tr '\t' ',' | tr -s ',' | sed -e 's/^,//' -e 's/,$//' || true)"
+          elif [[ "$input" == *subnet-* ]]; then
+            resolved="$input"
+          fi
+          # 'none', an empty input, an empty lookup, or any error above
+          # lands here; only a clean comma-separated subnet-id list is
+          # accepted, anything else resolves to empty.
+          if [[ ! "$resolved" =~ ^subnet-[0-9a-f]+(,subnet-[0-9a-f]+)*$ ]]; then
+            resolved=""
+          fi
+          echo "resolved=$resolved" >> "$GITHUB_OUTPUT"
+          echo "Fargate subnets resolved: ${resolved:-<none>}"
+
+      - name: Validate and build the pilot template
+        shell: bash
+        run: |
+          set -euo pipefail
+          sam validate --lint --template template.yaml
+          sam build --template template.yaml
+
+      - name: Prepare dedicated SAM artifact bucket
+        id: artifact-bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          [[ "$AWS_REGION" =~ ^[a-z0-9-]+$ ]]
+          region_hash="$(printf '%s' "$AWS_REGION" | sha256sum | cut -c1-8)"
+          bucket="solvelang-api-access-production-artifacts-${account_id}-${region_hash}"
+          (( ${#bucket} <= 63 ))
+          aws s3api head-bucket --bucket "$bucket" >/dev/null
+          aws s3api put-public-access-block --bucket "$bucket" --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-encryption --bucket "$bucket" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+          aws s3api put-bucket-versioning --bucket "$bucket" --versioning-configuration Status=Enabled
+          echo "bucket=$bucket" >> "$GITHUB_OUTPUT"
+
+      - name: Encode the GitHub App private key for transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The raw PEM is corrupted by SAM/CloudFormation parameter
+          # parsing (spaces and newlines), so the key travels
+          # base64-encoded as a single line and the service decodes it
+          # on receipt. Never echo the key or its encoding anywhere.
+          if [[ -n "$GH_APP_PRIVATE_KEY" ]]; then
+            printf 'GH_APP_PRIVATE_KEY_B64=%s\n' "$(printf '%s' "$GH_APP_PRIVATE_KEY" | base64 -w 0)" >> "$GITHUB_ENV"
+          fi
+
+      - name: Deploy the merge-governance pilot stack
+        env:
+          SAM_ARTIFACT_BUCKET: ${{ steps.artifact-bucket.outputs.bucket }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          parameters=(
+            PilotTenantId="$PILOT_TENANT_ID"
+            PilotRepos="$PILOT_REPOS"
+            AdminToken="$MGOV_ADMIN_TOKEN"
+            WebhookSecret="$MGOV_WEBHOOK_SECRET"
+          )
+          [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || parameters+=(GitHubReadToken="$MGOV_GITHUB_READ_TOKEN")
+          [[ -z "$GH_APP_ID" ]] || parameters+=(GitHubAppId="$GH_APP_ID")
+          # The key travels base64-encoded because raw PEMs are corrupted
+          # by parameter parsing; the service decodes it on receipt.
+          [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY_B64")
+          # Fargate subnets travel only when the resolve step produced a
+          # clean list; empty leaves the parameter unset, and the template
+          # default keeps the service step failing closed.
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || parameters+=(FargateSubnets="${{ steps.fargate-subnets.outputs.resolved }}")
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --s3-bucket "$SAM_ARTIFACT_BUCKET" \
+            --s3-prefix solvelang-merge-governance-pilot \
+            --capabilities CAPABILITY_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "${parameters[@]}"
+
+      - name: Write deployment summary
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_auth="off"
+          [[ -z "$GH_APP_ID" || -z "$GH_APP_PRIVATE_KEY" ]] || app_auth="on"
+          static_reader="off"
+          [[ -z "$MGOV_GITHUB_READ_TOKEN" ]] || static_reader="on"
+          fargate_subnets_line="not configured (service step will fail closed)"
+          [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || fargate_subnets_line="configured (parameter passed)"
+          {
+            echo "## SolveLang merge-governance pilot deploy"
+            echo
+            echo "- Dispatcher commit: \`$GITHUB_SHA\`"
+            echo "- Product source: \`saiidz/solvelang-merge-governance\` @ \`${{ inputs.private_ref }}\` (read-only deploy key checkout)"
+            echo "- Stack: \`$STACK_NAME\`"
+            echo "- Region: \`$AWS_REGION\`"
+            echo "- Pilot tenant: \`$PILOT_TENANT_ID\`"
+            echo "- Pilot repos: \`$PILOT_REPOS\`"
+            echo "- GitHub App auth configured: **$app_auth**"
+            echo "- Static read token configured: **$static_reader**"
+            echo "- Fargate subnets: **$fargate_subnets_line**"
+            echo "- Cost envelope: **D0** (on-demand serverless only)"
+          } >> "$GITHUB_STEP_SUMMARY"

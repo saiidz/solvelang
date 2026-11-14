@@ -47,9 +47,25 @@ jobs:
       STRIPE_API_DEVELOPER_PRICE_ID: ${{ vars.STRIPE_API_DEVELOPER_PRICE_ID }}
       STRIPE_API_PRO_PRICE_ID: ${{ vars.STRIPE_API_PRO_PRICE_ID }}
       STRIPE_API_BUSINESS_PRICE_ID: ${{ vars.STRIPE_API_BUSINESS_PRICE_ID }}
+      STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID }}
+      STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID }}
+      STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID }}
+      STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID }}
+      MGOV_PILOT_BASE_URL: ${{ vars.MGOV_PILOT_BASE_URL }}
+      MGOV_PILOT_TENANT: ${{ vars.MGOV_PILOT_TENANT }}
+      MGOV_PILOT_OWNER: ${{ vars.MGOV_PILOT_OWNER }}
+      MGOV_PILOT_REPO: ${{ vars.MGOV_PILOT_REPO }}
+      MGOV_PILOT_INSTALLATION_ID: ${{ vars.MGOV_PILOT_INSTALLATION_ID }}
+      MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
+      TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
+      GH_APP_ID: ${{ secrets.GH_APP_ID }}
+      GH_APP_CLIENT_ID: ${{ secrets.GH_APP_CLIENT_ID }}
+      GH_APP_CLIENT_SECRET: ${{ secrets.GH_APP_CLIENT_SECRET }}
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      SOLVELANG_WEBHOOK_SECRET: ${{ secrets.SOLVELANG_WEBHOOK_SECRET }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: ${{ secrets.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET }}
 
@@ -79,6 +95,16 @@ jobs:
           [[ "$STRIPE_API_DEVELOPER_PRICE_ID" == "price_1U2jBo4HWc7PvaDYXcET6RX9" ]]
           [[ "$STRIPE_API_PRO_PRICE_ID" == "price_1U2jCa4HWc7PvaDYNE8wPhgr" ]]
           [[ "$STRIPE_API_BUSINESS_PRICE_ID" == "price_1U2jCx4HWc7PvaDYIvE3ne0Y" ]]
+          [[ "$STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID" == "price_1UZGDH4HWc7PvaDYJ1W9Rlxh" ]]
+          [[ "$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID" == "price_1UZGDH4HWc7PvaDY5j7uMC3s" ]]
+          [[ "$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID" == "price_1UZGDN4HWc7PvaDYD9evdkxz" ]]
+          [[ "$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID" == "price_1UZGDN4HWc7PvaDYK42zx1LY" ]]
+          [[ "$MGOV_PILOT_BASE_URL" == "https://2l346svz17.execute-api.us-east-2.amazonaws.com" ]]
+          [[ "$MGOV_PILOT_TENANT" == "saiidz-pilot" ]]
+          [[ "$MGOV_PILOT_OWNER" == "saiidz" ]]
+          [[ "$MGOV_PILOT_REPO" == "upcomingsounds-private" ]]
+          [[ "$MGOV_PILOT_INSTALLATION_ID" == "179351888" ]]
+          (( ${#MGOV_ADMIN_TOKEN} >= 32 ))
           (( ${#API_KEY_PEPPER} >= 32 ))
           (( ${#API_ACCESS_ADMIN_SECRET} >= 32 ))
           (( ${#CUSTOMER_AUTH_PEPPER} >= 32 ))
@@ -418,8 +444,24 @@ jobs:
             StripeApiDeveloperPriceId="$STRIPE_API_DEVELOPER_PRICE_ID"
             StripeApiProPriceId="$STRIPE_API_PRO_PRICE_ID"
             StripeApiBusinessPriceId="$STRIPE_API_BUSINESS_PRICE_ID"
+            StripeMgovRegularMonthlyPriceId="$STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID"
+            StripeMgovRegularAnnualPriceId="$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID"
+            StripeMgovPlusMonthlyPriceId="$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID"
+            StripeMgovPlusAnnualPriceId="$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID"
+            MgovPilotBaseUrl="$MGOV_PILOT_BASE_URL"
+            MgovAdminToken="$MGOV_ADMIN_TOKEN"
+            MgovPilotTenant="$MGOV_PILOT_TENANT"
+            MgovPilotOwner="$MGOV_PILOT_OWNER"
+            MgovPilotRepo="$MGOV_PILOT_REPO"
+            MgovPilotInstallationId="$MGOV_PILOT_INSTALLATION_ID"
           )
           [[ -z "$CUSTOMER_AUTH_EMAIL_REPLY_TO" ]] || parameters+=(CustomerAuthEmailReplyTo="$CUSTOMER_AUTH_EMAIL_REPLY_TO")
+          [[ -z "$TURNSTILE_SECRET_KEY" ]] || parameters+=(TurnstileSecretKey="$TURNSTILE_SECRET_KEY")
+          [[ -z "$GH_APP_ID" ]] || parameters+=(GitHubAppId="$GH_APP_ID")
+          [[ -z "$GH_APP_CLIENT_ID" ]] || parameters+=(GitHubAppClientId="$GH_APP_CLIENT_ID")
+          [[ -z "$GH_APP_CLIENT_SECRET" ]] || parameters+=(GitHubAppClientSecret="$GH_APP_CLIENT_SECRET")
+          [[ -z "$GH_APP_PRIVATE_KEY" ]] || parameters+=(GitHubAppPrivateKey="$GH_APP_PRIVATE_KEY")
+          [[ -z "$SOLVELANG_WEBHOOK_SECRET" ]] || parameters+=(GitHubAppWebhookSecret="$SOLVELANG_WEBHOOK_SECRET")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \

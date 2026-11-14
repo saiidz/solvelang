@@ -11,7 +11,7 @@ on:
 jobs:
   rust:
     name: Rust runtime
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: solvec
@@ -99,7 +99,7 @@ jobs:
 
   site:
     name: Static site
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
       run:
@@ -176,9 +176,9 @@ jobs:
         env:
           AWS_BRANCH: studio-acceptance
           STUDIO_ACCEPTANCE_PREVIEW_ENABLED: "true"
-          NEXT_PUBLIC_API_ACCESS_BASE_URL: https://3l3y008e94.execute-api.us-east-2.amazonaws.com
+          NEXT_PUBLIC_API_ACCESS_BASE_URL: https://api.solve-lang.com
         run: |
           npm run build:studio-acceptance
           grep -Rql "Connect / refresh account" out/_next/static/chunks
           grep -Rql "Studio acceptance preview" out/_next/static/chunks
-          grep -Rql "3l3y008e94.execute-api.us-east-2.amazonaws.com" out/_next/static/chunks
+          grep -Rql "api.solve-lang.com" out/_next/static/chunks

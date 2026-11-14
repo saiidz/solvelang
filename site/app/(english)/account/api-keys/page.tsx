@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   type AuthResult,
   CustomerApiError,
@@ -13,6 +13,9 @@ import {
   newRequestId,
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
+import { buildBotFields } from "@/app/account/core/bot-fields";
+import { githubAuthorizeUrl, githubSignInOutcome } from "@/app/account/core/github-install";
+import { SignInHoneypot, SignInTurnstile } from "@/app/account/core/signin-bot-check";
 
 const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const plans = [
@@ -51,6 +54,14 @@ export default function ApiKeysPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [botWebsite, setBotWebsite] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [botResetSignal, setBotResetSignal] = useState(0);
+  const formRenderedAt = useRef(0);
+
+  useEffect(() => {
+    formRenderedAt.current = Date.now();
+  }, []);
 
   async function refreshDashboard() {
     const account = await customerApi<CustomerDashboard>(API_BASE, "/customer/account", { method: "GET" });
@@ -76,6 +87,9 @@ export default function ApiKeysPage() {
     let active = true;
     (async () => {
       try {
+        const githubOutcome = githubSignInOutcome(window.location.search);
+        if (githubOutcome === "connected") setNotice("GitHub sign-in complete — you are signed in.");
+        if (githubOutcome === "error") setError("GitHub sign-in didn't complete. You can keep using your password or a secure email link.");
         const token = magicTokenFromHash(window.location.hash);
         if (token) {
           const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/verify", {
@@ -107,6 +121,15 @@ export default function ApiKeysPage() {
     return () => { active = false; };
   }, []);
 
+  function botFields() {
+    return buildBotFields({ renderedAt: formRenderedAt.current, now: Date.now(), website: botWebsite, turnstileToken: turnstileToken || undefined });
+  }
+
+  function resetBotCheck() {
+    setTurnstileToken("");
+    setBotResetSignal((value) => value + 1);
+  }
+
   async function passwordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -115,13 +138,14 @@ export default function ApiKeysPage() {
     try {
       const result = await customerApi<AuthResult>(API_BASE, "/customer/auth/password", {
         method: "POST",
-        body: JSON.stringify({ identifier, password: loginPassword }),
+        body: JSON.stringify({ identifier, password: loginPassword, ...botFields() }),
       });
       if (!result.mfaRequired) setLoginPassword("");
       await finishFirstFactor(result);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in failed.");
     } finally {
+      resetBotCheck();
       setBusy(false);
     }
   }
@@ -156,12 +180,13 @@ export default function ApiKeysPage() {
     try {
       await customerApi(API_BASE, "/customer/auth/magic-link", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, ...botFields() }),
       });
       setNotice("Check your email for a sign-in link. It expires in 15 minutes.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Sign-in could not be started.");
     } finally {
+      resetBotCheck();
       setBusy(false);
     }
   }
@@ -444,11 +469,18 @@ export default function ApiKeysPage() {
             <p className="mt-8 text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
             <h1 className="mt-3 text-4xl font-bold">Sign in</h1>
             <p className="mt-4 text-slate-300">Use your email address or username and password. Normal password sign-ins do not send email.</p>
+            {API_BASE ? (
+              <div className="mt-8">
+                <a href={githubAuthorizeUrl(API_BASE)} className="flex w-full items-center justify-center rounded-xl bg-white px-5 py-3 font-bold text-slate-950 hover:bg-slate-200">Continue with GitHub</a>
+                <p className="mt-3 text-sm text-slate-400">GitHub sign-in uses the verified email address on your GitHub account.</p>
+              </div>
+            ) : null}
             <form className="mt-8 space-y-4" onSubmit={passwordLogin}>
               <label className="block text-sm font-medium" htmlFor="identifier">Email or username</label>
               <input id="identifier" required value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com or username" />
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
               <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
               <button disabled={busy} className="w-full rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
             </form>
           </section>
@@ -460,9 +492,13 @@ export default function ApiKeysPage() {
             <form className="mt-8 space-y-4" onSubmit={requestLink}>
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
               <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" placeholder="you@company.com" />
+              <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
               <button disabled={busy} className="w-full rounded-xl border border-cyan-300/40 px-5 py-3 font-bold text-cyan-100 disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
             </form>
           </section>
+        </div>
+        <div className="mx-auto mt-6 max-w-5xl">
+          <SignInTurnstile onToken={setTurnstileToken} resetSignal={botResetSignal} />
         </div>
         <div className="mx-auto mt-6 max-w-5xl">
           {notice ? <p className="rounded-xl bg-emerald-400/10 p-4 text-sm text-emerald-200">{notice}</p> : null}
@@ -485,6 +521,7 @@ export default function ApiKeysPage() {
             <p className="mt-2 text-slate-400">{dashboard.email}</p>
           </div>
           <div className="flex gap-3">
+            <Link href="/account/live-center/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Live Center</Link>
             <Link href="/api-pricing/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Plans</Link>
           </div>
         </header>

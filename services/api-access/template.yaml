@@ -34,11 +34,51 @@ Parameters:
   SiteOrigin:
     Type: String
     Default: https://www.solve-lang.com
+  PublicStatusExecutionHealthUrl:
+    Type: String
+    Default: https://2l346svz17.execute-api.us-east-2.amazonaws.com/health
+    Description: Public health URL of the managed-execution service (merge-governance pilot) probed by the public status collector; blank leaves that component unmonitored.
+  PublicStatusRunnerMinutesHealthUrl:
+    Type: String
+    Default: ""
+    Description: Public health URL of the runner-minutes service probed by the public status collector; blank until that service is deployed, and its status component reports unmonitored meanwhile.
   StudioAcceptanceOrigin:
     Type: String
     Default: ""
     Description: Exact dedicated Amplify acceptance-branch origin; blank disables it.
     AllowedPattern: '^$|^https://studio-acceptance\.d[a-z0-9]+\.amplifyapp\.com$'
+  TurnstileSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Cloudflare Turnstile secret key for sign-in bot verification; blank leaves Turnstile unenforced (rate limits and the honeypot/timing checks stay active).
+  GitHubAppId:
+    Type: String
+    Default: ""
+    Description: SolveLang GitHub App id; blank (with any other GitHub App value blank) leaves GitHub sign-in and installations dark.
+  GitHubAppClientId:
+    Type: String
+    Default: ""
+    Description: SolveLang GitHub App OAuth client id.
+  GitHubAppClientSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App OAuth client secret.
+  GitHubAppPrivateKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App private key (PEM; literal \n escapes are accepted).
+  GitHubAppWebhookSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: SolveLang GitHub App webhook secret for delivery signature verification.
+  GitHubAppSlug:
+    Type: String
+    Default: "solvelang-reader"
+    Description: SolveLang GitHub App URL slug used to build the install URL.
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -84,6 +124,43 @@ Parameters:
   StripeApiBusinessPriceId:
     Type: String
     Default: ""
+  StripeMgovRegularMonthlyPriceId:
+    Type: String
+    Default: ""
+  StripeMgovRegularAnnualPriceId:
+    Type: String
+    Default: ""
+  StripeMgovPlusMonthlyPriceId:
+    Type: String
+    Default: ""
+  StripeMgovPlusAnnualPriceId:
+    Type: String
+    Default: ""
+  MgovPilotBaseUrl:
+    Type: String
+    Default: ""
+    Description: Merge Governance pilot base URL for the Live Center board proxy; blank (with any other Mgov pilot value blank) leaves Live Center dark.
+  MgovAdminToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Admin token presented to the Merge Governance pilot board endpoint.
+  MgovPilotTenant:
+    Type: String
+    Default: ""
+    Description: Merge Governance pilot tenant id for the Live Center board.
+  MgovPilotOwner:
+    Type: String
+    Default: ""
+    Description: GitHub owner of the repository shown in the Live Center board.
+  MgovPilotRepo:
+    Type: String
+    Default: ""
+    Description: GitHub repository shown in the Live Center board.
+  MgovPilotInstallationId:
+    Type: String
+    Default: ""
+    Description: GitHub App installation id for the Live Center board repository.
 
 Rules:
   CustomerAccountsRequirements:
@@ -131,7 +208,6 @@ Conditions:
   CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
   AdminCrmFeatureEnabled: !Equals [!Ref AdminCrmEnabled, "true"]
-  StudioAcceptanceOriginConfigured: !Not [!Equals [!Ref StudioAcceptanceOrigin, ""]]
 
 Resources:
   ApiAccountsTable:
@@ -246,6 +322,24 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  GitHubInstallationsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: recordKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: recordKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+
   AdminCrmTable:
     Type: AWS::DynamoDB::Table
     Condition: AdminCrmFeatureEnabled
@@ -285,13 +379,12 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       CorsConfiguration:
-        AllowOrigins: !If
-          - StudioAcceptanceOriginConfigured
-          - [!Ref SiteOrigin, !Ref StudioAcceptanceOrigin]
-          - [!Ref SiteOrigin]
+        AllowOrigins:
+          - !Ref SiteOrigin
         AllowCredentials: true
         AllowMethods: [GET, POST, OPTIONS]
         AllowHeaders:
+          - accept
           - authorization
           - content-type
           - idempotency-key
@@ -316,7 +409,7 @@ Resources:
       Handler: src/handler.handler
       CodeUri: .
       MemorySize: 256
-      Timeout: 15
+      Timeout: 30
       Architectures: [arm64]
       Environment:
         Variables:
@@ -339,6 +432,7 @@ Resources:
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
+          API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
           API_KEYS_TABLE: !Ref ApiKeysTable
           API_KEYS_ACCOUNT_INDEX: AccountIdIndex
@@ -346,11 +440,28 @@ Resources:
           API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
           API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
           API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
+          API_GITHUB_APP_ID: !Ref GitHubAppId
+          API_GITHUB_APP_CLIENT_ID: !Ref GitHubAppClientId
+          API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
+          API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
+          API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
+          API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
           STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
           STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
           STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+          STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: !Ref StripeMgovRegularMonthlyPriceId
+          STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
+          STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
+          STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
+          MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
+          MGOV_PILOT_TENANT: !Ref MgovPilotTenant
+          MGOV_PILOT_OWNER: !Ref MgovPilotOwner
+          MGOV_PILOT_REPO: !Ref MgovPilotRepo
+          MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiAccountsTable
@@ -364,6 +475,8 @@ Resources:
             TableName: !Ref ApiSubscriptionEventsTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ApiCustomerAuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GitHubInstallationsTable
         - Statement:
             Effect: Allow
             Action:
@@ -414,7 +527,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
-            Path: /public/status/health
+            Path: /public/status/{proxy+}
             Method: GET
         CustomerMagicLink:
           Type: HttpApi
@@ -457,6 +570,12 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/account
+            Method: GET
+        CustomerLiveCenterBoard:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/live-center/{proxy+}
             Method: GET
         StudioWorkspaceRead:
           Type: HttpApi
@@ -524,11 +643,41 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/subscriptions/portal
             Method: POST
+        CustomerSubscriptionElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/elements-checkout
+            Method: POST
+        CustomerMergeGovernanceElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/subscriptions/merge-governance/elements-checkout
+            Method: POST
+        CustomerConnectRepositories:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/connect/{proxy+}
+            Method: GET
         SubscriptionCheckout:
           Type: HttpApi
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /internal/subscriptions/checkout
+            Method: POST
+        SubscriptionElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/elements-checkout
+            Method: POST
+        MergeGovernanceElementsCheckout:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /internal/subscriptions/merge-governance/elements-checkout
             Method: POST
         SubscriptionWebhook:
           Type: HttpApi
@@ -611,6 +760,115 @@ Resources:
             Auth:
               Authorizer: SolveLangApiKeyAuthorizer
 
+  GitHubFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 15
+      Architectures: [arm64]
+      Environment:
+        Variables:
+          API_ACCESS_ENABLED: !Ref ApiAccessEnabled
+          API_ACCESS_MODE: !Ref ApiAccessMode
+          API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
+          API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
+          API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
+          API_ADMIN_CRM_ENABLED: !Ref AdminCrmEnabled
+          API_ADMIN_CRM_TABLE: !If [AdminCrmFeatureEnabled, !Ref AdminCrmTable, disabled]
+          API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
+          API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
+          API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_KEY_PEPPER_PREVIOUS: !Ref ApiKeyPepperPrevious
+          API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
+          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_PEPPER_PREVIOUS: !Ref CustomerAuthPepperPrevious
+          API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
+          API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
+          SITE_ORIGIN: !Ref SiteOrigin
+          PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
+          API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
+          API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
+          API_KEYS_TABLE: !Ref ApiKeysTable
+          API_KEYS_ACCOUNT_INDEX: AccountIdIndex
+          API_USAGE_TABLE: !Ref ApiUsageTable
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+          API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
+          API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
+          API_GITHUB_APP_ID: !Ref GitHubAppId
+          API_GITHUB_APP_CLIENT_ID: !Ref GitHubAppClientId
+          API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
+          API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
+          API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
+          API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
+          STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
+          STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
+          STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+          STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: !Ref StripeMgovRegularMonthlyPriceId
+          STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
+          STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
+          STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
+          MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
+          MGOV_PILOT_TENANT: !Ref MgovPilotTenant
+          MGOV_PILOT_OWNER: !Ref MgovPilotOwner
+          MGOV_PILOT_REPO: !Ref MgovPilotRepo
+          MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ApiCustomerAuthTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref GitHubInstallationsTable
+      Events:
+        GitHubAuthAuthorize:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/authorize
+            Method: GET
+        GitHubAuthCallback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/auth/callback
+            Method: GET
+        GitHubWebhook:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/webhook
+            Method: POST
+        CustomerGitHubInstallations:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/installations
+            Method: GET
+        GitHubInstallStart:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /github/install/start
+            Method: GET
+        CustomerGitHubInstallationsLink:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/installations/link
+            Method: POST
+        CustomerGitHubAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/audit
+            Method: POST
+
   ApiAccessFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     DeletionPolicy: Retain
@@ -632,6 +890,8 @@ Resources:
         Variables:
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_API_HEALTH_URL: !Sub https://${ApiAccessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/health
+          PUBLIC_STATUS_EXECUTION_HEALTH_URL: !Ref PublicStatusExecutionHealthUrl
+          PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL: !Ref PublicStatusRunnerMinutesHealthUrl
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
       Policies:
         - Statement:

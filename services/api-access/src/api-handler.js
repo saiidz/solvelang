@@ -3,6 +3,9 @@ import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 import { unverifiedPublicStatus } from "./public-status.js";
 
+// A sign-in form submitted faster than this is a bot, not a person.
+const BOT_TIMING_MIN_MS = 1_200;
+
 function secureEqual(left, right) {
   if (typeof left !== "string" || typeof right !== "string") return false;
   const leftBuffer = Buffer.from(left);
@@ -55,10 +58,16 @@ export function createApiAccessHandler({
   subscriptionBillingEnabled = false,
   subscriptionCheckout,
   elementsCheckout,
+  mergeGovernanceCheckout,
+  mergeGovernanceConnect = null,
+  liveCenter,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
+  botProtection = null,
+  githubApp = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
+  statusProbes = {},
   logger = console,
 }) {
   if (!service) throw new Error("API access service is required.");
@@ -83,7 +92,7 @@ export function createApiAccessHandler({
         "access-control-allow-origin": siteOrigin,
         "access-control-allow-credentials": "true",
         "access-control-allow-methods": "GET,POST,OPTIONS",
-        "access-control-allow-headers": "authorization,content-type,idempotency-key,x-solvelang-admin-secret,x-solvelang-csrf,stripe-signature",
+        "access-control-allow-headers": "accept,authorization,content-type,idempotency-key,x-solvelang-admin-secret,x-solvelang-csrf,stripe-signature",
         "cache-control": "no-store",
         "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
         "referrer-policy": "no-referrer",
@@ -96,6 +105,12 @@ export function createApiAccessHandler({
     };
   }
 
+  // Browser flows (GitHub OAuth) answer with a redirect, not JSON. The
+  // body stays the standard empty JSON object; browsers follow Location.
+  function redirect(location, cookies = []) {
+    return response(302, {}, { location }, cookies);
+  }
+
   function requireAdmin(event) {
     const presented = header(event, "x-solvelang-admin-secret");
     if (!secureEqual(presented, adminSecret)) throw new ApiAccessError(403, "admin_denied", "Administrative access was denied.");
@@ -106,6 +121,23 @@ export function createApiAccessHandler({
     const session = await customerAuth.authenticate(cookieHeader(event));
     if (mutation) customerAuth.assertCsrf(session, header(event, "x-solvelang-csrf"));
     return session;
+  }
+
+  // Bot gate for the public, session-establishing routes (magic-link and
+  // password sign-in). The honeypot and timing checks always apply;
+  // Turnstile applies when a verifier is configured (botProtection). A
+  // failed check must be indistinguishable from success to the caller: no
+  // email is sent, no record is created, and the response stays neutral —
+  // the same verify-before-send rule the auth throttles already follow.
+  async function botCheckPasses(event, body) {
+    if (typeof body?.website === "string" && body.website.trim() !== "") return false;
+    if (typeof body?.formElapsedMs === "number" && body.formElapsedMs < BOT_TIMING_MIN_MS) return false;
+    if (!botProtection) return true;
+    return botProtection.verify({
+      token: body?.turnstileToken,
+      remoteIp: event?.requestContext?.http?.sourceIp,
+      expectedAction: "signin",
+    });
   }
 
   // Session-establishing routes set the SameSite=None session cookie, so a
@@ -137,6 +169,19 @@ export function createApiAccessHandler({
     }, {}, [verified.cookie]);
   }
 
+  async function statusProbeResponse(probe) {
+    if (typeof probe !== "function") return response(503, { status: "unavailable", service: "solvelang-api-access" });
+    try {
+      const outcome = await Promise.race([
+        probe(),
+        new Promise((_, reject) => { setTimeout(() => reject(new Error("status probe timeout")), 2_000); }),
+      ]);
+      return outcome
+        ? response(200, { status: "ok", service: "solvelang-api-access" })
+        : response(503, { status: "unavailable", service: "solvelang-api-access" });
+    } catch { return response(503, { status: "unavailable", service: "solvelang-api-access" }); }
+  }
+
   return async function handle(event) {
     try {
       const method = event?.requestContext?.http?.method ?? "GET";
@@ -145,6 +190,12 @@ export function createApiAccessHandler({
       if (method === "GET" && path.endsWith("/public/status/health")) {
         try { return response(200, await publicStatusReader()); }
         catch { return response(200, unverifiedPublicStatus()); }
+      }
+      if (method === "GET" && path.endsWith("/public/status/account")) {
+        return statusProbeResponse(statusProbes.accountPersistence);
+      }
+      if (method === "GET" && path.endsWith("/public/status/billing")) {
+        return statusProbeResponse(statusProbes.billing);
       }
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, { status: "ok", service: "solvelang-api-access" });
@@ -164,10 +215,47 @@ export function createApiAccessHandler({
         return response(200, { received: true, handled: result.handled, duplicate: result.duplicate });
       }
 
+      if (method === "GET" && path.endsWith("/github/auth/authorize")) {
+        if (!customerAccountsEnabled || !githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        const { location } = await githubApp.beginAuthorize();
+        return redirect(location);
+      }
+      if (method === "GET" && path.endsWith("/github/auth/callback")) {
+        // Every failure lands on the same detail-free error redirect: the
+        // caller learns nothing about which step rejected the sign-in.
+        const failure = redirect(`${siteOrigin}/account/api-keys/?github=error`);
+        if (!customerAccountsEnabled || !githubApp) return failure;
+        const code = event?.queryStringParameters?.code;
+        const state = event?.queryStringParameters?.state;
+        if (typeof code !== "string" || !code || typeof state !== "string" || !state) return failure;
+        try {
+          const result = await githubApp.completeSignIn({ code, state });
+          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, [result.cookie]);
+        } catch {
+          return failure;
+        }
+      }
+      if (method === "POST" && path.endsWith("/github/webhook")) {
+        if (!githubApp) return response(401, { error: "Invalid webhook.", code: "invalid_webhook_signature" });
+        const verified = await githubApp.handleWebhook({ rawBody: bodyText(event), signature: header(event, "x-hub-signature-256") });
+        if (!verified) return response(401, { error: "Invalid webhook.", code: "invalid_webhook_signature" });
+        return response(200, {});
+      }
+      if (method === "GET" && path.endsWith("/github/install/start")) {
+        const session = await customerSession(event);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        const { location } = await githubApp.beginInstall(session.accountId);
+        return redirect(location);
+      }
+
       if (method === "POST" && path.endsWith("/customer/auth/magic-link")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
         const origin = assertAllowedOrigin(event);
-        await customerAuth.requestMagicLink(parseJson(event), { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
+        const body = parseJson(event);
+        if (!(await botCheckPasses(event, body))) {
+          return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
+        }
+        await customerAuth.requestMagicLink(body, { sourceIp: event?.requestContext?.http?.sourceIp, ...(origin === undefined ? {} : { origin }) });
         return response(202, { accepted: true, message: "If the address is valid, a sign-in link will arrive shortly." });
       }
       if (method === "POST" && path.endsWith("/customer/auth/verify")) {
@@ -178,8 +266,12 @@ export function createApiAccessHandler({
       if (method === "POST" && path.endsWith("/customer/auth/password")) {
         if (!customerAccountsEnabled) throw new ApiAccessError(503, "customer_accounts_disabled", "Customer API accounts are not enabled.");
         assertAllowedOrigin(event);
+        const body = parseJson(event);
+        if (!(await botCheckPasses(event, body))) {
+          throw new ApiAccessError(401, "invalid_credentials", "Email/username or password is incorrect.");
+        }
         return authResponse(await customerAuth.loginWithPassword(
-          parseJson(event),
+          body,
           { sourceIp: event?.requestContext?.http?.sourceIp },
         ));
       }
@@ -249,6 +341,42 @@ export function createApiAccessHandler({
         const session = await customerSession(event, true);
         return response(200, { auth: await customerAuth.disableTotp(session, parseJson(event)) });
       }
+      if (method === "GET" && path.endsWith("/customer/github/installations")) {
+        const session = await customerSession(event);
+        if (!githubApp) return response(200, { enabled: false, installations: [] });
+        return response(200, { enabled: true, installations: await githubApp.listForAccount(session.accountId) });
+      }
+      if (method === "POST" && path.endsWith("/customer/github/installations/link")) {
+        const session = await customerSession(event, true);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        return response(200, await githubApp.linkInstallation({ accountId: session.accountId, ...parseJson(event) }));
+      }
+      if (method === "POST" && path.endsWith("/customer/github/audit")) {
+        const session = await customerSession(event, true);
+        if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
+        return response(200, await githubApp.runAudit({ accountId: session.accountId, ...parseJson(event) }));
+      }
+      // "Connect a repository by app sign-in": read-only proxies to
+      // the merge-governance pilot service's product-app routes. The
+      // session gate is the only authorization in this slice (the
+      // pilot service is reached with its admin token server-side);
+      // an unconfigured proxy answers 503 so the site can show its
+      // "being switched on" state.
+      if (method === "GET" && path.endsWith("/customer/connect/repositories")) {
+        await customerSession(event);
+        if (!mergeGovernanceConnect) throw new ApiAccessError(503, "merge_governance_connect_disabled", "Repository connect is not enabled.");
+        return response(200, await mergeGovernanceConnect.listRepositories(event.queryStringParameters?.installationId));
+      }
+      if (method === "GET" && path.endsWith("/customer/connect/audit")) {
+        await customerSession(event);
+        if (!mergeGovernanceConnect) throw new ApiAccessError(503, "merge_governance_connect_disabled", "Repository connect is not enabled.");
+        const query = event.queryStringParameters ?? {};
+        return response(200, await mergeGovernanceConnect.getAudit({
+          installationId: query.installationId,
+          owner: query.owner,
+          repo: query.repo,
+        }));
+      }
       if (method === "POST" && path.endsWith("/customer/keys")) {
         const session = await customerSession(event, true);
         return response(201, await customerAccount.issueKey(session, parseJson(event)));
@@ -285,6 +413,41 @@ export function createApiAccessHandler({
           promotionCode: body.promotionCode,
         }));
       }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/merge-governance/elements-checkout")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!mergeGovernanceCheckout) throw new ApiAccessError(503, "merge_governance_checkout_disabled", "Merge Governance checkout is not enabled.");
+        const body = parseJson(event);
+        const account = await service.getSubscriptionAccount(session.accountId);
+        return response(201, await mergeGovernanceCheckout.createMergeGovernanceCheckout({
+          accountId: session.accountId,
+          email: session.email,
+          plan: body.plan,
+          quantity: body.quantity,
+          requestId: body.requestId,
+          customerId: account?.stripeCustomerId,
+          promotionCode: body.promotionCode,
+          ...(body.billingAddress !== undefined ? { billingAddress: body.billingAddress } : {}),
+          ...(body.taxId !== undefined ? { taxId: body.taxId } : {}),
+        }));
+      }
+      if (method === "GET" && path.endsWith("/customer/live-center/board")) {
+        const session = await customerSession(event);
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        return response(200, await liveCenter.getBoard({
+          page: event.queryStringParameters?.page,
+          perPage: event.queryStringParameters?.perPage,
+        }));
+      }
+      if (method === "GET" && path.endsWith("/customer/live-center/minutes")) {
+        const session = await customerSession(event);
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        // The minutes seam: until the runners ledger service is
+        // wired, this answers { configured: false } and the Minutes
+        // tab renders its honest not-configured state.
+        if (typeof liveCenter.getMinutes !== "function") return response(200, { configured: false });
+        return response(200, await liveCenter.getMinutes());
+      }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
@@ -312,6 +475,11 @@ export function createApiAccessHandler({
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         if (!elementsCheckout) throw new ApiAccessError(503, "subscription_checkout_disabled", "API subscription checkout is not enabled.");
         return response(201, await elementsCheckout.createElementsCheckout(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/subscriptions/merge-governance/elements-checkout")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!mergeGovernanceCheckout) throw new ApiAccessError(503, "merge_governance_checkout_disabled", "Merge Governance checkout is not enabled.");
+        return response(201, await mergeGovernanceCheckout.createMergeGovernanceCheckout(body));
       }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");

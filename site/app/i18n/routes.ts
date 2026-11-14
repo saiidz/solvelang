@@ -29,6 +29,7 @@ export const publicRoutes = [
   { segment: "mcp", classification: "english-only-technical", sitemap: true },
   { segment: "check", classification: "english-only-technical", sitemap: true },
   { segment: "status", classification: "english-only-technical", sitemap: true },
+  { segment: "process-solution", classification: "english-only-technical", sitemap: true },
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },

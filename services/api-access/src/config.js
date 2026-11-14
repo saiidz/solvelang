@@ -47,7 +47,28 @@ function billing(environment) {
       pro: enabled ? required(environment, "STRIPE_API_PRO_PRICE_ID") : undefined,
       business: enabled ? required(environment, "STRIPE_API_BUSINESS_PRICE_ID") : undefined,
     },
+    // Merge Governance pricing stays optional at parse time: an absent or
+    // partial set leaves only the Merge Governance checkout dark (its
+    // service fails closed per plan), never the API-plan billing above.
+    mergeGovernancePriceIds: {
+      "mgov-regular-monthly": environment.STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID || undefined,
+      "mgov-regular-annual": environment.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID || undefined,
+      "mgov-plus-monthly": environment.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID || undefined,
+      "mgov-plus-annual": environment.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID || undefined,
+    },
   };
+}
+
+function mergeGovernanceService(environment) {
+  // The merge-governance pilot service (private repo) backs the
+  // signed-in "connect a repository" proxy routes. Optional like the
+  // Merge Governance prices: BOTH values present or the proxy stays
+  // dark (its routes answer 503) — a partial pair never enables a
+  // half-wired proxy.
+  const rawBase = typeof environment.MGOV_PILOT_BASE_URL === "string" ? environment.MGOV_PILOT_BASE_URL.trim().replace(/\/+$/, "") : "";
+  const baseUrl = rawBase || undefined;
+  const adminToken = environment.MGOV_ADMIN_TOKEN || undefined;
+  return { mergeGovernanceService: { baseUrl, adminToken, enabled: Boolean(baseUrl && adminToken) } };
 }
 
 function customerAccess(environment) {
@@ -88,15 +109,62 @@ function supportAutomation(environment) {
   };
 }
 
+function liveCenter(environment) {
+  // Live Center stays dark until every pilot pointer is present: a partial
+  // configuration never enables a half-wired board proxy, it simply leaves
+  // the route failing closed (503 mgov_not_configured) — the same
+  // optional-config discipline as the Merge Governance price IDs above.
+  const config = {
+    baseUrl: environment.MGOV_PILOT_BASE_URL || undefined,
+    adminToken: environment.MGOV_ADMIN_TOKEN || undefined,
+    tenant: environment.MGOV_PILOT_TENANT || undefined,
+    owner: environment.MGOV_PILOT_OWNER || undefined,
+    repo: environment.MGOV_PILOT_REPO || undefined,
+    installationId: environment.MGOV_PILOT_INSTALLATION_ID || undefined,
+  };
+  const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
+  // The Minutes seam: the runners-ledger pointers join the parsed
+  // config ONLY when both are present, so the parsed shape is
+  // unchanged until the day the runners service is actually wired —
+  // and a half-set pair never enables a half-wired minutes read.
+  const minutesBaseUrl = environment.RUNNERS_LEDGER_BASE_URL || undefined;
+  const minutesAdminToken = environment.RUNNERS_LEDGER_ADMIN_TOKEN || undefined;
+  const minutes =
+    minutesBaseUrl && minutesAdminToken
+      ? { minutesEnabled: true, minutesBaseUrl, minutesAdminToken }
+      : {};
+  return { liveCenter: { enabled, ...config, ...minutes } };
+}
+
+function githubApp(environment) {
+  // The GitHub App is dark until every credential is present: a partial
+  // configuration never enables a half-wired sign-in or webhook surface,
+  // it simply leaves the whole feature off (fail closed).
+  const config = {
+    appId: environment.API_GITHUB_APP_ID || undefined,
+    clientId: environment.API_GITHUB_APP_CLIENT_ID || undefined,
+    clientSecret: environment.API_GITHUB_APP_CLIENT_SECRET || undefined,
+    privateKey: environment.API_GITHUB_APP_PRIVATE_KEY || undefined,
+    webhookSecret: environment.API_GITHUB_APP_WEBHOOK_SECRET || undefined,
+  };
+  const enabled = Object.values(config).every((value) => typeof value === "string" && value.length > 0);
+  // The app slug only builds the public install URL; it is not a
+  // credential, so it never gates `enabled` and defaults to the
+  // production app's slug.
+  const slug = environment.API_GITHUB_APP_SLUG || "solvelang-reader";
+  return { githubApp: { enabled, ...config, slug } };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   const customer = customerAccounts(environment);
   const automation = supportAutomation(environment);
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation,
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
+    turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,
   };
 }
 

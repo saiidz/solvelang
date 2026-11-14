@@ -8,6 +8,7 @@ import { RepositoryAuditDockerComposePanel } from "./RepositoryAuditDockerCompos
 import { RepositoryAuditDockerComposeRelationshipPanel } from "./RepositoryAuditDockerComposeRelationshipPanel";
 import { RepositoryAuditFrameworkPathPanel } from "./RepositoryAuditFrameworkPathPanel";
 import { RepositoryAuditVisualExplorerPanel } from "./RepositoryAuditVisualExplorerPanel";
+import { RepositoryConnectPanel } from "./RepositoryConnectPanel";
 import { analyzeRepositorySnapshot, type RepositoryAuditAnalysisResult } from "./core/analysisPipeline";
 import { createRepositoryAngularTargetConfigEvidenceDownload, type RepositoryAngularTargetConfigEvidenceDownload } from "./core/angularTargetConfigArtifact";
 import { createRepositoryArchitecturePathEvidenceDownload, type RepositoryArchitecturePathEvidenceDownload } from "./core/architecturePathArtifact";
@@ -313,6 +314,7 @@ export function RepositoryAuditApp() {
 
   return (
     <div className="mx-auto max-w-7xl px-6 pb-28 lg:px-8">
+      <RepositoryConnectPanel />
       <section className="grid gap-8 lg:grid-cols-[1.08fr_.92fr]">
         <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40 sm:p-8">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-700">Local repository scan</p>
