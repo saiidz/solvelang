@@ -176,6 +176,20 @@ export type LiveCenterRunnerView = {
   waitingCount: number;
 };
 
+export type LiveCenterFleetRunner = {
+  name: string;
+  status: "online" | "offline";
+  busy: boolean;
+};
+
+export type LiveCenterFleetView = {
+  available: boolean;
+  total: number | null;
+  online: number;
+  busy: number;
+  runners: LiveCenterFleetRunner[];
+};
+
 export type LiveCenterHistoryEntry = {
   number: number | null;
   title: string;
@@ -273,6 +287,7 @@ export type LiveCenterBoardView = {
   activity: LiveCenterActivityRow[];
   runs: LiveCenterRun[];
   runners: LiveCenterRunnerView;
+  fleet: LiveCenterFleetView;
   ownerActions: LiveCenterOwnerAction[];
   ownerActionGroups: LiveCenterOwnerActionGroup[];
   inboxGroups: LiveCenterInboxGroup[];
@@ -612,6 +627,34 @@ function resolveStage(
 // a queued job is waiting for one. There is no fleet list behind
 // this — a runner that is idle and unassigned is not visible here,
 // and the page says so rather than guessing.
+// The registered fleet rides the board payload's fleet block. Any
+// payload without it (older service, permission not yet granted)
+// normalizes to the unavailable shape and the Runners view keeps
+// its honest permission note — nothing about the fleet is guessed.
+function normalizeFleet(raw: unknown): LiveCenterFleetView {
+  const record = asRecord(raw);
+  if (record.available !== true) {
+    return { available: false, total: null, online: 0, busy: 0, runners: [] };
+  }
+  const runners = asArray(record.runners)
+    .map((item) => {
+      const r = asRecord(item);
+      return {
+        name: asText(r.name),
+        status: r.status === "online" ? ("online" as const) : ("offline" as const),
+        busy: r.busy === true,
+      };
+    })
+    .filter((r) => r.name);
+  return {
+    available: true,
+    total: typeof record.total === "number" ? record.total : runners.length,
+    online: asCount(record.online),
+    busy: asCount(record.busy),
+    runners,
+  };
+}
+
 export function deriveRunnerView(runs: LiveCenterRun[]): LiveCenterRunnerView {
   const busy: LiveCenterRunnerView["busy"] = [];
   const queuedJobs: LiveCenterRunnerView["queuedJobs"] = [];
@@ -1050,6 +1093,7 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     };
   });
   const runners = deriveRunnerView(runs);
+  const fleet = normalizeFleet(board.fleet);
 
   const activity: LiveCenterActivityRow[] = [];
   for (const item of asArray(board.activity ?? board.runs)) {
@@ -1168,6 +1212,7 @@ export function normalizeLiveCenterBoard(raw: unknown): LiveCenterBoardView {
     activity,
     runs,
     runners,
+    fleet,
     ownerActions,
     ownerActionGroups,
     inboxGroups,
