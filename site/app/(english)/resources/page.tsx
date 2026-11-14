@@ -60,24 +60,24 @@ const resourceGroups = [
 ];
 export default function ResourcesPage() {
   return (
-    <main className="min-h-screen bg-white text-slate-900">
-      <section className="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+    <main className="min-h-screen bg-panel text-ink">
+      <section className="border-b border-line bg-gradient-to-b from-canvas to-panel">
         <div className="mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-28">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">Resources</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted">Resources</p>
           <h1 className="mt-5 max-w-4xl text-4xl font-semibold tracking-tight sm:text-6xl">SolveLang tools and documentation.</h1>
-          <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600 sm:text-xl">Start with the local tools to inspect a workflow, repository, or redacted server snapshot. Review the evidence before connecting production automation.</p>
+          <p className="mt-6 max-w-3xl text-lg leading-8 text-muted sm:text-xl">Start with the local tools to inspect a workflow, repository, or redacted server snapshot. Review the evidence before connecting production automation.</p>
         </div>
       </section>
       <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8">
         <div className="grid gap-6 md:grid-cols-2">
           {resourceGroups.map((group) => (
-            <section key={group.title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+            <section key={group.title} className="rounded-3xl border border-line bg-panel p-6 shadow-sm sm:p-8">
               <h2 className="text-2xl font-semibold tracking-tight">{group.title}</h2>
-              <p className="mt-3 leading-7 text-slate-600">{group.description}</p>
+              <p className="mt-3 leading-7 text-muted">{group.description}</p>
               <div className="mt-6 space-y-4">
                 {group.links.map((link) => {
                   const external = link.href.startsWith("https://");
-                  return <Link key={link.href} href={link.href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className="block rounded-2xl border border-slate-200 bg-slate-50 p-5 hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><span className="text-lg font-semibold">{link.label}{external ? " ↗" : ""}</span><span className="mt-2 block leading-7 text-slate-600">{link.note}</span></Link>;
+                  return <Link key={link.href} href={link.href} target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined} className="block rounded-2xl border border-line bg-canvas p-5 hover:bg-panel focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"><span className="text-lg font-semibold">{link.label}{external ? " ↗" : ""}</span><span className="mt-2 block leading-7 text-muted">{link.note}</span></Link>;
                 })}
               </div>
             </section>
