@@ -360,14 +360,19 @@ test("password reset invalidates other sessions and older recovery links while p
   assert.equal(loggedIn.accountId, verified.accountId);
 });
 
-test("logout revokes the server session and clears the partitioned cookie", async () => {
+test("logout revokes the server session and clears both session cookie variants", async () => {
   const { sent, service } = setup();
   const verified = await verifiedSession(service, sent);
   const rawCookie = cookieHeader(verified.cookie);
   const cleared = await service.logout(rawCookie);
-  assert.match(cleared, /Max-Age=0/);
-  assert.match(cleared, /Partitioned/);
-  assert.match(cleared, /Domain=\.solve-lang\.com/);
+  assert.ok(Array.isArray(cleared));
+  assert.equal(cleared.length, 2);
+  assert.match(cleared[0], /Max-Age=0/);
+  assert.match(cleared[0], /Partitioned/);
+  assert.match(cleared[0], /Domain=\.solve-lang\.com/);
+  assert.match(cleared[1], /Max-Age=0/);
+  assert.match(cleared[1], /Partitioned/);
+  assert.doesNotMatch(cleared[1], /Domain=/);
   await assert.rejects(
     () => service.authenticate(rawCookie),
     (error) => error instanceof ApiAccessError && error.code === "invalid_session",
