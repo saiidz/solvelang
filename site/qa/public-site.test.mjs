@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks, normalizePath, isCurrentLink } = require("../.studio-test-dist/public-site/components/site-navigation.js");
@@ -14,15 +14,16 @@ const healthy = { name: "Test", description: "Test fixture, not live evidence", 
 
 test("navigation uses the shared account menu and unique internal destinations", () => {
   assert.equal(primaryLinks.some((link) => link.label === "Account"), false);
-  assert.match(read("app/components/SiteHeader.tsx"), /<SiteAccountMenu\s*\/>/);
-  const accountMenu = read("app/components/SiteAccountMenu.tsx");
-  assert.match(accountMenu, /\/customer\/account/);
-  assert.match(accountMenu, /\/customer\/auth\/logout/);
-  assert.match(accountMenu, /csrfToken: account\.csrfToken/);
-  assert.match(accountMenu, /Signed in as/);
-  assert.match(accountMenu, /Sign out/);
-  assert.match(accountMenu, /\/account\/live-center\//);
-  assert.match(accountMenu, />Live Center</);
+  const header = read("app/components/SiteHeader.tsx");
+  assert.doesNotMatch(header, /SiteAccountMenu/);
+  assert.equal(existsSync(new URL("../app/components/SiteAccountMenu.tsx", import.meta.url)), false);
+  assert.match(header, /\/customer\/account/);
+  assert.match(header, /\/customer\/auth\/logout/);
+  assert.match(header, /csrfToken: account\.csrfToken/);
+  assert.match(header, /Signed in as/);
+  assert.match(header, /Sign out/);
+  assert.match(header, /\/account\/live-center\//);
+  assert.match(header, />Live Center</);
   assert.match(read("app/(english)/account/api-keys/page.tsx"), /\/account\/live-center\//);
   const links = [...primaryLinks, ...toolLinks];
   assert.equal(new Set(links.map((link) => link.href)).size, links.length);
@@ -30,6 +31,47 @@ test("navigation uses the shared account menu and unique internal destinations",
     assert.ok(link.href.startsWith("/") && link.href.endsWith("/"));
     assert.ok(read(`app/(english)${link.href}page.tsx`));
   }
+});
+test("header has exactly one menu, labelled Menu at every breakpoint, carrying the account links", () => {
+  const header = read("app/components/SiteHeader.tsx");
+  // Exactly one header dropdown exists, and the old account dropdown is gone.
+  assert.equal((header.match(/data-site-menu="true"/g) || []).length, 1);
+  assert.doesNotMatch(header, /SiteAccountMenu/);
+  assert.equal(existsSync(new URL("../app/components/SiteAccountMenu.tsx", import.meta.url)), false);
+  // The one menu is labelled "Menu" at every width: no xl "More" variant
+  // and no breakpoint-swapped menu content remain.
+  assert.match(header, />\s*Menu<span/);
+  assert.doesNotMatch(header, />More</);
+  assert.doesNotMatch(header, /xl:hidden/);
+  assert.doesNotMatch(header, /hidden xl:inline/);
+  // Signed-in items appear in order: the signed-in header line, the four
+  // account destinations, the site/tool links, and Sign out last.
+  const signedInAt = header.indexOf("Signed in as");
+  const accountHomeAt = header.indexOf('href="/account/"');
+  const apiAccountAt = header.indexOf('href="/account/api-keys/"');
+  const liveCenterAt = header.indexOf('href="/account/live-center/"');
+  const buyMinutesAt = header.indexOf('href="/account/runner-minutes-checkout/"');
+  const toolLinksAt = header.indexOf("toolLinks.map");
+  const signOutAt = header.indexOf(': "Sign out"}');
+  for (const at of [signedInAt, accountHomeAt, apiAccountAt, liveCenterAt, buyMinutesAt, toolLinksAt, signOutAt]) assert.notEqual(at, -1);
+  assert.ok(signedInAt < accountHomeAt && accountHomeAt < apiAccountAt && apiAccountAt < liveCenterAt && liveCenterAt < buyMinutesAt, "account items keep their order");
+  assert.ok(buyMinutesAt < toolLinksAt && toolLinksAt < signOutAt, "site/tool links follow the account items and Sign out is pinned at the bottom");
+  assert.match(header, />Account home</);
+  assert.match(header, />API account</);
+  assert.match(header, />Live Center</);
+  assert.match(header, />Buy minutes</);
+  // The header keeps the site's original logo exactly as on main: the
+  // approved SVG wordmark at its standing size, never the name as text.
+  assert.match(header, /src="\/solvelang-logo\.svg"/);
+  assert.match(header, /width=\{194\} height=\{41\}/);
+  assert.match(header, /className="h-auto w-32 sm:w-40"/);
+  assert.match(header, /aria-label="SolveLang home"/);
+  assert.doesNotMatch(header, />SolveLang</);
+  // Signed-out access is not lost with the old chip: Sign in leads the menu.
+  const signInAt = header.indexOf(">Sign in<");
+  assert.notEqual(signInAt, -1);
+  assert.ok(signInAt < header.indexOf("primaryLinks.map", signInAt), "Sign in sits above the site links inside the menu for signed-out visitors");
+  assert.match(header, /\/customer\/auth\/logout/);
 });
 test("active route matching handles direct loads, trailing slashes, query, and account children", () => {
   assert.equal(normalizePath("/run/?x=1#source"), "/run");
@@ -60,7 +102,7 @@ test("deployed configuration is not manufactured health evidence", () => {
   assert.equal(observedState(undefined, now), "not_monitored");
   assert.equal(overallState(statusPage.components.map(() => undefined), now), "not_monitored");
   assert.ok(statusPage.components.some((component) => component.monitored));
-  assert.ok(statusPage.components.some((component) => !component.monitored));
+  assert.ok(statusPage.components.every((component) => component.monitored), "every registered component is wired to a live signal");
 });
 test("a single healthy component cannot hide unknown components", () => {
   assert.equal(overallState([healthy, { ...healthy, state: "not_monitored" }], now), "not_monitored");
@@ -83,7 +125,7 @@ test("live payload parser requires every monitored observation and discards malf
   const observations = Object.fromEntries(statusPage.components.filter((component) => component.monitored).map((component) => [component.id, healthy]));
   const valid = parseStatusObservations({ observations });
   assert.equal(Object.keys(valid).length, Object.keys(observations).length);
-  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "not_monitored", "unmonitored components prevent an all-green claim");
+  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "operational", "only a complete set of healthy observations supports an all-green claim");
   assert.deepEqual(parseStatusObservations({ observations: { ...observations, website: { ...healthy, state: "invented" } } }), {});
   assert.deepEqual(parseStatusObservations({ observations: { website: healthy } }), {});
   assert.deepEqual(parseStatusObservations({ observations: null }), {});
@@ -110,8 +152,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
   assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
-  for (const id of ["account-persistence", "billing", "support", "ci-deployment"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
-  for (const id of ["provider-execution", "posthog"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, false, `${id} has no live signal and stays unmonitored`);
+  for (const id of ["account-persistence", "billing", "support", "ci-deployment", "provider-execution", "posthog", "runner-minutes"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
 });
 test("incident history survives refresh without a fabricated resolution", () => {
   const history = statusPage.incidents.find((incident) => incident.id === "2026-08-06-github-actions");
@@ -335,4 +376,192 @@ test("the runners view renders the registered fleet when the payload carries it"
   assert.match(runs, /board\.fleet\.available/);
   assert.match(runs, /board\.fleet\.runners\.map/);
   assert.match(runs, /Repository Administration, read-only/);
+});
+
+test("account home page exists and carries the three account cards", () => {
+  const page = read("app/(english)/account/page.tsx");
+  // The bare /account/ address is a real page now, noindexed like its
+  // sibling account pages, rendering the account home component.
+  assert.match(page, /robots: \{ index: false, follow: false \}/);
+  assert.match(page, /<AccountHome \/>/);
+  const home = read("app/account/home/AccountHome.tsx");
+  // All three cards are there, with their exact destinations.
+  assert.match(home, />API account</);
+  assert.match(home, /href="\/account\/api-keys\/"/);
+  assert.match(home, />Live Center</);
+  assert.match(home, /href="\/account\/live-center\/"/);
+  assert.match(home, />Runner minutes</);
+  assert.match(home, /href="\/account\/runner-minutes-checkout\/"/);
+  assert.match(home, /Buy a minutes pack/);
+  // The session gate is the same account read every account page makes.
+  assert.match(home, /"\/customer\/account"/);
+  // The balance is the same Runner Minutes account read the checkout
+  // page makes — same endpoint, same default service address and
+  // override — and it is never guessed when the read fails.
+  assert.match(home, /"\/customer\/runner-minutes\/account"/);
+  assert.match(home, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+  assert.match(home, /could not load your balance/i);
+});
+
+test("a dead sign-in link explains itself instead of failing silently", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  assert.match(page, /That sign-in link is invalid or expired — request a fresh one below\./);
+  // The message is set on the verify-failure path of the magic-token
+  // branch, and the hash is cleared there too — the plain no-token load
+  // never reaches this branch and keeps swallowing 401s in silence.
+  const start = page.indexOf("const token = magicTokenFromHash");
+  assert.ok(start >= 0, "the magic-token branch exists");
+  const tokenBranch = page.slice(start, page.indexOf('"/customer/account"', start));
+  assert.match(tokenBranch, /\/customer\/auth\/verify/);
+  assert.match(tokenBranch, /setError\("That sign-in link is invalid or expired/);
+  assert.match(tokenBranch, /window\.history\.replaceState/);
+  assert.match(page, /apiError\.status !== 401/);
+});
+
+test("sign-in buttons wait for the bot check only when it is configured", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  const botCheck = read("app/account/core/signin-bot-check.tsx");
+  assert.match(botCheck, /export const signInTurnstileConfigured = turnstileSiteKey\.length > 0;/);
+  // Both submit buttons gate on the same derived flag, and each gated
+  // form carries the plain hint line exactly once.
+  assert.match(page, /const botCheckPending = signInTurnstileConfigured && !turnstileToken;/);
+  assert.equal((page.match(/disabled=\{busy \|\| botCheckPending\}/g) || []).length, 2);
+  assert.equal((page.match(/Complete the quick check above, then this button turns on\./g) || []).length, 2);
+});
+
+const {
+  STUDIO_DWELL_MS,
+  STUDIO_START_MS,
+  REVEAL_SWEEP_LINE,
+  clamp01,
+  pinProgress,
+  traversalProgress,
+  warmth,
+  revealDue,
+  heroParallax,
+  flowPaint,
+} = require("../.studio-test-dist/public-site/(english)/landing/animation.js");
+const landingAnimation = read("app/(english)/landing/LandingAnimation.tsx");
+const landingAnimCss = read("app/(english)/landing/animation.module.css");
+const landingAnimEngine = read("app/(english)/landing/animation.ts");
+const landingPage = read("app/(english)/landing/page.tsx");
+const landingCss = read("app/(english)/landing/landing.module.css");
+
+test("homepage animation math: pin and traversal progress clamp to the frame", () => {
+  assert.equal(pinProgress(10, 1900, 1000), 0);
+  assert.equal(pinProgress(0, 1900, 1000), 0);
+  assert.equal(pinProgress(-450, 1900, 1000), 0.5);
+  assert.equal(pinProgress(-900, 1900, 1000), 1);
+  assert.equal(pinProgress(-5000, 1900, 1000), 1);
+  assert.equal(traversalProgress(1000, 800, 1000), 0);
+  assert.equal(traversalProgress(100, 800, 1000), 0.5);
+  assert.equal(traversalProgress(-800, 800, 1000), 1);
+  assert.equal(clamp01(Number.NaN), 0);
+  assert.equal(clamp01(-2), 0);
+  assert.equal(clamp01(2), 1);
+});
+
+test("homepage animation math: context stages warm continuously in quarters", () => {
+  assert.deepEqual(warmth(0, 0), { opacity: 0.35, arrived: false });
+  assert.equal(warmth(0.25, 0).arrived, true);
+  assert.equal(warmth(0.25, 1).opacity, 0.35);
+  assert.ok(Math.abs(warmth(0.5, 1).opacity - 1) < 1e-9);
+  assert.equal(warmth(0.5, 2).opacity, 0.35);
+  assert.equal(warmth(1, 3).arrived, true);
+  for (let i = 0; i < 4; i += 1) assert.equal(warmth(1, i).opacity, 1);
+});
+
+test("homepage animation math: sweep line, parallax cap, studio pacing, flow beats", () => {
+  assert.equal(REVEAL_SWEEP_LINE, 0.85);
+  assert.equal(revealDue(849, 1000), true);
+  assert.equal(revealDue(850, 1000), false);
+  assert.equal(heroParallax(0), 0);
+  assert.equal(heroParallax(100), 5);
+  assert.equal(heroParallax(100000), 18);
+  assert.equal(STUDIO_DWELL_MS, 1600);
+  assert.equal(STUDIO_START_MS, 900);
+  assert.deepEqual(flowPaint(0), { activeNode: 0, doneNodes: [], activeConnector: -1, doneConnectors: [], activePathStep: 0 });
+  assert.deepEqual(flowPaint(1), { activeNode: 0, doneNodes: [], activeConnector: 0, doneConnectors: [], activePathStep: 0 });
+  assert.deepEqual(flowPaint(2), { activeNode: 1, doneNodes: [0], activeConnector: -1, doneConnectors: [0], activePathStep: 1 });
+  assert.deepEqual(flowPaint(3), { activeNode: 1, doneNodes: [0], activeConnector: 1, doneConnectors: [0], activePathStep: 1 });
+  assert.deepEqual(flowPaint(4), { activeNode: 2, doneNodes: [0, 1], activeConnector: -1, doneConnectors: [0, 1], activePathStep: 2 });
+});
+
+test("homepage animation: hidden states exist only behind the JS-armed gate", () => {
+  const hiddenRules = landingAnimCss
+    .split("}")
+    .filter((rule) => /opacity:\s*0/.test(rule) && /\[data-(reveal|scale|hero-line)\]/.test(rule));
+  assert.ok(hiddenRules.length >= 3, "reveal, scale and hero-line pre-states exist");
+  for (const rule of hiddenRules) assert.match(rule, /\[data-landing-anim="armed"\]/);
+  assert.match(landingAnimation, /dataset\.landingAnim = "armed"/);
+  assert.match(landingAnimation, /useLayoutEffect/);
+  /* the page is wrapped by the orchestrator, so arming covers every section */
+  assert.match(landingPage, /<LandingAnimation className="bg-\[#f5f6f4\] text-\[#102036\]">/);
+  assert.match(landingPage, /<\/LandingAnimation>/);
+});
+
+test("homepage animation: observers, sweep fallback, and reduced-motion finish", () => {
+  assert.match(landingAnimation, /new IntersectionObserver/);
+  assert.match(landingAnimation, /window\.setTimeout\(sweep, 1500\)/);
+  assert.match(landingAnimation, /revealDue\(el\.getBoundingClientRect\(\)\.top, vh\)/);
+  assert.match(landingAnimation, /prefers-reduced-motion: reduce/);
+  assert.match(landingAnimation, /visibilitychange/);
+  const reduced = landingAnimCss.slice(landingAnimCss.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(reduced, /\[data-reveal\][^}]*opacity: 1 !important/);
+  assert.match(reduced, /\[data-hero-line\]/);
+  assert.match(reduced, /\.scProgress i \{ transform: scaleX\(1\) !important; \}/);
+  assert.match(reduced, /\.ctaGlow \{ display: none !important; \}/);
+  assert.match(landingCss, /prefers-reduced-motion: reduce/);
+});
+
+test("homepage animation: only transform and opacity animate (plus studio emphasis)", () => {
+  const keyframeBodies = [...landingAnimCss.matchAll(/@keyframes[^{]+\{([\s\S]*?)\n\}/g)].map((match) => match[1]);
+  assert.ok(keyframeBodies.length >= 2, "the hero rise and CTA glow keyframes exist");
+  for (const body of keyframeBodies) {
+    const properties = [...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]);
+    assert.ok(properties.length >= 1, "keyframes declare at least one property");
+    for (const property of properties) {
+      assert.ok(property === "transform" || property === "opacity", `keyframe animates ${property}`);
+    }
+  }
+  const transitions = [...landingAnimCss.matchAll(/transition:[^;]+/g)].map((match) => match[0]);
+  assert.ok(transitions.length >= 5, "the reveal and walkthrough transitions exist");
+  for (const declaration of transitions) {
+    assert.doesNotMatch(declaration, /\b(width|height|top|left|right|bottom|margin|padding|gap|font-size)\b/);
+  }
+  const drift = landingCss.slice(landingCss.indexOf("@keyframes heroGlowDrift"), landingCss.indexOf("@keyframes heroGlowDrift") + 220);
+  assert.match(drift, /transform: translate3d/);
+  assert.doesNotMatch(drift, /\b(width|height|top|left)\s*:/);
+  assert.doesNotMatch(landingAnimEngine, /document\.|window\.|requestAnimationFrame/);
+});
+
+test("homepage animation: solve context pin structure and continuous progress", () => {
+  assert.match(landingAnimCss, /\.scPinWrap \{ background: #eaf0f3; \}/);
+  assert.match(landingAnimCss, /\.scPinWrap \{ height: 190vh; position: relative; \}/);
+  assert.match(landingAnimCss, /\.scPin \{ position: sticky; top: 0; min-height: 100vh;/);
+  assert.match(landingAnimation, /pinProgress\(rect\.top, rect\.height, window\.innerHeight\)/);
+  assert.match(landingAnimation, /warmth\(progress, Number\(el\.dataset\.scStep/);
+  assert.match(landingAnimation, /matchMedia\("\(min-width: 960px\) and \(min-height: 720px\)"\)/);
+  assert.match(landingPage, /data-sc-wrap=""/);
+  assert.match(landingPage, /data-sc-bar=""/);
+  assert.equal((landingPage.match(/data-sc-chip="/g) || []).length, 4);
+  assert.match(landingPage, /data-sc-step=\{index\}/);
+});
+
+test("homepage animation: studio hooks and light-section heading contrast", () => {
+  assert.equal((landingPage.match(/data-flow-node/g) || []).length, 3);
+  assert.equal((landingPage.match(/data-flow-conn/g) || []).length, 2);
+  assert.equal((landingPage.match(/data-tp=""/g) || []).length, 3);
+  assert.equal((landingPage.match(/data-action=""/g) || []).length, 1);
+  assert.match(landingPage, /data-studio-panel=""/);
+  assert.match(landingPage, /data-studio-actions=""/);
+  assert.match(landingAnimation, /STUDIO_DWELL_MS/);
+  /* light sections inherit the root's dark ink; none of their h2s re-lightens */
+  const context = landingPage.slice(landingPage.indexOf('id="solve-context"'), landingPage.indexOf('id="evidence"'));
+  assert.doesNotMatch(context.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
+  assert.match(context, /bg-\[#eaf0f3\]/);
+  const capabilities = landingPage.slice(landingPage.indexOf('id="capabilities"'), landingPage.indexOf('id="studio"'));
+  assert.doesNotMatch(capabilities.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
+  const quickstart = landingPage.slice(landingPage.indexOf('id="quickstart"'));
+  assert.doesNotMatch(quickstart.match(/<h2[^>]*>/)?.[0] ?? "", /text-white/);
 });

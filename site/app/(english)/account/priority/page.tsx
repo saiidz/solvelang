@@ -81,12 +81,12 @@ export default function CustomerPriorityPage() {
 
   if (!PRIORITY_RELEASED) {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-20 text-white">
-        <section className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-white/5 p-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Customer priority</p>
+      <main className="min-h-screen bg-canvas px-6 py-20 text-ink">
+        <section className="mx-auto max-w-3xl rounded-3xl border border-line bg-panel p-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Customer priority</p>
           <h1 className="mt-3 text-4xl font-bold">Priority processing is not released yet.</h1>
-          <p className="mt-5 text-slate-300">The queue, source-storage, and provider-execution gates remain disabled. No weighted priority credits can be consumed from this page.</p>
-          <Link className="mt-8 inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Return to API account</Link>
+          <p className="mt-5 text-body">The queue, source-storage, and provider-execution gates remain disabled. No weighted priority credits can be consumed from this page.</p>
+          <Link className="mt-8 inline-block font-semibold text-accent underline" href="/account/api-keys/">Return to API account</Link>
         </section>
       </main>
     );
@@ -154,37 +154,37 @@ export default function CustomerPriorityPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+    <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
       <section className="mx-auto max-w-4xl space-y-6">
         <header>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Customer priority</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-accent">Customer priority</p>
           <h1 className="mt-2 text-4xl font-bold">Repository Audit priority processing</h1>
-          <p className="mt-3 text-slate-300">Upload a ZIP, review the weighted-credit quote, then submit. Source ownership and existence are checked before credits are consumed.</p>
+          <p className="mt-3 text-body">Upload a ZIP, review the weighted-credit quote, then submit. Source ownership and existence are checked before credits are consumed.</p>
         </header>
 
-        {!dashboard ? <div className="rounded-2xl border border-white/10 bg-white/5 p-6">Loading your signed-in API account…</div> : null}
+        {!dashboard ? <div className="rounded-2xl border border-loading-panel bg-loading-panel p-6 text-loading-muted">Loading your signed-in API account…</div> : null}
         {dashboard ? (
           <>
-            <form onSubmit={handleUpload} className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <form onSubmit={handleUpload} className="rounded-2xl border border-line bg-panel p-6">
               <label className="block text-sm font-semibold" htmlFor="source">Repository ZIP (max 5 MiB)</label>
               <input id="source" name="source" type="file" accept=".zip,application/zip" required className="mt-3 block w-full" />
-              <button disabled={busy} className="mt-4 rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 disabled:opacity-60">Upload source</button>
-              {source ? <p className="mt-3 break-all text-sm text-slate-300">Stored {source.bytes.toLocaleString()} bytes · SHA-256 {source.fingerprint}</p> : null}
+              <button disabled={busy} className="mt-4 rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">Upload source</button>
+              {source ? <p className="mt-3 break-all text-sm text-body">Stored {source.bytes.toLocaleString()} bytes · SHA-256 {source.fingerprint}</p> : null}
             </form>
 
-            <section className="grid gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 md:grid-cols-3">
-              <label className="text-sm">Lane<select value={priority} onChange={(event) => setPriority(event.target.value as PriorityName)} className="mt-2 w-full rounded-lg bg-slate-900 p-3"><option value="standard">Standard · 1x</option><option value="express">Express · 2x</option><option value="priority">Priority · 5x</option><option value="critical">Critical · 10x</option></select></label>
-              <label className="text-sm">Input tokens<input value={inputTokens} onChange={(event) => setInputTokens(event.target.value)} inputMode="numeric" className="mt-2 w-full rounded-lg bg-slate-900 p-3" /></label>
-              <label className="text-sm">Output tokens<input value={outputTokens} onChange={(event) => setOutputTokens(event.target.value)} inputMode="numeric" className="mt-2 w-full rounded-lg bg-slate-900 p-3" /></label>
-              <button disabled={busy || !source} onClick={requestQuote} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-50">Get quote</button>
+            <section className="grid gap-4 rounded-2xl border border-line bg-panel p-6 md:grid-cols-3">
+              <label className="text-sm">Lane<select value={priority} onChange={(event) => setPriority(event.target.value as PriorityName)} className="mt-2 w-full rounded-lg bg-panel p-3"><option value="standard">Standard · 1x</option><option value="express">Express · 2x</option><option value="priority">Priority · 5x</option><option value="critical">Critical · 10x</option></select></label>
+              <label className="text-sm">Input tokens<input value={inputTokens} onChange={(event) => setInputTokens(event.target.value)} inputMode="numeric" className="mt-2 w-full rounded-lg bg-panel p-3" /></label>
+              <label className="text-sm">Output tokens<input value={outputTokens} onChange={(event) => setOutputTokens(event.target.value)} inputMode="numeric" className="mt-2 w-full rounded-lg bg-panel p-3" /></label>
+              <button disabled={busy || !source} onClick={requestQuote} className="rounded-xl bg-chrome px-5 py-3 font-bold text-chrome-text disabled:opacity-50">Get quote</button>
             </section>
 
-            {quote ? <section className="rounded-2xl border border-cyan-300/30 bg-cyan-300/5 p-6"><h2 className="text-xl font-bold">Quote</h2><p className="mt-2">{quote.label}: {quote.baseCredits} base credits × {quote.creditMultiplier} = <strong>{quote.weightedCredits} weighted credits</strong></p><button disabled={busy} onClick={submitJob} className="mt-4 rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950">Submit job</button></section> : null}
-            {job ? <section className="rounded-2xl border border-white/10 bg-white/5 p-6"><h2 className="text-xl font-bold">Job {job.jobId}</h2><p className="mt-2">Status: <strong>{job.status}</strong> · {job.weightedCredits} weighted credits</p>{job.result?.reportId ? <p className="mt-2">Report: {job.result.reportId}</p> : null}{job.errorCode ? <p className="mt-2 text-red-200">Error: {job.errorCode}</p> : null}<button disabled={busy} onClick={refreshJob} className="mt-4 rounded-xl bg-white px-5 py-3 font-bold text-slate-950">Refresh status</button></section> : null}
+            {quote ? <section className="rounded-2xl border border-accent bg-accent-soft p-6"><h2 className="text-xl font-bold">Quote</h2><p className="mt-2">{quote.label}: {quote.baseCredits} base credits × {quote.creditMultiplier} = <strong>{quote.weightedCredits} weighted credits</strong></p><button disabled={busy} onClick={submitJob} className="mt-4 rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent">Submit job</button></section> : null}
+            {job ? <section className="rounded-2xl border border-line bg-panel p-6"><h2 className="text-xl font-bold">Job {job.jobId}</h2><p className="mt-2">Status: <strong>{job.status}</strong> · {job.weightedCredits} weighted credits</p>{job.result?.reportId ? <p className="mt-2">Report: {job.result.reportId}</p> : null}{job.errorCode ? <p className="mt-2 text-danger">Error: {job.errorCode}</p> : null}<button disabled={busy} onClick={refreshJob} className="mt-4 rounded-xl bg-chrome px-5 py-3 font-bold text-chrome-text">Refresh status</button></section> : null}
           </>
         ) : null}
-        {error ? <p className="rounded-xl bg-red-400/10 p-4 text-red-200">{error}</p> : null}
-        <Link className="inline-block font-semibold text-cyan-300 underline" href="/account/api-keys/">Back to API account</Link>
+        {error ? <p className="rounded-xl bg-danger-soft p-4 text-danger">{error}</p> : null}
+        <Link className="inline-block font-semibold text-accent underline" href="/account/api-keys/">Back to API account</Link>
       </section>
     </main>
   );
