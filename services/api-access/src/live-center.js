@@ -29,6 +29,26 @@ import { ApiAccessError } from "./service.js";
 //      normalizeLiveCenterMinutes for the exact fields the page
 //      reads), which is passed through with `configured: true`
 //      stamped on by this proxy.
+//
+// THE OWNER PANEL SEAM: the same minutes pointers also carry the
+// owner control panel. The api-handler routes under
+// /customer/runner-minutes-admin/* are gated on the signed-in
+// identity (isMinutesOwner below — exactly one account, the owner's
+// own); the methods here only run behind that gate and call the
+// ledger's admin surface with the same token:
+//   GET  {minutesBaseUrl}/admin/accounts
+//   POST {minutesBaseUrl}/admin/accounts/{tenant}/{credit|debit|pause|resume}
+// The admin token never leaves the server: it is set on the upstream
+// call here and never appears in anything returned to the browser.
+
+// The owner panel's gate: exactly one SolveLang account operates the
+// runner-minutes ledger — the owner's own. tenantId === accountId
+// across this seam (see the runners service's session validator), so
+// the account id below is also the owner's ledger tenant. Env
+// overrides (RUNNERS_LEDGER_OWNER_ACCOUNT_ID / _EMAIL, parsed in
+// config.js) exist for staging; production uses these values.
+export const MINUTES_OWNER_ACCOUNT_ID = "acct_b234472a01a209f69aadac7f145c2dbe";
+export const MINUTES_OWNER_EMAIL = "saiidzeidan@gmail.com";
 
 function positiveIntParam(value) {
   const num = Number(value);
@@ -42,12 +62,17 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
     config?.minutesEnabled && config?.minutesBaseUrl && config?.minutesAdminToken,
   );
 
-  async function upstreamJson(url, adminToken) {
+  async function upstreamJson(url, adminToken, { method = "GET", body } = {}) {
     let upstream;
     try {
       upstream = await fetchImpl(url, {
-        method: "GET",
-        headers: { accept: "application/json", "x-admin-token": adminToken },
+        method,
+        headers: {
+          accept: "application/json",
+          "x-admin-token": adminToken,
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch {
       throw new ApiAccessError(502, "upstream_unavailable", "Live Center is temporarily unavailable.");
@@ -96,6 +121,43 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
       const url = `${baseUrl}/accounts/${encodeURIComponent(config.tenant)}/minutes-summary`;
       const summary = await upstreamJson(url, config.minutesAdminToken);
       return { ...summary, configured: true };
+    },
+
+    // The owner gate for the panel routes: BOTH halves of the
+    // identity must match the signed-in session. A session carrying
+    // only the email or only the account id is not the owner.
+    isMinutesOwner(session) {
+      const accountId = config?.minutesOwnerAccountId || MINUTES_OWNER_ACCOUNT_ID;
+      const email = String(config?.minutesOwnerEmail || MINUTES_OWNER_EMAIL).toLowerCase();
+      return (
+        session?.accountId === accountId &&
+        typeof session?.email === "string" &&
+        session.email.toLowerCase() === email
+      );
+    },
+
+    async getMinutesAdminAccounts() {
+      if (!enabled) {
+        throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+      }
+      if (!minutesEnabled) {
+        return { configured: false };
+      }
+      const baseUrl = String(config.minutesBaseUrl).replace(/\/+$/, "");
+      const result = await upstreamJson(`${baseUrl}/admin/accounts`, config.minutesAdminToken);
+      return { ...result, configured: true };
+    },
+
+    async minutesAdminAction(tenantId, action, body = {}) {
+      if (!enabled) {
+        throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+      }
+      if (!minutesEnabled) {
+        throw new ApiAccessError(503, "minutes_not_configured", "Runner minutes are not configured.");
+      }
+      const baseUrl = String(config.minutesBaseUrl).replace(/\/+$/, "");
+      const url = `${baseUrl}/admin/accounts/${encodeURIComponent(tenantId)}/${encodeURIComponent(action)}`;
+      return upstreamJson(url, config.minutesAdminToken, { method: "POST", body });
     },
   };
 }

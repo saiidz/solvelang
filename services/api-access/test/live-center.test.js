@@ -318,3 +318,196 @@ test("minutes route is session-gated and serves the seam answer", async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(JSON.parse(response.body), { configured: false });
 });
+
+// --- owner minutes admin --------------------------------------------------
+
+const OWNER_SESSION = {
+  accountId: "acct_b234472a01a209f69aadac7f145c2dbe",
+  email: "saiidzeidan@gmail.com",
+  csrfToken: "csrf_owner",
+};
+
+function ownerAdminFixture({ session = OWNER_SESSION, liveCenter } = {}) {
+  const customerAuth = {
+    async authenticate() {
+      return session;
+    },
+    assertCsrf(sess, presented) {
+      if (presented !== sess.csrfToken) throw new ApiAccessError(403, "invalid_csrf", "The request could not be verified.");
+    },
+  };
+  const handler = createApiAccessHandler({
+    service: {},
+    enabled: true,
+    adminSecret: ADMIN_SECRET,
+    siteOrigin: "https://www.solve-lang.com",
+    customerAccountsEnabled: true,
+    customerAuth,
+    customerAccount: {},
+    liveCenter,
+    logger: { error() {} },
+  });
+  return { handler };
+}
+
+test("owner identity overrides join the config only with the minutes wiring", () => {
+  const bare = parseApiAccessEnvironment(baseEnvironment({
+    RUNNERS_LEDGER_OWNER_ACCOUNT_ID: "acct_stage",
+  }));
+  assert.equal(bare.liveCenter.minutesOwnerAccountId, undefined);
+
+  const wired = parseApiAccessEnvironment(baseEnvironment({
+    RUNNERS_LEDGER_BASE_URL: "https://runners.example.com",
+    RUNNERS_LEDGER_ADMIN_TOKEN: "runners-token",
+    RUNNERS_LEDGER_OWNER_ACCOUNT_ID: "acct_stage",
+    RUNNERS_LEDGER_OWNER_EMAIL: "stage@example.com",
+  }));
+  assert.equal(wired.liveCenter.minutesOwnerAccountId, "acct_stage");
+  assert.equal(wired.liveCenter.minutesOwnerEmail, "stage@example.com");
+});
+
+test("minutes owner gate matches only the owner's full identity", () => {
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => jsonResponse({}),
+  });
+  assert.equal(service.isMinutesOwner(OWNER_SESSION), true);
+  assert.equal(service.isMinutesOwner({ ...OWNER_SESSION, email: "SaiidZeidan@Gmail.com" }), true);
+  assert.equal(service.isMinutesOwner({ ...OWNER_SESSION, email: "other@example.com" }), false);
+  assert.equal(service.isMinutesOwner({ ...OWNER_SESSION, accountId: "acct_other" }), false);
+  assert.equal(service.isMinutesOwner({ email: "saiidzeidan@gmail.com" }), false);
+  assert.equal(service.isMinutesOwner(null), false);
+
+  const staging = createLiveCenterService({
+    config: { ...PILOT_CONFIG, minutesOwnerAccountId: "acct_stage", minutesOwnerEmail: "stage@example.com" },
+    fetchImpl: async () => jsonResponse({}),
+  });
+  assert.equal(staging.isMinutesOwner({ accountId: "acct_stage", email: "stage@example.com" }), true);
+  assert.equal(staging.isMinutesOwner(OWNER_SESSION), false);
+});
+
+test("owner admin accounts proxy the ledger admin list and stamp configured", async () => {
+  const seen = [];
+  const service = createLiveCenterService({
+    config: {
+      ...PILOT_CONFIG,
+      minutesEnabled: true,
+      minutesBaseUrl: "https://runners.example.com",
+      minutesAdminToken: "runners-token",
+    },
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return jsonResponse({ accounts: [{ tenantId: "acct_1", status: "active" }] });
+    },
+  });
+  const out = await service.getMinutesAdminAccounts();
+  assert.equal(out.configured, true);
+  assert.equal(out.accounts[0].tenantId, "acct_1");
+  assert.equal(seen[0].url, "https://runners.example.com/admin/accounts");
+  assert.equal(seen[0].options.method, "GET");
+  assert.equal(seen[0].options.headers["x-admin-token"], "runners-token");
+});
+
+test("owner admin accounts answer not-configured until the ledger pointers exist", async () => {
+  let fetches = 0;
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => { fetches += 1; return jsonResponse({}); },
+  });
+  assert.deepEqual(await service.getMinutesAdminAccounts(), { configured: false });
+  assert.equal(fetches, 0);
+});
+
+test("owner admin action posts to the ledger admin route; unwired minutes throw 503", async () => {
+  const seen = [];
+  const service = createLiveCenterService({
+    config: {
+      ...PILOT_CONFIG,
+      minutesEnabled: true,
+      minutesBaseUrl: "https://runners.example.com/",
+      minutesAdminToken: "runners-token",
+    },
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return jsonResponse({ account: { tenantId: "acct_1" }, detail: { action: "credit" } });
+    },
+  });
+  const out = await service.minutesAdminAction("acct_1", "credit", { pool: "standard", minutes: 25 });
+  assert.equal(out.detail.action, "credit");
+  assert.equal(seen[0].url, "https://runners.example.com/admin/accounts/acct_1/credit");
+  assert.equal(seen[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(seen[0].options.body), { pool: "standard", minutes: 25 });
+  assert.equal(seen[0].options.headers["x-admin-token"], "runners-token");
+  assert.equal(seen[0].options.headers["content-type"], "application/json");
+
+  const unwired = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => jsonResponse({}),
+  });
+  await assert.rejects(
+    unwired.minutesAdminAction("acct_1", "pause", {}),
+    (error) => error instanceof ApiAccessError && error.statusCode === 503 && error.code === "minutes_not_configured",
+  );
+});
+
+const ADMIN_ACCOUNTS_PATH = "/customer/runner-minutes-admin/accounts";
+
+function adminListEvent() {
+  return {
+    requestContext: { http: { method: "GET", sourceIp: "127.0.0.1" } },
+    rawPath: ADMIN_ACCOUNTS_PATH,
+    headers: { cookie: "sl_api_session=sess_test" },
+  };
+}
+
+function adminActionEvent(action, csrf) {
+  return {
+    requestContext: { http: { method: "POST", sourceIp: "127.0.0.1" } },
+    rawPath: `${ADMIN_ACCOUNTS_PATH}/acct_1/${action}`,
+    headers: { cookie: "sl_api_session=sess_test", "x-solvelang-csrf": csrf, "content-type": "application/json" },
+    body: JSON.stringify({ pool: "standard", minutes: 25 }),
+  };
+}
+
+test("owner admin list route serves accounts only to the owner", async () => {
+  const liveCenter = {
+    isMinutesOwner: (s) => s.accountId === OWNER_SESSION.accountId,
+    async getMinutesAdminAccounts() { return { configured: true, accounts: [{ tenantId: "acct_1" }] }; },
+  };
+  const owner = ownerAdminFixture({ liveCenter });
+  const res = await owner.handler(adminListEvent());
+  assert.equal(res.statusCode, 200);
+  assert.equal(JSON.parse(res.body).accounts[0].tenantId, "acct_1");
+
+  const stranger = ownerAdminFixture({
+    session: { accountId: "acct_other", email: "other@example.com", csrfToken: "csrf_x" },
+    liveCenter,
+  });
+  const hidden = await stranger.handler(adminListEvent());
+  assert.equal(hidden.statusCode, 200);
+  assert.deepEqual(JSON.parse(hidden.body), { configured: false });
+});
+
+test("owner admin action route: owner passes through, non-owner refused, data never moves", async () => {
+  const calls = [];
+  const liveCenter = {
+    isMinutesOwner: (s) => s.accountId === OWNER_SESSION.accountId,
+    async minutesAdminAction(tenantId, action, body) {
+      calls.push({ tenantId, action, body });
+      return { account: { tenantId }, detail: { action } };
+    },
+  };
+  const owner = ownerAdminFixture({ liveCenter });
+  const res = await owner.handler(adminActionEvent("credit", "csrf_owner"));
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(calls[0], { tenantId: "acct_1", action: "credit", body: { pool: "standard", minutes: 25 } });
+
+  const stranger = ownerAdminFixture({
+    session: { accountId: "acct_other", email: "other@example.com", csrfToken: "csrf_x" },
+    liveCenter,
+  });
+  const refused = await stranger.handler(adminActionEvent("pause", "csrf_x"));
+  assert.equal(refused.statusCode, 403);
+  assert.equal(JSON.parse(refused.body).code, "owner_panel_unavailable");
+  assert.equal(calls.length, 1);
+});
