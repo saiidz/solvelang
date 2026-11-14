@@ -57,6 +57,20 @@ function isVerificationCheckoutResponse(result: CheckoutResponse): result is Ver
   return "verification" in result && result.verification === true && result.amountCents === 0;
 }
 
+// Runner Minutes account state, read from the runners service at
+// GET /customer/runner-minutes/account — the same session-authenticated
+// customer pattern as the elements-checkout call below. The status
+// field arrived with the start/pause build: "paused" means jobs do not
+// run and no minutes are used. An older service does not send the field
+// at all — absence means active, never paused.
+type RunnerMinutesAccount = {
+  status?: "active" | "paused";
+};
+
+function runnerMinutesStatus(account: RunnerMinutesAccount): "active" | "paused" {
+  return account.status === "paused" ? "paused" : "active";
+}
+
 type Phase = "preparing" | "select" | "creating" | "pay" | "confirming" | "success-done" | "verified-done";
 
 function dollars(cents: number): string {
@@ -92,6 +106,35 @@ export function EmbeddedRunnerMinutesCheckout() {
   const [payError, setPayError] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [verified, setVerified] = useState<VerificationCheckoutResponse | null>(null);
+  const [minutesStatus, setMinutesStatus] = useState<"active" | "paused">("active");
+  const [minutesBusy, setMinutesBusy] = useState(false);
+  const [minutesError, setMinutesError] = useState("");
+
+  async function loadRunnerMinutesStatus(): Promise<"active" | "paused"> {
+    const minutesAccount = await customerApi<RunnerMinutesAccount>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
+    return runnerMinutesStatus(minutesAccount);
+  }
+
+  async function toggleMinutes() {
+    const account = accountRef.current;
+    if (!account || minutesBusy) return;
+    setMinutesBusy(true);
+    setMinutesError("");
+    try {
+      await customerApi<Record<string, never>>(
+        RUNNERS_API_BASE,
+        minutesStatus === "paused" ? "/customer/runner-minutes/resume" : "/customer/runner-minutes/pause",
+        { method: "POST", csrfToken: account.csrfToken },
+      );
+      // Re-read the account and render the state the service reports —
+      // never a blind local flip.
+      setMinutesStatus(await loadRunnerMinutesStatus());
+    } catch (caught) {
+      setMinutesError(caught instanceof Error ? caught.message : "Your minutes setting could not be changed.");
+    } finally {
+      setMinutesBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -109,6 +152,14 @@ export function EmbeddedRunnerMinutesCheckout() {
         accountRef.current = account;
         setEmail(account.email);
         setAccountReady(true);
+        try {
+          const status = await loadRunnerMinutesStatus();
+          if (!active) return;
+          setMinutesStatus(status);
+        } catch {
+          // An older or unreachable runners service leaves the status
+          // at its default — active — and the checkout stays usable.
+        }
         setPack(resolveRunnerMinutesPack(params.get("pack")));
         if (params.get("checkout") === "success") {
           setPhase("success-done");
@@ -266,6 +317,30 @@ export function EmbeddedRunnerMinutesCheckout() {
             {error && phase === "select" ? (
               <div role="alert" className="mx-2 mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
                 <p>{error}</p>
+              </div>
+            ) : null}
+
+            {accountReady ? (
+              <div className="mx-2 mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-semibold text-slate-900">Runner minutes: {minutesStatus === "paused" ? "Paused" : "Active"}</p>
+                  <button
+                    type="button"
+                    disabled={minutesBusy}
+                    onClick={() => void toggleMinutes()}
+                    className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    {minutesStatus === "paused" ? "Start minutes" : "Pause minutes"}
+                  </button>
+                </div>
+                {minutesStatus === "paused" ? (
+                  <p className="mt-2">Your minutes are paused — jobs will not run and no minutes will be used.</p>
+                ) : null}
+                {minutesError ? (
+                  <div role="alert" className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+                    <p>{minutesError}</p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
