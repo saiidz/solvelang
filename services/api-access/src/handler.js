@@ -30,7 +30,9 @@ import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscripti
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
+import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
+import { createGitHubBindingsService } from "./github-bindings.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -57,6 +59,18 @@ import { createTurnstileVerifier } from "./turnstile.js";
 // this must change with them.
 const GITHUB_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const GITHUB_SESSION_COOKIE = "sl_api_session";
+
+// Mirrors sessionCookies in customer-auth.js: the Domain cookie plus a
+// host-only twin carrying the same token, so a stale host-only jar entry
+// is overwritten by the fresh token instead of shadowing it.
+function githubSessionCookies(token) {
+  const maxAge = Math.floor(GITHUB_SESSION_TTL_MS / 1_000);
+  const value = encodeURIComponent(token);
+  return [
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+    `${GITHUB_SESSION_COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${maxAge}`,
+  ];
+}
 
 function githubDigest(pepper, purpose, value) {
   return createHmac("sha256", pepper).update(`${purpose}:${value}`).digest("hex");
@@ -141,6 +155,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
         accountId,
         email,
         cookie: `${GITHUB_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; Domain=.solve-lang.com; HttpOnly; Secure; SameSite=None; Partitioned; Max-Age=${Math.floor(GITHUB_SESSION_TTL_MS / 1_000)}`,
+        cookies: githubSessionCookies(token),
       };
     },
 
@@ -271,10 +286,28 @@ if (environment.subscriptionBillingEnabled) {
 // The repository-connect proxy exists only when the merge-governance
 // pilot service is fully configured (base URL + admin token); see
 // config.js. Unset pair -> undefined -> the connect routes answer 503.
+// The bindings read shares the merge-governance pilot pointers
+// (MGOV_PILOT_BASE_URL + MGOV_ADMIN_TOKEN, see config.js): the
+// service is constructed unconditionally like Live Center, and
+// fails closed with 503 bindings_unavailable until both pointers
+// are configured — a partial pair never enables it.
+const githubBindings = createGitHubBindingsService({ config: environment.mergeGovernanceService });
+
 const mergeGovernanceConnect = environment.mergeGovernanceService.enabled
   ? createMergeGovernanceConnectService({
       baseUrl: environment.mergeGovernanceService.baseUrl,
       adminToken: environment.mergeGovernanceService.adminToken,
+    })
+  : undefined;
+
+// Zero-step onboarding (S2): the product connect link exists only
+// when the binding secret is configured (see config.js). Unset ->
+// undefined -> the connect-link route answers 503
+// connect_not_configured, never a half-wired minter.
+const productConnectLink = environment.productConnect.enabled
+  ? createProductConnectLinkService({
+      bindingSecret: environment.productConnect.bindingSecret,
+      slug: environment.productConnect.slug,
     })
   : undefined;
 
@@ -304,7 +337,9 @@ const application = createApiAccessHandler({
   elementsCheckout,
   mergeGovernanceCheckout,
   mergeGovernanceConnect,
+  productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
+  githubBindings,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
