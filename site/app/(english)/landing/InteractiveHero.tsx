@@ -65,7 +65,7 @@ export function InteractiveHero() {
   const experience = experiences[active];
 
   return (
-    <section className={`${styles.hero} relative isolate overflow-hidden`} aria-labelledby="homepage-title">
+    <section className={`${styles.hero} dark-island relative isolate overflow-hidden`} aria-labelledby="homepage-title">
       <div className={styles.heroGlow} aria-hidden="true" />
       <div className="relative mx-auto grid max-w-[1440px] gap-6 px-5 pb-20 pt-12 sm:gap-12 sm:px-8 sm:pt-24 lg:min-h-[770px] lg:grid-cols-[0.95fr_1.05fr] lg:items-center lg:gap-10 lg:px-10 lg:pb-28 lg:pt-28">
         <div className="max-w-[670px]">
