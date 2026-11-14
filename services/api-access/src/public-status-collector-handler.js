@@ -5,7 +5,7 @@ import { createDynamoPublicStatusStore } from "./public-status-store.js";
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const store = createDynamoPublicStatusStore(client, process.env.PUBLIC_STATUS_TABLE);
-const collect = createPublicStatusCollector({ siteOrigin: process.env.SITE_ORIGIN, apiHealthUrl: process.env.PUBLIC_API_HEALTH_URL });
+const collect = createPublicStatusCollector({ siteOrigin: process.env.SITE_ORIGIN, apiHealthUrl: process.env.PUBLIC_API_HEALTH_URL, executionHealthUrl: process.env.PUBLIC_STATUS_EXECUTION_HEALTH_URL || undefined, runnerMinutesHealthUrl: process.env.PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL || undefined });
 
 export async function handler(event) {
   if (event?.source !== "aws.events" || event?.["detail-type"] !== "Scheduled Event") throw new Error("Public status collection requires the scheduled event.");
