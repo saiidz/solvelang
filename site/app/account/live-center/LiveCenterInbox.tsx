@@ -23,7 +23,7 @@ export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
 
   return (
     <section aria-label="Inbox — waiting on you" className="space-y-4">
-      <p className="max-w-3xl text-sm text-slate-400">
+      <p className="max-w-3xl text-sm text-muted">
         Everything that is waiting on a person, grouped by the kind of wait. Every button opens
         the pull request on GitHub in a new tab — that is where you mark a draft ready, resolve a
         conflict, or approve a deployment. Nothing here needs an answer inside SolveLang.
@@ -44,13 +44,13 @@ export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
           return (
             <div key={group.key} className={LC_PANEL}>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold text-slate-100">{group.label}</h3>
-                <span className="inline-block rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-slate-200">
+                <h3 className="font-semibold text-ink">{group.label}</h3>
+                <span className="inline-block rounded-full bg-panel-alt px-2 py-0.5 text-xs font-semibold text-body">
                   {group.items.length}
                 </span>
               </div>
-              <p className="mt-1 max-w-3xl text-sm text-slate-400">{group.description}</p>
-              <ul className="mt-2 divide-y divide-white/5">
+              <p className="mt-1 max-w-3xl text-sm text-muted">{group.description}</p>
+              <ul className="mt-2 divide-y divide-line">
                 {pageData.items.map((item, index) => {
                   const href =
                     group.key === "deployment"
@@ -63,10 +63,10 @@ export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
                       className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3"
                     >
                       <div className="min-w-0 flex-1 basis-64">
-                        <p className="break-words font-medium text-slate-100">
+                        <p className="break-words font-medium text-ink">
                           {item.title || item.blocker}
                         </p>
-                        <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-400">
+                        <p className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted">
                           {item.number !== null ? <span>#{item.number}</span> : null}
                           {item.title ? <span>{item.blocker}</span> : null}
                           {item.total > 0 ? (
@@ -81,7 +81,7 @@ export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
                         href={href}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-block shrink-0 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10"
+                        className="inline-block shrink-0 rounded-lg border border-line bg-panel px-3 py-1.5 text-sm text-body transition hover:bg-panel-alt"
                       >
                         {group.key === "deployment" ? "Open the run on GitHub" : "Open on GitHub"}
                       </a>
@@ -101,7 +101,7 @@ export function LiveCenterInbox({ board }: { board: LiveCenterBoardView }) {
         })
       )}
       {totalItems > 0 ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted">
           {totalItems} item{totalItems === 1 ? "" : "s"} waiting across {board.inboxGroups.length}{" "}
           group{board.inboxGroups.length === 1 ? "" : "s"}.
         </p>

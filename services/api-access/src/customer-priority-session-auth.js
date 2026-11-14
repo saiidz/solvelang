@@ -16,13 +16,17 @@ function digest(pepper, label, value) {
   return createHmac("sha256", pepper).update(`${label}:${value}`).digest("hex");
 }
 
-function cookieValue(cookieHeader, name) {
-  if (typeof cookieHeader !== "string") return undefined;
+// Every value presented under `name`, in header order — the Domain
+// cookie and a host-only twin are distinct jar entries and either may
+// be presented first (see customer-auth.js).
+function cookieValues(cookieHeader, name) {
+  if (typeof cookieHeader !== "string") return [];
+  const values = [];
   for (const part of cookieHeader.split(";")) {
     const [key, ...rest] = part.trim().split("=");
-    if (key === name) return rest.join("=");
+    if (key === name) values.push(rest.join("="));
   }
-  return undefined;
+  return values;
 }
 
 function authVersion(value) {
@@ -60,46 +64,65 @@ export function createPriorityCustomerSessionAuth({
     return response.Item;
   }
 
+  async function authenticateToken(token, match) {
+    const [, sessionId, secret] = match;
+    const session = await get(`session#${sessionId}`);
+    const timestamp = Math.floor(now() / 1000);
+    if (
+      session?.kind !== "session"
+      || !ACCOUNT_ID.test(session.accountId ?? "")
+      || typeof session.email !== "string"
+      || !Number.isSafeInteger(session.expiresAt)
+      || session.expiresAt <= timestamp
+      || !pepperCandidates.some((candidate) => secureEqual(session.secretFingerprint, digest(candidate, "session", token)))
+    ) {
+      throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
+    }
+
+    const account = await get(`account#${session.accountId}`);
+    const sessionVersion = authVersion(session.authVersion);
+    const accountVersion = authVersion(account?.authVersion);
+    if (
+      account?.kind !== "account"
+      || account.accountId !== session.accountId
+      || account.email !== session.email
+      || sessionVersion === null
+      || accountVersion === null
+      || sessionVersion !== accountVersion
+    ) {
+      throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
+    }
+    await accountAccess.assertActive(session.accountId);
+    return {
+      accountId: session.accountId,
+      email: session.email,
+      csrfToken: session.csrfToken,
+      csrfFingerprint: session.csrfFingerprint,
+      authVersion: sessionVersion,
+    };
+  }
+
   return {
     async authenticate(cookieHeader) {
-      const token = cookieValue(cookieHeader, cookieName);
-      const match = typeof token === "string" ? SESSION_TOKEN.exec(token) : null;
-      if (!match) throw new ApiAccessError(401, "session_required", "Customer authentication is required.");
-      const [, sessionId, secret] = match;
-      const session = await get(`session#${sessionId}`);
-      const timestamp = Math.floor(now() / 1000);
-      if (
-        session?.kind !== "session"
-        || !ACCOUNT_ID.test(session.accountId ?? "")
-        || typeof session.email !== "string"
-        || !Number.isSafeInteger(session.expiresAt)
-        || session.expiresAt <= timestamp
-        || !pepperCandidates.some((candidate) => secureEqual(session.secretFingerprint, digest(candidate, "session", token)))
-      ) {
-        throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
+      // Same shadow rule as customer-auth.js: a jar can present the
+      // Domain cookie and a stale host-only twin in either order, so
+      // try EVERY presented value and accept the first that verifies;
+      // fail closed only when none does. Only an invalid-session
+      // rejection moves to the next candidate — an access restriction
+      // (assertActive) or a store failure must still surface.
+      let sawWellFormed = false;
+      for (const token of cookieValues(cookieHeader, cookieName)) {
+        const match = typeof token === "string" ? SESSION_TOKEN.exec(token) : null;
+        if (!match) continue;
+        sawWellFormed = true;
+        try {
+          return await authenticateToken(token, match);
+        } catch (error) {
+          if (!(error instanceof ApiAccessError) || error.code !== "session_invalid") throw error;
+        }
       }
-
-      const account = await get(`account#${session.accountId}`);
-      const sessionVersion = authVersion(session.authVersion);
-      const accountVersion = authVersion(account?.authVersion);
-      if (
-        account?.kind !== "account"
-        || account.accountId !== session.accountId
-        || account.email !== session.email
-        || sessionVersion === null
-        || accountVersion === null
-        || sessionVersion !== accountVersion
-      ) {
-        throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
-      }
-      await accountAccess.assertActive(session.accountId);
-      return {
-        accountId: session.accountId,
-        email: session.email,
-        csrfToken: session.csrfToken,
-        csrfFingerprint: session.csrfFingerprint,
-        authVersion: sessionVersion,
-      };
+      if (sawWellFormed) throw new ApiAccessError(401, "session_invalid", "Customer session is invalid or expired.");
+      throw new ApiAccessError(401, "session_required", "Customer authentication is required.");
     },
 
     assertCsrf(session, presented) {
