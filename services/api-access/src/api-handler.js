@@ -66,6 +66,7 @@ export function createApiAccessHandler({
   stripeGateway,
   botProtection = null,
   githubApp = null,
+  productConnectLink = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
   statusProbes = {},
   logger = console,
@@ -345,6 +346,16 @@ export function createApiAccessHandler({
         const session = await customerSession(event);
         if (!githubApp) return response(200, { enabled: false, installations: [] });
         return response(200, { enabled: true, installations: await githubApp.listForAccount(session.accountId) });
+      }
+      // Zero-step onboarding (S2): the signed-in customer's connect
+      // link for the branded product app. The session is the only
+      // input - the tenant in the minted state is the session's own
+      // account id, never anything the browser supplied. An
+      // unconfigured binding secret fails closed with a plain 503.
+      if (method === "GET" && path.endsWith("/customer/github/connect-link")) {
+        const session = await customerSession(event);
+        if (!productConnectLink) return response(503, { error: "connect_not_configured" });
+        return response(200, productConnectLink.createConnectLink(session.accountId));
       }
       if (method === "POST" && path.endsWith("/customer/github/installations/link")) {
         const session = await customerSession(event, true);

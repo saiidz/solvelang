@@ -30,6 +30,7 @@ import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscripti
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
+import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
@@ -278,6 +279,17 @@ const mergeGovernanceConnect = environment.mergeGovernanceService.enabled
     })
   : undefined;
 
+// Zero-step onboarding (S2): the product connect link exists only
+// when the binding secret is configured (see config.js). Unset ->
+// undefined -> the connect-link route answers 503
+// connect_not_configured, never a half-wired minter.
+const productConnectLink = environment.productConnect.enabled
+  ? createProductConnectLinkService({
+      bindingSecret: environment.productConnect.bindingSecret,
+      slug: environment.productConnect.slug,
+    })
+  : undefined;
+
 const botProtection = environment.turnstileSecretKey
   ? createTurnstileVerifier({ secret: environment.turnstileSecretKey, expectedHostname: new URL(environment.siteOrigin).hostname })
   : undefined;
@@ -304,6 +316,7 @@ const application = createApiAccessHandler({
   elementsCheckout,
   mergeGovernanceCheckout,
   mergeGovernanceConnect,
+  productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
   subscriptionPortal,
   subscriptionLifecycle,

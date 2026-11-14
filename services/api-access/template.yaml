@@ -71,6 +71,15 @@ Parameters:
     Type: String
     Default: "solvelang-reader"
     Description: SolveLang GitHub App URL slug used to build the install URL.
+  ProductBindingSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Shared secret that signs the product connect-link state (zero-step onboarding S2); blank leaves the connect-link route answering 503 connect_not_configured.
+  ProductAppSlug:
+    Type: String
+    Default: "solvelang-process-solution"
+    Description: Branded product GitHub App URL slug used to build the connect-link install URL.
   ApiKeyPepper:
     Type: String
     NoEcho: true
@@ -438,6 +447,8 @@ Resources:
           API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
           API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
           API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          PRODUCT_BINDING_SECRET: !Ref ProductBindingSecret
+          PRODUCT_APP_SLUG: !Ref ProductAppSlug
           API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
@@ -796,6 +807,8 @@ Resources:
           API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
           API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
           API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          PRODUCT_BINDING_SECRET: !Ref ProductBindingSecret
+          PRODUCT_APP_SLUG: !Ref ProductAppSlug
           API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
           STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
@@ -841,6 +854,12 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/github/installations
+            Method: GET
+        CustomerGitHubConnectLink:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/github/connect-link
             Method: GET
         GitHubInstallStart:
           Type: HttpApi
