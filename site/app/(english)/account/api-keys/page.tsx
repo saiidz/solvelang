@@ -529,194 +529,226 @@ export default function ApiKeysPage() {
         {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-emerald-200">{notice}</p> : null}
         {error ? <p className="mt-6 rounded-xl bg-red-400/10 p-4 text-red-200">{error}</p> : null}
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Account security</p>
-              <h2 className="mt-2 text-2xl font-bold">{dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}</h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Changing your password asks for your current password${dashboard.auth.totpEnabled ? " and an authenticator code" : ""}. Right after an email recovery link, you can set a new password directly.` : "Choose a username and password once. Future sign-ins will not need an email link."}
-              </p>
-            </div>
-            {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span> : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
-          </div>
-          <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-2 md:items-end">
-            <div>
-              <label htmlFor="credential-username" className="block text-sm font-medium">Username</label>
-              <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60" />
-            </div>
-            {dashboard.auth.passwordConfigured ? (
-              <div>
-                <label htmlFor="credential-current-password" className="block text-sm font-medium">Current password</label>
-                <input id="credential-current-password" type="password" value={credentialCurrentPassword} onChange={(event) => setCredentialCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
-              </div>
-            ) : null}
-            <div>
-              <label htmlFor="credential-password" className="block text-sm font-medium">{dashboard.auth.passwordConfigured ? "New password" : "Password"}</label>
-              <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
-            </div>
-            {dashboard.auth.passwordConfigured && dashboard.auth.totpEnabled ? (
-              <div>
-                <label htmlFor="credential-code" className="block text-sm font-medium">Authenticator or backup code</label>
-                <input id="credential-code" type="text" value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
-              </div>
-            ) : null}
-            <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40 md:justify-self-start">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
-          </form>
-
-          <div className="mt-8 border-t border-white/10 pt-6">
+        <section id="sign-in-security" className="mt-10">
+          <h2 className="text-2xl font-bold">Sign-in & security</h2>
+          <section className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Authenticator app</p>
-                <h3 className="mt-2 text-xl font-bold">{dashboard.auth.totpEnabled ? "Two-factor authentication enabled" : "Optional two-factor authentication"}</h3>
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">Account security</p>
+                <h2 className="mt-2 text-2xl font-bold">{dashboard.auth.passwordConfigured ? "Password sign-in enabled" : "Set up password sign-in"}</h2>
                 <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                  {dashboard.auth.totpEnabled
-                    ? `Password and recovery-link sign-ins require your authenticator or one unused backup code. ${dashboard.auth.backupCodesRemaining ?? 0} backup codes remain.`
-                    : "Add a standards-compatible authenticator app for an extra factor after password or email recovery."}
+                  {dashboard.auth.passwordConfigured ? `Sign in with ${dashboard.auth.username} or your email. Changing your password asks for your current password${dashboard.auth.totpEnabled ? " and an authenticator code" : ""}. Right after an email recovery link, you can set a new password directly.` : "Choose a username and password once. Future sign-ins will not need an email link."}
                 </p>
               </div>
-              {dashboard.auth.totpEnabled ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Enabled</span> : null}
+              {dashboard.auth.passwordConfigured ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Ready</span> : <span className="rounded-full bg-amber-300/10 px-3 py-1 text-sm text-amber-100">Setup needed</span>}
+            </div>
+            <form onSubmit={saveCredentials} className="mt-6 grid gap-4 md:grid-cols-2 md:items-end">
+              <div>
+                <label htmlFor="credential-username" className="block text-sm font-medium">Username</label>
+                <input id="credential-username" required minLength={3} maxLength={32} disabled={Boolean(dashboard.auth.username)} value={credentialUsername} onChange={(event) => setCredentialUsername(event.target.value)} autoComplete="username" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300 disabled:opacity-60" />
+              </div>
+              {dashboard.auth.passwordConfigured ? (
+                <div>
+                  <label htmlFor="credential-current-password" className="block text-sm font-medium">Current password</label>
+                  <input id="credential-current-password" type="password" value={credentialCurrentPassword} onChange={(event) => setCredentialCurrentPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+                </div>
+              ) : null}
+              <div>
+                <label htmlFor="credential-password" className="block text-sm font-medium">{dashboard.auth.passwordConfigured ? "New password" : "Password"}</label>
+                <input id="credential-password" type="password" required minLength={12} maxLength={128} value={credentialPassword} onChange={(event) => setCredentialPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              </div>
+              {dashboard.auth.passwordConfigured && dashboard.auth.totpEnabled ? (
+                <div>
+                  <label htmlFor="credential-code" className="block text-sm font-medium">Authenticator or backup code</label>
+                  <input id="credential-code" type="text" value={credentialCode} onChange={(event) => setCredentialCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+                </div>
+              ) : null}
+              <button disabled={busy} className="rounded-xl bg-white px-5 py-3 font-bold text-slate-950 disabled:opacity-40 md:justify-self-start">{dashboard.auth.passwordConfigured ? "Update password" : "Enable password sign-in"}</button>
+            </form>
+
+            <div className="mt-8 border-t border-white/10 pt-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Authenticator app</p>
+                  <h3 className="mt-2 text-xl font-bold">{dashboard.auth.totpEnabled ? "Two-factor authentication enabled" : "Optional two-factor authentication"}</h3>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                    {dashboard.auth.totpEnabled
+                      ? `Password and recovery-link sign-ins require your authenticator or one unused backup code. ${dashboard.auth.backupCodesRemaining ?? 0} backup codes remain.`
+                      : "Add a standards-compatible authenticator app for an extra factor after password or email recovery."}
+                  </p>
+                </div>
+                {dashboard.auth.totpEnabled ? <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm text-emerald-200">Enabled</span> : null}
+              </div>
+
+              {!dashboard.auth.totpAvailable ? (
+                <p className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4 text-sm text-slate-400">Authenticator setup is not enabled on this environment yet.</p>
+              ) : !dashboard.auth.totpEnabled ? (
+                <div className="mt-5">
+                  {!totpSetup ? (
+                    <button type="button" disabled={busy || !dashboard.auth.passwordConfigured} onClick={beginAuthenticatorSetup} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-40">Set up authenticator app</button>
+                  ) : (
+                    <form onSubmit={confirmAuthenticator} className="rounded-2xl border border-cyan-300/25 bg-cyan-300/5 p-5">
+                      <p className="text-sm text-slate-300">Add this key to Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another TOTP app.</p>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <code className="break-all rounded-lg bg-black/30 px-3 py-2 text-sm text-cyan-100">{totpSetup.secret}</code>
+                        <button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">Copy key</button>
+                        <a href={totpSetup.otpauthUri} className="rounded-lg border border-white/15 px-3 py-2 text-center text-sm">Open authenticator app</a>
+                      </div>
+                      <div className="mt-5 grid gap-4 md:grid-cols-2">
+                        <div>
+                          <label htmlFor="totp-enable-password" className="block text-sm font-medium">Current password</label>
+                          <input id="totp-enable-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                        </div>
+                        <div>
+                          <label htmlFor="totp-enable-code" className="block text-sm font-medium">6-digit authenticator code</label>
+                          <input id="totp-enable-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-widest" placeholder="123456" />
+                        </div>
+                      </div>
+                      <div className="mt-5 flex gap-3">
+                        <button disabled={busy} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Enable authenticator 2FA</button>
+                        <button type="button" onClick={() => { setTotpSetup(null); setTotpPassword(""); setTotpCode(""); }} className="rounded-xl border border-white/15 px-4 py-2">Cancel</button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <form onSubmit={regenerateBackupCodes} className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-5">
+                  <p className="text-sm text-slate-300">Security changes require your current password plus a fresh authenticator code or unused backup code. Reusing a TOTP time-step is rejected.</p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label htmlFor="totp-security-password" className="block text-sm font-medium">Current password</label>
+                      <input id="totp-security-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
+                    </div>
+                    <div>
+                      <label htmlFor="totp-security-code" className="block text-sm font-medium">Fresh authenticator or backup code</label>
+                      <input id="totp-security-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono" />
+                    </div>
+                  </div>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button disabled={busy} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-60">Regenerate backup codes</button>
+                    <button type="button" disabled={busy} onClick={disableAuthenticator} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 disabled:opacity-60">Disable authenticator 2FA</button>
+                  </div>
+                </form>
+              )}
+
+              {backupCodes.length > 0 ? (
+                <div className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-5">
+                  <h4 className="font-bold text-amber-100">Save these one-time backup codes now</h4>
+                  <p className="mt-2 text-sm text-amber-100/80">Each code works once. SolveLang stores only keyed fingerprints and will not show these plaintext codes again.</p>
+                  <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-black/30 p-4 font-mono text-sm text-amber-50">{backupCodes.join("\n")}</pre>
+                  <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy backup codes</button>
+                </div>
+              ) : null}
             </div>
 
-            {!dashboard.auth.totpAvailable ? (
-              <p className="mt-5 rounded-xl border border-white/10 bg-black/10 p-4 text-sm text-slate-400">Authenticator setup is not enabled on this environment yet.</p>
-            ) : !dashboard.auth.totpEnabled ? (
-              <div className="mt-5">
-                {!totpSetup ? (
-                  <button type="button" disabled={busy || !dashboard.auth.passwordConfigured} onClick={beginAuthenticatorSetup} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-40">Set up authenticator app</button>
-                ) : (
-                  <form onSubmit={confirmAuthenticator} className="rounded-2xl border border-cyan-300/25 bg-cyan-300/5 p-5">
-                    <p className="text-sm text-slate-300">Add this key to Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another TOTP app.</p>
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <code className="break-all rounded-lg bg-black/30 px-3 py-2 text-sm text-cyan-100">{totpSetup.secret}</code>
-                      <button type="button" onClick={() => navigator.clipboard.writeText(totpSetup.secret)} className="rounded-lg border border-white/15 px-3 py-2 text-sm">Copy key</button>
-                      <a href={totpSetup.otpauthUri} className="rounded-lg border border-white/15 px-3 py-2 text-center text-sm">Open authenticator app</a>
-                    </div>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2">
-                      <div>
-                        <label htmlFor="totp-enable-password" className="block text-sm font-medium">Current password</label>
-                        <input id="totp-enable-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
-                      </div>
-                      <div>
-                        <label htmlFor="totp-enable-code" className="block text-sm font-medium">6-digit authenticator code</label>
-                        <input id="totp-enable-code" required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" value={totpCode} onChange={(event) => setTotpCode(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono tracking-widest" placeholder="123456" />
-                      </div>
-                    </div>
-                    <div className="mt-5 flex gap-3">
-                      <button disabled={busy} className="rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Enable authenticator 2FA</button>
-                      <button type="button" onClick={() => { setTotpSetup(null); setTotpPassword(""); setTotpCode(""); }} className="rounded-xl border border-white/15 px-4 py-2">Cancel</button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            ) : (
-              <form onSubmit={regenerateBackupCodes} className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-5">
-                <p className="text-sm text-slate-300">Security changes require your current password plus a fresh authenticator code or unused backup code. Reusing a TOTP time-step is rejected.</p>
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label htmlFor="totp-security-password" className="block text-sm font-medium">Current password</label>
-                    <input id="totp-security-password" type="password" required value={totpPassword} onChange={(event) => setTotpPassword(event.target.value)} autoComplete="current-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3" />
-                  </div>
-                  <div>
-                    <label htmlFor="totp-security-code" className="block text-sm font-medium">Fresh authenticator or backup code</label>
-                    <input id="totp-security-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value)} autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 font-mono" />
-                  </div>
-                </div>
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button disabled={busy} className="rounded-xl border border-cyan-300/40 px-4 py-2 font-semibold text-cyan-100 disabled:opacity-60">Regenerate backup codes</button>
-                  <button type="button" disabled={busy} onClick={disableAuthenticator} className="rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 disabled:opacity-60">Disable authenticator 2FA</button>
-                </div>
-              </form>
-            )}
+            <div className="mt-8 border-t border-white/10 pt-6">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Sessions</p>
+              <h3 className="mt-2 text-xl font-bold">Sign out everywhere</h3>
+              <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                Ends every signed-in session for this account on all devices, including this browser. Use this if a device is lost or you think someone else may have access. You will need to sign in again afterwards.
+              </p>
+              <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Sign out of all devices</button>
+            </div>
+          </section>
+        </section>
 
-            {backupCodes.length > 0 ? (
-              <div className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-5">
-                <h4 className="font-bold text-amber-100">Save these one-time backup codes now</h4>
-                <p className="mt-2 text-sm text-amber-100/80">Each code works once. SolveLang stores only keyed fingerprints and will not show these plaintext codes again.</p>
-                <pre className="mt-4 whitespace-pre-wrap rounded-xl bg-black/30 p-4 font-mono text-sm text-amber-50">{backupCodes.join("\n")}</pre>
-                <button type="button" onClick={() => navigator.clipboard.writeText(backupCodes.join("\n"))} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy backup codes</button>
-              </div>
-            ) : null}
-          </div>
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">API keys</h2>
+          {issued ? (
+            <section className="mt-5 rounded-3xl border border-amber-300/40 bg-amber-300/10 p-6">
+              <h2 className="text-2xl font-bold text-amber-100">Copy this key now</h2>
+              <p className="mt-2 text-sm text-amber-100/80">For security, the complete key will not be shown again.</p>
+              <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-amber-50">{issued.env}</pre>
+              <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy .env values</button>
+            </section>
+          ) : null}
 
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Sessions</p>
-            <h3 className="mt-2 text-xl font-bold">Sign out everywhere</h3>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
-              Ends every signed-in session for this account on all devices, including this browser. Use this if a device is lost or you think someone else may have access. You will need to sign in again afterwards.
-            </p>
-            <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-red-300/30 px-4 py-2 font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Sign out of all devices</button>
+          <section className="mt-8 grid gap-8 lg:grid-cols-[360px_1fr]">
+            <form onSubmit={issueKey} className="h-fit rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-2xl font-bold">Create API key</h2>
+              <p className="mt-2 text-sm text-slate-400">Keys receive the repository audit scope assigned by your plan.</p>
+              <label htmlFor="key-name" className="mt-6 block text-sm font-medium">Key name</label>
+              <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
+              <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-slate-950 disabled:opacity-40">Create one-time key</button>
+            </form>
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
+              <h2 className="text-2xl font-bold">API keys</h2>
+              <div className="mt-5 space-y-3">
+                {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No API keys yet.</p> : dashboard.keys.map((key) => (
+                  <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h3 className="font-bold">{key.name}</h3>
+                      <p className="mt-1 font-mono text-sm text-slate-300">{key.prefix}…{key.lastFour}</p>
+                      <p className="mt-2 text-xs text-slate-500">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
+                    </div>
+                    {key.revokedAt ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-sm text-red-200">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-red-300/30 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Revoke</button>}
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Plan & billing</h2>
+          <section className="mt-5 grid gap-5 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <p className="text-sm text-slate-400">Plan</p>
+              <p className="mt-2 text-2xl font-bold capitalize">{dashboard.subscription.plan ?? "No subscription"}</p>
+              <p className="mt-1 text-sm capitalize text-slate-300">{dashboard.subscription.status}</p>
+              {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Manage subscription</button> : null}
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <p className="text-sm text-slate-400">Credits used</p>
+              <p className="mt-2 text-2xl font-bold">{dashboard.usage.used ?? 0} / {dashboard.usage.limit ?? "—"}</p>
+              <p className="mt-1 text-sm text-slate-300">Remaining {dashboard.usage.remaining ?? "—"} · Period {dashboard.usage.period}</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <p className="text-sm text-slate-400">Active API keys</p>
+              <p className="mt-2 text-2xl font-bold">{activeKeys.length}</p>
+              <p className="mt-1 text-sm text-slate-300">Current period ends {readableDate(dashboard.subscription.currentPeriodEnd)}</p>
+            </div>
+          </section>
+
+          <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.</section>
+
+          {!dashboard.subscription.plan ? (
+            <section className="mt-8 rounded-3xl border border-cyan-300/30 bg-cyan-300/5 p-6">
+              <h2 className="text-2xl font-bold">Choose an API plan</h2>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                {plans.map((plan) => (
+                  <div key={plan.key} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5">
+                    <h3 className="text-xl font-bold">{plan.name}</h3>
+                    <p className="mt-2 font-semibold text-cyan-200">{plan.price}</p>
+                    <p className="mt-3 text-sm text-slate-300">{plan.credits}</p>
+                    <p className="mt-1 text-sm text-slate-300">{plan.keys}</p>
+                    <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Start checkout</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Runner minutes</h2>
+          <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-6">
+            <h3 className="text-xl font-bold">Minutes live in the Live Center</h3>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">Your runner minutes balance and usage are shown in the Live Center, not on this page. Open the Live Center to see how many minutes you have left, or buy more minutes when you need them.</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/account/live-center/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">View minutes in the Live Center</Link>
+              <Link href="/account/runner-minutes-checkout/" className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-slate-950">Buy minutes</Link>
+            </div>
           </div>
         </section>
 
-        <section className="mt-8 grid gap-5 md:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Plan</p>
-            <p className="mt-2 text-2xl font-bold capitalize">{dashboard.subscription.plan ?? "No subscription"}</p>
-            <p className="mt-1 text-sm capitalize text-slate-300">{dashboard.subscription.status}</p>
-            {dashboard.subscription.plan ? <button type="button" onClick={manageSubscription} disabled={busy} className="mt-5 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-60">Manage subscription</button> : null}
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Credits used</p>
-            <p className="mt-2 text-2xl font-bold">{dashboard.usage.used ?? 0} / {dashboard.usage.limit ?? "—"}</p>
-            <p className="mt-1 text-sm text-slate-300">Remaining {dashboard.usage.remaining ?? "—"} · Period {dashboard.usage.period}</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <p className="text-sm text-slate-400">Active API keys</p>
-            <p className="mt-2 text-2xl font-bold">{activeKeys.length}</p>
-            <p className="mt-1 text-sm text-slate-300">Current period ends {readableDate(dashboard.subscription.currentPeriodEnd)}</p>
-          </div>
-        </section>
-
-        <section className="mt-8 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/5 p-5 text-sm text-slate-200">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Express, Priority, and Critical processing are not selectable yet; paid priority remains disabled until the queue-backed worker is enabled and validated.</section>
-
-        {!dashboard.subscription.plan ? (
-          <section className="mt-8 rounded-3xl border border-cyan-300/30 bg-cyan-300/5 p-6">
-            <h2 className="text-2xl font-bold">Choose an API plan</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              {plans.map((plan) => (
-                <div key={plan.key} className="rounded-2xl border border-white/10 bg-slate-950/50 p-5">
-                  <h3 className="text-xl font-bold">{plan.name}</h3>
-                  <p className="mt-2 font-semibold text-cyan-200">{plan.price}</p>
-                  <p className="mt-3 text-sm text-slate-300">{plan.credits}</p>
-                  <p className="mt-1 text-sm text-slate-300">{plan.keys}</p>
-                  <button disabled={busy} onClick={() => startCheckout(plan.key)} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-2 font-bold text-slate-950 disabled:opacity-60">Start checkout</button>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {issued ? (
-          <section className="mt-8 rounded-3xl border border-amber-300/40 bg-amber-300/10 p-6">
-            <h2 className="text-2xl font-bold text-amber-100">Copy this key now</h2>
-            <p className="mt-2 text-sm text-amber-100/80">For security, the complete key will not be shown again.</p>
-            <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-amber-50">{issued.env}</pre>
-            <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-amber-200 px-4 py-2 font-bold text-slate-950">Copy .env values</button>
-          </section>
-        ) : null}
-
-        <section className="mt-8 grid gap-8 lg:grid-cols-[360px_1fr]">
-          <form onSubmit={issueKey} className="h-fit rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h2 className="text-2xl font-bold">Create API key</h2>
-            <p className="mt-2 text-sm text-slate-400">Keys receive the repository audit scope assigned by your plan.</p>
-            <label htmlFor="key-name" className="mt-6 block text-sm font-medium">Key name</label>
-            <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 outline-none focus:border-cyan-300" />
-            <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-white px-4 py-3 font-bold text-slate-950 disabled:opacity-40">Create one-time key</button>
-          </form>
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6">
-            <h2 className="text-2xl font-bold">API keys</h2>
-            <div className="mt-5 space-y-3">
-              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-6 text-slate-400">No API keys yet.</p> : dashboard.keys.map((key) => (
-                <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h3 className="font-bold">{key.name}</h3>
-                    <p className="mt-1 font-mono text-sm text-slate-300">{key.prefix}…{key.lastFour}</p>
-                    <p className="mt-2 text-xs text-slate-500">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
-                  </div>
-                  {key.revokedAt ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-sm text-red-200">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-red-300/30 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-300/10 disabled:opacity-60">Revoke</button>}
-                </article>
-              ))}
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Connected accounts</h2>
+          <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-6">
+            <h3 className="text-xl font-bold">GitHub</h3>
+            <p className="mt-2 max-w-2xl text-sm text-slate-300">Your GitHub connection lives on its own page. Install or manage the SolveLang GitHub App and see your linked installations there.</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/account/github/" className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5">Manage GitHub connection</Link>
             </div>
           </div>
         </section>
