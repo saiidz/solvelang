@@ -81,9 +81,9 @@ export default function GitHubAccountPage() {
 
   if (screen === "loading") {
     return (
-      <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
+      <main className="min-h-screen bg-loading-canvas px-6 py-16 text-loading-text">
         <div className="mx-auto max-w-3xl">
-          <p className="text-slate-300">Loading your GitHub connection…</p>
+          <p className="text-loading-muted">Loading your GitHub connection…</p>
         </div>
       </main>
     );
@@ -91,24 +91,24 @@ export default function GitHubAccountPage() {
 
   if (screen === "signed-out") {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-950 px-6 py-16 text-white">
-        <section className="w-full max-w-lg rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+      <main className="grid min-h-screen place-items-center bg-canvas px-6 py-16 text-ink">
+        <section className="w-full max-w-lg rounded-3xl border border-line bg-panel p-8 shadow-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang API</p>
           <h1 className="mt-3 text-3xl font-bold">Connect GitHub</h1>
-          <p className="mt-4 text-slate-300">Sign in to your SolveLang account first. The GitHub install is linked to the account you are signed in with, so this page needs your session before it can show or link installations.</p>
-          <Link href="/account/api-keys/" className="mt-8 inline-flex rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-200">Go to sign in</Link>
+          <p className="mt-4 text-body">Sign in to your SolveLang account first. The GitHub install is linked to the account you are signed in with, so this page needs your session before it can show or link installations.</p>
+          <Link href="/account/api-keys/" className="mt-8 inline-flex rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent hover:bg-accent">Go to sign in</Link>
         </section>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
+    <main className="min-h-screen bg-canvas px-6 py-12 text-ink">
       <div className="mx-auto max-w-4xl">
-        <header className="border-b border-white/10 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">API account</p>
+        <header className="border-b border-line pb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">API account</p>
           <h1 className="mt-2 text-4xl font-bold">GitHub app</h1>
-          <p className="mt-3 max-w-2xl leading-7 text-slate-300">
+          <p className="mt-3 max-w-2xl leading-7 text-body">
             Install the SolveLang GitHub App on your account or organization and choose exactly which
             repositories it can see. Audits read those repositories <strong>read-only</strong> — SolveLang
             cannot change your code — and you can remove a repository or uninstall the app at any time
@@ -116,32 +116,32 @@ export default function GitHubAccountPage() {
           </p>
         </header>
 
-        {notice ? <p className="mt-6 rounded-xl bg-emerald-400/10 p-4 text-sm text-emerald-200">{notice}</p> : null}
-        {error ? <p className="mt-6 rounded-xl bg-red-400/10 p-4 text-sm text-red-200">{error}</p> : null}
+        {notice ? <p className="mt-6 rounded-xl bg-success-soft p-4 text-sm text-success">{notice}</p> : null}
+        {error ? <p className="mt-6 rounded-xl bg-danger-soft p-4 text-sm text-danger">{error}</p> : null}
 
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl">
+        <section className="mt-8 rounded-3xl border border-line bg-panel p-8 shadow-2xl">
           <h2 className="text-2xl font-bold">Linked installations</h2>
           {!enabled ? (
-            <p className="mt-4 text-slate-300">GitHub sign-in and installations are not enabled on this environment yet.</p>
+            <p className="mt-4 text-body">GitHub sign-in and installations are not enabled on this environment yet.</p>
           ) : installations.length === 0 ? (
-            <p className="mt-4 text-slate-300">No GitHub installations are linked to your account yet.</p>
+            <p className="mt-4 text-body">No GitHub installations are linked to your account yet.</p>
           ) : (
             <ul className="mt-6 space-y-6">
               {installations.map((installation) => (
-                <li key={installation.installationId} className="rounded-2xl border border-white/10 bg-black/10 p-5">
+                <li key={installation.installationId} className="rounded-2xl border border-line bg-black/10 p-5">
                   <div className="flex flex-wrap items-center gap-3">
                     <p className="font-bold">{installation.accountLogin}</p>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300">{installation.accountType}</span>
-                    {installation.suspended ? <span className="rounded-full bg-red-400/10 px-3 py-1 text-xs text-red-200">Suspended on GitHub</span> : null}
+                    <span className="rounded-full bg-panel-alt px-3 py-1 text-xs text-body">{installation.accountType}</span>
+                    {installation.suspended ? <span className="rounded-full bg-danger-soft px-3 py-1 text-xs text-danger">Suspended on GitHub</span> : null}
                   </div>
                   {installation.repositories.length > 0 ? (
-                    <ul className="mt-3 space-y-1 text-sm text-slate-300">
+                    <ul className="mt-3 space-y-1 text-sm text-body">
                       {installation.repositories.map((repository) => (
                         <li key={repository.id} className="font-mono">{repository.fullName}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-3 text-sm text-slate-400">No repositories are selected for this installation.</p>
+                    <p className="mt-3 text-sm text-muted">No repositories are selected for this installation.</p>
                   )}
                 </li>
               ))}
@@ -150,12 +150,12 @@ export default function GitHubAccountPage() {
           {enabled ? (
             <a
               href={githubInstallStartUrl(API_BASE)}
-              className="mt-8 inline-flex rounded-xl bg-cyan-300 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-200"
+              className="mt-8 inline-flex rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent hover:bg-accent"
             >
               {busy ? "Linking…" : "Install the SolveLang app"}
             </a>
           ) : null}
-          <p className="mt-4 text-sm text-slate-400">The button takes you to GitHub to pick the account and repositories. GitHub returns you here afterwards and the installation is linked to your account.</p>
+          <p className="mt-4 text-sm text-muted">The button takes you to GitHub to pick the account and repositories. GitHub returns you here afterwards and the installation is linked to your account.</p>
         </section>
       </div>
     </main>
