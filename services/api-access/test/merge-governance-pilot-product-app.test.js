@@ -29,8 +29,8 @@ test("deployment summary reports the product app state", async () => {
   assert.match(source, /echo "- Product app: \*\*\$product_app_line\*\*"/);
 });
 
-test("the reserved product webhook secret stays unwired in the dispatcher", async () => {
+test("the product webhook secret is wired from the environment secret", async () => {
   const source = await workflow();
-  assert.doesNotMatch(source, /MGOV_PRODUCT_WEBHOOK_SECRET/);
-  assert.doesNotMatch(source, /ProductWebhookSecret/);
+  assert.match(source, /MGOV_PRODUCT_WEBHOOK_SECRET: \$\{\{ secrets\.MGOV_PRODUCT_WEBHOOK_SECRET \}\}/);
+  assert.match(source, /\[\[ -z "\$MGOV_PRODUCT_WEBHOOK_SECRET" \]\] \|\| parameters\+=\(ProductWebhookSecret="\$MGOV_PRODUCT_WEBHOOK_SECRET"\)/);
 });

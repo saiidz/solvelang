@@ -56,6 +56,7 @@ jobs:
       GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
       MGOV_PRODUCT_APP_ID: ${{ secrets.MGOV_PRODUCT_APP_ID }}
       MGOV_PRODUCT_APP_PRIVATE_KEY: ${{ secrets.MGOV_PRODUCT_APP_PRIVATE_KEY }}
+      MGOV_PRODUCT_WEBHOOK_SECRET: ${{ secrets.MGOV_PRODUCT_WEBHOOK_SECRET }}
 
     steps:
       - name: Check out the private product source
@@ -211,6 +212,13 @@ jobs:
           # configured the same conditional way; the slug is the app's own.
           [[ -z "$MGOV_PRODUCT_APP_ID" ]] || parameters+=(ProductAppId="$MGOV_PRODUCT_APP_ID" ProductAppSlug="solvelang-process-solution")
           [[ -z "$MGOV_PRODUCT_APP_PRIVATE_KEY" ]] || parameters+=(ProductAppPrivateKeyB64="$MGOV_PRODUCT_APP_PRIVATE_KEY_B64")
+          # The product webhook secret travels the same conditional way:
+          # never as an empty value - when the secret is unset the
+          # parameter is omitted entirely, and the pilot template
+          # exposes it to the dispatcher process as
+          # PRODUCT_WEBHOOK_SECRET (its default keeps that step
+          # failing closed).
+          [[ -z "$MGOV_PRODUCT_WEBHOOK_SECRET" ]] || parameters+=(ProductWebhookSecret="$MGOV_PRODUCT_WEBHOOK_SECRET")
           # Fargate subnets travel only when the resolve step produced a
           # clean list; empty leaves the parameter unset, and the template
           # default keeps the service step failing closed.
@@ -237,6 +245,8 @@ jobs:
           [[ -z "${{ steps.fargate-subnets.outputs.resolved }}" ]] || fargate_subnets_line="configured (parameter passed)"
           product_app_line="not configured"
           [[ -z "$MGOV_PRODUCT_APP_ID" ]] || product_app_line="configured (parameters passed)"
+          product_webhook_line="not configured"
+          [[ -z "$MGOV_PRODUCT_WEBHOOK_SECRET" ]] || product_webhook_line="configured (parameter passed)"
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
@@ -250,5 +260,6 @@ jobs:
             echo "- Static read token configured: **$static_reader**"
             echo "- Fargate subnets: **$fargate_subnets_line**"
             echo "- Product app: **$product_app_line**"
+            echo "- Product webhook secret: **$product_webhook_line**"
             echo "- Cost envelope: **D0** (on-demand serverless only)"
           } >> "$GITHUB_STEP_SUMMARY"
