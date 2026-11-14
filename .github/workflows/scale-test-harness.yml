@@ -16,11 +16,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Harness mode: seed-crossing backs up the pilot tenant's last 7 USAGE days + SCALE_STATE, then seeds those days at 12000 events/day"
+        description: "Harness mode: seed-crossing backs up then seeds 7 USAGE days at 12000 events/day; seed-stepdown cools those days to 5 and primes the step-down streak; cleanup restores the backup and deletes this test's receipts"
         required: true
         type: choice
         options:
           - seed-crossing
+          - seed-stepdown
+          - cleanup
       confirm_scale_test:
         description: Confirm writing test-shaped scale data into the PILOT table only (stack solvelang-merge-governance-pilot, tenant saiidz-pilot)
         required: true
@@ -114,9 +116,11 @@ jobs:
             DynamoDBDocumentClient,
             GetCommand,
             PutCommand,
+            DeleteCommand,
+            QueryCommand,
           } from "@aws-sdk/lib-dynamodb";
           import { execFileSync } from "node:child_process";
-          import { appendFileSync, writeFileSync } from "node:fs";
+          import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
           const MODE = process.env.HARNESS_MODE;
           const TABLE = process.env.TABLE_NAME;
@@ -221,7 +225,88 @@ jobs:
             }
           }
 
-          const modes = { "seed-crossing": seedCrossing };
+          async function seedStepdown() {
+            const days = lastSevenDays();
+            // Cool the sustained window: the same 7 days drop to 5
+            // events/day, preserving any other fields on each row.
+            summary("## Seed — stepdown (cool the window)");
+            for (const day of days) {
+              const key = usageKey(day);
+              const existing = await getItem(key);
+              const item = existing
+                ? { ...existing }
+                : { PK: key.PK, SK: key.SK, tenantId: TENANT_ID, day };
+              const before = item.eventsReceived ?? null;
+              item.eventsReceived = 5;
+              item.updatedAt = new Date().toISOString();
+              await doc.send(new PutCommand({ TableName: TABLE, Item: item }));
+              summary(`USAGE ${day}: eventsReceived ${before} -> 5`);
+            }
+            // Prime the step-down streak on the scale state: 29 below-floor
+            // days already counted, last evaluation yesterday — so the next
+            // real evaluation is the 30th consecutive day. Read-modify-write
+            // from the live item; abort if the state is missing or its tier
+            // is not one of the known tiers.
+            const key = scaleStateKey();
+            const state = await getItem(key);
+            if (!state || !["D0", "D1", "D2", "D3"].includes(state.currentTier)) {
+              console.error(`SCALE_STATE missing or currentTier unexpected: ${JSON.stringify(state)}`);
+              process.exit(1);
+            }
+            const now = new Date();
+            const y = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+            y.setUTCDate(y.getUTCDate() - 1);
+            const yesterday = dayString(y);
+            const before = {
+              currentTier: state.currentTier,
+              belowFloorStreakDays: state.belowFloorStreakDays ?? null,
+              lastEvaluatedDate: state.lastEvaluatedDate ?? null,
+            };
+            const next = { ...state, belowFloorStreakDays: 29, lastEvaluatedDate: yesterday };
+            await doc.send(new PutCommand({ TableName: TABLE, Item: next }));
+            summary(`SCALE_STATE before: ${JSON.stringify(before)}`);
+            summary(`SCALE_STATE after: ${JSON.stringify({ currentTier: next.currentTier, belowFloorStreakDays: next.belowFloorStreakDays, lastEvaluatedDate: next.lastEvaluatedDate })}`);
+          }
+
+          async function cleanup() {
+            // Restore every backed-up row exactly: a null backup entry
+            // means the row did not exist before the test, so delete it;
+            // otherwise put the backed-up item back untouched.
+            const backupFile = `${process.env.RUNNER_TEMP || "/tmp"}/scale-test-backup-restore.json`;
+            execFileSync("aws", ["s3", "cp", `s3://${BUCKET}/${BACKUP_KEY}`, backupFile], { stdio: "inherit" });
+            const backup = JSON.parse(readFileSync(backupFile, "utf8"));
+            summary("## Cleanup — restoring backed-up rows");
+            for (const entry of backup.entries) {
+              if (entry.item == null) {
+                await doc.send(new DeleteCommand({ TableName: TABLE, Key: entry.key }));
+                summary(`DELETE ${entry.key.PK} / ${entry.key.SK} (absent at backup time)`);
+              } else {
+                await doc.send(new PutCommand({ TableName: TABLE, Item: entry.item }));
+                summary(`RESTORE ${entry.key.PK} / ${entry.key.SK}`);
+              }
+            }
+            // Delete only this test's receipts: PLATFORM rows whose SK
+            // starts with RECEIPT# and whose source is the live test's.
+            const q = await doc.send(new QueryCommand({
+              TableName: TABLE,
+              KeyConditionExpression: "PK = :pk AND begins_with(SK, :prefix)",
+              ExpressionAttributeValues: { ":pk": PLATFORM_PK, ":prefix": "RECEIPT#" },
+            }));
+            const mine = (q.Items ?? []).filter((it) => it.source === "scale-live-test-2026-11-11");
+            summary(`Receipts with source scale-live-test-2026-11-11: ${mine.length}`);
+            for (const it of mine) {
+              await doc.send(new DeleteCommand({ TableName: TABLE, Key: { PK: it.PK, SK: it.SK } }));
+              summary(`DELETE receipt ${it.SK}`);
+            }
+            const state = await getItem(scaleStateKey());
+            summary(`SCALE_STATE final: ${JSON.stringify(state)}`);
+          }
+
+          const modes = {
+            "seed-crossing": seedCrossing,
+            "seed-stepdown": seedStepdown,
+            "cleanup": cleanup,
+          };
           const run = modes[MODE];
           if (!run) {
             console.error(`Unknown harness mode: ${MODE}`);
