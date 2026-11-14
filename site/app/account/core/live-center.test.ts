@@ -301,10 +301,10 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
 });
 
 test("the Live Center is linked from the account menu and the account dashboard", () => {
-  const menu = readFileSync("app/components/SiteAccountMenu.tsx", "utf8");
+  const menu = readFileSync("app/components/SiteHeader.tsx", "utf8");
   const menuLink = menu.indexOf('href="/account/live-center/"');
-  const manageAccount = menu.indexOf("Manage account");
-  assert.ok(menuLink >= 0 && manageAccount >= 0 && menuLink > manageAccount, "the account menu links Live Center after Manage account");
+  const apiAccount = menu.indexOf("API account");
+  assert.ok(menuLink >= 0 && apiAccount >= 0 && menuLink > apiAccount, "the one header menu links Live Center after API account");
   assert.ok(menu.includes(">Live Center<"), "the menu label is plain Live Center");
   const dashboard = readFileSync("app/(english)/account/api-keys/page.tsx", "utf8");
   assert.ok(dashboard.includes('href="/account/live-center/"'), "the account dashboard links to the Live Center");
