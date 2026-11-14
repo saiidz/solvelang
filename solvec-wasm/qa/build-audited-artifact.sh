@@ -30,6 +30,9 @@ git archive "$source_commit" | tar -x -C "$audit_root/source"
 repo_root="$audit_root/source"
 cd "$repo_root"
 compiler="$(rustup which --toolchain 1.95.0 rustc)"
+# On Windows the rustup path carries backslashes, which break the TOML
+# --config embedding below; forward slashes work on every host.
+compiler="${compiler//\\/}"
 linker="$("$compiler" --print sysroot)/lib/rustlib/$("$compiler" -vV | sed -n 's/^host: //p')/bin/rust-lld"
 test -x "$linker"
 
