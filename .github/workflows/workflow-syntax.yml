@@ -15,7 +15,7 @@ permissions:
 jobs:
   actionlint:
     name: Workflow syntax (actionlint)
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

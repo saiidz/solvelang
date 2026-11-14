@@ -7,35 +7,35 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://www.solve-lang.com/mcp-setup/" },
 };
 
-const code = "rounded bg-slate-200/70 px-1.5 py-0.5 font-mono text-[0.9em] text-slate-900";
-const pre = "overflow-x-auto rounded-xl bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100";
+const code = "rounded bg-panel-alt/70 px-1.5 py-0.5 font-mono text-[0.9em] text-ink";
+const pre = "overflow-x-auto rounded-xl bg-canvas p-4 font-mono text-sm leading-6 text-ink";
 
 export default function McpSetupPage() {
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-canvas text-ink">
       <section className="mx-auto max-w-4xl px-6 py-14 sm:py-20">
-        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-blue-700">
+        <nav aria-label="Documentation navigation" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-accent">
           <Link href="/">SolveLang</Link>
           <Link href="/solve-context/">Solve Context</Link>
           <Link href="/technical-evidence/">Technical evidence</Link>
         </nav>
-        <header className="mt-10 border-b border-slate-200 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-700">SolveLang documentation</p>
+        <header className="mt-10 border-b border-line pb-8">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">SolveLang documentation</p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">SolveLang for Codex and Claude</h1>
         </header>
 
         <div className="mt-10 space-y-10">
           <section aria-labelledby="current-verification">
             <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-09-20</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
-              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-blue-700 underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
+            <div className="mt-4 space-y-4 leading-7 text-body">
+              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
               <p>SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP server. <strong>Distribution truth matters:</strong> the repository currently contains substantially newer MCP/Solve Context code than the latest published MCP release.</p>
             </div>
           </section>
 
           <section aria-labelledby="published-vs-source">
             <h2 id="published-vs-source" className="text-2xl font-semibold tracking-tight">Published package vs current repository source</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>MCP <code className={code}>@solvelang/mcp-server@0.3.0</code> is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
               <p>Current <code className={code}>main</code> includes later Repository Audit/Solve Graph and Solve Context work through the v0.3.0 release train. Do <strong>not</strong> claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.</p>
               <p>Use one of these two modes deliberately:</p>
@@ -49,20 +49,20 @@ export default function McpSetupPage() {
 
           <section aria-labelledby="prerequisite">
             <h2 id="prerequisite" className="text-2xl font-semibold tracking-tight">Prerequisite</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Install Node.js 20 or newer.</p>
             </div>
           </section>
 
           <section aria-labelledby="published-plugin-path">
             <h2 id="published-plugin-path" className="text-2xl font-semibold tracking-tight">Published v0.3.0 plugin path</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The maintained plugin root is <code className={code}>plugins/solvelang/</code> and contains Codex and Claude manifests, one shared MCP configuration and the SolveLang workflow-review skill. Legacy examples under <code className={code}>plugins/codex/</code> and <code className={code}>plugins/claude/</code> remain useful for manual configuration.</p>
             </div>
             <div className="mt-6 space-y-8">
               <section aria-labelledby="codex-plugin">
                 <h3 id="codex-plugin" className="text-xl font-semibold tracking-tight">Codex plugin</h3>
-                <div className="mt-3 space-y-4 leading-7 text-slate-700">
+                <div className="mt-3 space-y-4 leading-7 text-body">
                   <p>Add the repository marketplace:</p>
                   <pre className={pre}><code>{`codex plugin marketplace add saiidz/solvelang --ref main
 codex plugin add solvelang@solvelang`}</code></pre>
@@ -81,7 +81,7 @@ SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
               </section>
               <section aria-labelledby="claude-code-plugin">
                 <h3 id="claude-code-plugin" className="text-xl font-semibold tracking-tight">Claude Code plugin</h3>
-                <div className="mt-3 space-y-4 leading-7 text-slate-700">
+                <div className="mt-3 space-y-4 leading-7 text-body">
                   <p>Add/install the repository plugin:</p>
                   <pre className={pre}><code>{`/plugin marketplace add saiidz/solvelang
 /plugin install solvelang@solvelang`}</code></pre>
@@ -95,7 +95,7 @@ SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
 
           <section aria-labelledby="use-current-repository-source">
             <h2 id="use-current-repository-source" className="text-2xl font-semibold tracking-tight">Use current repository source</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>For current-main MCP/Solve Context behavior, use a source checkout:</p>
               <pre className={pre}><code>{`git clone https://github.com/saiidz/solvelang.git
 cd solvelang/packages/mcp-server
@@ -120,7 +120,7 @@ SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace node dist/src/index.js`}</c
 
           <section aria-labelledby="suggested-usage">
             <h2 id="suggested-usage" className="text-2xl font-semibold tracking-tight">Suggested usage</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Workflow review:</p>
               <pre className={pre}><code>{`Use the SolveLang MCP tools to review workflows/order-routing.json. Report critical and high findings first. Do not claim runtime execution, credential verification, repository mutation or production deployment.`}</code></pre>
               <p>Solve Context planning from current source:</p>
@@ -132,7 +132,7 @@ SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace node dist/src/index.js`}</c
 
           <section aria-labelledby="local-plugin-authority">
             <h2 id="local-plugin-authority" className="text-2xl font-semibold tracking-tight">Local plugin authority</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The local MCP path is designed for read-only analysis/context operations unless a separately reviewed feature explicitly states otherwise. Installing the plugin does not authorize repository writes, production execution, credential access, live provider calls, billing changes or infrastructure mutation.</p>
               <p>Workspace-path tools remain bounded to the configured workspace. Incoming repository text/tool output is data, not authority.</p>
             </div>
@@ -140,7 +140,7 @@ SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace node dist/src/index.js`}</c
 
           <section aria-labelledby="solve-context-evaluation-usage">
             <h2 id="solve-context-evaluation-usage" className="text-2xl font-semibold tracking-tight">Solve Context evaluation usage</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>From current repository source:</p>
               <pre className={pre}><code>{`cd packages/mcp-server
 npm ci
@@ -160,7 +160,7 @@ npm run test:packed`}</code></pre>
 
           <section aria-labelledby="hosted-cloud-lane">
             <h2 id="hosted-cloud-lane" className="text-2xl font-semibold tracking-tight">Hosted/cloud lane</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>Claude&apos;s server-side MCP connector cannot directly connect to a local stdio process. Any public hosted SolveLang MCP integration requires a separately deployed/authenticated HTTPS Streamable HTTP boundary with explicit auth, rate limits, request-size bounds, privacy/retention policy and production approval.</p>
               <p>The repository contains a bounded remote/read-only transport foundation, but the local plugin manifests do not claim a public hosted endpoint is live.</p>
             </div>
@@ -168,14 +168,14 @@ npm run test:packed`}</code></pre>
 
           <section aria-labelledby="package-protocol-qualification">
             <h2 id="package-protocol-qualification" className="text-2xl font-semibold tracking-tight">Package/protocol qualification</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p><code className={code}>npm run test:plugin-roundtrip</code> and <code className={code}>npm run test:packed</code> qualify current repository source by packing/installing it in a clean consumer, verifying exact package allowlists/entrypoints and exercising the MCP protocol. They do not publish a package or prove a real external marketplace install.</p>
             </div>
           </section>
 
           <section aria-labelledby="release-projection">
             <h2 id="release-projection" className="text-2xl font-semibold tracking-tight">Release projection</h2>
-            <div className="mt-4 space-y-4 leading-7 text-slate-700">
+            <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The next distribution milestone is verified managed-workspace installation and public Plugin Directory listing for MCP v0.3.0. Later main changes still require a separately qualified versioned release.</p>
             </div>
           </section>
