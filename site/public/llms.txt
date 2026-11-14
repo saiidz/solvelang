@@ -36,9 +36,9 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 
 - Public site hosted on AWS Amplify
 - Production API access and customer-account infrastructure verified enabled
-- Production API subscription billing and checkout verified enabled
-- Stripe Developer / Pro / Business prices, subscription webhook signature enforcement, and billing-failure monitoring verified
-- First real-payment canary still pending; broader public payment availability is not yet claimed
+- Production API subscription billing and checkout are live
+- Stripe Developer / Pro / Business prices, subscription webhook signature enforcement, and billing-failure monitoring enabled in production
+- Developer, Pro, and Business API plans are purchasable today
 - Paid priority and provider activation remain separate rollout gates
 
 Deployment evidence is not a live health feed or a general-availability claim. Current health is not independently verified by the public status page.
