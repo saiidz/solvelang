@@ -49,8 +49,8 @@ export const romanianWithdrawInfo: LegalSections = [
 
 function LegalShell({ children }: { children: React.ReactNode }) {
   return (
-    <main lang="ro" dir="ltr" className="min-h-screen bg-slate-50 px-6 py-14 text-slate-950 sm:py-20">
-      <article className="mx-auto max-w-3xl space-y-7 leading-7 text-slate-700">{children}</article>
+    <main lang="ro" dir="ltr" className="min-h-screen bg-canvas px-6 py-14 text-ink sm:py-20">
+      <article className="mx-auto max-w-3xl space-y-7 leading-7 text-body">{children}</article>
     </main>
   );
 }
@@ -60,7 +60,7 @@ function Sections({ sections }: { sections: LegalSections }) {
     <>
       {sections.map(([heading, paragraphs]) => (
         <section key={heading}>
-          <h2 className="text-2xl font-semibold text-slate-950">{heading}</h2>
+          <h2 className="text-2xl font-semibold text-ink">{heading}</h2>
           {paragraphs.map((paragraph) => <p key={paragraph} className="mt-3">{paragraph}</p>)}
         </section>
       ))}
@@ -69,19 +69,19 @@ function Sections({ sections }: { sections: LegalSections }) {
 }
 
 export function RomanianTerms() {
-  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/ro/refund-policy/">Politica de rambursare</Link><Link href="/ro/preflight-privacy/">Confidențialitate Preflight</Link><Link href="/ro/withdraw/">Retragere</Link><Link href="/terms/">English Terms</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Termeni de utilizare SolveLang</h1><p>Versiunea {romanianTermsVersion}. SolveLang este operat de {romanianOperatorLine}.</p><Sections sections={romanianTerms} /></LegalShell>;
+  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-accent"><Link href="/ro/refund-policy/">Politica de rambursare</Link><Link href="/ro/preflight-privacy/">Confidențialitate Preflight</Link><Link href="/ro/withdraw/">Retragere</Link><Link href="/terms/">English Terms</Link></nav><h1 className="text-4xl font-semibold text-ink">Termeni de utilizare SolveLang</h1><p>Versiunea {romanianTermsVersion}. SolveLang este operat de {romanianOperatorLine}.</p><Sections sections={romanianTerms} /></LegalShell>;
 }
 
 export function RomanianRefundPolicy() {
-  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/ro/terms/">Termeni</Link><Link href="/ro/withdraw/">Retragere</Link><Link href="/refund-policy/">English Refund Policy</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Politica de rambursare</h1><p>Versiunea {romanianTermsVersion}. Această politică face parte din Termenii de utilizare SolveLang.</p><Sections sections={romanianRefundPolicy} /></LegalShell>;
+  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-accent"><Link href="/ro/terms/">Termeni</Link><Link href="/ro/withdraw/">Retragere</Link><Link href="/refund-policy/">English Refund Policy</Link></nav><h1 className="text-4xl font-semibold text-ink">Politica de rambursare</h1><p>Versiunea {romanianTermsVersion}. Această politică face parte din Termenii de utilizare SolveLang.</p><Sections sections={romanianRefundPolicy} /></LegalShell>;
 }
 
 export function RomanianPreflightPrivacy() {
-  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/ro/terms/">Termeni</Link><Link href="/ro/refund-policy/">Rambursări</Link><Link href="/preflight-privacy/">English</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Confidențialitate Workflow Preflight</h1><Sections sections={romanianPreflightPrivacy} /></LegalShell>;
+  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-accent"><Link href="/ro/terms/">Termeni</Link><Link href="/ro/refund-policy/">Rambursări</Link><Link href="/preflight-privacy/">English</Link></nav><h1 className="text-4xl font-semibold text-ink">Confidențialitate Workflow Preflight</h1><Sections sections={romanianPreflightPrivacy} /></LegalShell>;
 }
 
 export function RomanianWithdraw() {
-  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-blue-700"><Link href="/withdraw/">Formularul de retragere</Link><Link href="/ro/terms/">Termeni</Link><Link href="/ro/refund-policy/">Rambursări</Link></nav><h1 className="text-4xl font-semibold text-slate-950">Retragerea din contract</h1><Sections sections={romanianWithdrawInfo} /><p>Formularul de transmitere a declarației de retragere este disponibil la <Link className="font-semibold text-blue-700 underline" href="/withdraw/">pagina de retragere</Link>.</p></LegalShell>;
+  return <LegalShell><nav className="flex gap-4 text-sm font-semibold text-accent"><Link href="/withdraw/">Formularul de retragere</Link><Link href="/ro/terms/">Termeni</Link><Link href="/ro/refund-policy/">Rambursări</Link></nav><h1 className="text-4xl font-semibold text-ink">Retragerea din contract</h1><Sections sections={romanianWithdrawInfo} /><p>Formularul de transmitere a declarației de retragere este disponibil la <Link className="font-semibold text-accent underline" href="/withdraw/">pagina de retragere</Link>.</p></LegalShell>;
 }
 
 export function RomanianLegalDraft({ route }: { route: PublicRouteSegment }) {
