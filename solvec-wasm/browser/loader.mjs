@@ -1,7 +1,8 @@
 export const WASM_LOAD_FAILURE = "Solve runtime unavailable. No script was executed. Native solvec remains canonical; managed execution is unavailable.";
 const names = ["solvec_wasm.js", "solvec_wasm_bg.js", "solvec_wasm_bg.wasm"];
-const maximumFileBytes = 600000;
-const maximumBundleBytes = 620000;
+// Kept in step with solvec-wasm/qa/artifact-policy.json (maxWasmBytes / maxBundleBytes).
+const maximumFileBytes = 700000;
+const maximumBundleBytes = 720000;
 
 const fail = () => { throw new Error(WASM_LOAD_FAILURE); };
 const equal = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -70,6 +71,12 @@ export async function loadAuditedWasm({ baseUrl, sourceCommit, manifestSha256 } 
         // Preserve canonical oversized-input diagnostics without copying arbitrarily large strings into WASM.
         const bound = value => value.length > 1048576 ? "x".repeat(1048577) : value;
         return binding.run_pure_v1(bound(source), bound(input));
+      },
+      runFull(request) {
+        if (typeof request !== "string") throw new TypeError("Solve full request must be text.");
+        // The wrapper enforces the full contract's own request budget and
+        // returns its canonical limit diagnostic for oversized workspaces.
+        return binding.run_full_v1(request);
       },
     });
   } catch {

@@ -1,0 +1,22 @@
+diff a/site/app/(english)/landing/page.tsx b/site/app/(english)/landing/page.tsx	(rejected hunks)
+@@ -93,14 +93,17 @@ export default function Page() {
+           </div>
+         </section>
+ 
+-        <section id="solve-context" className="scroll-mt-24 bg-[#eaf0f3] py-24 sm:py-32" aria-labelledby="context-title">
++        <div className={anim.scPinWrap} data-sc-wrap="">
++        <section id="solve-context" className={`scroll-mt-24 bg-[#eaf0f3] py-24 sm:py-32 ${anim.scPin}`} aria-labelledby="context-title" data-sc-section="">
+           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
+             <SectionEyebrow revealIndex={0}>04 / SOLVE CONTEXT</SectionEyebrow>
+-            <div className="mt-5 grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20"><div><h2 id="context-title" className="text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Stop feeding agents your whole repository.</h2><p className="mt-7 max-w-2xl text-xl leading-8 text-[#3f5367]" data-reveal style={{ "--i": 2 } as React.CSSProperties}>Most agent workflows solve context the same way: dump everything into the window and hope the model finds what matters. That&apos;s noise with a token limit. Solve Context treats context as something you plan, not something you pile on.</p></div><div className={styles.contextStatement}><span>REPOSITORY</span><i aria-hidden="true">→</i><span>SELECTED EVIDENCE</span><i aria-hidden="true">→</i><span>STRUCTURED CONTEXT PACK</span><i aria-hidden="true">→</i><span>AGENT HANDOFF</span></div></div>
+-            <div className={styles.contextStages}>{contextStages.map((stage) => <div key={stage.number}><span>{stage.number}</span><h3>{stage.title}</h3><p>{stage.body}</p></div>)}</div>
++            <div className="mt-5 grid gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20"><div><h2 id="context-title" className="text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Stop feeding agents your whole repository.</h2><p className="mt-7 max-w-2xl text-xl leading-8 text-[#3f5367]" data-reveal style={{ "--i": 2 } as React.CSSProperties}>Most agent workflows solve context the same way: dump everything into the window and hope the model finds what matters. That&apos;s noise with a token limit. Solve Context treats context as something you plan, not something you pile on.</p></div><div className={styles.contextStatement}><span className={anim.scChip} data-sc-chip="0">REPOSITORY</span><i aria-hidden="true">→</i><span className={anim.scChip} data-sc-chip="1">SELECTED EVIDENCE</span><i aria-hidden="true">→</i><span className={anim.scChip} data-sc-chip="2">STRUCTURED CONTEXT PACK</span><i aria-hidden="true">→</i><span className={anim.scChip} data-sc-chip="3">AGENT HANDOFF</span></div></div>
++            <div className={anim.scProgress} aria-hidden="true"><i data-sc-bar="" /></div>
++            <div className={styles.contextStages} data-sc-stages="">{contextStages.map((stage, index) => <div key={stage.number} className={anim.scStep} data-sc-step={index}><span>{stage.number}</span><h3>{stage.title}</h3><p>{stage.body}</p></div>)}</div>
+             <div className={styles.contextClose}><div><p className="text-2xl font-semibold tracking-[-0.04em] text-[#102036] sm:text-3xl">What you get isn&apos;t a bigger context window. It&apos;s a smaller, traceable one — one you can follow back to source.</p><p className="mt-5 text-[#526579]">Real provider token and performance comparisons will be published only when the independent #898 evaluation supports them.</p></div><Link href="/solve-context/" className={styles.darkInlineLink}>Explore Solve Context <span aria-hidden="true">↗</span></Link></div>
+           </div>
+         </section>
++        </div>
+ 
+         <section id="evidence" className={`${styles.evidenceSection} scroll-mt-24 py-24 sm:py-32`} aria-labelledby="evidence-title">
+           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">

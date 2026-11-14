@@ -530,3 +530,28 @@ test("the board page proves the session before fetching the board and handles th
     assert.ok(board.includes(heading), `tab rendered: ${heading}`);
   }
 });
+
+test("normalizeLiveCenterBoard maps an available fleet payload", () => {
+  const view = normalizeLiveCenterBoard({
+    fleet: {
+      available: true, total: 3, online: 2, busy: 1,
+      runners: [
+        { name: "ORACLE-1", status: "online", busy: true },
+        { name: "MAC-1", status: "online", busy: false },
+        { name: "OLD-1", status: "offline", busy: false },
+      ],
+    },
+  });
+  assert.equal(view.fleet.available, true);
+  assert.equal(view.fleet.total, 3);
+  assert.equal(view.fleet.online, 2);
+  assert.equal(view.fleet.busy, 1);
+  assert.deepEqual(view.fleet.runners.map((r) => r.name), ["ORACLE-1", "MAC-1", "OLD-1"]);
+});
+
+test("normalizeLiveCenterBoard keeps the fleet unavailable without the block", () => {
+  for (const raw of [null, {}, { fleet: { available: false } }, { fleet: "nope" }]) {
+    const view = normalizeLiveCenterBoard(raw);
+    assert.deepEqual(view.fleet, { available: false, total: null, online: 0, busy: 0, runners: [] });
+  }
+});
