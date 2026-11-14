@@ -7,6 +7,7 @@ import "../globals.css";
 import { LegalFooter } from "../components/LegalFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { ThemeDeviceListener } from "../components/ThemeDeviceListener";
+import { ToolPagesShell } from "../components/ToolPagesShell";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-full flex flex-col">
         <JsonLd id="site-json-ld" data={siteJsonLd} />
         <SiteHeader />
-        <div id="site-content" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-24 outline-none">{children}</div>
+        <div id="site-content" tabIndex={-1} className="min-w-0 flex-1 scroll-mt-24 outline-none"><ToolPagesShell>{children}</ToolPagesShell></div>
         <LegalFooter />
         <LanguageSuggestion countryHintEndpoint="" />
         <ThemeDeviceListener />
