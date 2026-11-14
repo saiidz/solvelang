@@ -38,6 +38,25 @@ try {
     if (result.ok) check(JSON.stringify(result.outputs) === JSON.stringify(fixture.expect.outputs), fixture.id);
     else check(result.error.kind === fixture.expect.canonical_error, fixture.id);
   }
+  {
+    phase = 'full multi-module';
+    const fullRequest = JSON.stringify({ entry: 'main.solve', files: {
+      'main.solve': 'import { add } from "math.solve"\\nprint(add(20, 22))',
+      'math.solve': 'export fn add(a, b) { return a + b }',
+    } });
+    const firstFull = runtime.runFull(fullRequest);
+    check(firstFull === runtime.runFull(fullRequest), 'full non-deterministic execution');
+    const full = JSON.parse(firstFull);
+    check(full.contract === 'solvelang.run_full' && full.version === 1, 'full contract');
+    check(full.ok === true && JSON.stringify(full.outputs) === '[42]', 'full multi-module output');
+    const missing = JSON.parse(runtime.runFull(JSON.stringify({ entry: 'main.solve', files: { 'main.solve': 'import "ghost.solve" as ghost\\n' } })));
+    check(!missing.ok && missing.error.kind === 'module' && missing.error.module === 'main.solve', 'full missing module');
+    const denied = JSON.parse(runtime.runFull(JSON.stringify({ entry: 'main.solve', files: {
+      'main.solve': 'import { steal } from "net.solve"\\nprint(steal())',
+      'net.solve': 'export fn steal() { return http_get("https://invalid.example") }',
+    } })));
+    check(!denied.ok && denied.error.kind === 'capability_denied' && denied.outputs.length === 0, 'full capability denial');
+  }
   for (const call of ['http_get("https://invalid.example")', 'http_post("https://invalid.example", "x")', 'read_file("secret")', 'write_file("secret", "x")', 'env("SECRET")', 'missing()', 'fetch("x")', 'eval("x")', 'spawn("x")', 'localStorage("x")']) {
     phase = 'capability denial';
     for (const source of [call, 'if false { ' + call + ' }', 'fn unused() { ' + call + ' }']) {
