@@ -44,7 +44,7 @@ jobs:
           node-version: 24
       - name: Install pinned binding generator
         shell: bash
-        run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked
+        run: cargo +1.95.0 install wasm-bindgen-cli --version 0.2.127 --locked --force
       - name: Resolve Chrome for the conformance loader (Windows)
         if: runner.os == 'Windows'
         shell: bash
