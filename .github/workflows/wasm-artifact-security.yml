@@ -17,7 +17,7 @@ jobs:
     # resolves Chrome per platform (linux PATH, darwin app bundle, and the
     # CHROME_BIN set below on Windows), and every shell step is pinned to
     # bash so Windows runs them under Git Bash instead of PowerShell.
-    runs-on: [self-hosted, solvelang-ci]
+    runs-on: ubuntu-latest
     env:
       # A Windows checkout must not rewrite line endings: the audit's first
       # act is a clean-tree assertion and its snapshot comes from the commit.
