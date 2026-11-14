@@ -360,3 +360,29 @@ test("account home page exists and carries the three account cards", () => {
   assert.match(home, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
   assert.match(home, /could not load your balance/i);
 });
+
+test("a dead sign-in link explains itself instead of failing silently", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  assert.match(page, /That sign-in link is invalid or expired — request a fresh one below\./);
+  // The message is set on the verify-failure path of the magic-token
+  // branch, and the hash is cleared there too — the plain no-token load
+  // never reaches this branch and keeps swallowing 401s in silence.
+  const start = page.indexOf("const token = magicTokenFromHash");
+  assert.ok(start >= 0, "the magic-token branch exists");
+  const tokenBranch = page.slice(start, page.indexOf('"/customer/account"', start));
+  assert.match(tokenBranch, /\/customer\/auth\/verify/);
+  assert.match(tokenBranch, /setError\("That sign-in link is invalid or expired/);
+  assert.match(tokenBranch, /window\.history\.replaceState/);
+  assert.match(page, /apiError\.status !== 401/);
+});
+
+test("sign-in buttons wait for the bot check only when it is configured", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  const botCheck = read("app/account/core/signin-bot-check.tsx");
+  assert.match(botCheck, /export const signInTurnstileConfigured = turnstileSiteKey\.length > 0;/);
+  // Both submit buttons gate on the same derived flag, and each gated
+  // form carries the plain hint line exactly once.
+  assert.match(page, /const botCheckPending = signInTurnstileConfigured && !turnstileToken;/);
+  assert.equal((page.match(/disabled=\{busy \|\| botCheckPending\}/g) || []).length, 2);
+  assert.equal((page.match(/Complete the quick check above, then this button turns on\./g) || []).length, 2);
+});
