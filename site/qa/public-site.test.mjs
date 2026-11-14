@@ -322,6 +322,31 @@ test("runner minutes buy page shows the selection and the honest not-yet-on stat
   assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
 });
 
+test("runner minutes checkout carries the pause and start control with the paused message", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The minutes account is read from the runners service with the same
+  // session-authenticated customer pattern as the purchase call, and a
+  // missing status field (older service) reads as active, never paused.
+  assert.match(checkout, /"\/customer\/runner-minutes\/account"/);
+  assert.match(checkout, /status\?: "active" \| "paused"/);
+  assert.match(checkout, /return account\.status === "paused" \? "paused" : "active";/);
+  // The control offers Pause while active and Start while paused, and
+  // the paused state carries the plain-language line verbatim.
+  assert.match(checkout, /minutesStatus === "paused" \? "Start minutes" : "Pause minutes"/);
+  assert.match(checkout, /Your minutes are paused — jobs will not run and no minutes will be used\./);
+  // Toggling posts to the matching endpoint with the account CSRF
+  // token, then re-reads the account and renders the reported state.
+  const toggle = checkout.slice(checkout.indexOf("async function toggleMinutes()"), checkout.indexOf("useEffect(() => {"));
+  assert.match(toggle, /"\/customer\/runner-minutes\/resume" : "\/customer\/runner-minutes\/pause"/);
+  assert.match(toggle, /method: "POST", csrfToken: account\.csrfToken/);
+  assert.match(toggle, /setMinutesStatus\(await loadRunnerMinutesStatus\(\)\)/);
+  assert.match(toggle, /setMinutesError\(caught instanceof Error \? caught\.message/);
+  // Pausing never disables buying: the purchase controls carry no
+  // minutes-status disable and Continue to payment still exists once.
+  assert.doesNotMatch(checkout, /disabled=\{minutesStatus/);
+  assert.equal(checkout.split("Continue to payment").length - 1, 1);
+});
+
 test("live center overview carries the queue panel with per-PR progress rows", () => {
   const board = read("app/account/live-center/LiveCenterBoard.tsx");
   assert.match(board, /The queue/);
