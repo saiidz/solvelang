@@ -66,9 +66,9 @@ export default function TotpQrEnhancer() {
   if (!target || !qr) return null;
 
   return createPortal(
-    <div className="mb-5 grid gap-5 rounded-2xl border border-cyan-300/25 bg-slate-950/45 p-5 md:grid-cols-[auto_1fr] md:items-center">
+    <div className="mb-5 grid gap-5 rounded-2xl border border-accent bg-panel-inset p-5 md:grid-cols-[auto_1fr] md:items-center">
       {qr.error ? (
-        <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100 md:col-span-2">
+        <div className="rounded-xl border border-warning bg-warning-soft p-4 text-sm text-warning md:col-span-2">
           {qr.error}
         </div>
       ) : (
@@ -88,17 +88,17 @@ export default function TotpQrEnhancer() {
       )}
 
       <div>
-        <p className="text-base font-bold text-white">Scan with your authenticator app</p>
-        <p className="mt-2 text-sm leading-6 text-slate-300">
+        <p className="text-base font-bold text-ink">Scan with your authenticator app</p>
+        <p className="mt-2 text-sm leading-6 text-body">
           Scan this QR code with Google Authenticator, Microsoft Authenticator, 1Password, Authy, or another standards-compatible TOTP app.
         </p>
-        <p className="mt-3 text-sm leading-6 text-emerald-200">
+        <p className="mt-3 text-sm leading-6 text-success">
           The QR code is generated locally in this browser from the setup URI. SolveLang does not send the authenticator secret to a third-party QR service.
         </p>
-        <p className="mt-3 text-sm leading-6 text-amber-100">
+        <p className="mt-3 text-sm leading-6 text-warning">
           If this QR code or setup key has been exposed, cancel this setup and start again before enabling 2FA. Starting setup again replaces the pending secret.
         </p>
-        <p className="mt-3 text-xs leading-5 text-slate-400">
+        <p className="mt-3 text-xs leading-5 text-muted">
           Can’t scan it? Use the manual setup key below.
         </p>
       </div>
