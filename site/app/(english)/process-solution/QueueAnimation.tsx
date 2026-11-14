@@ -86,13 +86,13 @@ const CHIP_TEXT: Record<ChipKind, string> = {
 };
 
 const CHIP_CLASSES: Record<ChipKind, string> = {
-  queued: "bg-slate-100 text-slate-600",
-  batch: "bg-blue-100 text-blue-800",
-  checking: "bg-slate-100 text-slate-600",
-  failed: "bg-rose-100 text-rose-700",
-  passed: "bg-emerald-100 text-emerald-800",
-  returned: "border border-rose-300 bg-white text-rose-700",
-  merged: "bg-emerald-600 text-white",
+  queued: "bg-panel-alt text-muted",
+  batch: "bg-accent-soft text-accent",
+  checking: "bg-panel-alt text-muted",
+  failed: "bg-danger-soft text-danger",
+  passed: "bg-success-soft text-success",
+  returned: "border border-danger bg-panel text-danger",
+  merged: "bg-success text-ink",
 };
 
 function inWindow(progress: number, window: readonly [number, number]): boolean {
@@ -349,16 +349,16 @@ export default function QueueAnimation() {
       ref={rootRef}
       role="img"
       aria-label={SEQUENCE_DESCRIPTION}
-      className="relative flex h-[448px] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm sm:h-[468px]"
+      className="relative flex h-[448px] flex-col overflow-hidden rounded-3xl border border-line bg-panel shadow-sm sm:h-[468px]"
     >
       <p className="sr-only">{SEQUENCE_DESCRIPTION}</p>
       <div aria-hidden="true" className={`flex min-h-0 flex-1 flex-col ${resetting ? styles.resetting : ""}`}>
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200 px-4">
-          <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-          <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-          <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-          <span className="ml-2 font-mono text-xs font-semibold text-slate-700">merge-queue</span>
-          <span className="ml-auto font-mono text-[11px] text-slate-500">combined-tree verification</span>
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          <span className="h-2.5 w-2.5 rounded-full bg-line-strong" />
+          <span className="ml-2 font-mono text-xs font-semibold text-body">merge-queue</span>
+          <span className="ml-auto font-mono text-[11px] text-muted">combined-tree verification</span>
         </div>
 
         <div className="relative h-11 shrink-0" style={{ opacity: fade }}>
@@ -366,12 +366,12 @@ export default function QueueAnimation() {
             const active = view.still ? beat === "hold" : view.beat === beat;
             const tone =
               beat === "break"
-                ? "text-rose-700"
+                ? "text-danger"
                 : beat === "merge" || beat === "hold"
-                  ? "text-emerald-700"
-                  : "text-slate-700";
+                  ? "text-success"
+                  : "text-body";
             const dot =
-              beat === "break" ? "bg-rose-500" : beat === "merge" || beat === "hold" ? "bg-emerald-500" : "bg-blue-600";
+              beat === "break" ? "bg-danger" : beat === "merge" || beat === "hold" ? "bg-success" : "bg-accent-solid";
             return (
               <div
                 key={beat}
@@ -388,15 +388,15 @@ export default function QueueAnimation() {
         <div className="relative min-h-0 flex-1 px-3 pb-3" style={{ opacity: fade }}>
           <div className="absolute inset-x-3 bottom-[60px] top-0">
             <div
-              className={`absolute inset-0 rounded-2xl border-2 border-blue-300 ${styles.anim} ${styles.durMed}`}
+              className={`absolute inset-0 rounded-2xl border-2 border-accent ${styles.anim} ${styles.durMed}`}
               style={{ opacity: frameLayerOpacity("blue", view) }}
             />
             <div
-              className={`absolute inset-0 rounded-2xl border-2 border-rose-400 ${styles.anim} ${styles.durMed}`}
+              className={`absolute inset-0 rounded-2xl border-2 border-danger ${styles.anim} ${styles.durMed}`}
               style={{ opacity: frameLayerOpacity("rose", view) }}
             />
             <div
-              className={`absolute inset-0 rounded-2xl border-2 border-emerald-400 ${styles.anim} ${styles.durMed}`}
+              className={`absolute inset-0 rounded-2xl border-2 border-success ${styles.anim} ${styles.durMed}`}
               style={{ opacity: frameLayerOpacity("emerald", view) }}
             />
             <div
@@ -408,7 +408,7 @@ export default function QueueAnimation() {
               />
             </div>
             <div
-              className={`absolute -top-2.5 left-3 z-10 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 shadow-sm ${styles.anim} ${styles.durMed}`}
+              className={`absolute -top-2.5 left-3 z-10 rounded-full border border-line bg-panel px-2.5 py-0.5 text-[11px] font-semibold text-body shadow-sm ${styles.anim} ${styles.durMed}`}
               style={{
                 opacity: showFrameLabel ? 1 : 0,
                 transform: `translateY(${showFrameLabel ? 0 : 4}px)`,
@@ -418,28 +418,28 @@ export default function QueueAnimation() {
             </div>
 
             <div
-              className="absolute left-3 right-3 z-[5] h-px bg-slate-300"
+              className="absolute left-3 right-3 z-[5] h-px bg-line-strong"
               style={{
                 top: FRAME_PAD_TOP + 2 * ROW - CARD_GAP / 2,
                 opacity: !view.still && view.beat === "bisect" ? 1 : 0,
               }}
             />
             <div
-              className="absolute left-3 right-3 z-[5] h-px bg-slate-300"
+              className="absolute left-3 right-3 z-[5] h-px bg-line-strong"
               style={{
                 top: FRAME_PAD_TOP + ROW - CARD_GAP / 2,
                 opacity: !view.still && view.beat === "bisect" && view.secondSplit ? 1 : 0,
               }}
             />
             <div
-              className="absolute left-3 right-3 z-[5] h-px bg-slate-300"
+              className="absolute left-3 right-3 z-[5] h-px bg-line-strong"
               style={{
                 top: FRAME_PAD_TOP + 3 * ROW - CARD_GAP / 2,
                 opacity: !view.still && view.beat === "bisect" && view.secondSplit ? 1 : 0,
               }}
             />
             <div
-              className="absolute left-3 right-3 z-[5] h-0.5 bg-rose-400"
+              className="absolute left-3 right-3 z-[5] h-0.5 bg-danger"
               style={{
                 top: FRAME_PAD_TOP + ROW + 2,
                 opacity: !view.still && view.beat === "break" ? 1 : 0,
@@ -456,11 +456,11 @@ export default function QueueAnimation() {
                   card.breaker && (view.still || view.beat === "break" || view.beat === "bisect" || view.beatIndex > BEAT_ORDER.indexOf("bisect"));
                 const border = card.breaker
                   ? redOn
-                    ? "border-rose-300"
-                    : "border-slate-200"
+                    ? "border-danger"
+                    : "border-line"
                   : greenOn
-                    ? "border-emerald-300"
-                    : "border-slate-200";
+                    ? "border-success"
+                    : "border-line";
                 const badgeOn =
                   card.breaker &&
                   (view.still || view.beat === "isolate" || view.beat === "merge" || view.beat === "hold");
@@ -476,19 +476,19 @@ export default function QueueAnimation() {
                       zIndex: card.breaker ? 6 : 4,
                     }}
                   >
-                    <div className={`relative flex h-full items-center gap-2.5 overflow-hidden rounded-xl border bg-white px-3 shadow-sm ${border}`}>
+                    <div className={`relative flex h-full items-center gap-2.5 overflow-hidden rounded-xl border bg-panel px-3 shadow-sm ${border}`}>
                       <div
-                        className={`pointer-events-none absolute inset-0 bg-rose-500/10 ${styles.anim} ${styles.durFast}`}
+                        className={`pointer-events-none absolute inset-0 bg-danger-soft ${styles.anim} ${styles.durFast}`}
                         style={{ opacity: redOn ? 1 : 0 }}
                       />
                       <div
-                        className={`pointer-events-none absolute inset-0 bg-emerald-500/10 ${styles.anim} ${styles.durFast}`}
+                        className={`pointer-events-none absolute inset-0 bg-success-soft ${styles.anim} ${styles.durFast}`}
                         style={{ opacity: !card.breaker && greenOn ? 1 : 0 }}
                       />
                       <span className={`relative h-2.5 w-2.5 shrink-0 rounded-full ${AUTHOR_DOTS[index]}`} />
-                      <span className="relative truncate font-mono text-[13px] font-medium text-slate-800">{card.title}</span>
+                      <span className="relative truncate font-mono text-[13px] font-medium text-body">{card.title}</span>
                       <span
-                        className={`relative ml-auto font-bold text-emerald-600 ${styles.anim} ${styles.durFast}`}
+                        className={`relative ml-auto font-bold text-success ${styles.anim} ${styles.durFast}`}
                         style={{
                           opacity: !card.breaker && greenOn ? 1 : 0,
                           transform: `scale(${!card.breaker && greenOn ? 1 : 0.5})`,
@@ -501,7 +501,7 @@ export default function QueueAnimation() {
                       </span>
                     </div>
                     <span
-                      className={`absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-[11px] font-bold text-white shadow ${styles.anim} ${styles.durFast}`}
+                      className={`absolute -left-2 -top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-danger text-[11px] font-bold text-ink shadow ${styles.anim} ${styles.durFast}`}
                       style={{
                         opacity: badgeOn ? 1 : 0,
                         transform: `scale(${badgeOn ? 1 : 0.5})`,
@@ -515,13 +515,13 @@ export default function QueueAnimation() {
             </div>
           </div>
 
-          <div className="absolute inset-x-3 bottom-3 flex h-12 items-center gap-3 rounded-2xl bg-slate-950 px-4 text-white">
-            <span className="font-mono text-xs font-semibold text-slate-300">main</span>
+          <div className="absolute inset-x-3 bottom-3 flex h-12 items-center gap-3 rounded-2xl bg-canvas px-4 text-ink">
+            <span className="font-mono text-xs font-semibold text-body">main</span>
             <span className="flex items-center gap-1.5">
               {[0, 1, 2].map((i) => (
                 <span
                   key={i}
-                  className={`flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-[11px] font-bold text-emerald-400 ${styles.anim} ${styles.durFast}`}
+                  className={`flex h-5 w-5 items-center justify-center rounded-full bg-success-soft text-[11px] font-bold text-success ${styles.anim} ${styles.durFast}`}
                   style={{
                     opacity: showRailChecks(i) ? 1 : 0,
                     transform: `scale(${showRailChecks(i) ? 1 : 0.5})`,
@@ -531,7 +531,7 @@ export default function QueueAnimation() {
                 </span>
               ))}
             </span>
-            <span className={`ml-auto font-mono text-[11px] ${railDone ? "text-emerald-300" : "text-slate-500"}`}>
+            <span className={`ml-auto font-mono text-[11px] ${railDone ? "text-success" : "text-muted"}`}>
               {railDone ? "stayed green" : "protected"}
             </span>
           </div>

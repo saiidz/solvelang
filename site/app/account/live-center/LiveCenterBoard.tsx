@@ -273,6 +273,27 @@ function Overview({
         </p>
       </div>
 
+      <div className={LC_PANEL}>
+        <h2 className="font-semibold text-slate-100">The queue</h2>
+        {board.pullRequests.length === 0 ? (
+          <p className="mt-1 text-sm text-slate-400">
+            No open pull requests right now. When someone opens one, it appears here and the
+            checks start on their own.
+          </p>
+        ) : (
+          <>
+            <div className="mt-2 divide-y divide-white/5">
+              {board.pullRequests.slice(0, 25).map((pr) => (
+                <PrRow key={pr.number ?? pr.title} pr={pr} repoLabel={board.repoLabel} showPosition />
+              ))}
+            </div>
+            <button type="button" onClick={onOpenQueue} className={`${LC_BTN} mt-3`}>
+              Open the Queue tab
+            </button>
+          </>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className={LC_PANEL}>
           <h2 className="font-semibold text-slate-100">Summary</h2>
@@ -735,18 +756,21 @@ export function LiveCenterBoard() {
 
   if (phase === "loading") {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 text-slate-300 sm:px-6 lg:px-8">
+      <main className="w-full bg-[#0a0e1a] text-slate-300">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <p className="text-sm">
           Loading your Live Center — first proving your session, then fetching the newest board
           from GitHub.
         </p>
+        </div>
       </main>
     );
   }
 
   if (phase === "signed-out") {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 text-slate-300 sm:px-6 lg:px-8">
+      <main className="w-full bg-[#0a0e1a] text-slate-300">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-white">You are signed out</h1>
         <p className="mt-2 max-w-xl text-sm text-slate-400">
           Sign in to see your Live Center. There is no guest view — the board shows your
@@ -757,13 +781,15 @@ export function LiveCenterBoard() {
             Go to your account to sign in
           </Link>
         </p>
+        </div>
       </main>
     );
   }
 
   if (phase === "not-configured") {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 text-slate-300 sm:px-6 lg:px-8">
+      <main className="w-full bg-[#0a0e1a] text-slate-300">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-white">Live Center is not switched on yet</h1>
         <p className="mt-2 max-w-xl text-sm text-slate-400">
           This account&rsquo;s Live Center has not been connected to a repository yet, so there is
@@ -775,13 +801,15 @@ export function LiveCenterBoard() {
             Back to your account
           </Link>
         </p>
+        </div>
       </main>
     );
   }
 
   if (phase === "error" || !board) {
     return (
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 text-slate-300 sm:px-6 lg:px-8">
+      <main className="w-full bg-[#0a0e1a] text-slate-300">
+        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-white">The Live Center could not be loaded</h1>
         <p className="mt-2 max-w-xl text-sm text-slate-400">
           {error || "Something went wrong while loading the board."} Nothing about your
@@ -792,6 +820,7 @@ export function LiveCenterBoard() {
             Reload the page to try again
           </button>
         </p>
+        </div>
       </main>
     );
   }

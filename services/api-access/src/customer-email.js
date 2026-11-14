@@ -1,5 +1,10 @@
 import { SendEmailCommand } from "@aws-sdk/client-sesv2";
 
+// SES message tag stamped on every send so SES event publishing on the
+// shared my-first-configuration-set can split CloudWatch counts per
+// project (Etrack MESSAGE_TAG dimension "project"). Counting only.
+const PROJECT_EMAIL_TAGS = [{ Name: "project", Value: "solvelang" }];
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -45,6 +50,7 @@ export function createCustomerEmailGateway(sesClient, { sender, replyTo }) {
         FromEmailAddress: sender,
         ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
         Destination: { ToAddresses: [email] },
+        EmailTags: PROJECT_EMAIL_TAGS,
         Content: {
           Simple: {
             Subject: { Data: "Your SolveLang API sign-in link", Charset: "UTF-8" },
@@ -69,6 +75,7 @@ export function createCustomerEmailGateway(sesClient, { sender, replyTo }) {
         FromEmailAddress: sender,
         ...(replyTo ? { ReplyToAddresses: [replyTo] } : {}),
         Destination: { ToAddresses: [email] },
+        EmailTags: PROJECT_EMAIL_TAGS,
         Content: {
           Simple: {
             Subject: { Data: notice.subject, Charset: "UTF-8" },
