@@ -250,3 +250,81 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+test("runner minutes checkout points at the live service by default", () => {
+  const component = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+});
+
+test("runner minutes checkout carries an optional verification code in the payment action area", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The field exists, in plain language, wired to its own state.
+  assert.match(checkout, /Have a verification code\?/);
+  assert.match(checkout, /id="runner-minutes-verification-code"/);
+  assert.match(checkout, /const \[verificationCode, setVerificationCode\] = useState\(""\);/);
+  // It lives with the payment action: it follows the not-configured
+  // notice in the source (so it renders only in the configured branch,
+  // never where the notice sits) and precedes the payment button.
+  const noticeAt = checkout.indexOf("Runner Minutes checkout is being switched on.");
+  const fieldAt = checkout.indexOf('id="runner-minutes-verification-code"');
+  const buttonAt = checkout.indexOf("Continue to payment");
+  assert.ok(noticeAt !== -1 && fieldAt > noticeAt, "code field sits in the configured payment branch, after the notice");
+  assert.ok(fieldAt !== -1 && buttonAt !== -1 && fieldAt < buttonAt, "code field precedes the payment button");
+});
+
+test("runner minutes verification code is sent only when entered and never reaches Stripe", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  const start = checkout.slice(checkout.indexOf("async function startPayment()"), checkout.indexOf("async function confirmPayment()"));
+  // With no code entered, the request body is exactly the old shape.
+  assert.match(start, /: \{ pack: pack\.key, requestId \}/);
+  // An entered code rides along under its own field name.
+  assert.match(start, /verificationCode: trimmedCode/);
+  // The verification branch is answered before Stripe is ever loaded,
+  // and lands on the verified success phase.
+  const branchAt = start.indexOf("isVerificationCheckoutResponse(result)");
+  const stripeAt = start.indexOf("loadStripe(");
+  assert.ok(branchAt !== -1 && stripeAt !== -1 && branchAt < stripeAt, "verification is answered before loadStripe");
+  assert.match(start, /setPhase\("verified-done"\)/);
+  // The guard is strict: a true verification marker at amountCents 0.
+  assert.match(checkout, /result\.verification === true && result\.amountCents === 0/);
+});
+
+test("runner minutes verified success shows $0.00 and the credited minutes, and the paid path copy is untouched", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(checkout, /Verification code accepted/);
+  assert.match(checkout, /dollars\(verified\.amountCents\)/);
+  assert.match(checkout, /minutes are credited to your account balance/);
+  // No-code behaviour is unchanged: the Elements session is still
+  // required, and the not-configured notice still reads as before.
+  assert.match(checkout, /if \(!result\.clientSecret \|\| !result\.publishableKey\) throw new Error\("Stripe checkout did not return a secure payment session\."\);/);
+  assert.match(checkout, /Runner Minutes checkout is being switched on\. The packs and prices above are final/);
+});
+
+test("runner minutes buy page shows the selection and the honest not-yet-on state at the point of selection", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The header copy branches on the configuration state: only the
+  // configured copy may promise the Stripe payment form.
+  assert.match(checkout, /\{CHECKOUT_CONFIGURED \? \(/);
+  assert.match(checkout, /Payment is not switched on yet: when sales open, it switches on right here on this page/);
+  // In the unconfigured block, the selection echo sits directly above the
+  // switched-on notice, and the block renders no button at all — the
+  // honest message is the state, never a fake disabled Continue.
+  const start = checkout.indexOf("{!CHECKOUT_CONFIGURED ? (");
+  assert.ok(start >= 0, "the unconfigured selection block exists");
+  const block = checkout.slice(start, checkout.indexOf(") : (", start));
+  const echoAt = block.indexOf("Selected:");
+  const noticeAt = block.indexOf("Runner Minutes checkout is being switched on");
+  assert.ok(echoAt >= 0 && noticeAt > echoAt, "the selection echo sits directly above the switched-on notice");
+  assert.match(block, /\{pack\.label\} — \$\{pack\.totalDollars\}/);
+  assert.doesNotMatch(block, /<button/);
+  // Continue to payment exists exactly once — inside the configured
+  // branch — and starting payment stays impossible while unconfigured.
+  assert.equal(checkout.split("Continue to payment").length - 1, 1);
+  assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
+});
+
+test("live center overview carries the queue panel with per-PR progress rows", () => {
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.match(board, /The queue/);
+  assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
+  assert.match(board, /showPosition \/>/);
+});
