@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks, normalizePath, isCurrentLink } = require("../.studio-test-dist/public-site/components/site-navigation.js");
@@ -14,15 +14,16 @@ const healthy = { name: "Test", description: "Test fixture, not live evidence", 
 
 test("navigation uses the shared account menu and unique internal destinations", () => {
   assert.equal(primaryLinks.some((link) => link.label === "Account"), false);
-  assert.match(read("app/components/SiteHeader.tsx"), /<SiteAccountMenu\s*\/>/);
-  const accountMenu = read("app/components/SiteAccountMenu.tsx");
-  assert.match(accountMenu, /\/customer\/account/);
-  assert.match(accountMenu, /\/customer\/auth\/logout/);
-  assert.match(accountMenu, /csrfToken: account\.csrfToken/);
-  assert.match(accountMenu, /Signed in as/);
-  assert.match(accountMenu, /Sign out/);
-  assert.match(accountMenu, /\/account\/live-center\//);
-  assert.match(accountMenu, />Live Center</);
+  const header = read("app/components/SiteHeader.tsx");
+  assert.doesNotMatch(header, /SiteAccountMenu/);
+  assert.equal(existsSync(new URL("../app/components/SiteAccountMenu.tsx", import.meta.url)), false);
+  assert.match(header, /\/customer\/account/);
+  assert.match(header, /\/customer\/auth\/logout/);
+  assert.match(header, /csrfToken: account\.csrfToken/);
+  assert.match(header, /Signed in as/);
+  assert.match(header, /Sign out/);
+  assert.match(header, /\/account\/live-center\//);
+  assert.match(header, />Live Center</);
   assert.match(read("app/(english)/account/api-keys/page.tsx"), /\/account\/live-center\//);
   const links = [...primaryLinks, ...toolLinks];
   assert.equal(new Set(links.map((link) => link.href)).size, links.length);
@@ -30,6 +31,47 @@ test("navigation uses the shared account menu and unique internal destinations",
     assert.ok(link.href.startsWith("/") && link.href.endsWith("/"));
     assert.ok(read(`app/(english)${link.href}page.tsx`));
   }
+});
+test("header has exactly one menu, labelled Menu at every breakpoint, carrying the account links", () => {
+  const header = read("app/components/SiteHeader.tsx");
+  // Exactly one header dropdown exists, and the old account dropdown is gone.
+  assert.equal((header.match(/data-site-menu="true"/g) || []).length, 1);
+  assert.doesNotMatch(header, /SiteAccountMenu/);
+  assert.equal(existsSync(new URL("../app/components/SiteAccountMenu.tsx", import.meta.url)), false);
+  // The one menu is labelled "Menu" at every width: no xl "More" variant
+  // and no breakpoint-swapped menu content remain.
+  assert.match(header, />\s*Menu<span/);
+  assert.doesNotMatch(header, />More</);
+  assert.doesNotMatch(header, /xl:hidden/);
+  assert.doesNotMatch(header, /hidden xl:inline/);
+  // Signed-in items appear in order: the signed-in header line, the four
+  // account destinations, the site/tool links, and Sign out last.
+  const signedInAt = header.indexOf("Signed in as");
+  const accountHomeAt = header.indexOf('href="/account/"');
+  const apiAccountAt = header.indexOf('href="/account/api-keys/"');
+  const liveCenterAt = header.indexOf('href="/account/live-center/"');
+  const buyMinutesAt = header.indexOf('href="/account/runner-minutes-checkout/"');
+  const toolLinksAt = header.indexOf("toolLinks.map");
+  const signOutAt = header.indexOf(': "Sign out"}');
+  for (const at of [signedInAt, accountHomeAt, apiAccountAt, liveCenterAt, buyMinutesAt, toolLinksAt, signOutAt]) assert.notEqual(at, -1);
+  assert.ok(signedInAt < accountHomeAt && accountHomeAt < apiAccountAt && apiAccountAt < liveCenterAt && liveCenterAt < buyMinutesAt, "account items keep their order");
+  assert.ok(buyMinutesAt < toolLinksAt && toolLinksAt < signOutAt, "site/tool links follow the account items and Sign out is pinned at the bottom");
+  assert.match(header, />Account home</);
+  assert.match(header, />API account</);
+  assert.match(header, />Live Center</);
+  assert.match(header, />Buy minutes</);
+  // The header keeps the site's original logo exactly as on main: the
+  // approved SVG wordmark at its standing size, never the name as text.
+  assert.match(header, /src="\/solvelang-logo\.svg"/);
+  assert.match(header, /width=\{194\} height=\{41\}/);
+  assert.match(header, /className="h-auto w-32 sm:w-40"/);
+  assert.match(header, /aria-label="SolveLang home"/);
+  assert.doesNotMatch(header, />SolveLang</);
+  // Signed-out access is not lost with the old chip: Sign in leads the menu.
+  const signInAt = header.indexOf(">Sign in<");
+  assert.notEqual(signInAt, -1);
+  assert.ok(signInAt < header.indexOf("primaryLinks.map", signInAt), "Sign in sits above the site links inside the menu for signed-out visitors");
+  assert.match(header, /\/customer\/auth\/logout/);
 });
 test("active route matching handles direct loads, trailing slashes, query, and account children", () => {
   assert.equal(normalizePath("/run/?x=1#source"), "/run");
