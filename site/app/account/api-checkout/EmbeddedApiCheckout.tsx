@@ -34,6 +34,13 @@ type ElementsCheckoutResponse = {
 
 type Phase = "preparing" | "code" | "creating" | "pay" | "confirming" | "free-done";
 
+function siteStripeTheme(): "stripe" | "night" {
+  // The embedded Stripe form follows the site theme resolved before
+  // first paint: a light site gets Stripe's light theme, a dark site
+  // gets its "night" theme. Read once, when the form is created.
+  return document.documentElement.getAttribute("data-theme") === "light" ? "stripe" : "night";
+}
+
 export function EmbeddedApiCheckout() {
   const mountRef = useRef<HTMLDivElement>(null);
   const stripeRef = useRef<Stripe | null>(null);
@@ -118,7 +125,7 @@ export function EmbeddedApiCheckout() {
       stripeRef.current = stripe;
       const elements = stripe.elements({
         clientSecret: result.clientSecret,
-        appearance: { theme: "stripe", variables: { borderRadius: "12px" } },
+        appearance: { theme: siteStripeTheme(), variables: { borderRadius: "12px" } },
       });
       elementsRef.current = elements;
       const paymentElement = elements.create("payment", {
@@ -173,24 +180,24 @@ export function EmbeddedApiCheckout() {
   const busy = phase === "preparing" || phase === "creating" || phase === "confirming";
 
   return (
-    <main className="min-h-screen bg-slate-950 px-5 py-10 text-white sm:px-8">
+    <main className="min-h-screen bg-canvas px-5 py-10 text-ink sm:px-8">
       <div className="mx-auto max-w-6xl">
-        <Link href="/account/api-keys/" className="text-sm font-semibold text-slate-300 hover:text-white">
+        <Link href="/account/api-keys/" className="text-sm font-semibold text-body hover:text-ink">
           ← Back to API account
         </Link>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:items-start">
-          <aside className="rounded-[2rem] border border-cyan-300/20 bg-gradient-to-b from-cyan-300/10 to-white/5 p-7 shadow-2xl sm:p-9">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-300">SolveLang API</p>
+          <aside className="rounded-[2rem] border border-accent bg-gradient-to-b from-accent-soft to-panel/5 p-7 shadow-2xl sm:p-9">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-accent">SolveLang API</p>
             <h1 className="mt-3 text-3xl font-bold">{details ? `${details.name} plan` : "Secure subscription"}</h1>
-            <p className="mt-3 text-slate-300">Monthly API access for {email || "your SolveLang account"}.</p>
+            <p className="mt-3 text-body">Monthly API access for {email || "your SolveLang account"}.</p>
             {details ? (
-              <div className="mt-8 border-t border-white/10 pt-7">
+              <div className="mt-8 border-t border-line pt-7">
                 <div className="flex items-end justify-between gap-4">
-                  <span className="text-sm text-slate-400">Billed monthly</span>
-                  <span className="text-4xl font-bold">{details.price}<span className="text-base font-medium text-slate-400">/mo</span></span>
+                  <span className="text-sm text-muted">Billed monthly</span>
+                  <span className="text-4xl font-bold">{details.price}<span className="text-base font-medium text-muted">/mo</span></span>
                 </div>
-                <ul className="mt-7 space-y-3 text-sm text-slate-200">
+                <ul className="mt-7 space-y-3 text-sm text-body">
                   <li>✓ {details.credits}</li>
                   <li>✓ Up to {details.keys}</li>
                   <li>✓ Repository audit API scope</li>
@@ -198,30 +205,30 @@ export function EmbeddedApiCheckout() {
                 </ul>
               </div>
             ) : null}
-            <p className="mt-8 text-xs leading-5 text-slate-400">
+            <p className="mt-8 text-xs leading-5 text-muted">
               UPCOMINGSOUNDS S.R.L. is the operator and merchant; your statement may show that name. Stripe securely processes payment details, and SolveLang never receives your full card number. The plan renews monthly until canceled. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment.
             </p>
-            <p className="mt-3 text-xs leading-5 text-slate-400">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
+            <p className="mt-3 text-xs leading-5 text-muted">Review the <Link className="underline" href="/terms/">Terms</Link>, <Link className="underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="underline" href="/billing/">Billing FAQ</Link> before purchase. Cancellation does not automatically refund a paid period; mandatory consumer rights remain unaffected.</p>
           </aside>
 
-          <section className="min-h-[620px] rounded-[2rem] bg-white p-4 text-slate-950 shadow-2xl sm:p-7">
+          <section className="min-h-[620px] rounded-[2rem] bg-panel p-4 text-ink shadow-2xl sm:p-7">
             <div className="mb-5 px-2 pt-2">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Secure payment</p>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-accent">Secure payment</p>
               <h2 className="mt-2 text-2xl font-bold">Complete your SolveLang subscription</h2>
-              <p className="mt-2 text-sm text-slate-600">The payment form stays inside SolveLang and is securely provided by Stripe. We accept cards and Link, processed securely by Stripe.</p>
+              <p className="mt-2 text-sm text-muted">The payment form stays inside SolveLang and is securely provided by Stripe. We accept cards and Link, processed securely by Stripe.</p>
             </div>
 
-            {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Loading secure checkout…</div> : null}
+            {phase === "preparing" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-muted">Loading secure checkout…</div> : null}
 
             {error && phase === "code" ? (
-              <div role="alert" className="mx-2 mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
+              <div role="alert" className="mx-2 mb-5 rounded-2xl border border-danger bg-danger-soft p-5 text-sm font-medium text-danger">
                 <p>{error}</p>
               </div>
             ) : null}
 
             {phase === "code" && details ? (
               <div className="mx-2">
-                <label htmlFor="promo-code" className="text-sm font-semibold text-slate-700">Promotion code (optional)</label>
+                <label htmlFor="promo-code" className="text-sm font-semibold text-body">Promotion code (optional)</label>
                 <input
                   id="promo-code"
                   type="text"
@@ -229,29 +236,29 @@ export function EmbeddedApiCheckout() {
                   onChange={(event) => setPromoCode(event.target.value)}
                   placeholder="Enter code"
                   autoComplete="off"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-950 outline-none focus:border-cyan-600"
+                  className="mt-2 w-full rounded-xl border border-line-strong px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                 />
-                <p className="mt-4 text-sm leading-6 text-slate-600">
-                  Total due today: <strong className="text-slate-950">{details.price}.00</strong>
+                <p className="mt-4 text-sm leading-6 text-muted">
+                  Total due today: <strong className="text-ink">{details.price}.00</strong>
                   {promoCode.trim() ? " before any promotion discount is applied." : "."} Then {details.price}/month, renewing monthly until you cancel. Cancel anytime in your subscription account; cancellation stops renewal at the current period end.
                 </p>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void startPayment()}
-                  className="mt-5 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="mt-5 w-full rounded-xl bg-canvas px-4 py-3 text-sm font-semibold text-ink hover:bg-panel-alt disabled:opacity-60"
                 >
                   Continue to payment
                 </button>
               </div>
             ) : null}
 
-            {phase === "creating" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-slate-600">Preparing your secure payment form…</div> : null}
+            {phase === "creating" ? <div className="grid min-h-[420px] place-items-center text-sm font-medium text-muted">Preparing your secure payment form…</div> : null}
 
             {phase === "free-done" ? (
-              <div className="mx-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm font-medium text-emerald-900">
+              <div className="mx-2 rounded-2xl border border-success bg-success-soft p-5 text-sm font-medium text-success">
                 <p>Your {details?.name} subscription is active. No payment was due — your promotion code covered the first period in full.</p>
-                <Link href="/account/api-keys/" className="mt-4 inline-block rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
+                <Link href="/account/api-keys/" className="mt-4 inline-block rounded-xl bg-canvas px-4 py-2 text-sm font-semibold text-ink hover:bg-panel-alt">
                   Go to your API account
                 </Link>
               </div>
@@ -261,18 +268,18 @@ export function EmbeddedApiCheckout() {
               <div className="mx-2">
                 <div ref={mountRef} aria-label="Secure Stripe payment form" />
                 {payError ? (
-                  <div role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+                  <div role="alert" className="mt-4 rounded-2xl border border-danger bg-danger-soft p-4 text-sm font-medium text-danger">
                     <p>{payError}</p>
                   </div>
                 ) : null}
-                <p className="mt-5 text-sm leading-6 text-slate-600">
-                  Total due today: <strong className="text-slate-950">{details.price}.00</strong>. Then {details.price}/month, renewing monthly until you cancel. Cancel anytime in your subscription account; cancellation stops renewal at the current period end.
+                <p className="mt-5 text-sm leading-6 text-muted">
+                  Total due today: <strong className="text-ink">{details.price}.00</strong>. Then {details.price}/month, renewing monthly until you cancel. Cancel anytime in your subscription account; cancellation stops renewal at the current period end.
                 </p>
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void confirmPayment()}
-                  className="mt-4 w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                  className="mt-4 w-full rounded-xl bg-canvas px-4 py-3 text-sm font-semibold text-ink hover:bg-panel-alt disabled:opacity-60"
                 >
                   {phase === "confirming" ? "Processing…" : `Subscribe and pay ${details.price}.00`}
                 </button>
