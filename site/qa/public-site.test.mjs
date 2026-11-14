@@ -60,7 +60,7 @@ test("deployed configuration is not manufactured health evidence", () => {
   assert.equal(observedState(undefined, now), "not_monitored");
   assert.equal(overallState(statusPage.components.map(() => undefined), now), "not_monitored");
   assert.ok(statusPage.components.some((component) => component.monitored));
-  assert.ok(statusPage.components.some((component) => !component.monitored));
+  assert.ok(statusPage.components.every((component) => component.monitored), "every registered component is wired to a live signal");
 });
 test("a single healthy component cannot hide unknown components", () => {
   assert.equal(overallState([healthy, { ...healthy, state: "not_monitored" }], now), "not_monitored");
@@ -83,7 +83,7 @@ test("live payload parser requires every monitored observation and discards malf
   const observations = Object.fromEntries(statusPage.components.filter((component) => component.monitored).map((component) => [component.id, healthy]));
   const valid = parseStatusObservations({ observations });
   assert.equal(Object.keys(valid).length, Object.keys(observations).length);
-  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "not_monitored", "unmonitored components prevent an all-green claim");
+  assert.equal(overallState(statusPage.components.map((component) => valid[component.id]), now), "operational", "only a complete set of healthy observations supports an all-green claim");
   assert.deepEqual(parseStatusObservations({ observations: { ...observations, website: { ...healthy, state: "invented" } } }), {});
   assert.deepEqual(parseStatusObservations({ observations: { website: healthy } }), {});
   assert.deepEqual(parseStatusObservations({ observations: null }), {});
@@ -110,8 +110,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
   assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
-  for (const id of ["account-persistence", "billing", "support", "ci-deployment"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
-  for (const id of ["provider-execution", "posthog"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, false, `${id} has no live signal and stays unmonitored`);
+  for (const id of ["account-persistence", "billing", "support", "ci-deployment", "provider-execution", "posthog", "runner-minutes"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
 });
 test("incident history survives refresh without a fabricated resolution", () => {
   const history = statusPage.incidents.find((incident) => incident.id === "2026-08-06-github-actions");
@@ -249,6 +248,143 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,430px\)\]/);
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
+});
+test("runner minutes checkout points at the live service by default", () => {
+  const component = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+});
+
+test("runner minutes checkout carries an optional verification code in the payment action area", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The field exists, in plain language, wired to its own state.
+  assert.match(checkout, /Have a verification code\?/);
+  assert.match(checkout, /id="runner-minutes-verification-code"/);
+  assert.match(checkout, /const \[verificationCode, setVerificationCode\] = useState\(""\);/);
+  // It lives with the payment action: it follows the not-configured
+  // notice in the source (so it renders only in the configured branch,
+  // never where the notice sits) and precedes the payment button.
+  const noticeAt = checkout.indexOf("Runner Minutes checkout is being switched on.");
+  const fieldAt = checkout.indexOf('id="runner-minutes-verification-code"');
+  const buttonAt = checkout.indexOf("Continue to payment");
+  assert.ok(noticeAt !== -1 && fieldAt > noticeAt, "code field sits in the configured payment branch, after the notice");
+  assert.ok(fieldAt !== -1 && buttonAt !== -1 && fieldAt < buttonAt, "code field precedes the payment button");
+});
+
+test("runner minutes verification code is sent only when entered and never reaches Stripe", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  const start = checkout.slice(checkout.indexOf("async function startPayment()"), checkout.indexOf("async function confirmPayment()"));
+  // With no code entered, the request body is exactly the old shape.
+  assert.match(start, /: \{ pack: pack\.key, requestId \}/);
+  // An entered code rides along under its own field name.
+  assert.match(start, /verificationCode: trimmedCode/);
+  // The verification branch is answered before Stripe is ever loaded,
+  // and lands on the verified success phase.
+  const branchAt = start.indexOf("isVerificationCheckoutResponse(result)");
+  const stripeAt = start.indexOf("loadStripe(");
+  assert.ok(branchAt !== -1 && stripeAt !== -1 && branchAt < stripeAt, "verification is answered before loadStripe");
+  assert.match(start, /setPhase\("verified-done"\)/);
+  // The guard is strict: a true verification marker at amountCents 0.
+  assert.match(checkout, /result\.verification === true && result\.amountCents === 0/);
+});
+
+test("runner minutes verified success shows $0.00 and the credited minutes, and the paid path copy is untouched", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(checkout, /Verification code accepted/);
+  assert.match(checkout, /dollars\(verified\.amountCents\)/);
+  assert.match(checkout, /minutes are credited to your account balance/);
+  // No-code behaviour is unchanged: the Elements session is still
+  // required, and the not-configured notice still reads as before.
+  assert.match(checkout, /if \(!result\.clientSecret \|\| !result\.publishableKey\) throw new Error\("Stripe checkout did not return a secure payment session\."\);/);
+  assert.match(checkout, /Runner Minutes checkout is being switched on\. The packs and prices above are final/);
+});
+
+test("runner minutes buy page shows the selection and the honest not-yet-on state at the point of selection", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The header copy branches on the configuration state: only the
+  // configured copy may promise the Stripe payment form.
+  assert.match(checkout, /\{CHECKOUT_CONFIGURED \? \(/);
+  assert.match(checkout, /Payment is not switched on yet: when sales open, it switches on right here on this page/);
+  // In the unconfigured block, the selection echo sits directly above the
+  // switched-on notice, and the block renders no button at all — the
+  // honest message is the state, never a fake disabled Continue.
+  const start = checkout.indexOf("{!CHECKOUT_CONFIGURED ? (");
+  assert.ok(start >= 0, "the unconfigured selection block exists");
+  const block = checkout.slice(start, checkout.indexOf(") : (", start));
+  const echoAt = block.indexOf("Selected:");
+  const noticeAt = block.indexOf("Runner Minutes checkout is being switched on");
+  assert.ok(echoAt >= 0 && noticeAt > echoAt, "the selection echo sits directly above the switched-on notice");
+  assert.match(block, /\{pack\.label\} — \$\{pack\.totalDollars\}/);
+  assert.doesNotMatch(block, /<button/);
+  // Continue to payment exists exactly once — inside the configured
+  // branch — and starting payment stays impossible while unconfigured.
+  assert.equal(checkout.split("Continue to payment").length - 1, 1);
+  assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
+});
+
+test("live center overview carries the queue panel with per-PR progress rows", () => {
+  const board = read("app/account/live-center/LiveCenterBoard.tsx");
+  assert.match(board, /The queue/);
+  assert.match(board, /board\.pullRequests\.slice\(0, 25\)/);
+  assert.match(board, /showPosition \/>/);
+});
+
+test("the runners view renders the registered fleet when the payload carries it", () => {
+  const runs = read("app/account/live-center/LiveCenterRuns.tsx");
+  assert.match(runs, /Your full runner fleet/);
+  assert.match(runs, /board\.fleet\.available/);
+  assert.match(runs, /board\.fleet\.runners\.map/);
+  assert.match(runs, /Repository Administration, read-only/);
+});
+
+test("account home page exists and carries the three account cards", () => {
+  const page = read("app/(english)/account/page.tsx");
+  // The bare /account/ address is a real page now, noindexed like its
+  // sibling account pages, rendering the account home component.
+  assert.match(page, /robots: \{ index: false, follow: false \}/);
+  assert.match(page, /<AccountHome \/>/);
+  const home = read("app/account/home/AccountHome.tsx");
+  // All three cards are there, with their exact destinations.
+  assert.match(home, />API account</);
+  assert.match(home, /href="\/account\/api-keys\/"/);
+  assert.match(home, />Live Center</);
+  assert.match(home, /href="\/account\/live-center\/"/);
+  assert.match(home, />Runner minutes</);
+  assert.match(home, /href="\/account\/runner-minutes-checkout\/"/);
+  assert.match(home, /Buy a minutes pack/);
+  // The session gate is the same account read every account page makes.
+  assert.match(home, /"\/customer\/account"/);
+  // The balance is the same Runner Minutes account read the checkout
+  // page makes — same endpoint, same default service address and
+  // override — and it is never guessed when the read fails.
+  assert.match(home, /"\/customer\/runner-minutes\/account"/);
+  assert.match(home, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
+  assert.match(home, /could not load your balance/i);
+});
+
+test("a dead sign-in link explains itself instead of failing silently", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  assert.match(page, /That sign-in link is invalid or expired — request a fresh one below\./);
+  // The message is set on the verify-failure path of the magic-token
+  // branch, and the hash is cleared there too — the plain no-token load
+  // never reaches this branch and keeps swallowing 401s in silence.
+  const start = page.indexOf("const token = magicTokenFromHash");
+  assert.ok(start >= 0, "the magic-token branch exists");
+  const tokenBranch = page.slice(start, page.indexOf('"/customer/account"', start));
+  assert.match(tokenBranch, /\/customer\/auth\/verify/);
+  assert.match(tokenBranch, /setError\("That sign-in link is invalid or expired/);
+  assert.match(tokenBranch, /window\.history\.replaceState/);
+  assert.match(page, /apiError\.status !== 401/);
+});
+
+test("sign-in buttons wait for the bot check only when it is configured", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  const botCheck = read("app/account/core/signin-bot-check.tsx");
+  assert.match(botCheck, /export const signInTurnstileConfigured = turnstileSiteKey\.length > 0;/);
+  // Both submit buttons gate on the same derived flag, and each gated
+  // form carries the plain hint line exactly once.
+  assert.match(page, /const botCheckPending = signInTurnstileConfigured && !turnstileToken;/);
+  assert.equal((page.match(/disabled=\{busy \|\| botCheckPending\}/g) || []).length, 2);
+  assert.equal((page.match(/Complete the quick check above, then this button turns on\./g) || []).length, 2);
 });
 
 const {
