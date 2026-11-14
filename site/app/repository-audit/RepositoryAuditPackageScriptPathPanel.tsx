@@ -11,9 +11,9 @@ type RepositoryAuditPackageScriptPathPanelProps = {
 };
 
 const targetStateClasses: Record<RepositoryPackageScriptPathPresentationRow["targetState"], string> = {
-  present: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  "outside-bounded-scan": "border-amber-200 bg-amber-50 text-amber-800",
-  missing: "border-rose-200 bg-rose-50 text-rose-800",
+  present: "border-success bg-success-soft text-success",
+  "outside-bounded-scan": "border-warning bg-warning-soft text-warning",
+  missing: "border-danger bg-danger-soft text-danger",
 };
 
 function targetStateLabel(state: RepositoryPackageScriptPathPresentationRow["targetState"]): string {
@@ -40,22 +40,22 @@ export function RepositoryAuditPackageScriptPathPanel({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-fuchsia-800">Package script paths</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Literal local script targets</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-ink">Literal local script targets</h2>
         </div>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted">
           {presentation.summary.rowsShown} shown · {presentation.summary.relationships} analyzed
         </p>
       </div>
 
-      <p className="mt-3 max-w-4xl leading-7 text-slate-700">
+      <p className="mt-3 max-w-4xl leading-7 text-body">
         SolveLang maps only explicit repository-local Node, tsx, ts-node, TypeScript project, Vite config, and ESLint config references from bounded <code>package.json</code> script text. Scripts are never executed, and shell-heavy or ambiguous references are skipped instead of guessed.
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-slate-700">
-        <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.presentTargets} present</span>
-        <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.outsideBoundedScanTargets} outside bounded scan</span>
-        <span className="rounded-full bg-white px-3 py-1.5">{presentation.summary.missingTargets} missing</span>
-        <span className="rounded-full bg-white px-3 py-1.5">{skipped} skipped evidence item(s)</span>
+      <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold text-body">
+        <span className="rounded-full bg-panel px-3 py-1.5">{presentation.summary.presentTargets} present</span>
+        <span className="rounded-full bg-panel px-3 py-1.5">{presentation.summary.outsideBoundedScanTargets} outside bounded scan</span>
+        <span className="rounded-full bg-panel px-3 py-1.5">{presentation.summary.missingTargets} missing</span>
+        <span className="rounded-full bg-panel px-3 py-1.5">{skipped} skipped evidence item(s)</span>
         {presentation.summary.rowsHidden > 0 ? (
           <span className="rounded-full bg-fuchsia-100 px-3 py-1.5 text-fuchsia-900">{presentation.summary.rowsHidden} hidden by row limit</span>
         ) : null}
@@ -64,7 +64,7 @@ export function RepositoryAuditPackageScriptPathPanel({
       {presentation.notices.length ? (
         <div className="mt-5 grid gap-2">
           {presentation.notices.map((notice) => (
-            <p key={notice} className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+            <p key={notice} className="rounded-xl border border-warning bg-warning-soft p-3 text-sm font-semibold text-warning">
               {notice}
             </p>
           ))}
@@ -73,33 +73,33 @@ export function RepositoryAuditPackageScriptPathPanel({
 
       <div className="mt-6 grid gap-3">
         {presentation.rows.length ? presentation.rows.map((row) => (
-          <article key={row.evidenceId} className="rounded-2xl border border-slate-200 bg-white p-5">
+          <article key={row.evidenceId} className="rounded-2xl border border-line bg-panel p-5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-fuchsia-100 px-3 py-1 text-xs font-bold uppercase text-fuchsia-900">
                 {kindLabel(row.kind)}
               </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              <span className="rounded-full bg-panel-alt px-3 py-1 text-xs font-semibold text-body">
                 script: {row.scriptName}
               </span>
               <span className={`rounded-full border px-3 py-1 text-xs font-bold uppercase ${targetStateClasses[row.targetState]}`}>
                 {targetStateLabel(row.targetState)}
               </span>
             </div>
-            <code className="mt-4 block break-all text-sm font-semibold text-slate-950">{row.fromPath}</code>
-            <p className="my-1 text-xs text-slate-400">→</p>
-            <code className="block break-all text-sm font-semibold text-slate-950">{row.targetPath}</code>
-            <p className="mt-3 break-all text-xs leading-5 text-slate-500">
+            <code className="mt-4 block break-all text-sm font-semibold text-ink">{row.fromPath}</code>
+            <p className="my-1 text-xs text-muted">→</p>
+            <code className="block break-all text-sm font-semibold text-ink">{row.targetPath}</code>
+            <p className="mt-3 break-all text-xs leading-5 text-muted">
               Evidence: {row.evidence.path} · {row.evidence.field}
             </p>
           </article>
         )) : (
-          <div className="rounded-2xl border border-dashed border-fuchsia-200 bg-white p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-fuchsia-200 bg-panel p-8 text-center text-sm text-muted">
             No explicit bounded package-script path relationships were identified.
           </div>
         )}
       </div>
 
-      <p className="mt-5 text-xs leading-5 text-slate-500">
+      <p className="mt-5 text-xs leading-5 text-muted">
         Graph {presentation.graphId} · schema {presentation.schema} · {presentation.status} evidence · network access disabled · write access disabled
       </p>
     </section>
