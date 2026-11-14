@@ -16,18 +16,32 @@ test("wasm audit job keeps its required-check name", async () => {
   assert.match(text, /name: WASM artifact security/);
 });
 
-test("wasm audit places by capability labels, never by OS name", async () => {
+test("wasm audit places on the fleet-wide label every runner carries", async () => {
   const text = await workflowText();
   const match = text.match(/runs-on: \[([^\]]+)\]/);
   assert.ok(match, "audit job must declare a runs-on label set");
   const labels = match[1].split(",").map((label) => label.trim());
-  assert.deepEqual(labels, ["self-hosted", "ARM64", "solvelang-ci"]);
-  for (const osLabel of ["Linux", "macOS", "Windows", "oracle-free"]) {
+  assert.deepEqual(labels, ["self-hosted", "solvelang-ci"]);
+  for (const pin of ["Linux", "macOS", "Windows", "ARM64", "X64", "oracle-free"]) {
     assert.ok(
-      !labels.includes(osLabel),
-      `runs-on must not pin by host or OS label: ${osLabel}`,
+      !labels.includes(pin),
+      `runs-on must not pin by host, OS, or arch label: ${pin}`,
     );
   }
+});
+
+test("wasm audit pins bash so Windows runs the POSIX steps under Git Bash", async () => {
+  const text = await workflowText();
+  assert.match(
+    text,
+    /Reproduce and audit browser artifact under hostile caller Cargo config\s*\n\s*shell: bash/,
+  );
+});
+
+test("wasm audit resolves Chrome on Windows through CHROME_BIN", async () => {
+  const text = await workflowText();
+  assert.match(text, /runner\.os == 'Windows'/);
+  assert.match(text, /CHROME_BIN=/);
 });
 
 test("wasm audit still runs the audited-artifact script", async () => {
