@@ -11,9 +11,10 @@ on:
 jobs:
   rust:
     name: Rust runtime
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: [self-hosted, solvelang-ci]
     defaults:
       run:
+        shell: bash
         working-directory: solvec
     steps:
       - name: Checkout
@@ -99,10 +100,11 @@ jobs:
 
   site:
     name: Static site
-    runs-on: [self-hosted, solvelang-flex]
+    runs-on: [self-hosted, solvelang-ci]
     timeout-minutes: 60
     defaults:
       run:
+        shell: bash
         working-directory: site
     steps:
       - name: Checkout
