@@ -20,14 +20,12 @@ import { normalizePath } from "./site-navigation";
 // - "Your account": Account home, API account, Live Center, Runner
 //   minutes, Sign-in & security.
 // - "Work": Studio, Workflow check, Repository audit, Server audit,
-//   Run in browser, Process Solution.
+//   Audit, Run in browser, Process Solution.
 // Every link is one plain single line — no sub-captions anywhere in
 // the sidebar. Buying minutes lives on the Live Center / Runner
 // minutes views and on the account home, not in this sidebar.
 // Active state follows the current page across both groups: exactly
-// the entry matching the current route is highlighted. The /audit/
-// page deliberately has no entry in either group, so nothing is
-// highlighted there.
+// the entry matching the current route is highlighted.
 //
 // Entry targets:
 // - "Runner minutes" opens the Live Center. The board selects its
@@ -108,6 +106,12 @@ const WORK_ENTRIES: SidebarEntry[] = [
     label: "Server audit",
     href: "/server-audit/",
     isActive: (path) => onPath("/server-audit")(path),
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    href: "/audit/",
+    isActive: (path) => onPath("/audit")(path),
   },
   {
     id: "run-in-browser",
