@@ -62,3 +62,44 @@ test("runtime traps and malformed responses fail without claiming nothing ran or
     assert.equal(JSON.stringify(result).includes("No script was executed"), false);
   }
 });
+
+const fullSuccess = (outputs: unknown[]) => JSON.stringify({ contract: "solvelang.run_full", version: 1, ok: true, outputs, error: null });
+
+test("workspace runs serialize the file map and entry for run_full_v1", async () => {
+  let seen = "";
+  const session = createCanonicalPreviewSession(async () => ({
+    runPure: () => { throw new Error("pure path must not be used for workspaces"); },
+    runFull: (request: string) => { seen = request; return fullSuccess([42, "done"]); },
+  }));
+  const result = await session.runWorkspace([
+    { name: "main.solve", source: "import { add } from \"math.solve\"\nprint(add(20, 22))" },
+    { name: "math.solve", source: "export fn add(a, b) { return a + b }" },
+  ], "main.solve");
+  assert.deepEqual(result, { ok: true, output: "42\ndone" });
+  assert.deepEqual(JSON.parse(seen), {
+    entry: "main.solve",
+    files: {
+      "main.solve": "import { add } from \"math.solve\"\nprint(add(20, 22))",
+      "math.solve": "export fn add(a, b) { return a + b }",
+    },
+  });
+});
+
+test("workspace module errors name the module that failed", async () => {
+  const session = createCanonicalPreviewSession(async () => ({
+    runPure: () => fullSuccess([]),
+    runFull: () => JSON.stringify({ contract: "solvelang.run_full", version: 1, ok: false, outputs: [], error: { kind: "module", message: "failed to resolve explicit module 'ghost.solve'", line: 1, column: 8, module: "main.solve", source_line: "import \"ghost.solve\" as ghost", hint: null } }),
+  }));
+  const result = await session.runWorkspace([{ name: "main.solve", source: "import \"ghost.solve\" as ghost" }], "main.solve");
+  assert.equal(result.ok, false);
+  assert.match(result.error!, /main\.solve:1:8/);
+  assert.match(result.error!, /failed to resolve explicit module/);
+});
+
+test("workspace runs fail closed when the loaded runtime predates run_full_v1", async () => {
+  const session = createCanonicalPreviewSession(async () => ({ runPure: () => success(["pure"]) }));
+  const result = await session.runWorkspace([{ name: "main.solve", source: "print(1)" }], "main.solve");
+  assert.equal(result.ok, false);
+  assert.match(result.error!, /could not complete this script/);
+  assert.equal(JSON.stringify(result).includes("No script was executed"), false);
+});
