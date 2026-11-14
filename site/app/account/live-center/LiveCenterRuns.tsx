@@ -249,15 +249,40 @@ export function LiveCenterRunners({ board }: { board: LiveCenterBoardView }) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-4 sm:p-5">
+      <div className={board.fleet.available ? LC_PANEL : "rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-4 sm:p-5"}>
         <h3 className="font-semibold text-slate-100">Your full runner fleet</h3>
-        <p className="mt-1 max-w-3xl text-sm text-slate-400">
-          Seeing every machine in your fleet — including the ones sitting idle right now — needs
-          one more GitHub permission: <strong className="text-slate-200">Repository Administration, read-only</strong>.
-          Until it is granted, this page can only show the runners GitHub reports on current jobs,
-          which is everything above. No runner is being hidden from you by SolveLang; GitHub
-          simply does not report idle machines without that permission.
-        </p>
+        {board.fleet.available ? (
+          <>
+            <p className="mt-1 max-w-3xl text-sm text-slate-400">
+              <strong className="text-slate-200">
+                {board.fleet.total} registered · {board.fleet.online} online · {board.fleet.busy} working now
+              </strong>{" "}
+              — every machine GitHub holds for this repository, including the ones sitting idle.
+            </p>
+            <ul className="mt-2 divide-y divide-white/5">
+              {board.fleet.runners.map((entry) => (
+                <li key={entry.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5">
+                  <span
+                    aria-hidden="true"
+                    className={`inline-block h-2 w-2 shrink-0 rounded-full ${entry.busy ? "bg-emerald-400" : entry.status === "online" ? "bg-sky-400" : "bg-slate-600"}`}
+                  />
+                  <span className="font-mono text-sm font-semibold text-slate-100">{entry.name}</span>
+                  <span className="text-sm text-slate-400">
+                    {entry.busy ? "working now" : entry.status === "online" ? "online — free" : "offline"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="mt-1 max-w-3xl text-sm text-slate-400">
+            Seeing every machine in your fleet — including the ones sitting idle right now — needs
+            one more GitHub permission: <strong className="text-slate-200">Repository Administration, read-only</strong>.
+            Until it is granted, this page can only show the runners GitHub reports on current jobs,
+            which is everything above. No runner is being hidden from you by SolveLang; GitHub
+            simply does not report idle machines without that permission.
+          </p>
+        )}
       </div>
     </section>
   );
