@@ -34,3 +34,27 @@ test("the product webhook secret is wired from the environment secret", async ()
   assert.match(source, /MGOV_PRODUCT_WEBHOOK_SECRET: \$\{\{ secrets\.MGOV_PRODUCT_WEBHOOK_SECRET \}\}/);
   assert.match(source, /\[\[ -z "\$MGOV_PRODUCT_WEBHOOK_SECRET" \]\] \|\| parameters\+=\(ProductWebhookSecret="\$MGOV_PRODUCT_WEBHOOK_SECRET"\)/);
 });
+
+test("product webhook secret reaches the dispatcher process env as PRODUCT_WEBHOOK_SECRET", async () => {
+  const source = await workflow();
+  // The dispatcher comment documents the pilot template parameter's
+  // process-env name, and the template parameter itself is present.
+  assert.match(source, /PRODUCT_WEBHOOK_SECRET/);
+  assert.match(source, /ProductWebhookSecret="\$MGOV_PRODUCT_WEBHOOK_SECRET"/);
+});
+
+test("product webhook secret passes only when set - never an empty substitution", async () => {
+  const source = await workflow();
+  assert.match(source, /\[\[ -z "\$MGOV_PRODUCT_WEBHOOK_SECRET" \]\] \|\| parameters\+=\(ProductWebhookSecret="\$MGOV_PRODUCT_WEBHOOK_SECRET"\)/);
+  // It is not part of the unconditional parameter list the deploy starts
+  // from, so an unset secret leaves the parameter (and the template
+  // default that fails closed) untouched.
+  assert.doesNotMatch(source, /parameters=\(\s*PilotTenantId="\$PILOT_TENANT_ID"\s*PilotRepos="\$PILOT_REPOS"\s*AdminToken="\$MGOV_ADMIN_TOKEN"\s*WebhookSecret="\$MGOV_WEBHOOK_SECRET"\s*ProductWebhookSecret/);
+});
+
+test("deployment summary reports the product webhook secret state", async () => {
+  const source = await workflow();
+  assert.match(source, /product_webhook_line="not configured"/);
+  assert.match(source, /\[\[ -z "\$MGOV_PRODUCT_WEBHOOK_SECRET" \]\] \|\| product_webhook_line="configured \(parameter passed\)"/);
+  assert.match(source, /echo "- Product webhook secret: \*\*\$product_webhook_line\*\*"/);
+});
