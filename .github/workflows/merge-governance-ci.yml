@@ -8,8 +8,12 @@ on:
       - 'services/merge-governance/**'
       - '.github/workflows/merge-governance-ci.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    if: github.repository == 'saiidz/solvelang' && github.actor == 'saiidz'
     name: Merge governance tests
     runs-on: [self-hosted, solvelang-flex]
     defaults:

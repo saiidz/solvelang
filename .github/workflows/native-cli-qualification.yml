@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   qualify:
+    if: github.repository == 'saiidz/solvelang' && github.actor == 'saiidz'
     name: Native ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
