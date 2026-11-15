@@ -61,11 +61,13 @@ export function createApiAccessHandler({
   mergeGovernanceCheckout,
   mergeGovernanceConnect = null,
   liveCenter,
+  githubBindings = null,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
   botProtection = null,
   githubApp = null,
+  productConnectLink = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
   statusProbes = {},
   logger = console,
@@ -153,6 +155,17 @@ export function createApiAccessHandler({
     return origin;
   }
 
+  // Auth results carry `cookies` (every Set-Cookie variant to emit);
+  // the singular `cookie` (the Domain variant alone) remains on older
+  // result shapes, and logout returns its clear pair directly.
+  // Normalize any of them to the array the response builder expects.
+  function resultCookies(result) {
+    if (Array.isArray(result)) return result;
+    if (typeof result === "string") return [result];
+    if (Array.isArray(result?.cookies)) return result.cookies;
+    return result?.cookie ? [result.cookie] : [];
+  }
+
   function authResponse(verified) {
     if (verified?.mfaRequired) {
       return response(200, {
@@ -166,7 +179,7 @@ export function createApiAccessHandler({
       email: verified.email,
       csrfToken: verified.csrfToken,
       mfaRequired: false,
-    }, {}, [verified.cookie]);
+    }, {}, resultCookies(verified));
   }
 
   async function statusProbeResponse(probe) {
@@ -230,7 +243,7 @@ export function createApiAccessHandler({
         if (typeof code !== "string" || !code || typeof state !== "string" || !state) return failure;
         try {
           const result = await githubApp.completeSignIn({ code, state });
-          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, [result.cookie]);
+          return redirect(`${siteOrigin}/account/api-keys/?github=connected`, resultCookies(result));
         } catch {
           return failure;
         }
@@ -285,8 +298,8 @@ export function createApiAccessHandler({
       }
       if (method === "POST" && path.endsWith("/customer/auth/logout")) {
         const session = await customerSession(event, true);
-        const cookie = await customerAuth.logout(cookieHeader(event));
-        return response(200, { signedOut: true, accountId: session.accountId }, {}, [cookie]);
+        const cleared = await customerAuth.logout(cookieHeader(event));
+        return response(200, { signedOut: true, accountId: session.accountId }, {}, resultCookies(cleared));
       }
       if (method === "POST" && path.endsWith("/customer/auth/sessions/revoke-all")) {
         const session = await customerSession(event, true);
@@ -295,7 +308,7 @@ export function createApiAccessHandler({
           signedOutEverywhere: true,
           currentSessionRevoked: true,
           accountId: session.accountId,
-        }, {}, [revoked.cookie]);
+        }, {}, resultCookies(revoked));
       }
 
       if (!enabled) throw new ApiAccessError(503, "api_access_disabled", "API subscriptions are not enabled.");
@@ -346,6 +359,16 @@ export function createApiAccessHandler({
         if (!githubApp) return response(200, { enabled: false, installations: [] });
         return response(200, { enabled: true, installations: await githubApp.listForAccount(session.accountId) });
       }
+      // Zero-step onboarding (S2): the signed-in customer's connect
+      // link for the branded product app. The session is the only
+      // input - the tenant in the minted state is the session's own
+      // account id, never anything the browser supplied. An
+      // unconfigured binding secret fails closed with a plain 503.
+      if (method === "GET" && path.endsWith("/customer/github/connect-link")) {
+        const session = await customerSession(event);
+        if (!productConnectLink) return response(503, { error: "connect_not_configured" });
+        return response(200, productConnectLink.createConnectLink(session.accountId));
+      }
       if (method === "POST" && path.endsWith("/customer/github/installations/link")) {
         const session = await customerSession(event, true);
         if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
@@ -355,6 +378,25 @@ export function createApiAccessHandler({
         const session = await customerSession(event, true);
         if (!githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
         return response(200, await githubApp.runAudit({ accountId: session.accountId, ...parseJson(event) }));
+      }
+      // Session-authed bindings read (S5b): which GitHub
+      // installations and repositories are bound for THIS
+      // customer. The tenant is always the session's accountId —
+      // a client-supplied tenant id is never read, let alone
+      // forwarded. The upstream mgov pair is server-side only;
+      // unconfigured or any upstream failure fails closed with
+      // the exact plain body { error: "bindings_unavailable" }
+      // and no upstream internals.
+      if (method === "GET" && path.endsWith("/customer/github/bindings")) {
+        const session = await customerSession(event);
+        if (!githubBindings || typeof githubBindings.getBindings !== "function") {
+          return response(503, { error: "bindings_unavailable" });
+        }
+        try {
+          return response(200, await githubBindings.getBindings(session.accountId));
+        } catch {
+          return response(503, { error: "bindings_unavailable" });
+        }
       }
       // "Connect a repository by app sign-in": read-only proxies to
       // the merge-governance pilot service's product-app routes. The
@@ -447,6 +489,35 @@ export function createApiAccessHandler({
         // tab renders its honest not-configured state.
         if (typeof liveCenter.getMinutes !== "function") return response(200, { configured: false });
         return response(200, await liveCenter.getMinutes());
+      }
+      const minutesAdminMatch = path.match(/\/customer\/runner-minutes-admin\/accounts(?:\/([^/]+)\/(credit|debit|pause|resume))?$/);
+      if (minutesAdminMatch && (method === "GET" || method === "POST")) {
+        const actionTenant = minutesAdminMatch[1] ? decodeURIComponent(minutesAdminMatch[1]) : null;
+        const action = minutesAdminMatch[2] || null;
+        if ((method === "GET" && action) || (method === "POST" && !action)) {
+          throw new ApiAccessError(404, "not_found", "Route not found.");
+        }
+        const session = method === "POST" ? await customerSession(event, true) : await customerSession(event);
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        // Owner gate: the panel exists for exactly one signed-in
+        // account — the owner's own. A read for anyone else answers
+        // the plain not-configured shape (the page renders its
+        // not-available state; no account data ever leaves this
+        // route for them), and a write for anyone else is refused.
+        const isOwner = typeof liveCenter.isMinutesOwner === "function" && liveCenter.isMinutesOwner(session);
+        if (method === "GET") {
+          if (!isOwner || typeof liveCenter.getMinutesAdminAccounts !== "function") {
+            return response(200, { configured: false });
+          }
+          return response(200, await liveCenter.getMinutesAdminAccounts());
+        }
+        if (!isOwner) {
+          throw new ApiAccessError(403, "owner_panel_unavailable", "This page is not available for your account.");
+        }
+        if (typeof liveCenter.minutesAdminAction !== "function") {
+          throw new ApiAccessError(503, "minutes_not_configured", "Runner minutes are not configured.");
+        }
+        return response(200, await liveCenter.minutesAdminAction(actionTenant, action, parseJson(event)));
       }
       if (method === "POST" && path.endsWith("/customer/subscriptions/portal")) {
         const session = await customerSession(event, true);
