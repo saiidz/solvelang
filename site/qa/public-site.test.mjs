@@ -369,6 +369,17 @@ test("runner minutes checkout points at the live service by default", () => {
   assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
 });
 
+test("runner minutes checkout terms state the GitHub fee is absorbed, never passed through", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // Standing product decision (Nov 13, 2026): if GitHub's announced
+  // $0.002/min self-hosted runner fee ever takes effect, SolveLang absorbs
+  // it. The terms line must say so, and must never again claim the fee is
+  // passed through to the customer.
+  assert.match(checkout, /\$0\.002 per minute fee for self-hosted runners/);
+  assert.match(checkout, /SolveLang absorbs it — it is never passed through to you/);
+  assert.doesNotMatch(checkout, /passed through at cost/);
+});
+
 test("runner minutes checkout carries an optional verification code in the payment action area", () => {
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   // The field exists, in plain language, wired to its own state.
