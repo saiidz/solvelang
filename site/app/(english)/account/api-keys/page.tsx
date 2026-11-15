@@ -544,6 +544,8 @@ export default function ApiKeysPage() {
         {notice ? <p className="mt-6 rounded-xl bg-success-soft p-4 text-success">{notice}</p> : null}
         {error ? <p className="mt-6 rounded-xl bg-danger-soft p-4 text-danger">{error}</p> : null}
 
+        <section id="sign-in-security" className="mt-10">
+          <h2 className="text-2xl font-bold">Sign-in & security</h2>
         <section className="mt-8 rounded-3xl border border-line bg-panel p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -663,7 +665,47 @@ export default function ApiKeysPage() {
             <button type="button" disabled={busy} onClick={revokeAllSessions} className="mt-5 rounded-xl border border-danger px-4 py-2 font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Sign out of all devices</button>
           </div>
         </section>
+        </section>
 
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">API keys</h2>
+        {issued ? (
+          <section className="mt-8 rounded-3xl border border-warning bg-warning-soft p-6">
+            <h2 className="text-2xl font-bold text-warning">Copy this key now</h2>
+            <p className="mt-2 text-sm text-warning">For security, the complete key will not be shown again.</p>
+            <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-warning">{issued.env}</pre>
+            <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-warning-soft px-4 py-2 font-bold text-warning">Copy .env values</button>
+          </section>
+        ) : null}
+
+        <section className="mt-8 grid gap-8 lg:grid-cols-[360px_1fr]">
+          <form onSubmit={issueKey} className="h-fit rounded-3xl border border-line bg-panel p-6">
+            <h2 className="text-2xl font-bold">Create API key</h2>
+            <p className="mt-2 text-sm text-muted">Keys receive the repository audit scope assigned by your plan.</p>
+            <label htmlFor="key-name" className="mt-6 block text-sm font-medium">Key name</label>
+            <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
+            <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-chrome px-4 py-3 font-bold text-chrome-text disabled:opacity-40">Create one-time key</button>
+          </form>
+          <div className="rounded-3xl border border-line bg-panel p-6">
+            <h2 className="text-2xl font-bold">API keys</h2>
+            <div className="mt-5 space-y-3">
+              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-line p-6 text-muted">No API keys yet.</p> : dashboard.keys.map((key) => (
+                <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-line bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h3 className="font-bold">{key.name}</h3>
+                    <p className="mt-1 font-mono text-sm text-body">{key.prefix}…{key.lastFour}</p>
+                    <p className="mt-2 text-xs text-muted">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
+                  </div>
+                  {key.revokedAt ? <span className="rounded-full bg-danger-soft px-3 py-1 text-sm text-danger">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-danger px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Revoke</button>}
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+        </section>
+
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Plan & billing</h2>
         <section className="mt-8 grid gap-5 md:grid-cols-3">
           <div className="rounded-2xl border border-line bg-panel p-6">
             <p className="text-sm text-muted">Plan</p>
@@ -701,37 +743,27 @@ export default function ApiKeysPage() {
             </div>
           </section>
         ) : null}
+        </section>
 
-        {issued ? (
-          <section className="mt-8 rounded-3xl border border-warning bg-warning-soft p-6">
-            <h2 className="text-2xl font-bold text-warning">Copy this key now</h2>
-            <p className="mt-2 text-sm text-warning">For security, the complete key will not be shown again.</p>
-            <pre className="mt-5 overflow-x-auto rounded-xl bg-black/40 p-4 text-sm text-warning">{issued.env}</pre>
-            <button onClick={() => navigator.clipboard.writeText(issued.env)} className="mt-4 rounded-xl bg-warning-soft px-4 py-2 font-bold text-warning">Copy .env values</button>
-          </section>
-        ) : null}
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Runner minutes</h2>
+          <div className="mt-5 rounded-3xl border border-line bg-panel p-6">
+            <h3 className="text-xl font-bold">Minutes live in the Live Center</h3>
+            <p className="mt-2 max-w-2xl text-sm text-body">Your runner minutes balance and usage are shown in the Live Center, not on this page. Open the Live Center to see how many minutes you have left, or buy more minutes when you need them.</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/account/live-center/" className="rounded-xl border border-line px-4 py-2 text-sm font-semibold hover:bg-panel">View minutes in the Live Center</Link>
+              <Link href="/account/runner-minutes-checkout/" className="rounded-xl bg-chrome px-4 py-2 text-sm font-bold text-chrome-text">Buy minutes</Link>
+            </div>
+          </div>
+        </section>
 
-        <section className="mt-8 grid gap-8 lg:grid-cols-[360px_1fr]">
-          <form onSubmit={issueKey} className="h-fit rounded-3xl border border-line bg-panel p-6">
-            <h2 className="text-2xl font-bold">Create API key</h2>
-            <p className="mt-2 text-sm text-muted">Keys receive the repository audit scope assigned by your plan.</p>
-            <label htmlFor="key-name" className="mt-6 block text-sm font-medium">Key name</label>
-            <input id="key-name" required maxLength={80} value={keyName} onChange={(event) => setKeyName(event.target.value)} className="mt-2 w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
-            <button disabled={busy || !dashboard.subscription.plan} className="mt-5 w-full rounded-xl bg-chrome px-4 py-3 font-bold text-chrome-text disabled:opacity-40">Create one-time key</button>
-          </form>
-          <div className="rounded-3xl border border-line bg-panel p-6">
-            <h2 className="text-2xl font-bold">API keys</h2>
-            <div className="mt-5 space-y-3">
-              {dashboard.keys.length === 0 ? <p className="rounded-xl border border-dashed border-line p-6 text-muted">No API keys yet.</p> : dashboard.keys.map((key) => (
-                <article key={key.keyId} className="flex flex-col gap-4 rounded-2xl border border-line bg-black/15 p-5 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h3 className="font-bold">{key.name}</h3>
-                    <p className="mt-1 font-mono text-sm text-body">{key.prefix}…{key.lastFour}</p>
-                    <p className="mt-2 text-xs text-muted">Created {readableDate(key.createdAt)} · Last used {readableDate(key.lastUsedAt)}</p>
-                  </div>
-                  {key.revokedAt ? <span className="rounded-full bg-danger-soft px-3 py-1 text-sm text-danger">Revoked</span> : <button disabled={busy} onClick={() => revokeKey(key.keyId)} className="rounded-xl border border-danger px-4 py-2 text-sm font-semibold text-danger hover:bg-danger-soft disabled:opacity-60">Revoke</button>}
-                </article>
-              ))}
+        <section className="mt-10">
+          <h2 className="text-2xl font-bold">Connected accounts</h2>
+          <div className="mt-5 rounded-3xl border border-line bg-panel p-6">
+            <h3 className="text-xl font-bold">GitHub</h3>
+            <p className="mt-2 max-w-2xl text-sm text-body">Your GitHub connection lives on its own page. Install or manage the SolveLang GitHub App and see your linked installations there.</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link href="/account/github/" className="rounded-xl border border-line px-4 py-2 text-sm font-semibold hover:bg-panel">Manage GitHub connection</Link>
             </div>
           </div>
         </section>
