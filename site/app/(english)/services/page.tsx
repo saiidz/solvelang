@@ -118,6 +118,7 @@ export default function ServicesPage() {
             <Link href="/account/runner-minutes-checkout/" className="inline-flex rounded-xl bg-accent-solid px-5 py-3 font-semibold text-ink hover:bg-panel-alt">Buy runner minutes</Link>
             <Link href="/account/api-keys/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-panel">Open your account</Link>
           </div>
+          <p className="mt-6 max-w-4xl leading-7 text-body"><strong className="text-ink">Fix it yourself:</strong> the <Link href="/solutions/" className="font-semibold text-ink underline">solutions library</Link> walks through the problems customers hit most — jobs not reaching SolveLang, labels and pools, pausing minutes, sign-in links — with the fix for each, step by step.</p>
         </section>
 
         <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="language-heading">
