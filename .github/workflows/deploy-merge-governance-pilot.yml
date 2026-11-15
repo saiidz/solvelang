@@ -57,6 +57,7 @@ jobs:
       MGOV_PRODUCT_APP_ID: ${{ secrets.MGOV_PRODUCT_APP_ID }}
       MGOV_PRODUCT_APP_PRIVATE_KEY: ${{ secrets.MGOV_PRODUCT_APP_PRIVATE_KEY }}
       MGOV_PRODUCT_WEBHOOK_SECRET: ${{ secrets.MGOV_PRODUCT_WEBHOOK_SECRET }}
+      MGOV_BINDING_STATE_SECRET: ${{ secrets.MGOV_BINDING_STATE_SECRET }}
 
     steps:
       - name: Check out the private product source
@@ -219,6 +220,14 @@ jobs:
           # PRODUCT_WEBHOOK_SECRET (its default keeps that step
           # failing closed).
           [[ -z "$MGOV_PRODUCT_WEBHOOK_SECRET" ]] || parameters+=(ProductWebhookSecret="$MGOV_PRODUCT_WEBHOOK_SECRET")
+          # The binding-state secret (it verifies the install
+          # callback's signed state) travels the same conditional
+          # way: never as an empty value - when the secret is unset
+          # the parameter is omitted entirely, and the pilot
+          # template exposes it to the function as
+          # BINDING_STATE_SECRET (its default keeps the callback
+          # failing closed).
+          [[ -z "$MGOV_BINDING_STATE_SECRET" ]] || parameters+=(BindingStateSecret="$MGOV_BINDING_STATE_SECRET")
           # Fargate subnets travel only when the resolve step produced a
           # clean list; empty leaves the parameter unset, and the template
           # default keeps the service step failing closed.
@@ -247,6 +256,8 @@ jobs:
           [[ -z "$MGOV_PRODUCT_APP_ID" ]] || product_app_line="configured (parameters passed)"
           product_webhook_line="not configured"
           [[ -z "$MGOV_PRODUCT_WEBHOOK_SECRET" ]] || product_webhook_line="configured (parameter passed)"
+          binding_state_line="not configured"
+          [[ -z "$MGOV_BINDING_STATE_SECRET" ]] || binding_state_line="configured (parameter passed)"
           {
             echo "## SolveLang merge-governance pilot deploy"
             echo
@@ -261,5 +272,6 @@ jobs:
             echo "- Fargate subnets: **$fargate_subnets_line**"
             echo "- Product app: **$product_app_line**"
             echo "- Product webhook secret: **$product_webhook_line**"
+            echo "- Binding state secret: **$binding_state_line**"
             echo "- Cost envelope: **D0** (on-demand serverless only)"
           } >> "$GITHUB_STEP_SUMMARY"
