@@ -1159,3 +1159,14 @@ test("solutions library documents each problem in the four-part shape", () => {
   // internal storage, infrastructure, or implementation vocabulary.
   assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
 });
+
+test("status summary label and link use the theme accent token, never the low-contrast hexes", () => {
+  const source = read("app/(english)/status/StatusHealth.tsx");
+  // On the light theme the homepage evidence card sits on bg-panel (white);
+  // the previous hard-coded hexes measured 2.1:1 (#93b6df) and 1.63:1
+  // (#a9cdff) against the 4.5:1 WCAG AA requirement in Lighthouse/axe.
+  assert.doesNotMatch(source, /#93b6df/i);
+  assert.doesNotMatch(source, /#a9cdff/i);
+  assert.match(source, /tracking-widest text-accent">Current public status/);
+  assert.match(source, /ml-auto text-sm font-semibold text-accent underline/);
+});
