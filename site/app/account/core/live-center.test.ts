@@ -287,6 +287,7 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     activity: [],
     runs: [],
     runners: { busy: [], runningUnassigned: 0, queuedJobs: [], busyCount: 0, waitingCount: 0 },
+    fleet: { available: false, total: null, online: 0, busy: 0, runners: [] },
     ownerActions: [],
     ownerActionGroups: [],
     inboxGroups: [],
@@ -301,10 +302,10 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
 });
 
 test("the Live Center is linked from the account menu and the account dashboard", () => {
-  const menu = readFileSync("app/components/SiteAccountMenu.tsx", "utf8");
+  const menu = readFileSync("app/components/SiteHeader.tsx", "utf8");
   const menuLink = menu.indexOf('href="/account/live-center/"');
-  const manageAccount = menu.indexOf("Manage account");
-  assert.ok(menuLink >= 0 && manageAccount >= 0 && menuLink > manageAccount, "the account menu links Live Center after Manage account");
+  const apiAccount = menu.indexOf("API account");
+  assert.ok(menuLink >= 0 && apiAccount >= 0 && menuLink > apiAccount, "the one header menu links Live Center after API account");
   assert.ok(menu.includes(">Live Center<"), "the menu label is plain Live Center");
   const dashboard = readFileSync("app/(english)/account/api-keys/page.tsx", "utf8");
   assert.ok(dashboard.includes('href="/account/live-center/"'), "the account dashboard links to the Live Center");
@@ -548,5 +549,30 @@ test("the board page proves the session before fetching the board and handles th
   assert.ok(board.includes('"/customer/live-center/minutes"'), "the minutes seam is fetched");
   for (const heading of ["Overview", "Pull requests", "Queue", "Checks", "Runners", "Statistics", "Inbox", "Minutes"]) {
     assert.ok(board.includes(heading), `tab rendered: ${heading}`);
+  }
+});
+
+test("normalizeLiveCenterBoard maps an available fleet payload", () => {
+  const view = normalizeLiveCenterBoard({
+    fleet: {
+      available: true, total: 3, online: 2, busy: 1,
+      runners: [
+        { name: "ORACLE-1", status: "online", busy: true },
+        { name: "MAC-1", status: "online", busy: false },
+        { name: "OLD-1", status: "offline", busy: false },
+      ],
+    },
+  });
+  assert.equal(view.fleet.available, true);
+  assert.equal(view.fleet.total, 3);
+  assert.equal(view.fleet.online, 2);
+  assert.equal(view.fleet.busy, 1);
+  assert.deepEqual(view.fleet.runners.map((r) => r.name), ["ORACLE-1", "MAC-1", "OLD-1"]);
+});
+
+test("normalizeLiveCenterBoard keeps the fleet unavailable without the block", () => {
+  for (const raw of [null, {}, { fleet: { available: false } }, { fleet: "nope" }]) {
+    const view = normalizeLiveCenterBoard(raw);
+    assert.deepEqual(view.fleet, { available: false, total: null, online: 0, busy: 0, runners: [] });
   }
 });
