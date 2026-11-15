@@ -32,6 +32,22 @@ test("navigation uses the shared account menu and unique internal destinations",
     assert.ok(read(`app/(english)${link.href}page.tsx`));
   }
 });
+test("live center tab counts read the totals their views show", () => {
+  const boardSource = read("app/account/live-center/LiveCenterBoard.tsx");
+  const counterStart = boardSource.indexOf("const tabCounter");
+  assert.ok(counterStart >= 0, "the board defines its tab counter");
+  const counter = boardSource.slice(counterStart, boardSource.indexOf("};", counterStart));
+  assert.match(counter, /case "prs":\s*\n\s*return String\(board\.pullRequests\.length\)/);
+  assert.match(counter, /case "queue":\s*\n\s*return String\(board\.pullRequests\.length\)/);
+  assert.match(counter, /case "runs":\s*\n\s*return String\(board\.runs\.length\)/);
+  assert.match(counter, /case "runners":\s*\n\s*return String\(board\.runners\.busyCount\)/);
+  assert.match(counter, /case "inbox":\s*\n\s*return String\(board\.inboxItems\)/);
+  assert.equal(counter.includes('case "overview"'), false, "Overview carries no count");
+  assert.equal(counter.includes('case "stats"'), false, "Statistics carries no count");
+  assert.equal(counter.includes('case "minutes"'), false, "Minutes carries no count");
+  assert.match(read("app/account/core/live-center.ts"), /const inboxItems = inboxGroups\.reduce/);
+  assert.match(read("app/account/live-center/LiveCenterInbox.tsx"), /const totalItems = board\.inboxItems/);
+});
 test("header has exactly one menu, labelled Menu at every breakpoint, carrying the account links", () => {
   const header = read("app/components/SiteHeader.tsx");
   // Exactly one header dropdown exists, and the old account dropdown is gone.
