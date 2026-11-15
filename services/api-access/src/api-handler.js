@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 import { unverifiedPublicStatus } from "./public-status.js";
+import { agUiBoardErrorEvents, agUiBoardEvents, agUiRunIds, encodeAgUiSse } from "./ag-ui.js";
 
 // A sign-in form submitted faster than this is a bot, not a person.
 const BOT_TIMING_MIN_MS = 1_200;
@@ -61,6 +62,7 @@ export function createApiAccessHandler({
   mergeGovernanceCheckout,
   mergeGovernanceConnect = null,
   liveCenter,
+  agUiPilotEnabled = false,
   githubBindings = null,
   subscriptionPortal,
   subscriptionLifecycle,
@@ -111,6 +113,21 @@ export function createApiAccessHandler({
   // body stays the standard empty JSON object; browsers follow Location.
   function redirect(location, cookies = []) {
     return response(302, {}, { location }, cookies);
+  }
+
+  // Event-stream responses (the AG-UI pilot) carry the same security
+  // and CORS headers as response(), with the SSE content type and the
+  // body already encoded — no JSON wrapping. Note the transport
+  // reality: this Lambda proxy shape returns the encoded stream as
+  // one buffered body through API Gateway; the events are complete
+  // and in order, but nothing here flushes incrementally.
+  function streamResponse(body) {
+    const { headers } = response(200, {});
+    return {
+      statusCode: 200,
+      headers: { ...headers, "content-type": "text/event-stream; charset=utf-8" },
+      body,
+    };
   }
 
   function requireAdmin(event) {
@@ -472,6 +489,41 @@ export function createApiAccessHandler({
           ...(body.billingAddress !== undefined ? { billingAddress: body.billingAddress } : {}),
           ...(body.taxId !== undefined ? { taxId: body.taxId } : {}),
         }));
+      }
+      if ((method === "GET" || method === "POST") && path.endsWith("/customer/live-center/ag-ui")) {
+        // AG-UI pilot (read-only): the Live Center board as a
+        // protocol event stream, reusing the board read below — no
+        // second computation, no actions, nothing written. Dark
+        // unless the pilot flag is on: the session gate runs first
+        // (an unsigned caller gets the same 401 as every /customer/*
+        // route), then the disabled-feature gate answers the plain
+        // 503. The POST shape is AG-UI's RunAgentInput; a run here
+        // changes nothing, so it takes the CSRF-checked session like
+        // every other POST in this handler. A malformed POST body is
+        // tolerated — the run ids simply fall back to server-minted
+        // ones, since the body carries nothing the read depends on.
+        const session = method === "POST" ? await customerSession(event, true) : await customerSession(event);
+        if (!agUiPilotEnabled) throw new ApiAccessError(503, "ag_ui_pilot_disabled", "The AG-UI pilot is not enabled.");
+        if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
+        let input = {};
+        if (method === "POST") {
+          try { input = parseJson(event); } catch { input = {}; }
+        }
+        const ids = agUiRunIds(input);
+        let board;
+        try {
+          board = await liveCenter.getBoard({
+            page: event.queryStringParameters?.page,
+            perPage: event.queryStringParameters?.perPage,
+          });
+        } catch (error) {
+          // The run started, so a failed board read ends in-stream
+          // with RUN_ERROR instead of the board route's JSON 502 —
+          // an AG-UI client surfaces stream errors from the stream.
+          if (error instanceof ApiAccessError) return streamResponse(encodeAgUiSse(agUiBoardErrorEvents(ids, error)));
+          throw error;
+        }
+        return streamResponse(encodeAgUiSse(agUiBoardEvents(ids, board)));
       }
       if (method === "GET" && path.endsWith("/customer/live-center/board")) {
         const session = await customerSession(event);

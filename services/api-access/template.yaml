@@ -84,6 +84,10 @@ Parameters:
     NoEcho: true
     Default: ""
     Description: Shared secret that signs the product connect-link state (zero-step onboarding S2); blank leaves the connect-link route answering 503 connect_not_configured.
+  AgUiPilotEnabled:
+    Type: String
+    Default: ""
+    Description: AG-UI pilot gate for /customer/live-center/ag-ui (the Live Center board as a read-only AG-UI event stream); only the exact value "true" enables it. Blank (the default) leaves the route answering 503 ag_ui_pilot_disabled.
   ProductAppSlug:
     Type: String
     Default: "solvelang-process-solution"
@@ -476,6 +480,7 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
