@@ -18,6 +18,7 @@ export const publicRoutes = [
   { segment: "resources", classification: "localizable-public", sitemap: true },
   { segment: "pricing", classification: "localizable-public", sitemap: false },
   { segment: "api-pricing", classification: "english-only-technical", sitemap: true },
+  { segment: "services", classification: "english-only-technical", sitemap: true },
   { segment: "n8n-workflow-validator", classification: "localizable-public", sitemap: true },
   { segment: "n8n-workflow-tester", classification: "localizable-public", sitemap: true },
   { segment: "n8n-error-checker", classification: "localizable-public", sitemap: true },
