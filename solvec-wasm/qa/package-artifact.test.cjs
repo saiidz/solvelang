@@ -9,6 +9,26 @@ const bundle = process.env.SOLVELANG_WASM_AUDIT_DIR;
 const commit = process.env.SOLVELANG_WASM_SOURCE_COMMIT;
 assert.ok(bundle && commit, "real audited artifact and exact source commit are required");
 
+// The symlink-rejection fixture needs to CREATE a symlink. Some hosts
+// forbid that for the service account (Windows without the symlink
+// privilege answers EPERM), which is a host capability, not a product
+// defect: probe once and skip only that fixture where creation is
+// impossible. Everywhere else the test runs in full.
+function symlinkCapable() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "solvelang-symlink-probe-"));
+  try {
+    const target = path.join(root, "target");
+    fs.writeFileSync(target, "");
+    fs.symlinkSync(target, path.join(root, "link"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+const SYMLINK_OK = symlinkCapable();
+
 function fixture(run) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "solvelang-package-test-"));
   try { run(root); } finally { fs.rmSync(root, { recursive: true, force: true }); }
@@ -26,7 +46,7 @@ test("packaging is deterministic and binds the exact audited source", () => fixt
 }));
 
 for (const mutation of ["missing", "extra", "corrupt", "oversized", "symlink", "manifest"]) {
-  test(`package rejects ${mutation} artifacts before execution`, () => fixture(root => {
+  test(`package rejects ${mutation} artifacts before execution`, { skip: mutation === "symlink" && !SYMLINK_OK ? "symlink creation is not permitted for this account on this host" : false }, () => fixture(root => {
     const destination = path.join(root, "package");
     packageArtifact(bundle, destination, commit);
     const wasm = path.join(destination, "solvec_wasm_bg.wasm");
