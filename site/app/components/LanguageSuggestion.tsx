@@ -30,8 +30,8 @@ export function LanguageSuggestion({ countryHintEndpoint = "" }: { countryHintEn
   if (!visibleSuggestion) return null;
   const locale = localeByCode.get(visibleSuggestion);
   if (!locale) return null;
-  return <aside role="status" className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-xl rounded-lg border border-slate-200 bg-white p-4 shadow-lg" aria-label="Optional language suggestion">
-    <p className="text-sm text-slate-800">Would you like to view SolveLang in {locale.nativeName}? This suggestion is optional.</p>
-    <div className="mt-3 flex gap-3"><button type="button" className="rounded bg-blue-700 px-3 py-2 text-sm font-semibold text-white" onClick={() => { localStorage.setItem(localeStorageKey, locale.code); window.location.assign(safeLocalePath(locale, pathname)); }}>Switch to {locale.nativeName}</button><button type="button" className="rounded border border-slate-300 px-3 py-2 text-sm font-semibold" onClick={() => { sessionStorage.setItem(suggestionDismissedStorageKey, "1"); setSuggestion(undefined); }}>Continue in English</button></div>
+  return <aside role="status" className="fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-xl rounded-lg border border-chrome-line bg-chrome p-4 shadow-lg" aria-label="Optional language suggestion">
+    <p className="text-sm text-chrome-text">Would you like to view SolveLang in {locale.nativeName}? This suggestion is optional.</p>
+    <div className="mt-3 flex gap-3"><button type="button" className="rounded bg-accent-solid px-3 py-2 text-sm font-semibold text-on-accent" onClick={() => { localStorage.setItem(localeStorageKey, locale.code); window.location.assign(safeLocalePath(locale, pathname)); }}>Switch to {locale.nativeName}</button><button type="button" className="rounded border border-chrome-line px-3 py-2 text-sm font-semibold" onClick={() => { sessionStorage.setItem(suggestionDismissedStorageKey, "1"); setSuggestion(undefined); }}>Continue in English</button></div>
   </aside>;
 }
