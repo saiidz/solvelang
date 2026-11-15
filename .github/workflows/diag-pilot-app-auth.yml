@@ -1,0 +1,130 @@
+name: Diagnose Pilot App Auth
+
+# TEMPORARY DIAGNOSTIC - measurement only, dispatch by hand and remove
+# once the pilot board 502 is fixed. The merge-governance pilot's board
+# and queue reads fail at the GitHub App installation-token mint even
+# though the Reader key, the app id, the service's auth module, and the
+# template wiring all verify good from outside. This workflow prints the
+# SHAPE of the private key at every hop of the deploy path - the
+# environment secret, the deploy's base64 transport, the deployed Lambda
+# configuration, and the service's own CloudWatch key-shape lines - so
+# the hop where the held value diverges is visible. Shapes only:
+# lengths, sha256 prefixes, and the openssl public-key fingerprint.
+# A secret value and its base64 are never printed.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  id-token: write
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, ARM64, oracle-free, solvelang-ci]
+    environment: api-access-production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: solvelang-merge-governance-pilot
+      GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+    steps:
+      - name: Shape of the environment secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GH_APP_PRIVATE_KEY byte length: $(printf '%s' "$GH_APP_PRIVATE_KEY" | wc -c)"
+          echo "GH_APP_PRIVATE_KEY sha256 prefix: $(printf '%s' "$GH_APP_PRIVATE_KEY" | sha256sum | cut -c1-16)"
+
+      - name: Shape of the deploy base64 transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          encoded="$(printf '%s' "$GH_APP_PRIVATE_KEY" | base64 -w 0)"
+          echo "base64 length: ${#encoded}"
+          echo "decoded sha256 prefix: $(printf '%s' "$encoded" | base64 -d | sha256sum | cut -c1-16)"
+
+      - name: Install AWS CLI into the job workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "$RUNNER_TEMP/awscliv2.zip"
+          python3 -m zipfile -e "$RUNNER_TEMP/awscliv2.zip" "$RUNNER_TEMP"
+          for f in "$RUNNER_TEMP/aws/install" "$RUNNER_TEMP/aws/dist/aws" "$RUNNER_TEMP/aws/dist/aws_completer"; do
+            if [[ -f "$f" ]]; then chmod +x "$f"; fi
+          done
+          "$RUNNER_TEMP/aws/install" --install-dir "$RUNNER_TEMP/aws-cli/lib" --bin-dir "$RUNNER_TEMP/aws-cli/bin"
+          echo "$RUNNER_TEMP/aws-cli/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/aws-cli/bin/aws" --version
+
+      - name: Assume pilot deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Shape of the deployed Lambda configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import base64
+          import hashlib
+          import json
+          import subprocess
+
+          def aws_json(*args):
+              out = subprocess.run(["aws", *args], capture_output=True, text=True, check=True).stdout
+              return json.loads(out) if out.strip() else {}
+
+          resources = aws_json(
+              "cloudformation", "describe-stack-resources", "--stack-name", "solvelang-merge-governance-pilot"
+          )
+          functions = [
+              r["PhysicalResourceId"]
+              for r in resources.get("StackResources", [])
+              if r.get("ResourceType") == "AWS::Lambda::Function"
+          ]
+          print("Lambda functions:", ", ".join(functions))
+          for fn in functions:
+              cfg = aws_json("lambda", "get-function-configuration", "--function-name", fn)
+              variables = (cfg.get("Environment") or {}).get("Variables") or {}
+              print(f"== {fn}")
+              print("env var names:", ", ".join(sorted(variables.keys())))
+              app_id = variables.get("MGOV_GITHUB_APP_ID")
+              print("MGOV_GITHUB_APP_ID:", app_id if app_id is not None else "<absent>")
+              key = variables.get("MGOV_GITHUB_APP_PRIVATE_KEY")
+              if key is None:
+                  print("MGOV_GITHUB_APP_PRIVATE_KEY: <absent>")
+                  continue
+              print("MGOV_GITHUB_APP_PRIVATE_KEY length:", len(key))
+              try:
+                  decoded = base64.b64decode(key)
+              except Exception as exc:
+                  print("decoded sha256 prefix: <base64 decode failed:", type(exc).__name__ + ">")
+                  continue
+              print("decoded sha256 prefix:", hashlib.sha256(decoded).hexdigest()[:16])
+              try:
+                  proc = subprocess.run(
+                      ["openssl", "rsa", "-pubout", "-outform", "DER"], input=decoded, capture_output=True
+                  )
+                  if proc.returncode == 0:
+                      fingerprint = base64.b64encode(hashlib.sha256(proc.stdout).digest()).decode()
+                      print("decoded key fingerprint: SHA256:" + fingerprint)
+                  else:
+                      print("decoded key fingerprint: <decoded bytes do not parse as an RSA key>")
+              except Exception as exc:
+                  print("decoded key fingerprint: <unavailable:", type(exc).__name__ + ">")
+          PYEOF
+
+      - name: CloudWatch key-shape and auth-error lines
+        shell: bash
+        run: |
+          start_ms="$(( ( $(date +%s) - 10800 ) * 1000 ))"
+          for fn in $(aws cloudformation describe-stack-resources --stack-name "$STACK_NAME" --query "StackResources[?ResourceType=='AWS::Lambda::Function'].PhysicalResourceId" --output text); do
+            echo "== $fn key_shape lines (last 3h)"
+            aws logs filter-log-events --log-group-name "/aws/lambda/$fn" --start-time "$start_ms" --filter-pattern "key_shape" --query 'events[].message' --output text 2>&1 | head -20 || true
+            echo "== $fn GitHubAppAuthError lines (last 3h)"
+            aws logs filter-log-events --log-group-name "/aws/lambda/$fn" --start-time "$start_ms" --filter-pattern "GitHubAppAuthError" --query 'events[].message' --output text 2>&1 | head -20 || true
+          done
