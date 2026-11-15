@@ -538,9 +538,11 @@ export function createApiAccessHandler({
         if (!liveCenter) throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
         // The minutes seam: until the runners ledger service is
         // wired, this answers { configured: false } and the Minutes
-        // tab renders its honest not-configured state.
+        // tab renders its honest not-configured state. The session
+        // is handed to the seam so the summary served is the
+        // signed-in account's own.
         if (typeof liveCenter.getMinutes !== "function") return response(200, { configured: false });
-        return response(200, await liveCenter.getMinutes());
+        return response(200, await liveCenter.getMinutes(session));
       }
       const minutesAdminMatch = path.match(/\/customer\/runner-minutes-admin\/accounts(?:\/([^/]+)\/(credit|debit|pause|resume))?$/);
       if (minutesAdminMatch && (method === "GET" || method === "POST")) {
