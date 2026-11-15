@@ -293,6 +293,72 @@ test("minutes seam proxies the ledger summary and stamps it configured", async (
   assert.equal(seen[0].options.headers["x-admin-token"], "runners-token");
 });
 
+// --- per-account minutes resolution -------------------------------------
+
+const MINUTES_CONFIG = {
+  ...PILOT_CONFIG,
+  minutesEnabled: true,
+  minutesBaseUrl: "https://runners.example.com",
+  minutesAdminToken: "runners-token",
+};
+
+function minutesService(seen, body) {
+  return createLiveCenterService({
+    config: MINUTES_CONFIG,
+    fetchImpl: async (url, options) => {
+      seen.push({ url, options });
+      return jsonResponse(body);
+    },
+  });
+}
+
+test("minutes seam fetches a non-owner session's OWN tenant summary", async () => {
+  const seen = [];
+  const service = minutesService(seen, { balances: [{ kind: "standard", minutesLeft: 5000 }] });
+  const minutes = await service.getMinutes({ accountId: "acct_customer_1", email: "customer@example.com" });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].url, "https://runners.example.com/accounts/acct_customer_1/minutes-summary");
+  assert.equal(seen[0].options.headers["x-admin-token"], "runners-token");
+  assert.equal(minutes.configured, true);
+  assert.equal(minutes.balances[0].minutesLeft, 5000);
+});
+
+test("minutes seam keeps the pilot path ONLY for the owner's full identity", async () => {
+  const seen = [];
+  const service = minutesService(seen, { balances: [] });
+  // Right account id, wrong email: not the owner - reads its own
+  // tenant directly, never the pilot name.
+  await service.getMinutes({ accountId: "acct_b234472a01a209f69aadac7f145c2dbe", email: "someone-else@example.com" });
+  assert.equal(seen[0].url, "https://runners.example.com/accounts/acct_b234472a01a209f69aadac7f145c2dbe/minutes-summary");
+  // Right email, different account: not the owner either.
+  await service.getMinutes({ accountId: "acct_customer_2", email: "saiidzeidan@gmail.com" });
+  assert.equal(seen[1].url, "https://runners.example.com/accounts/acct_customer_2/minutes-summary");
+});
+
+test("minutes seam passes an empty summary through with configured stamped", async () => {
+  const seen = [];
+  const empty = {
+    balances: [],
+    cache: {},
+    lanes: { windowLabel: "Last 24 hours", spotMinutes: 0, onDemandMinutes: 0, creditsDrawn: 0 },
+    byRepository: [],
+    recentJobs: [],
+  };
+  const service = minutesService(seen, empty);
+  const minutes = await service.getMinutes({ accountId: "acct_new_customer", email: "new@example.com" });
+  assert.equal(seen[0].url, "https://runners.example.com/accounts/acct_new_customer/minutes-summary");
+  assert.deepEqual(minutes, { ...empty, configured: true });
+});
+
+test("minutes seam fetches nothing when the session carries no account", async () => {
+  const seen = [];
+  const service = minutesService(seen, { balances: [] });
+  assert.deepEqual(await service.getMinutes(), { configured: false });
+  assert.deepEqual(await service.getMinutes({}), { configured: false });
+  assert.deepEqual(await service.getMinutes({ email: "no-account@example.com" }), { configured: false });
+  assert.equal(seen.length, 0);
+});
+
 const MINUTES_PATH = "/customer/live-center/minutes";
 
 function minutesEvent() {
@@ -322,6 +388,29 @@ test("minutes route is session-gated and serves the seam answer", async () => {
   const response = await wired.handler(minutesEvent());
   assert.equal(response.statusCode, 200);
   assert.deepEqual(JSON.parse(response.body), { configured: false });
+});
+
+test("minutes route hands the signed-in session to the seam", async () => {
+  const seen = [];
+  const { handler } = handlerFixture({
+    liveCenter: { async getMinutes(session) { seen.push(session); return { configured: false }; } },
+  });
+  const response = await handler(minutesEvent());
+  assert.equal(response.statusCode, 200);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].accountId, "acct_session");
+});
+
+test("minutes route rejects a missing session with 401 invalid_session and never calls the seam", async () => {
+  let calls = 0;
+  const { handler } = handlerFixture({
+    authenticated: false,
+    liveCenter: { async getMinutes() { calls += 1; return { configured: false }; } },
+  });
+  const response = await handler(minutesEvent());
+  assert.equal(response.statusCode, 401);
+  assert.equal(JSON.parse(response.body).code, "invalid_session");
+  assert.equal(calls, 0);
 });
 
 // --- owner minutes admin --------------------------------------------------
