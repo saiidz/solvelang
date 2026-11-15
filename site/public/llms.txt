@@ -18,6 +18,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - n8n workflow preflight: https://www.solve-lang.com/check/
 - Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
 - API pricing: https://www.solve-lang.com/api-pricing/
+- Services: https://www.solve-lang.com/services/
 - SolveLang MCP/plugin reference: https://www.solve-lang.com/mcp/
 - Public support: https://www.solve-lang.com/support/
 - Source repository: https://github.com/saiidz/solvelang
@@ -31,6 +32,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Deterministic n8n workflow preflight tools
 - Public examples and documentation
 - Rule-based workflow audit and support-triage planning previews; no remote tasks or messages are executed
+- SolveLang Runner Minutes: prepaid GitHub Actions runner capacity, live and purchasable on the SolveLang account pages; per-second metering, Standard and High-Power pools, pause controls, and label routing; purchases happen only through the site's own embedded checkout
 
 ## Deployed with gates — evidence dated September 17, 2026
 
@@ -40,6 +42,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Stripe Developer / Pro / Business prices, subscription webhook signature enforcement, and billing-failure monitoring enabled in production
 - Developer, Pro, and Business API plans are purchasable today
 - Paid priority and provider activation remain separate rollout gates
+- Merge governance (Process Solution) is in pilot with a small number of design-partner teams; there is no public price or self-serve signup
 
 Deployment evidence is not a live health feed or a general-availability claim. Current health is not independently verified by the public status page.
 
