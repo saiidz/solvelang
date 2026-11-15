@@ -885,3 +885,11 @@ test("S5c bindings shape maps to the connected view and failures map to not conn
   assert.match(connectedRepositories, /setBindings\(normalizeGitHubBindings\(null\)\)/);
   assert.match(connectedRepositories, /No GitHub account is connected yet\./);
 });
+
+test("legal footer stays compact on phones: wrapped link flow, never the tall column", () => {
+  const footer = read("app/components/LegalFooter.tsx");
+  assert.match(footer, /<nav aria-label="Policies and business contact" className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 sm:gap-x-5 sm:gap-y-2">/);
+  assert.doesNotMatch(footer, /<nav[^>]*flex-col/);
+  assert.match(footer, /<footer className="border-t border-white\/10 bg-\[#0a0e1a\] px-6 py-4 text-sm leading-6 text-slate-300 sm:py-6 sm:leading-7">/);
+  assert.doesNotMatch(footer, /<footer[^>]*bg-white/);
+});
