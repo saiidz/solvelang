@@ -11,6 +11,49 @@ SolveLang is an early-stage language and tooling project for describing business
 
 It is not another Zapier, no-code builder, or managed automation platform. Its purpose is to make workflow intent explicit: deterministic rules, AI-assisted decisions, tool access, approvals, expected outputs, failure behavior, and reviewable evidence.
 
+## Services
+
+SolveLang is the open-source language and toolchain in this repository. SolveLang the service sells four things; three are live today, and the fourth is a pilot and is labeled as one. The full list also lives on the site: [Services](https://www.solve-lang.com/services/).
+
+### Runner Minutes — live
+
+Prepaid GitHub Actions runner minutes. Buy a pack on the SolveLang site, connect GitHub once (install the app, pick your repositories, accept), and queued jobs in those repositories run automatically on fresh SolveLang-provisioned Linux machines — one machine per job, destroyed when the job ends.
+
+- Metering is per second, measured from each job's own GitHub start and finish timestamps, with a 10-second minimum per job.
+- Spot capacity serves first at 1x. If Spot cannot start a job in time, guaranteed on-demand capacity starts it instead, and those minutes draw at 2x — always shown as a separate line in your usage.
+- Two pools: Standard (2-vCPU class) and High-Power (16-vCPU class — the Speed lane, with a guaranteed start and a colocated cache).
+- Jobs pick their pool by `runs-on` label: `[self-hosted, solvelang-runners-standard]` or `[self-hosted, solvelang-runners-high-power]`. Label routing: label a pull request `solvelang` and its jobs route to SolveLang runners.
+- Pause or resume serving at any time from your account. Balances expire 12 months after purchase and are always visible. Linux runners for private repositories.
+
+Prices (USD, tax included — the price shown is the full amount charged):
+
+| Standard minutes | Price | High-Power minutes | Price |
+| --- | --- | --- | --- |
+| 5,000 | $20 | 1,000 | $80 |
+| 25,000 | $100 | 2,000 | $140 |
+| 100,000 | $400 | 3,000 | $192 |
+| | | 4,000 | $236 |
+| | | 5,000 | $275 |
+| | | 6,000 | $306 |
+| | | 7,000 | $336 |
+| | | 8,000 | $360 |
+| | | 9,000 | $382.50 |
+| | | 10,000 | $400 |
+
+Speed Lane Cache: a 10 GB colocated cache beside the high-power machines, $2 per month. Buying happens only through the site's own embedded checkout: [Buy runner minutes](https://www.solve-lang.com/account/runner-minutes-checkout/).
+
+### Language, toolchain, and Live Center — live
+
+The SolveLang language and the `solvec` CLI (below), the [browser workspace](https://www.solve-lang.com/run/), Workflow Intelligence Studio, the Repository Audit / Solve Graph / Server Audit surfaces, and Solve Context over MCP. A customer account adds the **Live Center**: a live view of your pull requests, the merge queue, checks, runners, and your minutes balance.
+
+### API access plans — live
+
+Monthly weighted-credit API plans: Developer $49/month (1,000 credits, 2 API keys), Pro $199/month (10,000 credits, 3 keys), Business $699/month (50,000 credits, 5 keys). Full comparison: [API pricing](https://www.solve-lang.com/api-pricing/).
+
+### Merge governance (Process Solution) — pilot
+
+Governed merge automation for busy repositories: it builds the exact tree that will land, tests the combined tree once, and lands it only on FULL GREEN, with a written reason for every merge and block. Process Solution is in **pilot** with a small number of design-partner teams — there is no public price and no self-serve signup yet. How it works: [Process Solution](https://www.solve-lang.com/process-solution/). The service is described here only; its source is not in this repository.
+
 ## Why SolveLang exists
 
 Business processes often live in one of three places:
@@ -29,7 +72,7 @@ SolveLang is an **open-source workflow intelligence product** with a versioned l
 
 The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, browser/WASM tooling, Workflow Intelligence Studio, bounded Repository/Server Audit surfaces, Self-Driving safety/execution contracts, a substantially implemented Solve Context layer, and a separately deployed production customer-account/API/Admin/TOTP foundation.
 
-It does **not** yet provide a stable 1.0 language contract, production managed workflow execution, broadly accepted subscription payments or enabled paid priority, a generally activated support/provider service, verified marketplace distribution, enterprise orchestration, or a general integration marketplace.
+It does **not** yet provide a stable 1.0 language contract, production managed workflow execution or enabled paid priority, a generally activated support/provider service, verified marketplace distribution, enterprise orchestration, or a general integration marketplace.
 
 Public claims should use these labels.
 
@@ -51,7 +94,7 @@ Public claims should use these labels.
 - repository-safe Self-Driving Observe/Suggest, patch/preflight, single-use execution-plan/finalization, GitHub-write and PostHog safety contracts; live provider activation and production rollout remain separately gated
 - **Solve Context** plan/pack/retrieve tools, content-addressed retrieval, Claude ↔ Codex handoff, lossless JSON/log/diff compaction, changed-path + supplied-graph ranking, pinned real-source regressions and strict agent-measurement record/report contracts through #913–#920
 - repository-qualified connected-support code with native IMAP/SMTP plus optional Gmail, durable event/action state, safe cutover/recovery, account controls and monitoring preparation; live activation remains separate
-- production API access, customer password accounts, private Admin/TOTP infrastructure and controlled-rollout API subscription billing recorded by separate production evidence; real-payment acceptance remains pending
+- production API access, customer password accounts, private Admin/TOTP infrastructure, live API subscription billing, and live Runner Minutes purchasing on the account pages
 - repository examples, tests, schemas, documentation, and launch-readiness controls
 
 ### Experimental
@@ -64,11 +107,11 @@ Public claims should use these labels.
 - optional OpenAI-backed responses
 - Studio-to-`.solve` draft generation
 - Solve Context selection/compaction quality beyond the committed regression fixtures
-- paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production; broader billing launch still requires real-payment acceptance
+- paid-priority, provider-execution, support-provider activation and managed-execution foundations that remain gated/off in production
 
 Experimental means implemented but unstable, narrow, provider-dependent, not yet broadly distributed, or not suitable for production promises.
 
-Repository validation includes hosted CI plus path-specific Rust/RustSec, WASM, MCP and trusted self-hosted lanes. CI-runner availability is not a released-platform support claim. **Solve Runners / Solblend remains a separate deferred product**, not an enabled SolveLang execution service.
+Repository validation includes hosted CI plus path-specific Rust/RustSec, WASM, MCP and trusted self-hosted lanes. CI-runner availability is not a released-platform support claim. **SolveLang Runner Minutes is a live service** (see [Services](#services)): prepaid, per-second-metered GitHub Actions runner capacity sold on the SolveLang site, separate from this repository's own CI.
 
 ### Planned / projected
 
@@ -315,7 +358,7 @@ These surfaces provide bounded read-only static/system evidence, graph explanati
 
 ### 6. Account/API/Admin foundation
 
-`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. Subscription billing is enabled for controlled rollout with real-payment acceptance pending. Paid priority/provider execution and general managed workflow execution remain off/not established live.
+`services/api-access/` and related infrastructure contain API-key, customer-account, authentication, Admin, billing-readiness and priority-readiness paths. Separately verified production evidence records API access, customer password accounts, private Admin and TOTP infrastructure as live. API subscription billing is live, and Runner Minutes purchasing is live on the account pages. Paid priority/provider execution and general managed workflow execution remain off/not established live.
 
 ### 7. Connected support
 
@@ -446,7 +489,7 @@ Its current analysis is deterministic and local-first. It should not be describe
 
 ### Is the account/API system production-ready?
 
-A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. Subscription billing is enabled for controlled rollout, with real-payment acceptance pending. The broader SaaS is not fully launched: paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
+A limited customer-account/API/Admin/TOTP foundation is separately deployed and verified. API subscription billing is live and the Developer, Pro, and Business plans are purchasable today; Runner Minutes are likewise purchasable on the account pages. The broader SaaS is not fully launched: paid priority/provider execution, connected-support activation and general managed execution remain separately gated.
 
 ## For recruiters and hiring managers
 
