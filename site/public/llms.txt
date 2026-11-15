@@ -1,6 +1,6 @@
 # SolveLang
 
-SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.
+> SolveLang is a readable, explainable workflow language designed for AI-assisted business processes.
 
 SolveLang is an open-source language and workflow intelligence product. The Rust CLI is the canonical runtime for supported `.solve` workflows. Workflow Intelligence Studio provides local-first deterministic analysis. The browser preview uses a pinned WebAssembly safe-core build with host side effects denied, not the full hosted runtime.
 
@@ -8,21 +8,20 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 
 ## Canonical resources
 
-- Website: https://www.solve-lang.com/
-- About and maturity: https://www.solve-lang.com/about/
-- Resources: https://www.solve-lang.com/resources/
-- Browser preview: https://www.solve-lang.com/run/
-- Workflow status: https://www.solve-lang.com/status/
-- Workflow audit preview: https://www.solve-lang.com/audit/
-- Support-triage demo: https://www.solve-lang.com/demo/support-triage/
-- n8n workflow preflight: https://www.solve-lang.com/check/
-- Privacy for workflow preflight: https://www.solve-lang.com/preflight-privacy/
-- API pricing: https://www.solve-lang.com/api-pricing/
-- Services: https://www.solve-lang.com/services/
-- SolveLang MCP/plugin reference: https://www.solve-lang.com/mcp/
-- Public support: https://www.solve-lang.com/support/
-- Source repository: https://github.com/saiidz/solvelang
-- License: https://github.com/saiidz/solvelang/blob/main/LICENSE
+- [Website](https://www.solve-lang.com/): SolveLang home — the language, the tools, and what is live today
+- [About and maturity](https://www.solve-lang.com/about/): What SolveLang is, its maturity, and its boundaries
+- [Resources](https://www.solve-lang.com/resources/): Public examples, documentation, and reference material
+- [Browser preview](https://www.solve-lang.com/run/): Run supported SolveLang behavior in the browser-safe core preview
+- [Workflow status](https://www.solve-lang.com/status/): Public status and component boundaries
+- [Workflow audit preview](https://www.solve-lang.com/audit/): Rule-based workflow audit preview
+- [Support-triage demo](https://www.solve-lang.com/demo/support-triage/): Rule-based support-triage planning preview
+- [n8n workflow preflight](https://www.solve-lang.com/check/): Deterministic preflight checks for n8n workflows
+- [Privacy for workflow preflight](https://www.solve-lang.com/preflight-privacy/): How workflow preflight handles your data
+- [API pricing](https://www.solve-lang.com/api-pricing/): Developer, Pro, and Business API plan pricing
+- [Services](https://www.solve-lang.com/services/): Runner minutes, API access plans, and the merge governance pilot
+- [SolveLang MCP/plugin reference](https://www.solve-lang.com/mcp/): MCP and plugin integration reference
+- [Public support](https://www.solve-lang.com/support/): How to get help with SolveLang
+- [Solutions library](https://www.solve-lang.com/solutions/): Step-by-step fixes for common SolveLang problems
 
 ## Working today
 
@@ -32,7 +31,6 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Deterministic n8n workflow preflight tools
 - Public examples and documentation
 - Rule-based workflow audit and support-triage planning previews; no remote tasks or messages are executed
-- SolveLang Runner Minutes: prepaid GitHub Actions runner capacity, live and purchasable on the SolveLang account pages; per-second metering, Standard and High-Power pools, pause controls, and label routing; purchases happen only through the site's own embedded checkout
 
 ## Deployed with gates — evidence dated September 17, 2026
 
@@ -42,7 +40,6 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - Stripe Developer / Pro / Business prices, subscription webhook signature enforcement, and billing-failure monitoring enabled in production
 - Developer, Pro, and Business API plans are purchasable today
 - Paid priority and provider activation remain separate rollout gates
-- Merge governance (Process Solution) is in pilot with a small number of design-partner teams; there is no public price or self-serve signup
 
 Deployment evidence is not a live health feed or a general-availability claim. Current health is not independently verified by the public status page.
 
@@ -66,5 +63,10 @@ Deployment evidence is not a live health feed or a general-availability claim. C
 - A proposed workflow or draft is not authorization for an external action.
 - No production uptime, SLA, adoption, revenue, or performance benchmark is claimed.
 - Private account, checkout, credentials, payment, and uploaded-workflow information is not part of the public search surface.
+
+## Optional
+
+- [Source repository](https://github.com/saiidz/solvelang): The open-source SolveLang repository — language runtime, CLI, and web tooling
+- [License](https://github.com/saiidz/solvelang/blob/main/LICENSE): The repository license
 
 Contact: hello@solve-lang.com
