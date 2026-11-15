@@ -318,6 +318,50 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
+test("services page publishes the full service list with live and pilot labels", () => {
+  const page = read("app/(english)/services/page.tsx");
+  assert.match(page, /Runner Minutes/);
+  assert.match(page, /Zero-step onboarding/);
+  assert.match(page, /Label routing/);
+  for (const price of ["$20", "$100", "$400", "$80", "$140", "$192", "$236", "$275", "$306", "$336", "$360", "$382.50"]) {
+    assert.ok(page.includes(price), `services page lists the ${price} shelf price`);
+  }
+  for (const minutes of ["5,000", "25,000", "100,000", "1,000", "10,000"]) {
+    assert.ok(page.includes(minutes), `services page lists the ${minutes}-minute pack`);
+  }
+  assert.match(page, /solvelang-runners-standard/);
+  assert.match(page, /solvelang-runners-high-power/);
+  assert.match(page, /\/account\/runner-minutes-checkout\//);
+  assert.doesNotMatch(page, /buy\.stripe\.com/);
+  assert.match(page, /API access plans/);
+  assert.ok(page.includes("$49") && page.includes("$199") && page.includes("$699"));
+  assert.match(page, /\/api-pricing\//);
+  assert.match(page, /Merge governance/);
+  assert.match(page, /Pilot status:/);
+  assert.match(page, /no public price and no self-serve signup/);
+  assert.match(page, /\/process-solution\//);
+});
+
+test("services route is registered for the sitemap and linked in primary navigation", () => {
+  assert.match(read("app/i18n/routes.ts"), /segment: "services"[^\n]+sitemap: true/);
+  assert.ok(primaryLinks.some((link) => link.href === "/services/"), "primary navigation links to /services/");
+});
+
+test("process solution page is labeled a pilot with no public price", () => {
+  const page = read("app/(english)/process-solution/page.tsx");
+  assert.match(page, />Pilot</);
+  assert.match(page, /Pilot status:/);
+  assert.match(page, /no public price and no self-serve signup yet/);
+});
+
+test("api pricing page carries the runner minutes shelf summary", () => {
+  const page = read("app/(english)/api-pricing/page.tsx");
+  assert.match(page, /Runner minutes · Live/);
+  assert.match(page, /5,000 minutes \$20/);
+  assert.match(page, /\/services\//);
+  assert.match(page, /\/account\/runner-minutes-checkout\//);
+});
+
 test("runner minutes checkout points at the live service by default", () => {
   const component = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
