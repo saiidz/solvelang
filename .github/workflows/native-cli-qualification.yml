@@ -1,5 +1,12 @@
 name: Native CLI Qualification
 
+# Runner boundary: pull_request runs execute code from the PR tree, so
+# they are planned onto GitHub-hosted runners only (macos-15 for macOS
+# ARM64, windows-2022 for Windows X64). The self-hosted fleet stays
+# reachable solely from workflow_dispatch, which only a maintainer can
+# trigger. The plan job below is the single place that mapping is
+# decided; the qualify job consumes its matrix unchanged for both
+# events, so the steps exist exactly once.
 on:
   pull_request:
     paths:
@@ -16,20 +23,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    name: Plan qualification runners
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # Maintainer-triggered: qualify on the real self-hosted fleet.
+            echo 'matrix={"include":[{"runner":["self-hosted","macOS","ARM64"],"target":"aarch64-apple-darwin","python":"python3"},{"runner":["self-hosted","Windows","X64"],"target":"x86_64-pc-windows-msvc","python":"python"}]}' >> "$GITHUB_OUTPUT"
+          else
+            # pull_request: PR-tree code runs on GitHub-hosted runners only.
+            echo 'matrix={"include":[{"runner":"macos-15","target":"aarch64-apple-darwin","python":"python3"},{"runner":"windows-2022","target":"x86_64-pc-windows-msvc","python":"python"}]}' >> "$GITHUB_OUTPUT"
+          fi
+
   qualify:
     name: Native ${{ matrix.target }}
+    needs: plan
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - runner: [self-hosted, macOS, ARM64]
-            target: aarch64-apple-darwin
-            python: python3
-          - runner: [self-hosted, Windows, X64]
-            target: x86_64-pc-windows-msvc
-            python: python
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       TARGET: ${{ matrix.target }}
