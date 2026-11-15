@@ -145,7 +145,7 @@ export default function TechnicalEvidencePage() {
               <li>npm read: <code className={code}>npm view @solvelang/mcp-server@0.3.0 version dist.integrity dist.tarball --json</code></li>
               <li>npm integrity: <code className={code}>sha512-aOH/Sg6OF17sePGlnoJ6hfFdEY4tL1Wj/ZW8A3ZmpZg9doFJpCC4IUTmhWnTZZY8iToc5y52+n9+Cu/Z68xUlA==</code></li>
               <li>Public API health: <code className={code}>https://3l3y008e94.execute-api.us-east-2.amazonaws.com/health</code>.</li>
-              <li>Live website checks: <code className={code}>/</code>, <code className={code}>/about/</code>, <code className={code}>/landing/</code>, <code className={code}>/run/</code>, <code className={code}>/check/</code>, <code className={code}>/llms.txt</code>.</li>
+              <li>Live website checks: <code className={code}>/</code>, <code className={code}>/about/</code>, <code className={code}>/run/</code>, <code className={code}>/check/</code>, <code className={code}>/llms.txt</code>.</li>
               <li>Live Stripe read-only search in the configured SolveLang merchant account: <code className={code}>metadata[&apos;plan&apos;]:&apos;developer&apos; OR metadata[&apos;plan&apos;]:&apos;pro&apos; OR metadata[&apos;plan&apos;]:&apos;business&apos;</code>. Empty results with no further page are limited search evidence, not a claim that the merchant has no payments or that the checkout is defective.</li>
             </ul>
           </div>
