@@ -129,11 +129,12 @@ export const solutions: readonly SolutionEntry[] = [
     cause: [
       "GitHub routes every job by the labels in its runs-on line. SolveLang runners answer to specific label sets. A job that asks for labels SolveLang does not answer to will wait for a different runner — that is not an error; the job is simply not addressed to SolveLang.",
     ],
-    fixIntro: "Use exactly one of these label sets in your workflow's runs-on:",
+    fixIntro: "Use one of these label sets in your workflow's runs-on:",
     fix: [
       "For Standard runners — everyday machines for ordinary jobs: `[\"self-hosted\", \"solvelang-runners-standard\"]`.",
       "For High-Power runners — larger, faster machines for heavy jobs: `[\"self-hosted\", \"solvelang-runners-high-power\"]`.",
       "Plain `[\"self-hosted\"]` also reaches SolveLang, and runs on the Standard pool.",
+      "Other labels your workflow already carries — for example, labels that pick out your own runners — can ride alongside a SolveLang label in the same runs-on line, and the job still runs on the pool the SolveLang label names; a runs-on line with no SolveLang label at all is not picked up by SolveLang.",
       "Remember that the pools are separate balances: the pool a job runs on is the balance it draws from. A Standard job never spends High-Power minutes, and a High-Power job never spends Standard minutes.",
     ],
     exampleText: "The same workflow can mix pools, job by job:",
