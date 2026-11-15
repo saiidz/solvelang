@@ -21,7 +21,7 @@ test("wasm audit places on the fleet-wide label every runner carries", async () 
   const match = text.match(/runs-on: \[([^\]]+)\]/);
   assert.ok(match, "audit job must declare a runs-on label set");
   const labels = match[1].split(",").map((label) => label.trim());
-  assert.deepEqual(labels, ["self-hosted", "solvelang-ci"]);
+  assert.deepEqual(labels, ["ubuntu-latest"]);
   for (const pin of ["Linux", "macOS", "Windows", "ARM64", "X64", "oracle-free"]) {
     assert.ok(
       !labels.includes(pin),
