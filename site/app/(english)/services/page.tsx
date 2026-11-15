@@ -116,7 +116,7 @@ export default function ServicesPage() {
           <p className="mt-4 text-sm leading-6 text-body"><strong className="text-ink">Speed Lane Cache:</strong> a 10 GB colocated cache that sits beside the high-power machines, so dependency and build caches load at local speed — $2 per month.</p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/account/runner-minutes-checkout/" className="inline-flex rounded-xl bg-accent-solid px-5 py-3 font-semibold text-ink hover:bg-panel-alt">Buy runner minutes</Link>
-            <Link href="/account/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-panel">Open your account</Link>
+            <Link href="/account/api-keys/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-panel">Open your account</Link>
           </div>
         </section>
 
