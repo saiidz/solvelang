@@ -13,7 +13,7 @@ It is not another Zapier, no-code builder, or managed automation platform. Its p
 
 ## Services
 
-SolveLang is the open-source language and toolchain in this repository. SolveLang the service sells four things; three are live today, and the fourth is a pilot and is labeled as one. The full list also lives on the site: [Services](https://www.solve-lang.com/services/).
+SolveLang is the open-source language and toolchain in this repository. SolveLang the service sells four things; three are live today, and the fourth is a pilot and is labeled as one. The full list also lives on the site: [Services](https://www.solve-lang.com/services/). Problem-by-problem guides live in the [Solutions documentation](https://www.solve-lang.com/solutions/).
 
 ### Runner Minutes — live
 
