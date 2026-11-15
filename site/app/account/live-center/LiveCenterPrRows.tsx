@@ -18,11 +18,11 @@ import {
   shortSha,
 } from "@/app/account/core/live-center";
 
-export const LC_PANEL = "rounded-2xl border border-white/10 bg-[#16203a] p-4 sm:p-5";
+export const LC_PANEL = "rounded-2xl border border-line bg-panel p-4 sm:p-5";
 export const LC_BTN =
-  "inline-block rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-slate-200 transition hover:bg-white/10";
+  "inline-block rounded-lg border border-line bg-panel px-3 py-1.5 text-sm text-body transition hover:bg-panel-alt";
 export const LC_BTN_SMALL =
-  "inline-block rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-slate-200 transition hover:bg-white/10";
+  "inline-block rounded-lg border border-line bg-panel px-2.5 py-1 text-xs text-body transition hover:bg-panel-alt";
 
 export function githubPrUrl(repoLabel: string, number: number | null): string {
   return number !== null && repoLabel
@@ -41,10 +41,10 @@ export function githubRepoUrl(repoLabel: string): string {
 }
 
 const STAGE_GLYPH: Record<LiveCenterStage, { glyph: string; className: string; label: string }> = {
-  ready: { glyph: "✓", className: "text-emerald-400", label: "Ready" },
-  failing: { glyph: "✕", className: "text-rose-400", label: "Failing" },
-  checking: { glyph: "◐", className: "lc-spin text-amber-300", label: "Checking" },
-  queue: { glyph: "◌", className: "text-slate-400", label: "In queue" },
+  ready: { glyph: "✓", className: "text-success", label: "Ready" },
+  failing: { glyph: "✕", className: "text-danger", label: "Failing" },
+  checking: { glyph: "◐", className: "lc-spin text-warning", label: "Checking" },
+  queue: { glyph: "◌", className: "text-muted", label: "In queue" },
 };
 
 export function StageIcon({ stage, className = "" }: { stage: LiveCenterStage; className?: string }) {
@@ -62,16 +62,16 @@ export function stageWord(stage: LiveCenterStage): string {
 
 export function CheckIcon({ run }: { run: LiveCenterCheckRun }) {
   if (run.status === "completed") {
-    if (run.conclusion === "success") return <span aria-hidden="true" className="inline-block shrink-0 text-emerald-400">✓</span>;
+    if (run.conclusion === "success") return <span aria-hidden="true" className="inline-block shrink-0 text-success">✓</span>;
     if (["failure", "timed_out", "action_required", "startup_failure"].includes(run.conclusion)) {
-      return <span aria-hidden="true" className="inline-block shrink-0 text-rose-400">✕</span>;
+      return <span aria-hidden="true" className="inline-block shrink-0 text-danger">✕</span>;
     }
-    return <span aria-hidden="true" className="inline-block shrink-0 text-slate-500">–</span>;
+    return <span aria-hidden="true" className="inline-block shrink-0 text-muted">–</span>;
   }
   if (run.status === "in_progress") {
-    return <span aria-hidden="true" className="lc-spin inline-block shrink-0 text-amber-300">◐</span>;
+    return <span aria-hidden="true" className="lc-spin inline-block shrink-0 text-warning">◐</span>;
   }
-  return <span aria-hidden="true" className="inline-block shrink-0 text-slate-500">○</span>;
+  return <span aria-hidden="true" className="inline-block shrink-0 text-muted">○</span>;
 }
 
 export function checkStateWord(run: LiveCenterCheckRun): string {
@@ -101,20 +101,20 @@ export function SegBar({ passed, failed, pending }: { passed: number; failed: nu
   return (
     <span
       aria-hidden="true"
-      className="flex h-1.5 w-full min-w-16 overflow-hidden rounded-full bg-white/10"
+      className="flex h-1.5 w-full min-w-16 overflow-hidden rounded-full bg-panel-alt"
     >
-      {passed > 0 ? <span className="bg-emerald-400" style={{ width: pct(passed) }} /> : null}
-      {failed > 0 ? <span className="bg-rose-400" style={{ width: pct(failed) }} /> : null}
-      {pending > 0 ? <span className="bg-amber-300" style={{ width: pct(pending) }} /> : null}
+      {passed > 0 ? <span className="bg-success" style={{ width: pct(passed) }} /> : null}
+      {failed > 0 ? <span className="bg-danger" style={{ width: pct(failed) }} /> : null}
+      {pending > 0 ? <span className="bg-warning" style={{ width: pct(pending) }} /> : null}
     </span>
   );
 }
 
 function RollupIcon({ pr }: { pr: LiveCenterPullRequest }) {
-  if (pr.failed > 0) return <span aria-hidden="true" className="text-rose-400">✕</span>;
-  if (pr.pending > 0) return <span aria-hidden="true" className="lc-spin inline-block text-amber-300">◐</span>;
-  if (pr.total > 0) return <span aria-hidden="true" className="text-emerald-400">✓</span>;
-  return <span aria-hidden="true" className="text-slate-500">◌</span>;
+  if (pr.failed > 0) return <span aria-hidden="true" className="text-danger">✕</span>;
+  if (pr.pending > 0) return <span aria-hidden="true" className="lc-spin inline-block text-warning">◐</span>;
+  if (pr.total > 0) return <span aria-hidden="true" className="text-success">✓</span>;
+  return <span aria-hidden="true" className="text-muted">◌</span>;
 }
 
 function Chip({ className, children, title }: { className: string; children: ReactNode; title?: string }) {
@@ -133,14 +133,14 @@ function CheckDetail({ pr }: { pr: LiveCenterPullRequest }) {
   const runs = pr.checkRuns;
   if (runs.length === 0) {
     return (
-      <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-400">
+      <div className="mt-3 rounded-xl border border-line bg-black/20 p-3 text-sm text-muted">
         <p>
           This board read carries the check counts but not the individual check names for this
           pull request yet. The counts above are exact; the named list appears on reads served by
           the current Live Center data.
         </p>
         {pr.failing.length > 0 ? (
-          <p className="mt-2 text-rose-300">Failing: {pr.failing.join(", ")}</p>
+          <p className="mt-2 text-danger">Failing: {pr.failing.join(", ")}</p>
         ) : null}
       </div>
     );
@@ -156,26 +156,26 @@ function CheckDetail({ pr }: { pr: LiveCenterPullRequest }) {
   const row = (run: LiveCenterCheckRun) => (
     <li key={`${run.kind}-${run.name}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 py-1">
       <CheckIcon run={run} />
-      <span className="min-w-0 break-words font-medium text-slate-200">{run.name}</span>
+      <span className="min-w-0 break-words font-medium text-body">{run.name}</span>
       {run.required === true ? (
-        <Chip className="border-sky-300/30 bg-sky-400/10 text-sky-200" title="This check must pass before the pull request can merge.">
+        <Chip className="border-accent bg-accent-soft text-accent" title="This check must pass before the pull request can merge.">
           Required
         </Chip>
       ) : null}
-      <span className="text-xs text-slate-400">
+      <span className="text-xs text-muted">
         {checkStateWord(run)}
         {run.durationMs !== null ? ` · took ${formatDurationMs(run.durationMs)}` : ""}
       </span>
     </li>
   );
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-      <p className="text-xs text-slate-400">
+    <div className="mt-3 rounded-xl border border-line bg-black/20 p-3">
+      <p className="text-xs text-muted">
         {runs.length} checks on the newest commit · {passed.length} passed · {failing.length} failed
         · {active.length} still running or queued · {gateStateLabel(pr.gate.state).toLowerCase()}
         {pr.gate.checks.length > 0 ? ` (${pr.gate.checks.join(", ")})` : ""}
       </p>
-      <ul className="mt-1 divide-y divide-white/5">
+      <ul className="mt-1 divide-y divide-line">
         {failing.map(row)}
         {active.map(row)}
         {other.map(row)}
@@ -186,11 +186,11 @@ function CheckDetail({ pr }: { pr: LiveCenterPullRequest }) {
             type="button"
             onClick={() => setShowPassed((value) => !value)}
             aria-expanded={showPassed}
-            className="text-sm text-emerald-300 underline-offset-2 hover:underline"
+            className="text-sm text-success underline-offset-2 hover:underline"
           >
             {showPassed ? "▾" : "▸"} ✓ {passed.length} checks passed{showPassed ? " — hide them" : " — show them"}
           </button>
-          {showPassed ? <ul className="divide-y divide-white/5">{passed.map(row)}</ul> : null}
+          {showPassed ? <ul className="divide-y divide-line">{passed.map(row)}</ul> : null}
         </div>
       ) : null}
     </div>
@@ -214,7 +214,7 @@ export function PrRow({
     <div className={`py-3 ${pr.draft ? "opacity-75" : ""}`}>
       <div className="flex items-start gap-3">
         {showPosition && pr.position > 0 ? (
-          <span className="w-7 shrink-0 pt-0.5 text-right text-sm font-semibold text-slate-500">
+          <span className="w-7 shrink-0 pt-0.5 text-right text-sm font-semibold text-muted">
             {pr.position}
           </span>
         ) : null}
@@ -227,7 +227,7 @@ export function PrRow({
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="min-w-0 break-words font-semibold text-slate-100 underline-offset-2 hover:underline"
+              className="min-w-0 break-words font-semibold text-ink underline-offset-2 hover:underline"
             >
               {pr.title || "Untitled pull request"}
             </a>
@@ -237,28 +237,28 @@ export function PrRow({
               </Chip>
             ) : null}
             {pr.isStackChild ? (
-              <Chip className="border-sky-300/30 bg-sky-400/10 text-sky-200" title="This pull request builds on another pull request instead of the main branch. It joins the queue properly once its parent lands.">
+              <Chip className="border-accent bg-accent-soft text-accent" title="This pull request builds on another pull request instead of the main branch. It joins the queue properly once its parent lands.">
                 Stack child
               </Chip>
             ) : null}
             {pr.needsOwner ? (
-              <Chip className="border-amber-300/30 bg-amber-400/10 text-amber-200" title="Something on this pull request is waiting on a person. The Inbox tab lists exactly what.">
+              <Chip className="border-warning bg-warning-soft text-warning" title="Something on this pull request is waiting on a person. The Inbox tab lists exactly what.">
                 Waiting on you
               </Chip>
             ) : null}
             {pr.mergeableState === "dirty" ? (
-              <Chip className="border-rose-300/30 bg-rose-400/10 text-rose-200" title="The branch and the base branch changed the same lines. The author has to resolve the conflict.">
+              <Chip className="border-danger bg-danger-soft text-danger" title="The branch and the base branch changed the same lines. The author has to resolve the conflict.">
                 Conflicts
               </Chip>
             ) : null}
             {pr.labels.map((label) => (
-              <Chip key={label} className="border-white/15 bg-white/5 text-slate-300">
+              <Chip key={label} className="border-line bg-panel text-body">
                 {label}
               </Chip>
             ))}
           </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
-            <a href={url} target="_blank" rel="noreferrer" className="font-medium text-slate-300 hover:underline">
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+            <a href={url} target="_blank" rel="noreferrer" className="font-medium text-body hover:underline">
               #{pr.number ?? "—"}
             </a>
             {pr.author ? (
@@ -271,22 +271,22 @@ export function PrRow({
               <RollupIcon pr={pr} /> {pr.passed}/{pr.total} checks
             </span>
             {pr.headSha ? (
-              <span className="font-mono text-[11px] text-slate-500">{shortSha(pr.headSha)}</span>
+              <span className="font-mono text-[11px] text-muted">{shortSha(pr.headSha)}</span>
             ) : null}
             {pr.headRef || pr.baseRef ? (
-              <span className="font-mono text-[11px] text-slate-500">
+              <span className="font-mono text-[11px] text-muted">
                 {pr.headRef || "?"} → {pr.baseRef || "?"}
               </span>
             ) : null}
             {pr.comments > 0 ? <span>💬 {pr.comments}</span> : null}
-            <span className="text-slate-500">{stageWord(pr.stage)}</span>
+            <span className="text-muted">{stageWord(pr.stage)}</span>
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="w-28 shrink-0 sm:w-36">
               <SegBar passed={pr.passed} failed={pr.failed} pending={pr.pending} />
             </span>
             {pr.review.state !== "none" ? (
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted">
                 {pr.review.state === "approved"
                   ? `✓ ${reviewStateLabel(pr.review.state)}${pr.review.approvals.length > 0 ? ` by ${pr.review.approvals.join(", ")}` : ""}`
                   : pr.review.state === "changes_requested"
@@ -295,7 +295,7 @@ export function PrRow({
               </span>
             ) : null}
             {pr.gate.state !== "unknown" ? (
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-muted">
                 {pr.gate.state === "passed" ? "✓ " : pr.gate.state === "failing" ? "✕ " : "◐ "}
                 {gateStateLabel(pr.gate.state)}
               </span>
@@ -305,7 +305,7 @@ export function PrRow({
             type="button"
             onClick={() => setExpanded((value) => !value)}
             aria-expanded={expanded}
-            className="mt-1.5 text-sm text-slate-300 underline-offset-2 hover:underline"
+            className="mt-1.5 text-sm text-body underline-offset-2 hover:underline"
           >
             {expanded ? "▾" : "▸"} {detailLabel}
           </button>
@@ -333,7 +333,7 @@ export function LcPager({
 }) {
   if (pages <= 1) {
     return total > 0 ? (
-      <p className="mt-3 text-xs text-slate-500">
+      <p className="mt-3 text-xs text-muted">
         {total} {noun}
       </p>
     ) : null;
@@ -342,7 +342,7 @@ export function LcPager({
   const start = Math.max(1, Math.min(page - 2, pages - 4));
   for (let p = start; p <= Math.min(pages, start + 4); p += 1) windowPages.push(p);
   const btn =
-    "inline-block min-w-8 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-center text-sm text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40";
+    "inline-block min-w-8 rounded-lg border border-line bg-panel px-2 py-1 text-center text-sm text-body transition hover:bg-panel-alt disabled:cursor-not-allowed disabled:opacity-40";
   return (
     <nav aria-label="Pagination" className="mt-3 flex flex-wrap items-center gap-1.5">
       <button type="button" className={btn} disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">
@@ -351,7 +351,7 @@ export function LcPager({
       {windowPages[0] > 1 ? (
         <>
           <button type="button" className={btn} onClick={() => onPage(1)}>1</button>
-          <span className="px-1 text-slate-500">…</span>
+          <span className="px-1 text-muted">…</span>
         </>
       ) : null}
       {windowPages.map((p) => (
@@ -359,7 +359,7 @@ export function LcPager({
           key={p}
           type="button"
           aria-current={p === page ? "page" : undefined}
-          className={p === page ? `${btn} border-sky-300/40 bg-sky-400/15 text-sky-100` : btn}
+          className={p === page ? `${btn} border-accent bg-accent-soft text-accent` : btn}
           onClick={() => onPage(p)}
         >
           {p}
@@ -367,14 +367,14 @@ export function LcPager({
       ))}
       {windowPages[windowPages.length - 1] < pages ? (
         <>
-          <span className="px-1 text-slate-500">…</span>
+          <span className="px-1 text-muted">…</span>
           <button type="button" className={btn} onClick={() => onPage(pages)}>{pages}</button>
         </>
       ) : null}
       <button type="button" className={btn} disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Next page">
         Next ›
       </button>
-      <span className="ml-2 text-xs text-slate-500">
+      <span className="ml-2 text-xs text-muted">
         Page {page} of {pages} · {total} {noun}
       </span>
     </nav>
@@ -383,9 +383,9 @@ export function LcPager({
 
 export function LcEmpty({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-4 text-center sm:p-6">
-      <p className="font-semibold text-slate-200">{title}</p>
-      <div className="mx-auto mt-1 max-w-xl text-sm text-slate-400">{children}</div>
+    <div className="rounded-xl border border-dashed border-line bg-panel p-4 text-center sm:p-6">
+      <p className="font-semibold text-body">{title}</p>
+      <div className="mx-auto mt-1 max-w-xl text-sm text-muted">{children}</div>
     </div>
   );
 }

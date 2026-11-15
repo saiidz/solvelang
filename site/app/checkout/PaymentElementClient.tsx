@@ -52,6 +52,13 @@ function initialCheckoutConfiguration(): CheckoutConfiguration {
   };
 }
 
+function siteStripeTheme(): "stripe" | "night" {
+  // The embedded Stripe form follows the site theme resolved before
+  // first paint: a light site gets Stripe's light theme, a dark site
+  // gets its "night" theme. Read once, when the form is created.
+  return document.documentElement.getAttribute("data-theme") === "light" ? "stripe" : "night";
+}
+
 export function PaymentElementClient() {
   const [checkoutConfiguration] = useState(initialCheckoutConfiguration);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,7 +129,7 @@ export function PaymentElementClient() {
       const elements = stripe.elements({
         clientSecret: body.clientSecret,
         appearance: {
-          theme: "stripe",
+          theme: siteStripeTheme(),
           variables: { borderRadius: "12px" },
         },
       });
@@ -309,9 +316,9 @@ export function PaymentElementClient() {
 
   return (
     <div>
-      <div className="mb-5 space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+      <div className="mb-5 space-y-4 rounded-xl border border-line bg-canvas p-4 text-sm leading-6 text-body">
         <label className="block" htmlFor="checkout-receipt-email">
-          <span className="mb-1 block font-semibold text-slate-900">Contract confirmation and Stripe receipt email</span>
+          <span className="mb-1 block font-semibold text-ink">Contract confirmation and Stripe receipt email</span>
           <input
             id="checkout-receipt-email"
             type="email"
@@ -319,7 +326,7 @@ export function PaymentElementClient() {
             value={customerEmail}
             onChange={(event) => updateCustomerEmail(event.target.value)}
             disabled={checkoutLocked}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            className="w-full rounded-lg border border-line-strong bg-panel px-3 py-2 text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent"
             required
           />
         </label>
@@ -330,7 +337,7 @@ export function PaymentElementClient() {
             checked={termsAccepted}
             onChange={(event) => updateTermsAccepted(event.target.checked)}
             disabled={checkoutLocked}
-            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
+            className="mt-1 h-4 w-4 shrink-0 rounded border-line-strong text-accent focus:ring-accent"
           />
           <span>
             I have read and agree to the Terms of Use and Refund Policy, version {TERMS_VERSION}.
@@ -343,14 +350,14 @@ export function PaymentElementClient() {
             checked={immediatePerformanceRequested}
             onChange={(event) => updateImmediatePerformanceRequested(event.target.checked)}
             disabled={checkoutLocked}
-            className="mt-1 h-4 w-4 shrink-0 rounded border-slate-400 text-blue-700 focus:ring-blue-600"
+            className="mt-1 h-4 w-4 shrink-0 rounded border-line-strong text-accent focus:ring-accent"
           />
           <span>
             I expressly request that SolveLang begin performing and delivering the digital service immediately, before the withdrawal period expires. I understand that for digital content not supplied on a tangible medium, I may lose my right of withdrawal when delivery begins. If the purchase is legally treated as a service, I understand that the right is lost after the service has been fully performed. Mandatory consumer rights remain unaffected.
           </span>
         </label>
-        <p className="text-xs leading-5 text-slate-600">
-          Read the <Link href="/terms/" className="font-semibold text-blue-700 underline">Terms of Use</Link> and <Link href="/refund-policy/" className="font-semibold text-blue-700 underline">Refund Policy</Link> before confirming.
+        <p className="text-xs leading-5 text-muted">
+          Read the <Link href="/terms/" className="font-semibold text-accent underline">Terms of Use</Link> and <Link href="/refund-policy/" className="font-semibold text-accent underline">Refund Policy</Link> before confirming.
         </p>
       </div>
       {checkoutRequirementsMet && turnstileSiteKey ? (
@@ -361,31 +368,31 @@ export function PaymentElementClient() {
         />
       ) : null}
       {error ? (
-        <div role="alert" className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm font-medium text-red-800">
+        <div role="alert" className="mb-5 rounded-2xl border border-danger bg-danger-soft p-5 text-sm font-medium text-danger">
           {error}
         </div>
       ) : null}
-      {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm font-medium text-blue-900">{status}</div> : null}
+      {status && !error ? <div role="status" className="mb-5 rounded-2xl border border-accent bg-accent-soft p-5 text-sm font-medium text-accent">{status}</div> : null}
       {checkoutRequirementsMet && turnstileSiteKey ? (
         <div className="mb-5">
           <div ref={turnstileContainerRef} className="cf-turnstile" data-sitekey={turnstileSiteKey} data-action="checkout" aria-label="Human verification" />
         </div>
       ) : null}
       <div ref={containerRef} className="min-h-[220px]" aria-label="Secure Stripe payment form" />
-      {checkoutLocked ? <button type="button" onClick={startOver} disabled={!canStartOver(submitting, status)} className="mt-4 text-sm font-semibold text-blue-700 underline disabled:cursor-not-allowed disabled:opacity-60">Start over with a different email</button> : null}
-      <section aria-label="Pre-contract payment summary" className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-        <h3 className="font-semibold text-slate-950">Workflow Preflight</h3>
+      {checkoutLocked ? <button type="button" onClick={startOver} disabled={!canStartOver(submitting, status)} className="mt-4 text-sm font-semibold text-accent underline disabled:cursor-not-allowed disabled:opacity-60">Start over with a different email</button> : null}
+      <section aria-label="Pre-contract payment summary" className="mt-6 rounded-xl border border-line bg-canvas p-4 text-sm leading-6 text-body">
+        <h3 className="font-semibold text-ink">Workflow Preflight</h3>
         <p>One-time payment: USD $49. No subscription.</p>
         <p>Automated digital report with immediate delivery after successful payment. Your workflow input and compatibility limits can affect the report; review it before acting on it.</p>
         <p>VAT and final tax treatment require operator confirmation before production checkout is enabled.</p>
         <p>Withdrawal and refund rights are summarized in the Refund Policy; mandatory consumer rights remain unaffected.</p>
-        <p>Operator and legal identity details require verification before production checkout. Support: <a href="mailto:hello@solve-lang.com" className="font-semibold text-blue-700 underline">hello@solve-lang.com</a>.</p>
+        <p>Operator and legal identity details require verification before production checkout. Support: <a href="mailto:hello@solve-lang.com" className="font-semibold text-accent underline">hello@solve-lang.com</a>.</p>
       </section>
       <button
         type="button"
         onClick={() => void submitPayment()}
         disabled={!checkoutRequirementsMet || !ready || submitting}
-        className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-6 w-full rounded-xl bg-accent-solid px-5 py-3 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Processing…" : "Pay $49 and start Workflow Preflight"}
       </button>
