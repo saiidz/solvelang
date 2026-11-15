@@ -15,10 +15,12 @@ export default function ProcessSolutionPage() {
           <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
             <div>
               <p className="text-sm font-semibold text-accent">SolveLang Process Solution</p>
+              <p className="mt-4"><span className="rounded-full border border-warning bg-warning-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-warning">Pilot</span></p>
               <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">Test the landing tree once. Merge only what was tested.</h1>
               <p className="mt-5 max-w-3xl leading-7 text-muted">
                 Process Solution is a merge-governance control plane for GitHub teams. It builds the exact tree that will land — base plus batch together — runs one capped battery on it, and lands that tree only on FULL GREEN. Every decision is written to an audit log, and the savings are proved on a scoreboard your team can read.
               </p>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-body"><strong>Pilot status:</strong> Process Solution is in pilot with a small number of design-partner teams. There is no public price and no self-serve signup yet.</p>
             </div>
             <QueueAnimation />
           </div>
