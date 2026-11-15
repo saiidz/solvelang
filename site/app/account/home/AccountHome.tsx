@@ -8,11 +8,21 @@ import {
   customerApi,
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
+import {
+  RUNNER_MINUTES_PAUSED_LINE,
+  runnerMinutesStatus,
+  runnerMinutesToggleLabel,
+  runnerMinutesTogglePath,
+  type RunnerMinutesStatus,
+} from "@/app/account/core/runner-minutes-account";
 
 // The account home: one page that points at everything in the
 // account — the API account (keys, plan, credits), the Live Center,
-// and Runner Minutes. The session is gated against the account API
-// like every account page; the minutes balance is read from the
+// and Runner Minutes — whose card also carries the start/pause
+// control the checkout page has, through the shared helpers in
+// app/account/core/runner-minutes-account. The session is gated
+// against the account API like every account page; the minutes
+// balance is read from the
 // Runner Minutes service at its own base URL, the same read the
 // checkout page makes. The service's production home is
 // https://runners.solve-lang.com — the page points there by default;
@@ -21,6 +31,7 @@ const ACCOUNT_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BAS
 const RUNNERS_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL || "https://runners.solve-lang.com");
 
 type RunnerMinutesAccountView = {
+  status?: RunnerMinutesStatus;
   balances: {
     standard: { minutes: number };
     highPower: { minutes: number };
@@ -42,6 +53,9 @@ export function AccountHome() {
   const [error, setError] = useState("");
   const [balanceState, setBalanceState] = useState<BalanceState>("loading");
   const [minutes, setMinutes] = useState<RunnerMinutesAccountView["balances"] | null>(null);
+  const [minutesStatus, setMinutesStatus] = useState<RunnerMinutesStatus>("active");
+  const [minutesBusy, setMinutesBusy] = useState(false);
+  const [minutesError, setMinutesError] = useState("");
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -67,6 +81,7 @@ export function AccountHome() {
         const view = await customerApi<RunnerMinutesAccountView>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
         if (!active) return;
         setMinutes(view.balances);
+        setMinutesStatus(runnerMinutesStatus(view));
         setBalanceState("ready");
       } catch {
         // The balance is never guessed: if the service cannot be
@@ -82,6 +97,28 @@ export function AccountHome() {
       active = false;
     };
   }, []);
+
+  async function toggleMinutes() {
+    if (!dashboard || minutesBusy) return;
+    setMinutesBusy(true);
+    setMinutesError("");
+    try {
+      await customerApi<Record<string, never>>(
+        RUNNERS_API_BASE,
+        runnerMinutesTogglePath(minutesStatus),
+        { method: "POST", csrfToken: dashboard.csrfToken },
+      );
+      // Re-read the account and render the state the service reports —
+      // never a blind local flip.
+      const view = await customerApi<RunnerMinutesAccountView>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
+      setMinutes(view.balances);
+      setMinutesStatus(runnerMinutesStatus(view));
+    } catch (caught) {
+      setMinutesError(caught instanceof Error ? caught.message : "Your minutes setting could not be changed.");
+    } finally {
+      setMinutesBusy(false);
+    }
+  }
 
   if (screen === "loading") {
     return (
@@ -174,6 +211,27 @@ export function AccountHome() {
             ) : (
               <p className="mt-4 text-slate-300">Loading your balance…</p>
             )}
+            {balanceState === "ready" && minutes ? (
+              <div className="mt-6 border-t border-white/10 pt-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">Runner minutes: {minutesStatus === "paused" ? "Paused" : "Active"}</p>
+                  <button
+                    type="button"
+                    disabled={minutesBusy}
+                    onClick={() => void toggleMinutes()}
+                    className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+                  >
+                    {runnerMinutesToggleLabel(minutesStatus)}
+                  </button>
+                </div>
+                {minutesStatus === "paused" ? (
+                  <p className="mt-2 text-sm text-slate-400">{RUNNER_MINUTES_PAUSED_LINE}</p>
+                ) : null}
+                {minutesError ? (
+                  <p role="alert" className="mt-3 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{minutesError}</p>
+                ) : null}
+              </div>
+            ) : null}
             <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
               Buy a minutes pack
             </Link>

@@ -20,6 +20,13 @@ import {
   RUNNER_MINUTES_TERMS,
   resolveRunnerMinutesPack,
 } from "@/app/account/core/runner-minutes-checkout";
+import {
+  RUNNER_MINUTES_PAUSED_LINE,
+  runnerMinutesStatus,
+  runnerMinutesToggleLabel,
+  runnerMinutesTogglePath,
+  type RunnerMinutesStatus,
+} from "@/app/account/core/runner-minutes-account";
 
 // The account session is gated against the account API (like every
 // account page); the purchase itself is served by the Runner Minutes
@@ -60,16 +67,14 @@ function isVerificationCheckoutResponse(result: CheckoutResponse): result is Ver
 // Runner Minutes account state, read from the runners service at
 // GET /customer/runner-minutes/account — the same session-authenticated
 // customer pattern as the elements-checkout call below. The status
-// field arrived with the start/pause build: "paused" means jobs do not
-// run and no minutes are used. An older service does not send the field
-// at all — absence means active, never paused.
+// semantics (a missing field reads as active, never paused), the
+// pause/resume endpoints, and the paused line live in the shared
+// core module @/app/account/core/runner-minutes-account: the
+// account home's Runner minutes card folds the same control in
+// through those helpers, so the two surfaces cannot drift.
 type RunnerMinutesAccount = {
-  status?: "active" | "paused";
+  status?: RunnerMinutesStatus;
 };
-
-function runnerMinutesStatus(account: RunnerMinutesAccount): "active" | "paused" {
-  return account.status === "paused" ? "paused" : "active";
-}
 
 type Phase = "preparing" | "select" | "creating" | "pay" | "confirming" | "success-done" | "verified-done";
 
@@ -113,11 +118,11 @@ export function EmbeddedRunnerMinutesCheckout() {
   const [payError, setPayError] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [verified, setVerified] = useState<VerificationCheckoutResponse | null>(null);
-  const [minutesStatus, setMinutesStatus] = useState<"active" | "paused">("active");
+  const [minutesStatus, setMinutesStatus] = useState<RunnerMinutesStatus>("active");
   const [minutesBusy, setMinutesBusy] = useState(false);
   const [minutesError, setMinutesError] = useState("");
 
-  async function loadRunnerMinutesStatus(): Promise<"active" | "paused"> {
+  async function loadRunnerMinutesStatus(): Promise<RunnerMinutesStatus> {
     const minutesAccount = await customerApi<RunnerMinutesAccount>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
     return runnerMinutesStatus(minutesAccount);
   }
@@ -130,7 +135,7 @@ export function EmbeddedRunnerMinutesCheckout() {
     try {
       await customerApi<Record<string, never>>(
         RUNNERS_API_BASE,
-        minutesStatus === "paused" ? "/customer/runner-minutes/resume" : "/customer/runner-minutes/pause",
+        runnerMinutesTogglePath(minutesStatus),
         { method: "POST", csrfToken: account.csrfToken },
       );
       // Re-read the account and render the state the service reports —
@@ -337,11 +342,11 @@ export function EmbeddedRunnerMinutesCheckout() {
                     onClick={() => void toggleMinutes()}
                     className="rounded-xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                   >
-                    {minutesStatus === "paused" ? "Start minutes" : "Pause minutes"}
+                    {runnerMinutesToggleLabel(minutesStatus)}
                   </button>
                 </div>
                 {minutesStatus === "paused" ? (
-                  <p className="mt-2">Your minutes are paused — jobs will not run and no minutes will be used.</p>
+                  <p className="mt-2">{RUNNER_MINUTES_PAUSED_LINE}</p>
                 ) : null}
                 {minutesError ? (
                   <div role="alert" className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">

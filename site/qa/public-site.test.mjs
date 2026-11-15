@@ -393,19 +393,28 @@ test("runner minutes buy page shows the selection and the honest not-yet-on stat
 test("runner minutes checkout carries the pause and start control with the paused message", () => {
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   // The minutes account is read from the runners service with the same
-  // session-authenticated customer pattern as the purchase call, and a
-  // missing status field (older service) reads as active, never paused.
+  // session-authenticated customer pattern as the purchase call.
   assert.match(checkout, /"\/customer\/runner-minutes\/account"/);
-  assert.match(checkout, /status\?: "active" \| "paused"/);
-  assert.match(checkout, /return account\.status === "paused" \? "paused" : "active";/);
+  // The status semantics, the pause/resume endpoints, the toggle
+  // label, and the paused line live in the shared core module — the
+  // account home's Runner minutes card folds the same control in
+  // through those helpers, so the two surfaces cannot drift.
+  const account = read("app/account/core/runner-minutes-account.ts");
+  assert.match(checkout, /from "@\/app\/account\/core\/runner-minutes-account"/);
+  assert.match(account, /export type RunnerMinutesStatus = "active" \| "paused";/);
+  assert.match(account, /return account\.status === "paused" \? "paused" : "active";/);
+  assert.match(account, /"\/customer\/runner-minutes\/pause" \| "\/customer\/runner-minutes\/resume"/);
+  assert.match(account, /status === "paused" \? "\/customer\/runner-minutes\/resume" : "\/customer\/runner-minutes\/pause";/);
+  assert.match(account, /status === "paused" \? "Start minutes" : "Pause minutes";/);
+  assert.match(account, /Your minutes are paused — jobs will not run and no minutes will be used\./);
   // The control offers Pause while active and Start while paused, and
   // the paused state carries the plain-language line verbatim.
-  assert.match(checkout, /minutesStatus === "paused" \? "Start minutes" : "Pause minutes"/);
-  assert.match(checkout, /Your minutes are paused — jobs will not run and no minutes will be used\./);
+  assert.match(checkout, /\{runnerMinutesToggleLabel\(minutesStatus\)\}/);
+  assert.match(checkout, /\{RUNNER_MINUTES_PAUSED_LINE\}/);
   // Toggling posts to the matching endpoint with the account CSRF
   // token, then re-reads the account and renders the reported state.
   const toggle = checkout.slice(checkout.indexOf("async function toggleMinutes()"), checkout.indexOf("useEffect(() => {"));
-  assert.match(toggle, /"\/customer\/runner-minutes\/resume" : "\/customer\/runner-minutes\/pause"/);
+  assert.match(toggle, /runnerMinutesTogglePath\(minutesStatus\)/);
   assert.match(toggle, /method: "POST", csrfToken: account\.csrfToken/);
   assert.match(toggle, /setMinutesStatus\(await loadRunnerMinutesStatus\(\)\)/);
   assert.match(toggle, /setMinutesError\(caught instanceof Error \? caught\.message/);
