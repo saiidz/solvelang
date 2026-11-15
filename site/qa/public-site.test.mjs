@@ -1079,3 +1079,29 @@ test("manage page sign-in views keep their endpoints and logic markers", () => {
   const signedOutAt = page.indexOf('if (screen === "signed-out") {');
   assert.ok(loadingAt !== -1 && mfaAt > loadingAt && signedOutAt > mfaAt, "loading, MFA, and signed-out views keep their order");
 });
+
+test("solutions library documents each problem in the four-part shape", () => {
+  const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
+  assert.equal(solutions.length, 8, "the library documents exactly the eight known problems");
+  assert.equal(new Set(solutions.map((entry) => entry.slug)).size, solutions.length, "solution slugs are unique");
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "solutions"[^\\n]+classification: "english-only-technical"[^\\n]+sitemap: true/);
+  const article = read("app/(english)/solutions/SolutionArticle.tsx");
+  for (const heading of ["Symptom", "Cause", "Fix", "Example"]) assert.match(article, new RegExp(`>${heading}<`), `article renders the ${heading} part`);
+  const index = read("app/(english)/solutions/page.tsx");
+  assert.match(index, /from "\.\/solutions-data"/);
+  assert.match(index, /\/solutions\/\$\{entry\.slug\}\//, "index links every entry from the shared data");
+  for (const entry of solutions) {
+    assert.ok(entry.title.length > 0 && entry.summary.length > 0, `${entry.slug} carries a title and summary`);
+    assert.ok(entry.symptom.length > 0 && entry.cause.length > 0 && entry.fix.length > 0, `${entry.slug} states a symptom, a cause, and fix steps`);
+    assert.ok(entry.exampleText || entry.exampleCode, `${entry.slug} carries an example`);
+    assert.match(routes, new RegExp(`segment: "solutions/${entry.slug}"[^\\\\n]+classification: "english-only-technical"`), `${entry.slug} is registered as an english-only technical route`);
+    const page = read(`app/(english)/solutions/${entry.slug}/page.tsx`);
+    assert.match(page, new RegExp(`alternatesForRoute\\("solutions/${entry.slug}"\\)`), `${entry.slug} page carries its own canonical alternates`);
+    assert.match(page, /SolutionArticle/, `${entry.slug} page renders through the shared article`);
+    assert.match(page, new RegExp(`solutionBySlug\\("${entry.slug}"\\)`), `${entry.slug} page renders its own entry`);
+  }
+  // Customer-facing copy states only what a customer can see or do: no
+  // internal storage, infrastructure, or implementation vocabulary.
+  assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
+});
