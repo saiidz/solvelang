@@ -155,13 +155,28 @@ function githubApp(environment) {
   return { githubApp: { enabled, ...config, slug } };
 }
 
+function productConnect(environment) {
+  // Zero-step onboarding (S2): the product connect link is dark until
+  // its binding secret is present - an absent secret leaves only the
+  // connect-link route answering 503 (connect_not_configured), never
+  // the whole service, the same optional-config discipline as the
+  // Merge Governance values above. The product app slug only builds
+  // the public install URL; it is not a credential, so it never gates
+  // `enabled` and defaults to the branded product app's slug (the same
+  // slug the pilot dispatcher passes as ProductAppSlug). The Reader
+  // app keeps its own slug config in githubApp() above.
+  const bindingSecret = environment.PRODUCT_BINDING_SECRET || undefined;
+  const slug = environment.PRODUCT_APP_SLUG || "solvelang-process-solution";
+  return { productConnect: { enabled: Boolean(bindingSecret), bindingSecret, slug } };
+}
+
 export function parseApiAccessEnvironment(environment = process.env) {
   const customer = customerAccounts(environment);
   const automation = supportAutomation(environment);
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

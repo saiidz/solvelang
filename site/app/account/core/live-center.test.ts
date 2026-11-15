@@ -291,6 +291,7 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
     ownerActions: [],
     ownerActionGroups: [],
     inboxGroups: [],
+    inboxItems: 0,
     history: { merged: [], removed: [], daily: [], period: { days: 0, entered: 0, merged: 0, removed: 0 } },
     pagination: { total: 0, page: 1, perPage: 25, pages: 1 },
     batch: { proposed: false, size: 0, batchSize: 0, baseRef: "", members: [], blockedBy: null, stoppedReason: "" },
@@ -301,10 +302,10 @@ test("normalizeLiveCenterBoard degrades a missing or empty board to empty sectio
 });
 
 test("the Live Center is linked from the account menu and the account dashboard", () => {
-  const menu = readFileSync("app/components/SiteAccountMenu.tsx", "utf8");
+  const menu = readFileSync("app/components/SiteHeader.tsx", "utf8");
   const menuLink = menu.indexOf('href="/account/live-center/"');
-  const manageAccount = menu.indexOf("Manage account");
-  assert.ok(menuLink >= 0 && manageAccount >= 0 && menuLink > manageAccount, "the account menu links Live Center after Manage account");
+  const apiAccount = menu.indexOf("API account");
+  assert.ok(menuLink >= 0 && apiAccount >= 0 && menuLink > apiAccount, "the one header menu links Live Center after API account");
   assert.ok(menu.includes(">Live Center<"), "the menu label is plain Live Center");
   const dashboard = readFileSync("app/(english)/account/api-keys/page.tsx", "utf8");
   assert.ok(dashboard.includes('href="/account/live-center/"'), "the account dashboard links to the Live Center");
@@ -454,6 +455,26 @@ test("inbox groups name the draft, review, and gate waits in plain words", () =>
   assert.ok(deployment);
   assert.equal(deployment.items[0].runId, 4242);
   assert.match(deployment.items[0].blocker, /waiting for approval/);
+});
+
+test("inboxItems is the Inbox total: every item in every group", () => {
+  const view = normalizeLiveCenterBoard(pilotBoardV2);
+  // pilotBoardV2 waits on a person twice: PR 202 waits for its review
+  // and PR 201 waits for its required gate — two groups, one item each.
+  assert.equal(view.inboxItems, 2);
+  assert.equal(
+    view.inboxItems,
+    view.inboxGroups.reduce((sum, group) => sum + group.items.length, 0),
+  );
+
+  // A deployment approval is a third waiting item, in its own group.
+  const withDeployment = normalizeLiveCenterBoard({
+    ...pilotBoardV2,
+    ownerActions: [
+      { type: "deployment_approval", pr: null, runId: 4242, waitingOn: "Deployment to production is waiting for approval" },
+    ],
+  });
+  assert.equal(withDeployment.inboxItems, 3);
 });
 
 test("state labels and formatters speak plainly", () => {
