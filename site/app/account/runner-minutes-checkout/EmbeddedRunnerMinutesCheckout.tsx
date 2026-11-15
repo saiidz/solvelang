@@ -504,7 +504,7 @@ export function EmbeddedRunnerMinutesCheckout() {
             {RUNNER_MINUTES_TERMS.map((term) => (
               <li key={term}>{term}</li>
             ))}
-            <li>GitHub has announced (and postponed) a $0.002 per minute fee for self-hosted runners in private repositories. If it ever takes effect, it is passed through at cost with 30 days&apos; notice; minutes already in your balance keep their price.</li>
+            <li>GitHub has announced (and postponed) a $0.002 per minute fee for self-hosted runners in private repositories. If it ever takes effect, SolveLang absorbs it — it is never passed through to you; minutes already in your balance keep their price.</li>
           </ul>
         </section>
       </div>
