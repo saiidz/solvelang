@@ -173,7 +173,7 @@ export function createImapSmtpSupportProvider({ credentialResolver, allowedHosts
             logger: false, debug: false, pool: false, disableFileAccess: true, disableUrlAccess: true });
           guard.onClose(() => smtp.close()); guard.check();
           const result = await smtp.sendMail({ from: binding.mailbox, to: recipient, envelope: { from: binding.mailbox, to: [recipient] }, subject, text, inReplyTo, references: inReplyTo, messageId,
-            headers: { "Auto-Submitted": "auto-replied", "X-Auto-Response-Suppress": "All" }, disableFileAccess: true, disableUrlAccess: true }); guard.check();
+            headers: { "Auto-Submitted": "auto-replied", "X-Auto-Response-Suppress": "All", "X-SES-MESSAGE-TAGS": "project=solvelang" }, disableFileAccess: true, disableUrlAccess: true }); guard.check();
           if (!Array.isArray(result.accepted) || result.accepted.length !== 1 || address(result.accepted[0]) !== recipient || result.rejected?.length || !/^250(?:[ -]|$)/.test(result.response || "") || result.messageId !== messageId) throw fail("smtp_outcome_unknown");
           return { id: messageId, acceptedForDelivery: true, delivered: false };
         });
