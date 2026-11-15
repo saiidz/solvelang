@@ -332,6 +332,8 @@ test("services page publishes the full service list with live and pilot labels",
   assert.match(page, /solvelang-runners-standard/);
   assert.match(page, /solvelang-runners-high-power/);
   assert.match(page, /\/account\/runner-minutes-checkout\//);
+  assert.match(page, /Fix it yourself/, "services page offers the fix-it-yourself help line");
+  assert.match(page, /href="\/solutions\/"/, "services page links the solutions library");
   assert.doesNotMatch(page, /buy\.stripe\.com/);
   assert.match(page, /API access plans/);
   assert.ok(page.includes("$49") && page.includes("$199") && page.includes("$699"));
@@ -1145,6 +1147,14 @@ test("solutions library documents each problem in the four-part shape", () => {
     assert.match(page, /SolutionArticle/, `${entry.slug} page renders through the shared article`);
     assert.match(page, new RegExp(`solutionBySlug\\("${entry.slug}"\\)`), `${entry.slug} page renders its own entry`);
   }
+  // The labels-and-pools entry documents marker routing on top of the
+  // three exact label sets: extra labels may ride alongside a SolveLang
+  // label, and a label set with no SolveLang label at all is not picked up.
+  const labelsAndPools = solutions.find((entry) => entry.slug === "labels-and-pools");
+  assert.ok(labelsAndPools, "labels-and-pools entry exists");
+  const labelsFix = labelsAndPools.fix.join("\n");
+  assert.match(labelsFix, /can ride alongside a SolveLang label/, "labels-and-pools states extra labels may ride alongside the SolveLang label");
+  assert.match(labelsFix, /no SolveLang label at all is not picked up/, "labels-and-pools states a label set with no SolveLang label is not picked up");
   // Customer-facing copy states only what a customer can see or do: no
   // internal storage, infrastructure, or implementation vocabulary.
   assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
