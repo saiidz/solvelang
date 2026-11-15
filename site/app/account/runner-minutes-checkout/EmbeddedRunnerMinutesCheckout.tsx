@@ -408,15 +408,15 @@ export function EmbeddedRunnerMinutesCheckout() {
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <div>
               <p className="font-semibold text-body">Standard</p>
-              <pre className="mt-2 overflow-x-auto rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.standard}</pre>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.standard}</pre>
             </div>
             <div>
               <p className="font-semibold text-body">High-power</p>
-              <pre className="mt-2 overflow-x-auto rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.highPower}</pre>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.highPower}</pre>
             </div>
             <div>
               <p className="font-semibold text-body">Speed lane</p>
-              <pre className="mt-2 overflow-x-auto rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.speedLane}</pre>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.speedLane}</pre>
             </div>
           </div>
           <h3 className="mt-8 text-lg font-bold">The terms, in plain language</h3>
