@@ -10,15 +10,15 @@ export const metadata: Metadata = {
 
 export default function PreflightPrivacyPage() {
   return (
-    <main className="min-h-screen bg-white text-slate-900">
+    <main className="min-h-screen bg-panel text-ink">
       <section className="mx-auto max-w-3xl px-6 py-20">
-        <nav aria-label="Related legal pages" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-blue-700">
+        <nav aria-label="Related legal pages" className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-accent">
           <Link href="/terms/">Terms of Use</Link>
           <Link href="/refund-policy/">Refund Policy</Link>
           <Link href="/support/">Support</Link>
         </nav>
         <h1 className="mt-8 text-4xl font-semibold">Workflow Preflight privacy</h1>
-        <div className="mt-8 space-y-6 leading-7 text-slate-600">
+        <div className="mt-8 space-y-6 leading-7 text-muted">
           <p>The initial workflow scan runs in the browser. The selected JSON file is not uploaded by Workflow Preflight v1, and the scanner does not execute nodes or call workflow services.</p>
           <p>Checkout sends an opaque random scan ID, a validated receipt and contract-confirmation email, the current terms version, and required consent flags to SolveLang&apos;s entitlement API. Stripe receives the email as its receipt email, not as PaymentIntent metadata. PaymentIntent metadata is limited to the opaque scan ID, product, terms version, server-derived acceptance timestamp, and required immediate-performance and withdrawal acknowledgements. Workflow names, node parameters, credential metadata, report contents, Turnstile tokens, IP addresses, user agents, and customer email are not included in PaymentIntent metadata.</p>
           <p>The browser may temporarily store the generated report and scan ID in session storage so a successful Stripe return can restore the purchase. Session storage is scoped to the browser tab and is removed after successful entitlement verification.</p>
