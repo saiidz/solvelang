@@ -109,7 +109,7 @@ test("one global header has no route exclusions and a real skip target", () => {
   assert.match(header, /Escape/);
   assert.match(header, /pointerdown/);
   assert.match(header, /key=\{route\}/);
-  for (const route of ["landing", "about", "api-pricing", "check", "repository-audit", "run"]) {
+  for (const route of ["about", "api-pricing", "check", "repository-audit", "run"]) {
     const page = read(`app/(english)/${route}/page.tsx`);
     assert.doesNotMatch(page, /<SiteHeader|aria-label="SolveLang home"/);
   }
@@ -166,7 +166,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(view, /export function StatusDashboard\(\)/);
   assert.match(view, /export function StatusSummary\(\)/);
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
-  assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
+  assert.match(read("app/components/homepage/LandingPage.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
   for (const id of ["account-persistence", "billing", "support", "ci-deployment", "provider-execution", "posthog", "runner-minutes"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
 });
@@ -181,7 +181,7 @@ test("incident history survives refresh without a fabricated resolution", () => 
   assert.doesNotMatch(read("app/(english)/status/page.tsx"), /No recorded incidents\./);
 });
 test("homepage, About, pricing, and status preserve controlled-rollout billing boundaries", () => {
-  const landing = read("app/(english)/landing/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
   assert.match(landing, /import \{ billingAvailability \} from "\.\.\/\.\.\/product-capabilities"/);
   assert.match(landing, /account saving are deployed\. \{billingAvailability\} Paid priority/);
   assert.doesNotMatch(landing, /Billing is enabled for controlled rollout; the first real-payment canary remains pending/);
@@ -195,7 +195,18 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   assert.match(read("app/brandFacts.ts"), /status: "production"/);
   assert.match(read("public/llms.txt"), /Production API subscription billing and checkout are live/);
   assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
-  for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+  for (const page of ["about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+});
+
+test("homepage renders its sections from the shared component and landing is not a route", () => {
+  const homepage = read("app/(english)/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.match(homepage, /import LandingPage from "\.\.\/components\/homepage\/LandingPage";/);
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  let previous = -1;
+  for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
+  assert.equal(existsSync(new URL("../app/(english)/landing", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../app/(english)/landing/page.tsx", import.meta.url)), false);
 });
 
 const {
@@ -481,12 +492,12 @@ const {
   revealDue,
   heroParallax,
   flowPaint,
-} = require("../.studio-test-dist/public-site/(english)/landing/animation.js");
-const landingAnimation = read("app/(english)/landing/LandingAnimation.tsx");
-const landingAnimCss = read("app/(english)/landing/animation.module.css");
-const landingAnimEngine = read("app/(english)/landing/animation.ts");
-const landingPage = read("app/(english)/landing/page.tsx");
-const landingCss = read("app/(english)/landing/landing.module.css");
+} = require("../.studio-test-dist/public-site/components/homepage/animation.js");
+const landingAnimation = read("app/components/homepage/LandingAnimation.tsx");
+const landingAnimCss = read("app/components/homepage/animation.module.css");
+const landingAnimEngine = read("app/components/homepage/animation.ts");
+const landingPage = read("app/components/homepage/LandingPage.tsx");
+const landingCss = read("app/components/homepage/landing.module.css");
 
 test("homepage animation math: pin and traversal progress clamp to the frame", () => {
   assert.equal(pinProgress(10, 1900, 1000), 0);
@@ -776,7 +787,7 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
 });
 
 test("homepage hero: dark island keeps light mode from hiding the headline", () => {
-  const hero = read("app/(english)/landing/InteractiveHero.tsx");
+  const hero = read("app/components/homepage/InteractiveHero.tsx");
   const globals = read("app/globals.css");
   /* the hero artwork stays dark in both themes; the section re-pins dark tokens */
   assert.match(hero, /styles\.hero} dark-island relative isolate overflow-hidden/);
