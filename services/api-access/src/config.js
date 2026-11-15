@@ -163,6 +163,15 @@ function githubApp(environment) {
   return { githubApp: { enabled, ...config, slug } };
 }
 
+function agUiPilot(environment) {
+  // The AG-UI pilot (Live Center board as a protocol event stream)
+  // is dark unless its flag is exactly "true" — the same fail-closed
+  // optional-feature discipline as the flags above. Nothing else is
+  // required to enable it: the stream reuses the Live Center board
+  // read, which keeps its own configured/not-configured gate.
+  return { agUiPilotEnabled: environment.AG_UI_PILOT_ENABLED === "true" };
+}
+
 function productConnect(environment) {
   // Zero-step onboarding (S2): the product connect link is dark until
   // its binding secret is present - an absent secret leaves only the
@@ -184,7 +193,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

@@ -339,6 +339,7 @@ const application = createApiAccessHandler({
   mergeGovernanceConnect,
   productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
+  agUiPilotEnabled: environment.agUiPilotEnabled,
   githubBindings,
   subscriptionPortal,
   subscriptionLifecycle,
