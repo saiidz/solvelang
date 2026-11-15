@@ -281,7 +281,12 @@ test("minutes seam proxies the ledger summary and stamps it configured", async (
       return jsonResponse({ balances: [{ kind: "standard", minutesLeft: 812 }] });
     },
   });
-  const minutes = await service.getMinutes();
+  // The owner's session keeps the pilot-tenant path, exactly as
+  // before the per-account resolution.
+  const minutes = await service.getMinutes({
+    accountId: "acct_b234472a01a209f69aadac7f145c2dbe",
+    email: "saiidzeidan@gmail.com",
+  });
   assert.equal(minutes.configured, true);
   assert.equal(minutes.balances[0].minutesLeft, 812);
   assert.equal(seen[0].url, "https://runners.example.com/accounts/saiidz-pilot/minutes-summary");

@@ -30,6 +30,16 @@ import { ApiAccessError } from "./service.js";
 //      reads), which is passed through with `configured: true`
 //      stamped on by this proxy.
 //
+//   The summary is PER-ACCOUNT: the route hands getMinutes() the
+//   signed-in session, and the tenant fetched is that session's own
+//   account (tenantId === accountId across this seam - see the owner
+//   panel note below). The one exception is the owner's own session,
+//   which keeps the pilot-tenant path it has always used (the ledger
+//   resolves the pilot name to the owner's tenant). A session with no
+//   resolvable account fetches nothing and answers
+//   { configured: false } - one customer's minutes are never served
+//   to another session.
+//
 // THE OWNER PANEL SEAM: the same minutes pointers also carry the
 // owner control panel. The api-handler routes under
 // /customer/runner-minutes-admin/* are gated on the signed-in
@@ -87,6 +97,21 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
     }
   }
 
+  // The owner gate's identity test, shared by isMinutesOwner (the
+  // panel gate below) and getMinutes (the tenant resolution): BOTH
+  // halves of the identity must match the signed-in session. A
+  // session carrying only the email or only the account id is not
+  // the owner.
+  function isOwnerSession(session) {
+    const accountId = config?.minutesOwnerAccountId || MINUTES_OWNER_ACCOUNT_ID;
+    const email = String(config?.minutesOwnerEmail || MINUTES_OWNER_EMAIL).toLowerCase();
+    return (
+      session?.accountId === accountId &&
+      typeof session?.email === "string" &&
+      session.email.toLowerCase() === email
+    );
+  }
+
   return {
     // Board read. Optional pagination params are forwarded to the
     // pilot only when they are clean positive integers — a malformed
@@ -110,15 +135,29 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
       return upstreamJson(url, config.adminToken);
     },
 
-    async getMinutes() {
+    async getMinutes(session) {
       if (!enabled) {
         throw new ApiAccessError(503, "mgov_not_configured", "Live Center is not configured.");
       }
       if (!minutesEnabled) {
         return { configured: false };
       }
+      // Per-account tenant resolution: the owner's session keeps the
+      // pilot-tenant path it has always used; every other signed-in
+      // account reads its OWN ledger tenant (tenantId === accountId
+      // across this seam). No resolvable account -> no upstream call
+      // and the not-configured shape, so a balance is never served
+      // to the wrong session.
+      const tenant = isOwnerSession(session)
+        ? config.tenant
+        : typeof session?.accountId === "string" && session.accountId.length > 0
+          ? session.accountId
+          : null;
+      if (!tenant) {
+        return { configured: false };
+      }
       const baseUrl = String(config.minutesBaseUrl).replace(/\/+$/, "");
-      const url = `${baseUrl}/accounts/${encodeURIComponent(config.tenant)}/minutes-summary`;
+      const url = `${baseUrl}/accounts/${encodeURIComponent(tenant)}/minutes-summary`;
       const summary = await upstreamJson(url, config.minutesAdminToken);
       return { ...summary, configured: true };
     },
@@ -127,13 +166,7 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
     // identity must match the signed-in session. A session carrying
     // only the email or only the account id is not the owner.
     isMinutesOwner(session) {
-      const accountId = config?.minutesOwnerAccountId || MINUTES_OWNER_ACCOUNT_ID;
-      const email = String(config?.minutesOwnerEmail || MINUTES_OWNER_EMAIL).toLowerCase();
-      return (
-        session?.accountId === accountId &&
-        typeof session?.email === "string" &&
-        session.email.toLowerCase() === email
-      );
+      return isOwnerSession(session);
     },
 
     async getMinutesAdminAccounts() {
