@@ -1,7 +1,7 @@
 name: Native CLI Qualification
 
 # Runner boundary: pull_request runs execute code from the PR tree, so
-# they are planned onto GitHub-hosted runners only (macos-14 for macOS
+# they are planned onto GitHub-hosted runners only (macos-15 for macOS
 # ARM64, windows-2022 for Windows X64). The self-hosted fleet stays
 # reachable solely from workflow_dispatch, which only a maintainer can
 # trigger. The plan job below is the single place that mapping is
@@ -40,7 +40,7 @@ jobs:
             echo 'matrix={"include":[{"runner":["self-hosted","macOS","ARM64"],"target":"aarch64-apple-darwin","python":"python3"},{"runner":["self-hosted","Windows","X64"],"target":"x86_64-pc-windows-msvc","python":"python"}]}' >> "$GITHUB_OUTPUT"
           else
             # pull_request: PR-tree code runs on GitHub-hosted runners only.
-            echo 'matrix={"include":[{"runner":"macos-14","target":"aarch64-apple-darwin","python":"python3"},{"runner":"windows-2022","target":"x86_64-pc-windows-msvc","python":"python"}]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"runner":"macos-15","target":"aarch64-apple-darwin","python":"python3"},{"runner":"windows-2022","target":"x86_64-pc-windows-msvc","python":"python"}]}' >> "$GITHUB_OUTPUT"
           fi
 
   qualify:
