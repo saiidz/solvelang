@@ -66,7 +66,7 @@ test("native-cli qualification: qualify consumes the planned matrix and nothing 
 test("native-cli qualification: pull_request legs are GitHub-hosted only", async () => {
   const workflow = await nativeCliWorkflow();
   const { pullRequest } = planSegments(workflow);
-  assert.ok(pullRequest.includes('"runner":"macos-14"'), "macOS ARM64 PR leg must use macos-14");
+  assert.ok(pullRequest.includes('"runner":"macos-15"'), "macOS ARM64 PR leg must use macos-15");
   assert.ok(pullRequest.includes('"runner":"windows-2022"'), "Windows X64 PR leg must use windows-2022");
   assert.ok(!pullRequest.includes("self-hosted"), "pull_request matrix must never name self-hosted");
 });
