@@ -133,6 +133,14 @@ function liveCenter(environment) {
     minutesBaseUrl && minutesAdminToken
       ? { minutesEnabled: true, minutesBaseUrl, minutesAdminToken }
       : {};
+  // The owner panel's identity overrides ride the same both-or-neither
+  // minutes wiring: they join the parsed config only when the minutes
+  // pointers are set, so the parsed shape stays unchanged until the
+  // runners service is actually wired.
+  if (minutes.minutesEnabled) {
+    if (environment.RUNNERS_LEDGER_OWNER_ACCOUNT_ID) minutes.minutesOwnerAccountId = environment.RUNNERS_LEDGER_OWNER_ACCOUNT_ID;
+    if (environment.RUNNERS_LEDGER_OWNER_EMAIL) minutes.minutesOwnerEmail = environment.RUNNERS_LEDGER_OWNER_EMAIL;
+  }
   return { liveCenter: { enabled, ...config, ...minutes } };
 }
 

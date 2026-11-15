@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const { primaryLinks, toolLinks } = require("../.studio-test-dist/public-site/components/site-navigation.js");
 const { billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
 const root = fileURLToPath(new URL("../out/", import.meta.url));
-const routes = new Set(["/", "/landing/", "/privacy-policy/", "/terms/", ...primaryLinks.map(x => x.href), ...toolLinks.map(x => x.href)]);
+const routes = new Set(["/", "/privacy-policy/", "/terms/", ...primaryLinks.map(x => x.href), ...toolLinks.map(x => x.href)]);
 for (const route of routes) test(`static export has shared navigation and valid destinations: ${route}`, () => {
   const file = join(root, route, "index.html");
   assert.ok(existsSync(file), `${route} must be exported`);

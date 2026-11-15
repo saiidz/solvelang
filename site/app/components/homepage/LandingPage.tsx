@@ -3,7 +3,7 @@ import Link from "next/link";
 import { billingAvailability } from "../../product-capabilities";
 import { InteractiveHero } from "./InteractiveHero";
 import { LandingAnimation } from "./LandingAnimation";
-import { StatusSummary } from "../status/StatusHealth";
+import { StatusSummary } from "@/app/(english)/status/StatusHealth";
 import styles from "./landing.module.css";
 import anim from "./animation.module.css";
 
@@ -21,7 +21,7 @@ function SectionEyebrow({ children, light = false, revealIndex }: { children: Re
   return <p className={`${styles.sectionEyebrow} ${light ? styles.sectionEyebrowLight : ""}`} data-reveal="" style={{ "--i": revealIndex } as React.CSSProperties}>{children}</p>;
 }
 
-export default function Page() {
+export default function LandingPage() {
   return (
     <LandingAnimation className="bg-[#f5f6f4] text-[#102036]">
       <main>

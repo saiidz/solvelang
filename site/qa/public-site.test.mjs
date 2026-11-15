@@ -109,7 +109,7 @@ test("one global header has no route exclusions and a real skip target", () => {
   assert.match(header, /Escape/);
   assert.match(header, /pointerdown/);
   assert.match(header, /key=\{route\}/);
-  for (const route of ["landing", "about", "api-pricing", "check", "repository-audit", "run"]) {
+  for (const route of ["about", "api-pricing", "check", "repository-audit", "run"]) {
     const page = read(`app/(english)/${route}/page.tsx`);
     assert.doesNotMatch(page, /<SiteHeader|aria-label="SolveLang home"/);
   }
@@ -166,7 +166,7 @@ test("homepage and status use the one public status source without turning capab
   assert.match(view, /export function StatusDashboard\(\)/);
   assert.match(view, /export function StatusSummary\(\)/);
   assert.match(read("app/(english)/status/page.tsx"), /<StatusDashboard\s*\/>/);
-  assert.match(read("app/(english)/landing/page.tsx"), /<StatusSummary\s*\/>/);
+  assert.match(read("app/components/homepage/LandingPage.tsx"), /<StatusSummary\s*\/>/);
   assert.doesNotMatch(view, /billingAvailability|accountAvailability|previewAvailability/);
   for (const id of ["account-persistence", "billing", "support", "ci-deployment", "provider-execution", "posthog", "runner-minutes"]) assert.equal(statusPage.components.find((component) => component.id === id).monitored, true, `${id} is live-probed`);
 });
@@ -181,7 +181,7 @@ test("incident history survives refresh without a fabricated resolution", () => 
   assert.doesNotMatch(read("app/(english)/status/page.tsx"), /No recorded incidents\./);
 });
 test("homepage, About, pricing, and status preserve controlled-rollout billing boundaries", () => {
-  const landing = read("app/(english)/landing/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
   assert.match(landing, /import \{ billingAvailability \} from "\.\.\/\.\.\/product-capabilities"/);
   assert.match(landing, /account saving are deployed\. \{billingAvailability\} Paid priority/);
   assert.doesNotMatch(landing, /Billing is enabled for controlled rollout; the first real-payment canary remains pending/);
@@ -195,7 +195,18 @@ test("homepage, About, pricing, and status preserve controlled-rollout billing b
   assert.match(read("app/brandFacts.ts"), /status: "production"/);
   assert.match(read("public/llms.txt"), /Production API subscription billing and checkout are live/);
   assert.equal(capabilityGroups.find((group) => group.id === "billing").description, billingAvailability);
-  for (const page of ["landing", "about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+  for (const page of ["about", "api-pricing"]) assert.doesNotMatch(read(`app/(english)/${page}/page.tsx`), /Test-mode API access, account|only in the protected SolveLang test environment/);
+});
+
+test("homepage renders its sections from the shared component and landing is not a route", () => {
+  const homepage = read("app/(english)/page.tsx");
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.match(homepage, /import LandingPage from "\.\.\/components\/homepage\/LandingPage";/);
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  let previous = -1;
+  for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
+  assert.equal(existsSync(new URL("../app/(english)/landing", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../app/(english)/landing/page.tsx", import.meta.url)), false);
 });
 
 const {
@@ -379,6 +390,31 @@ test("runner minutes buy page shows the selection and the honest not-yet-on stat
   assert.match(checkout, /if \(!account \|\| phase === "creating" \|\| !CHECKOUT_CONFIGURED\) return;/);
 });
 
+test("runner minutes checkout carries the pause and start control with the paused message", () => {
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  // The minutes account is read from the runners service with the same
+  // session-authenticated customer pattern as the purchase call, and a
+  // missing status field (older service) reads as active, never paused.
+  assert.match(checkout, /"\/customer\/runner-minutes\/account"/);
+  assert.match(checkout, /status\?: "active" \| "paused"/);
+  assert.match(checkout, /return account\.status === "paused" \? "paused" : "active";/);
+  // The control offers Pause while active and Start while paused, and
+  // the paused state carries the plain-language line verbatim.
+  assert.match(checkout, /minutesStatus === "paused" \? "Start minutes" : "Pause minutes"/);
+  assert.match(checkout, /Your minutes are paused — jobs will not run and no minutes will be used\./);
+  // Toggling posts to the matching endpoint with the account CSRF
+  // token, then re-reads the account and renders the reported state.
+  const toggle = checkout.slice(checkout.indexOf("async function toggleMinutes()"), checkout.indexOf("useEffect(() => {"));
+  assert.match(toggle, /"\/customer\/runner-minutes\/resume" : "\/customer\/runner-minutes\/pause"/);
+  assert.match(toggle, /method: "POST", csrfToken: account\.csrfToken/);
+  assert.match(toggle, /setMinutesStatus\(await loadRunnerMinutesStatus\(\)\)/);
+  assert.match(toggle, /setMinutesError\(caught instanceof Error \? caught\.message/);
+  // Pausing never disables buying: the purchase controls carry no
+  // minutes-status disable and Continue to payment still exists once.
+  assert.doesNotMatch(checkout, /disabled=\{minutesStatus/);
+  assert.equal(checkout.split("Continue to payment").length - 1, 1);
+});
+
 test("live center overview carries the queue panel with per-PR progress rows", () => {
   const board = read("app/account/live-center/LiveCenterBoard.tsx");
   assert.match(board, /The queue/);
@@ -456,12 +492,12 @@ const {
   revealDue,
   heroParallax,
   flowPaint,
-} = require("../.studio-test-dist/public-site/(english)/landing/animation.js");
-const landingAnimation = read("app/(english)/landing/LandingAnimation.tsx");
-const landingAnimCss = read("app/(english)/landing/animation.module.css");
-const landingAnimEngine = read("app/(english)/landing/animation.ts");
-const landingPage = read("app/(english)/landing/page.tsx");
-const landingCss = read("app/(english)/landing/landing.module.css");
+} = require("../.studio-test-dist/public-site/components/homepage/animation.js");
+const landingAnimation = read("app/components/homepage/LandingAnimation.tsx");
+const landingAnimCss = read("app/components/homepage/animation.module.css");
+const landingAnimEngine = read("app/components/homepage/animation.ts");
+const landingPage = read("app/components/homepage/LandingPage.tsx");
+const landingCss = read("app/components/homepage/landing.module.css");
 
 test("homepage animation math: pin and traversal progress clamp to the frame", () => {
   assert.equal(pinProgress(10, 1900, 1000), 0);
@@ -751,7 +787,7 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
 });
 
 test("homepage hero: dark island keeps light mode from hiding the headline", () => {
-  const hero = read("app/(english)/landing/InteractiveHero.tsx");
+  const hero = read("app/components/homepage/InteractiveHero.tsx");
   const globals = read("app/globals.css");
   /* the hero artwork stays dark in both themes; the section re-pins dark tokens */
   assert.match(hero, /styles\.hero} dark-island relative isolate overflow-hidden/);
@@ -908,4 +944,103 @@ test("legal footer stays compact on phones: wrapped link flow, never the tall co
   assert.doesNotMatch(footer, /<nav[^>]*flex-col/);
   assert.match(footer, /<footer className="border-t border-white\/10 bg-\[#0a0e1a\] px-6 py-4 text-sm leading-6 text-slate-300 sm:py-6 sm:leading-7">/);
   assert.doesNotMatch(footer, /<footer[^>]*bg-white/);
+});
+
+
+test("runner minutes admin page exists, is noindexed, and carries the owner controls", () => {
+  const page = read("app/(english)/account/runner-minutes-admin/page.tsx");
+  // The owner panel is a real page, noindexed like its sibling
+  // account pages, rendering the admin component.
+  assert.match(page, /robots: \{ index: false, follow: false \}/);
+  assert.match(page, /<RunnerMinutesAdmin \/>/);
+  const panel = read("app/account/runner-minutes-admin/RunnerMinutesAdmin.tsx");
+  // It reads the owner proxy's account list and shows balances and
+  // status in plain words, with the account id labeled, never raw.
+  assert.match(panel, /ADMIN_ACCOUNTS_PATH/);
+  assert.match(panel, /Account ID:/);
+  assert.match(panel, /Standard minutes/);
+  assert.match(panel, /High-power minutes/);
+  assert.match(panel, /Paused/);
+  assert.match(panel, /Active/);
+  // The four owner controls are all there.
+  assert.match(panel, /Add minutes/);
+  assert.match(panel, /Take minutes/);
+  assert.match(panel, /Pause account/);
+  assert.match(panel, /Resume account/);
+  // Destructive actions pass an explicit confirm step before firing.
+  assert.match(panel, /Yes, take them/);
+  assert.match(panel, /Yes, pause it/);
+  assert.match(panel, /This cannot be undone/);
+  // Anyone who is not the owner gets the plain not-available state.
+  assert.match(panel, /This page is not available for your account\./);
+  // The admin token is a server-side secret: nothing in the page may
+  // ever name it or the upstream admin surface.
+  assert.doesNotMatch(panel, /ADMIN_TOKEN|x-admin-token|\/admin\/accounts/);
+});
+
+
+test("manage page dashboard is regrouped under the five approved headings in order", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  const dashboard = page.slice(page.indexOf('id="sign-in-security"'));
+  const headings = [
+    ">Sign-in & security</h2>",
+    ">API keys</h2>",
+    ">Plan & billing</h2>",
+    ">Runner minutes</h2>",
+    ">Connected accounts</h2>",
+  ];
+  let last = -1;
+  for (const heading of headings) {
+    const at = dashboard.indexOf(heading);
+    assert.ok(at > last, `heading ${heading} is present and in order`);
+    last = at;
+  }
+  // The security group container carries the exact sidebar anchor.
+  assert.match(page, /<section id="sign-in-security" className="mt-10">/);
+  // Existing dashboard sections live inside their groups.
+  const securityAt = dashboard.indexOf('id="sign-in-security"');
+  const accountSecurityAt = dashboard.indexOf("Account security");
+  const apiKeysGroupAt = dashboard.indexOf(">API keys</h2>");
+  assert.ok(accountSecurityAt > securityAt && accountSecurityAt < apiKeysGroupAt, "account security card sits in the sign-in & security group");
+  const revealAt = dashboard.indexOf("Copy this key now");
+  const createAt = dashboard.indexOf("Create API key");
+  const planGroupAt = dashboard.indexOf(">Plan & billing</h2>");
+  assert.ok(revealAt > apiKeysGroupAt && revealAt < planGroupAt, "key reveal sits in the API keys group");
+  assert.ok(createAt > apiKeysGroupAt && createAt < planGroupAt, "create key form sits in the API keys group");
+  const chooseAt = dashboard.indexOf("Choose an API plan");
+  const minutesGroupAt = dashboard.indexOf(">Runner minutes</h2>");
+  assert.ok(chooseAt > planGroupAt && chooseAt < minutesGroupAt, "choose-a-plan cards sit in the plan & billing group");
+  // The runner minutes group is navigation only: it links to the Live
+  // Center minutes view and the buy-minutes checkout.
+  const minutesBlock = dashboard.slice(minutesGroupAt, dashboard.indexOf(">Connected accounts</h2>"));
+  assert.match(minutesBlock, /\/account\/live-center\//);
+  assert.match(minutesBlock, /\/account\/runner-minutes-checkout\//);
+  assert.match(minutesBlock, />Buy minutes</);
+  // The connected accounts group links to the GitHub page.
+  const connectedBlock = dashboard.slice(dashboard.indexOf(">Connected accounts</h2>"));
+  assert.match(connectedBlock, /\/account\/github\//);
+});
+
+test("manage page sign-in views keep their endpoints and logic markers", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  // Password sign-in card and its endpoint.
+  assert.match(page, /onSubmit=\{passwordLogin\}/);
+  assert.match(page, /"\/customer\/auth\/password"/);
+  // Email-link card and its endpoint.
+  assert.match(page, /onSubmit=\{requestLink\}/);
+  assert.match(page, /"\/customer\/auth\/magic-link"/);
+  // GitHub sign-in button, Turnstile widget, and magic-token redemption.
+  assert.match(page, /githubAuthorizeUrl\(API_BASE\)/);
+  assert.match(page, /Continue with GitHub/);
+  assert.match(page, /<SignInTurnstile onToken=\{setTurnstileToken\} resetSignal=\{botResetSignal\} \/>/);
+  assert.match(page, /magicTokenFromHash\(window\.location\.hash\)/);
+  assert.match(page, /"\/customer\/auth\/verify"/);
+  // MFA view handler and endpoint.
+  assert.match(page, /onSubmit=\{verifyMfa\}/);
+  assert.match(page, /"\/customer\/auth\/totp\/verify"/);
+  // The three screens are still the top-level views, in source order.
+  const loadingAt = page.indexOf('if (screen === "loading")');
+  const mfaAt = page.indexOf('if (screen === "signed-out" && mfaChallenge)');
+  const signedOutAt = page.indexOf('if (screen === "signed-out") {');
+  assert.ok(loadingAt !== -1 && mfaAt > loadingAt && signedOutAt > mfaAt, "loading, MFA, and signed-out views keep their order");
 });
