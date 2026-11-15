@@ -3,6 +3,7 @@ export const primaryLinks = [
   { label: "Support demo", href: "/demo/support-triage/" },
   { label: "Browser preview", href: "/run/" },
   { label: "Studio", href: "/studio/" },
+  { label: "Services", href: "/services/" },
   { label: "Docs", href: "/resources/" },
   { label: "Status", href: "/status/" },
 ] as const;
