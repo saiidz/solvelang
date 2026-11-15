@@ -105,6 +105,19 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /api[_-]?key/i);
 });
 
+test("llms.txt follows the llmstxt.org structure", () => {
+  // H1 first, then a blockquote summary (the two elements the previous
+  // free-prose file lacked when PageSpeed flagged it, Nov 15 2026).
+  assert.match(llms, /^# SolveLang\n\n> SolveLang is a readable, explainable workflow language/);
+  // Resource entries are markdown links with a one-line description,
+  // never bare URLs after a colon.
+  assert.match(llms, /^- \[Website\]\(https:\/\/www\.solve-lang\.com\/\): /m);
+  assert.doesNotMatch(llms, /^- [^\[]+: https:\/\//m);
+  // Secondary links live under the spec's Optional section.
+  assert.match(llms, /## Optional\n\n- \[Source repository\]\(https:\/\/github\.com\/saiidz\/solvelang\): /);
+  assert.match(llms, /- \[License\]\(https:\/\/github\.com\/saiidz\/solvelang\/blob\/main\/LICENSE\): /);
+});
+
 test("homepage follows the approved product order and preserves maturity boundaries", () => {
   const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
   let previous = -1;
