@@ -64,7 +64,7 @@ export default function ServicesPage() {
           </ul>
 
           <h3 className="mt-8 text-xl font-bold">Two pools, chosen by label</h3>
-          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them.</p>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them. Faster processing is never free — it always has one of two prices: work that starts on guaranteed On-demand capacity consumes minutes at 2×, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices below. Standard work on Spot capacity draws at the plain 1× rate.</p>
           <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
             <div>
               <p className="font-semibold text-body">Standard</p>
