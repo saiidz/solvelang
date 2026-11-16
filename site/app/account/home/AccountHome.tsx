@@ -72,9 +72,17 @@ export function AccountHome() {
         setScreen("home");
       } catch (caught) {
         if (!active) return;
-        setScreen("signed-out");
         const apiError = caught instanceof CustomerApiError ? caught : null;
-        if (apiError && apiError.status !== 401) setError(apiError.message);
+        if (apiError?.status === 401) {
+          // Proven signed out: the door is the real sign-in page,
+          // not a bare gate with two links — send the visitor
+          // straight there. Any other failure (the API unreachable,
+          // say) keeps the gate below with its error showing.
+          window.location.replace("/account/api-keys/");
+          return;
+        }
+        setScreen("signed-out");
+        if (apiError) setError(apiError.message);
         return;
       }
       try {

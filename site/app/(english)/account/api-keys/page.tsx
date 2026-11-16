@@ -54,6 +54,7 @@ export default function ApiKeysPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyForm, setBusyForm] = useState<"password" | "link" | null>(null);
   const [botWebsite, setBotWebsite] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [botResetSignal, setBotResetSignal] = useState(0);
@@ -105,11 +106,14 @@ export default function ApiKeysPage() {
           window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
           if (!active) return;
           if (verifyFailed || !result) {
+            // A dead link explains itself — and nothing more. It
+            // must never sign anyone out: the session check below
+            // decides the screen, so a visitor who is already
+            // signed in keeps their dashboard (with this message
+            // showing on it), and only a visitor with no session
+            // lands on the sign-in form.
             setError("That sign-in link is invalid or expired — request a fresh one below.");
-            setScreen("signed-out");
-            return;
-          }
-          if (result.mfaRequired && result.challengeToken) {
+          } else if (result.mfaRequired && result.challengeToken) {
             setMfaChallenge(result.challengeToken);
             setScreen("signed-out");
             return;
@@ -144,6 +148,7 @@ export default function ApiKeysPage() {
   async function passwordLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    setBusyForm("password");
     setError("");
     setNotice("");
     try {
@@ -157,6 +162,7 @@ export default function ApiKeysPage() {
       setError(caught instanceof Error ? caught.message : "Sign-in failed.");
     } finally {
       resetBotCheck();
+      setBusyForm(null);
       setBusy(false);
     }
   }
@@ -186,6 +192,7 @@ export default function ApiKeysPage() {
   async function requestLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    setBusyForm("link");
     setError("");
     setNotice("");
     try {
@@ -198,6 +205,7 @@ export default function ApiKeysPage() {
       setError(caught instanceof Error ? caught.message : "Sign-in could not be started.");
     } finally {
       resetBotCheck();
+      setBusyForm(null);
       setBusy(false);
     }
   }
@@ -494,7 +502,7 @@ export default function ApiKeysPage() {
               <label className="block text-sm font-medium" htmlFor="password">Password</label>
               <input id="password" type="password" required value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-<button disabled={busy || botCheckPending} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">{busy ? "Signing in…" : "Sign in"}</button>
+<button disabled={busy || botCheckPending} className="w-full rounded-xl bg-accent-solid px-5 py-3 font-bold text-on-accent disabled:opacity-60">{busyForm === "password" ? "Signing in…" : "Sign in"}</button>
               {botCheckPending ? <p className="text-sm text-muted">Complete the quick check above, then this button turns on.</p> : null}
             </form>
           </section>
@@ -507,7 +515,7 @@ export default function ApiKeysPage() {
               <label className="block text-sm font-medium" htmlFor="email">Email address</label>
               <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-xl border border-line bg-black/20 px-4 py-3 outline-none focus:border-accent" placeholder="you@company.com" />
               <SignInHoneypot value={botWebsite} onChange={setBotWebsite} />
-<button disabled={busy || botCheckPending} className="w-full rounded-xl border border-accent px-5 py-3 font-bold text-accent disabled:opacity-60">{busy ? "Sending…" : "Email me a sign-in link"}</button>
+<button disabled={busy || botCheckPending} className="w-full rounded-xl border border-accent px-5 py-3 font-bold text-accent disabled:opacity-60">{busyForm === "link" ? "Sending…" : "Email me a sign-in link"}</button>
               {botCheckPending ? <p className="text-sm text-muted">Complete the quick check above, then this button turns on.</p> : null}
             </form>
           </section>
