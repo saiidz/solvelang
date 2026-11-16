@@ -1171,6 +1171,34 @@ test("solutions library documents each problem in the four-part shape", () => {
   assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
 });
 
+test("speed is never free: the minutes surfaces state both speed prices", () => {
+  const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
+  // How minutes work states the rule in its cause: faster processing
+  // costs either 2x minutes on On-demand capacity or High-Power minutes
+  // bought at the High-Power prices; Spot work on Standard machines
+  // bills at the plain 1x rate.
+  const howMinutes = solutions.find((entry) => entry.slug === "how-minutes-work");
+  assert.ok(howMinutes, "how-minutes-work entry exists");
+  const howCause = howMinutes.cause.join("\n");
+  assert.match(howCause, /Faster processing is never free/, "how-minutes-work states speed is never free");
+  assert.match(howCause, /On-demand capacity starts a job right away, and consumes your minutes at 2×/, "how-minutes-work names the 2x quota price");
+  assert.match(howCause, /High-Power pool runs a job on larger, faster premium machines/, "how-minutes-work names the premium-machine price");
+  assert.match(howCause, /bought at the higher High-Power prices/, "how-minutes-work names the High-Power prices");
+  assert.match(howCause, /bills at the plain 1× rate/, "how-minutes-work keeps the plain Spot rate as the baseline");
+  // Labels and pools states the same rule where the pools are explained.
+  const labelsAndPools = solutions.find((entry) => entry.slug === "labels-and-pools");
+  assert.ok(labelsAndPools, "labels-and-pools entry exists");
+  const labelsFix = labelsAndPools.fix.join("\n");
+  assert.match(labelsFix, /Speed is never free/, "labels-and-pools states speed is never free");
+  assert.match(labelsFix, /High-Power minutes put a job on larger, faster premium machines at the High-Power prices/, "labels-and-pools names the premium-machine price");
+  assert.match(labelsFix, /On-demand capacity starts a job right away while consuming minutes at 2×/, "labels-and-pools names the 2x quota price");
+  // The services page states the rule in its Runner Minutes section.
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /Faster processing is never free/, "services page states speed is never free");
+  assert.match(services, /work that starts on guaranteed On-demand capacity consumes minutes at 2×/, "services page names the 2x quota price");
+  assert.match(services, /draws from the separate High-Power balance, bought at the High-Power prices below/, "services page names the premium-machine price");
+});
+
 test("status summary label and link use the theme accent token, never the low-contrast hexes", () => {
   const source = read("app/(english)/status/StatusHealth.tsx");
   // On the light theme the homepage evidence card sits on bg-panel (white);
