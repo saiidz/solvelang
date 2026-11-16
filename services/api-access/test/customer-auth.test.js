@@ -282,6 +282,41 @@ test("wrong and unknown password logins return the same public error", async () 
   }
 });
 
+test("a password attempt on an account with no password names the email-link door", async () => {
+  const { sent, service } = setup();
+  // The account exists — it was created by verifying an email
+  // sign-in link — but password sign-in was never set up for it, so
+  // no password can ever match. The login must say that plainly and
+  // point at the secure email link instead of the generic
+  // wrong-password error.
+  await verifiedSession(service, sent);
+
+  await assert.rejects(
+    () => service.loginWithPassword(
+      { identifier: "dev@example.com", password: "any password at all" },
+      { sourceIp: "203.0.113.10" },
+    ),
+    (error) => error instanceof ApiAccessError
+      && error.statusCode === 401
+      && error.code === "password_not_configured"
+      && error.publicMessage === "This account does not have a password yet. Sign in with the secure email link, then set up password sign-in from the Sign-in & security section of your account page.",
+  );
+
+  // An identifier with no account behind it keeps the generic
+  // error — the no-password distinction never leaks account
+  // existence for addresses that were never registered.
+  await assert.rejects(
+    () => service.loginWithPassword(
+      { identifier: "nobody@example.com", password: "any password at all" },
+      { sourceIp: "203.0.113.11" },
+    ),
+    (error) => error instanceof ApiAccessError
+      && error.statusCode === 401
+      && error.code === "invalid_credentials"
+      && error.publicMessage === "Email/username or password is incorrect.",
+  );
+});
+
 test("a username is unique and cannot be changed through password reset", async () => {
   const first = setup();
   const firstVerified = await verifiedSession(first.service, first.sent, "first@example.com");
