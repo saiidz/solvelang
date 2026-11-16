@@ -52,6 +52,7 @@ export const solutions: readonly SolutionEntry[] = [
     cause: [
       "Metering is based on the job itself. SolveLang reads the job's own start and finish times from GitHub and bills for that time, per second. You are only ever billed for jobs a SolveLang runner actually ran: if one of your own runners, or a GitHub-hosted runner, ran the job instead, it costs you nothing here.",
       "Two things shape the final number: a 10-second minimum per job, and a capacity multiplier. Jobs on Spot capacity bill at 1×. Jobs on On-demand capacity — the guaranteed-start option — bill at 2×, and that multiplier is always shown as its own separate line, never hidden inside the time.",
+      "Faster processing is never free — it always has one of two prices. On-demand capacity starts a job right away, and consumes your minutes at 2×. The High-Power pool runs a job on larger, faster premium machines, and its minutes are a separate balance bought at the higher High-Power prices. Ordinary work — Standard machines on Spot capacity — bills at the plain 1× rate.",
       "At a zero balance, no machines launch at all: a job simply waits for another runner. You can never be charged beyond the minutes you have bought.",
     ],
     fixIntro: "How to read the numbers you see:",
@@ -136,6 +137,7 @@ export const solutions: readonly SolutionEntry[] = [
       "Plain `[\"self-hosted\"]` also reaches SolveLang, and runs on the Standard pool.",
       "Other labels your workflow already carries — for example, labels that pick out your own runners — can ride alongside a SolveLang label in the same runs-on line, and the job still runs on the pool the SolveLang label names; a runs-on line with no SolveLang label at all is not picked up by SolveLang.",
       "Remember that the pools are separate balances: the pool a job runs on is the balance it draws from. A Standard job never spends High-Power minutes, and a High-Power job never spends Standard minutes.",
+      "Speed is never free, and there are two ways to buy it: High-Power minutes put a job on larger, faster premium machines at the High-Power prices, and On-demand capacity starts a job right away while consuming minutes at 2×. Standard jobs on Spot capacity bill at the plain 1× rate.",
     ],
     exampleText: "The same workflow can mix pools, job by job:",
     exampleCode: [
