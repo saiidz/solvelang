@@ -573,6 +573,50 @@ test("sign-in buttons wait for the bot check only when it is configured", () => 
   assert.equal((page.match(/Complete the quick check above, then this button turns on\./g) || []).length, 2);
 });
 
+test("a dead sign-in link never decides the screen by itself", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  // The verify-failure branch sets the explanation and nothing
+  // else: the session read after it decides between the dashboard
+  // and the sign-in form, so a signed-in visitor who opens a used
+  // link keeps their session (and sees the banner on it).
+  const start = page.indexOf("if (verifyFailed || !result)");
+  assert.ok(start >= 0, "the verify-failure branch exists");
+  const failureBranch = page.slice(start, page.indexOf("else if (result.mfaRequired", start));
+  assert.match(failureBranch, /setError\("That sign-in link is invalid or expired/);
+  assert.doesNotMatch(failureBranch, /setScreen\(/);
+  assert.doesNotMatch(failureBranch, /return;/);
+  // The session read still follows the token branch.
+  assert.ok(page.indexOf('"/customer/account"', start) > start);
+});
+
+test("each sign-in button shows busy only for its own form", () => {
+  const page = read("app/(english)/account/api-keys/page.tsx");
+  assert.match(page, /const \[busyForm, setBusyForm\] = useState<"password" \| "link" \| null>\(null\);/);
+  assert.match(page, /\{busyForm === "password" \? "Signing in\u2026" : "Sign in"\}/);
+  assert.match(page, /\{busyForm === "link" \? "Sending\u2026" : "Email me a sign-in link"\}/);
+  assert.doesNotMatch(page, /\{busy \? "Signing in\u2026"/);
+  assert.doesNotMatch(page, /\{busy \? "Sending\u2026"/);
+  // Each submit handler marks its own form and clears the mark in
+  // its finally block.
+  const passwordLogin = page.slice(page.indexOf("async function passwordLogin"), page.indexOf("async function verifyMfa"));
+  assert.match(passwordLogin, /setBusyForm\("password"\)/);
+  assert.match(passwordLogin, /setBusyForm\(null\)/);
+  const requestLink = page.slice(page.indexOf("async function requestLink"), page.indexOf("async function saveCredentials"));
+  assert.match(requestLink, /setBusyForm\("link"\)/);
+  assert.match(requestLink, /setBusyForm\(null\)/);
+});
+
+test("signed-out account home sends visitors to the real sign-in page", () => {
+  const home = read("app/account/home/AccountHome.tsx");
+  // A 401 from the session read is proof of signed-out: the visitor
+  // is sent to the full sign-in page instead of the bare two-link
+  // gate. Any other failure keeps the gate, with its error showing.
+  const gate = home.slice(home.indexOf("async function prepare()"), home.indexOf("async function toggleMinutes()"));
+  assert.match(gate, /apiError\?\.status === 401/);
+  assert.match(gate, /window\.location\.replace\("\/account\/api-keys\/"\)/);
+  assert.match(gate, /setScreen\("signed-out"\)/);
+});
+
 const {
   STUDIO_DWELL_MS,
   STUDIO_START_MS,
