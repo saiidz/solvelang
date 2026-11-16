@@ -533,6 +533,20 @@ export function createCustomerAuthService({
     }
 
     if (!(await passwordMatches(account, password))) {
+      if (account && !passwordConfigured(account)) {
+        // The account exists but has no password yet: it arrived
+        // through an email sign-in link and password sign-in was
+        // never set up. Say so plainly and point at the door that
+        // works, instead of the generic wrong-password message that
+        // sends the customer in circles. A wrong password on an
+        // account WITH a password — and an unknown identifier —
+        // keep the generic error below, unchanged.
+        throw new ApiAccessError(
+          401,
+          "password_not_configured",
+          "This account does not have a password yet. Sign in with the secure email link, then set up password sign-in from the Sign-in & security section of your account page.",
+        );
+      }
       throw new ApiAccessError(401, "invalid_credentials", "Email/username or password is incorrect.");
     }
     const version = authVersionOf(account.authVersion);
