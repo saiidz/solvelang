@@ -17,6 +17,7 @@ import { createAdminCustomerService } from "./admin-customer-service.js";
 import { createDynamoAdminCrmStore } from "./admin-crm-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
 import { createDynamoPublicStatusStore } from "./public-status-store.js";
+import { createDynamoRunTelemetryStore } from "./run-telemetry-store.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
 import { createAccessGuardedCustomerAuthService } from "./customer-auth-access-service.js";
@@ -179,6 +180,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
 const environment = parseApiAccessEnvironment(process.env);
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const publicStatusStore = createDynamoPublicStatusStore(documentClient, process.env.PUBLIC_STATUS_TABLE);
+const runTelemetry = createDynamoRunTelemetryStore(documentClient, process.env.RUN_TELEMETRY_TABLE);
 const statusProbes = { accountPersistence: undefined, billing: undefined };
 const store = createDynamoApiAccessStore(documentClient, environment);
 const usageReader = createDynamoCustomerUsageReader(documentClient, environment.usageTable);
@@ -347,6 +349,7 @@ const application = createApiAccessHandler({
   botProtection,
   githubApp,
   publicStatusReader: () => publicStatusStore.readSnapshot(),
+  runTelemetry,
   statusProbes,
 });
 

@@ -312,6 +312,19 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  RunTelemetryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: counterKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: counterKey
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
   ApiSubscriptionEventsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -453,6 +466,7 @@ Resources:
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          RUN_TELEMETRY_TABLE: !Ref RunTelemetryTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
           API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
@@ -509,6 +523,12 @@ Resources:
             Action:
               - dynamodb:GetItem
             Resource: !GetAtt PublicStatusTable.Arn
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource: !GetAtt RunTelemetryTable.Arn
         - !If
           - AdminCrmFeatureEnabled
           - DynamoDBCrudPolicy:
@@ -555,6 +575,18 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /public/status/{proxy+}
+            Method: GET
+        TelemetryRun:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /telemetry/run
+            Method: POST
+        TelemetryRunCounts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /telemetry/run-counts
             Method: GET
         CustomerMagicLink:
           Type: HttpApi
