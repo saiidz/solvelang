@@ -45,7 +45,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="capabilities" className="scroll-mt-24 bg-[#f5f6f4] py-24 sm:py-32" aria-labelledby="capabilities-title">
+        <section id="capabilities" className="light-island scroll-mt-24 bg-[#f5f6f4] py-24 sm:py-32" aria-labelledby="capabilities-title">
           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
             <SectionEyebrow revealIndex={0}>02 / THREE THINGS SOLVE DOES DIFFERENTLY</SectionEyebrow>
             <h2 id="capabilities-title" className="mt-5 max-w-4xl text-balance text-4xl font-semibold tracking-[-0.055em] sm:text-6xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Understand the work before the work moves.</h2>
@@ -93,7 +93,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <div className={anim.scPinWrap} data-sc-wrap="">
+        <div className={`${anim.scPinWrap} light-island`} data-sc-wrap="">
         <section id="solve-context" className={`scroll-mt-24 bg-[#eaf0f3] py-24 sm:py-32 ${anim.scPin}`} aria-labelledby="context-title" data-sc-section="">
           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
             <SectionEyebrow revealIndex={0}>04 / SOLVE CONTEXT</SectionEyebrow>
@@ -121,7 +121,7 @@ export default function LandingPage() {
 
         <section className={styles.builtBand} aria-labelledby="built-title"><div className="mx-auto flex max-w-[1440px] flex-col gap-7 px-5 py-10 sm:px-8 lg:flex-row lg:items-center lg:justify-between lg:px-10"><div data-reveal style={{ "--i": 0 } as React.CSSProperties}><p className={styles.builtEyebrow}>BUILT WITH SOLVE</p><h2 id="built-title" className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-ink sm:text-3xl">Real usage, not a logo wall.</h2><p className="mt-2 text-[#bacbdf]">This space grows with real workflows, integrations, and projects built with Solve. Nothing here is fabricated.</p></div><a href="mailto:hello@solve-lang.com?subject=Built%20with%20Solve%20project" className={styles.builtLink} data-reveal style={{ "--i": 1 } as React.CSSProperties}>Building something with Solve? Submit your project <span aria-hidden="true">↗</span></a></div></section>
 
-        <section id="quickstart" className="scroll-mt-24 bg-[#f5f6f4] py-24 sm:py-32" aria-labelledby="quickstart-title"><div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10"><SectionEyebrow revealIndex={0}>06 / START WITH SOLVE</SectionEyebrow><h2 id="quickstart-title" className="mt-5 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Choose the surface that fits the job.</h2><div className={styles.quickstartGrid}>
+        <section id="quickstart" className="light-island scroll-mt-24 bg-[#f5f6f4] py-24 sm:py-32" aria-labelledby="quickstart-title"><div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10"><SectionEyebrow revealIndex={0}>06 / START WITH SOLVE</SectionEyebrow><h2 id="quickstart-title" className="mt-5 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Choose the surface that fits the job.</h2><div className={styles.quickstartGrid}>
           <article data-reveal style={{ "--i": 0 } as React.CSSProperties}><span>01 / NO INSTALLATION</span><h3>Open Studio</h3><p>Model a workflow visually, inspect risks, run scenarios, and preserve the evidence. Projects save locally first.</p><Link href="/studio/" className={styles.darkInlineLink}>Open Studio <span aria-hidden="true">↗</span></Link></article>
           <article data-reveal style={{ "--i": 1 } as React.CSSProperties}><span>02 / PUBLISHED MCP SERVER</span><h3>Connect Solve Context</h3><p>Use the published MCP server with supported agent workflows. Point it at the workspace to inspect using <code>SOLVELANG_WORKSPACE_ROOT</code>.</p><pre><code>npx --yes @solvelang/mcp-server</code></pre><Link href="/mcp-setup/" className={styles.darkInlineLink}>View MCP setup <span aria-hidden="true">↗</span></Link></article>
           <article data-reveal style={{ "--i": 2 } as React.CSSProperties}><span>03 / CANONICAL RUST CLI</span><h3>Run SolveLang locally</h3><p>Validate and run a repository example with the canonical native runtime.</p><pre><code>{`git clone https://github.com/saiidz/solvelang.git\ncd solvelang/solvec\ncargo run -- validate ../examples/support_triage.solve\ncargo run -- run ../examples/support_triage.solve`}</code></pre><details className={styles.nativeDetails}><summary>Native release build</summary><pre><code>{`cargo build --release\n./target/release/solvec run ../examples/hello.solve`}</code></pre></details></article>
