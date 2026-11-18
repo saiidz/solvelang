@@ -936,6 +936,25 @@ test("homepage hero: dark island keeps light mode from hiding the headline", () 
   assert.match(hero, /id="homepage-title"[^>]*text-ink/);
 });
 
+test("homepage light bands: light island keeps dark mode from hiding band text", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  const globals = read("app/globals.css");
+  /* the bands' artwork stays light in both themes; the band re-pins light tokens */
+  assert.match(globals, /\.light-island \{/);
+  const island = globals.slice(globals.indexOf(".light-island {"));
+  assert.match(island, /--ink: #0f172a;/);
+  assert.match(island, /--body-text: #1e293b;/);
+  assert.match(island, /--accent: #0969da;/);
+  /* every literal-light band carries the island: capabilities (bg #f5f6f4),
+     the Solve Context pin wrap (#eaf0f3), and quickstart (bg #f5f6f4) */
+  assert.match(landing, /id="capabilities" className="light-island /);
+  assert.match(landing, /id="quickstart" className="light-island /);
+  assert.match(landing, /scPinWrap\} light-island/);
+  /* the capability headline stays on the token; the island is what makes it resolve light */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.capabilityRow h3 \{[^}]*color: var\(--ink\)/);
+});
+
 test("sidebar Work group carries the Audit entry after Server audit, active on /audit/", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   // One plain single-line entry: the Audit label, the /audit/ target,
