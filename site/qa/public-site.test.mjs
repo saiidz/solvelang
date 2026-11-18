@@ -955,6 +955,28 @@ test("homepage light bands: light island keeps dark mode from hiding band text",
   assert.match(landingCss, /\.capabilityRow h3 \{[^}]*color: var\(--ink\)/);
 });
 
+test("homepage boundary section: text rides theme tokens, not literal light hexes", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  const boundary = landing.slice(landing.indexOf('id="boundaries"'), landing.indexOf('id="capabilities"'));
+  assert.match(boundary, /id="boundary-title"/);
+  /* the section background follows the theme (var(--canvas) below); its text must
+     follow too \u2014 the literal light hexes were written for the dark canvas and
+     wash out on the light one (measured 1.9:1 / 1.5:1 / 2.1:1 settled) */
+  assert.doesNotMatch(boundary, /text-\[#8ab7ff\]/);
+  assert.doesNotMatch(boundary, /text-\[#c2cfdf\]/);
+  assert.doesNotMatch(boundary, /text-\[#9fb0c6\]/);
+  /* the heading accent span rides the accent token, like the section eyebrow
+     and the ledger numbers in the same section */
+  assert.match(boundary, /<span className="text-accent">Explicit boundaries\.<\/span>/);
+  /* both intro paragraphs ride the body-text token, like the body copy of the
+     sibling theme-following sections (evidenceLedger p, benchmarkBand p) */
+  assert.match(boundary, /text-xl leading-8 text-body/);
+  assert.match(boundary, /mt-6 max-w-2xl leading-8 text-body/);
+  /* and the section itself stays theme-following \u2014 no island conversion */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.boundarySection \{ background: var\(--canvas\); \}/);
+});
+
 test("sidebar Work group carries the Audit entry after Server audit, active on /audit/", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   // One plain single-line entry: the Audit label, the /audit/ target,
