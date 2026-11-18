@@ -1344,3 +1344,14 @@ test("status summary label and link use the theme accent token, never the low-co
   assert.match(source, /tracking-widest text-accent">Current public status/);
   assert.match(source, /ml-auto text-sm font-semibold text-accent underline/);
 });
+
+test("run page counts anonymous runs and says so plainly", () => {
+  const page = read("app/(english)/run/page.tsx");
+  assert.match(page, /Your code never leaves your browser \u2014 the only thing we record is an anonymous count that a run happened, never your code or its content\./);
+  assert.doesNotMatch(page, /Nothing is sent to a server/);
+  assert.match(page, /sendRunBeacon\("start"\)/);
+  assert.match(page, /sendRunBeacon\("complete"\)/);
+  const beacon = read("app/run/runBeacon.ts");
+  assert.match(beacon, /\/telemetry\/run/);
+  assert.match(beacon, /JSON\.stringify\(\{ event \}\)/);
+});

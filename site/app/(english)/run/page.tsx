@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createCanonicalPreviewSession, type WorkspaceFile } from "../../run/canonicalRunner";
+import { sendRunBeacon } from "../../run/runBeacon";
 import wasmPin from "../../run/wasmPreviewPin.json";
 const ENTRY_NAME = "main.solve";
 const starterFiles: WorkspaceFile[] = [
@@ -49,8 +50,10 @@ export default function RunPage() {
   async function runCode() {
     if (busy) return;
     setOutput(""); setError("");
+    sendRunBeacon("start");
     const result = await session.runWorkspace(files, ENTRY_NAME, setStatus);
     if (result.kind === "busy") return;
+    sendRunBeacon("complete");
     if (result.ok) { setOutput(result.output); setStatus("success"); return; }
     setOutput(result.output); setError(result.error || "The local runtime could not complete this script."); setStatus("error");
   }
@@ -82,7 +85,7 @@ export default function RunPage() {
   return (
     <main className="min-h-screen bg-canvas px-5 py-8 text-ink sm:px-6 sm:py-12">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-10"><div className="flex flex-wrap items-center gap-3"><span className="rounded-full border border-accent bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-accent">Run</span><span className="rounded-full border border-line bg-panel px-3 py-1 text-xs font-semibold text-body">Browser-only · no server execution</span></div><h1 className="mt-5 text-4xl font-bold tracking-tight md:text-6xl">Run SolveLang in your browser.</h1><p className="mt-5 max-w-3xl text-lg leading-8 text-body">The full SolveLang language — including multi-file modules — runs locally in your browser from a pinned, audited WebAssembly build of the Rust runtime. Nothing is sent to a server.</p></header>
+        <header className="mb-10"><div className="flex flex-wrap items-center gap-3"><span className="rounded-full border border-accent bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-accent">Run</span><span className="rounded-full border border-line bg-panel px-3 py-1 text-xs font-semibold text-body">Browser-only · no server execution</span></div><h1 className="mt-5 text-4xl font-bold tracking-tight md:text-6xl">Run SolveLang in your browser.</h1><p className="mt-5 max-w-3xl text-lg leading-8 text-body">The full SolveLang language — including multi-file modules — runs locally in your browser from a pinned, audited WebAssembly build of the Rust runtime. Your code never leaves your browser — the only thing we record is an anonymous count that a run happened, never your code or its content.</p></header>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-panel px-4 py-3"><div className="flex items-center gap-3"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${status === "error" ? "bg-warning" : status === "success" ? "bg-success" : "bg-accent-solid"}`} /><span className="text-sm font-semibold">{statusLabel}</span></div><p className="text-sm text-muted">Pinned audited build <code className="text-body">{wasmPin.sourceCommit.slice(0, 7)}</code></p></div>
         <div className="grid gap-6 lg:grid-cols-2">
           <section aria-labelledby="script-heading" className="rounded-3xl border border-line bg-panel p-5 shadow-2xl">
