@@ -977,6 +977,56 @@ test("homepage boundary section: text rides theme tokens, not literal light hexe
   assert.match(landingCss, /\.boundarySection \{ background: var\(--canvas\); \}/);
 });
 
+test("homepage sweep sections: text rides theme tokens, not literal light hexes", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  /* the four remaining theme-following spots flagged after the boundary fix:
+     the Studio, Evidence, Built, and Final sections sit on var(--canvas) /
+     var(--panel), so their text must follow the theme too — the literal pale
+     hexes were written for the dark canvas and wash out on the light one
+     (measured 1.55:1 / 1.59:1 / 1.58:1 / 2.27:1 / 1.65:1 / 1.87:1 settled) */
+  for (const literal of ["#a7cbff", "#b9c8dc", "#b8c9d9", "#93a9bd", "#bacbdf", "#8cb9ff"]) {
+    assert.ok(!landing.includes(`text-[${literal}]`), `literal ${literal} is gone from the homepage`);
+  }
+  /* general guard: no literal text hex survives anywhere on the homepage's
+     theme-following sections. The only literal text hexes allowed in the file
+     are the theme-independent page root (dark text on its own literal light
+     background) and the Solve Context light island (dark literals on its
+     fixed light background) — strip exactly those two contexts, then the
+     rest of the file must be clean. */
+  const withoutRoot = landing.replace('<LandingAnimation className="bg-[#f5f6f4] text-[#102036]">', "");
+  assert.ok(withoutRoot.length < landing.length, "the page-root literal context was found and stripped");
+  const contextStart = withoutRoot.indexOf('id="solve-context"');
+  const contextEnd = withoutRoot.indexOf('id="evidence"');
+  assert.ok(contextStart >= 0 && contextEnd > contextStart, "the Solve Context island slice is located");
+  const themeFollowing = withoutRoot.slice(0, contextStart) + withoutRoot.slice(contextEnd);
+  assert.doesNotMatch(themeFollowing, /text-\[#[0-9a-fA-F]{3,8}\]/);
+  /* Studio: the statement line is blue emphasis, so it rides the accent token
+     like the boundary heading span; the paragraph under it rides body-text,
+     like the .studioActions paragraphs in the same section */
+  const studio = landing.slice(landing.indexOf('id="studio"'), landing.indexOf('id="solve-context"'));
+  assert.match(studio, /tracking-\[-0\.03em\] text-accent sm:text-3xl/);
+  assert.match(studio, /mt-5 max-w-xl leading-8 text-body/);
+  /* Evidence: both the lead and the body paragraph ride the body-text token,
+     like the evidenceLedger and benchmarkBand paragraphs in the same section */
+  const evidence = landing.slice(landing.indexOf('id="evidence"'), landing.indexOf("styles.builtBand"));
+  assert.match(evidence, /text-xl leading-8 text-body/);
+  assert.match(evidence, /max-w-lg leading-8 text-body/);
+  /* Built band: its paragraph rides the body-text token, like the
+     benchmarkBand paragraph on the sibling band */
+  const built = landing.slice(landing.indexOf("styles.builtBand"), landing.indexOf('id="quickstart"'));
+  assert.match(built, /mt-2 text-body/);
+  /* Final: the heading accent span rides the accent token — the same device
+     as the boundary heading span fixed before it */
+  const final = landing.slice(landing.indexOf("styles.finalSection"));
+  assert.match(final, /<span className="text-accent">Automate second\.<\/span>/);
+  /* and the sections themselves stay theme-following — no island conversion */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.studioSection \{ background: var\(--canvas\);/);
+  assert.match(landingCss, /\.evidenceSection \{ background: var\(--canvas\); \}/);
+  assert.match(landingCss, /\.builtBand \{[^}]*background: var\(--panel\);/);
+  assert.match(landingCss, /\.finalSection \{ background: var\(--canvas\);/);
+});
+
 test("sidebar Work group carries the Audit entry after Server audit, active on /audit/", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   // One plain single-line entry: the Audit label, the /audit/ target,
