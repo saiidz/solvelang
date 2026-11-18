@@ -31,9 +31,9 @@ export default function LandingPage() {
           <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-24 sm:px-8 lg:grid-cols-[1fr_0.85fr] lg:gap-24 lg:px-10 lg:py-32">
             <div>
               <SectionEyebrow light revealIndex={0}>01 / THE BOUNDARY</SectionEyebrow>
-              <h2 id="boundary-title" className="mt-6 max-w-3xl text-balance text-4xl font-semibold leading-[1.07] tracking-[-0.055em] text-ink sm:text-6xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Real capability. <span className="text-[#8ab7ff]">Explicit boundaries.</span></h2>
-              <p className="mt-7 max-w-2xl text-xl leading-8 text-[#c2cfdf]" data-reveal style={{ "--i": 2 } as React.CSSProperties}>Solve shows you what it actually did — and what it did not do.</p>
-              <p className="mt-6 max-w-2xl leading-8 text-[#9fb0c6]" data-reveal style={{ "--i": 3 } as React.CSSProperties}>The browser preview runs a pinned WebAssembly build of SolveLang&apos;s canonical safe core with host side effects denied. It runs supported language behavior and returns deterministic output within that boundary without pretending it has unrestricted access to your machine, infrastructure, or production systems.</p>
+              <h2 id="boundary-title" className="mt-6 max-w-3xl text-balance text-4xl font-semibold leading-[1.07] tracking-[-0.055em] text-ink sm:text-6xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Real capability. <span className="text-accent">Explicit boundaries.</span></h2>
+              <p className="mt-7 max-w-2xl text-xl leading-8 text-body" data-reveal style={{ "--i": 2 } as React.CSSProperties}>Solve shows you what it actually did — and what it did not do.</p>
+              <p className="mt-6 max-w-2xl leading-8 text-body" data-reveal style={{ "--i": 3 } as React.CSSProperties}>The browser preview runs a pinned WebAssembly build of SolveLang&apos;s canonical safe core with host side effects denied. It runs supported language behavior and returns deterministic output within that boundary without pretending it has unrestricted access to your machine, infrastructure, or production systems.</p>
               <Link href="/run/" className={styles.lightInlineLink} data-reveal style={{ "--i": 4 } as React.CSSProperties}>Inspect the browser-safe preview <span aria-hidden="true">↗</span></Link>
             </div>
             <div className={styles.boundaryLedger} aria-label="Capability distinctions">
