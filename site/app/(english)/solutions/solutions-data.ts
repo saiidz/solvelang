@@ -188,6 +188,35 @@ export const solutions: readonly SolutionEntry[] = [
     ],
     exampleText: "Your card shows Standard: 4,200 minutes and High-Power: 300 minutes. A Standard job that bills 10 minutes leaves Standard at 4,190 minutes — High-Power stays at 300.",
   },
+  {
+    slug: "job-protection",
+    title: "SolveLang Job Protection: the guarantees behind every minute",
+    summary: "The built-in protections that stand behind every runner minute: you are billed only for work SolveLang machines actually ran, exactly once, to the second — and a dead machine or a lost reading never silently becomes your problem.",
+    symptom: [
+      "On any CI setup, the same accidents happen: a cloud machine disappears mid-job and the job fails with no failed step. A job runs on the wrong runner and still gets billed. A finished job is charged twice — or never charged at all, until a confusing correction shows up later.",
+      "You cannot prevent the accidents. What matters is who absorbs them — you, or the platform.",
+    ],
+    cause: [
+      "Cloud capacity is reclaimed, processes die, and platforms hand jobs to whichever runner is free. None of that is under your control, and none of it is rare.",
+      "SolveLang is built on the assumption that jobs, machines, and its own processes will die and misbehave — and that the customer should never pay for that, in money or in lost work. That stance has a name: SolveLang Job Protection. It is not an add-on or a tier; it is included in every runner minute, and every protection in it is live and proven, not announced.",
+    ],
+    fixIntro: "The guarantees — each one is part of how the service runs today:",
+    fix: [
+      "Billed only for work SolveLang machines ran. If one of your own runners, or a GitHub-hosted runner, ran the job instead, you are never billed for it.",
+      "Billed exactly once. The same job can never be charged twice — metering is recorded per job, and a second charge for the same job is refused.",
+      "Metered to the second, from GitHub's own timestamps. Your bill comes from each job's own start and finish times on GitHub. Time spent waiting in the queue, and time spent starting the machine, is never billed. A 10-second minimum applies per job.",
+      "Pools never mix. A job draws only from the pool it ran on — Standard work never spends High-Power minutes, and High-Power work never spends Standard minutes. Your workflow labels choose the pool.",
+      "A safety net re-checks every finished job. If the live reading for a job is ever lost — for example, the process watching it dies — a reconciliation pass re-reads completed jobs and meters any SolveLang work that was missed, exactly once. Nothing is silently unbilled, and nothing is billed twice.",
+      "A machine is never shut down from under a running job. When a job finishes, its machine is checked before it is shut down; if that machine is busy running a different job, it stays up until that job completes.",
+      "A job that loses its machine is re-served, never stranded. If the machine prepared for a job is claimed by another job, your job gets a fresh machine — it is never left waiting forever.",
+      "Machines are spread out on purpose. Jobs launch across several availability zones and machine families, so one cloud capacity event cannot take down a whole set of jobs at once.",
+      "The whole queue is always read. However busy your repository gets, every queued job is seen — the engine reads the full queue and the full runner list, never just the first page. Stale runner registrations are swept automatically, so a dead registration can never block a job from starting.",
+      "Failures leave evidence. When a call to a provider fails, the provider's actual error is recorded — not just a status code — and every call the engine makes is time-bounded, so a hung response can never freeze your serving.",
+      "Checkout cannot mis-charge you. Switching packs during one checkout visit simply refreshes the payment area for the new pack, and an unfinished payment is never a charge.",
+      "Your numbers are only ever yours. Balances and usage are resolved to your own account alone; if an account cannot be resolved, the view fails closed rather than showing another customer's numbers.",
+    ],
+    exampleText: "What this looks like in our own record: a full audit of our billing found 54 of 54 sampled charges matching GitHub's job timestamps to the second, and not one duplicate among 63 charges. When the safety net's view was widened, its first pass found about 1,033 minutes of engine work that had run earlier and never been charged — and charged each of those jobs exactly once. And in the termination guard's first 21 minutes live, it held machines for other jobs three times; every protected job finished successfully.",
+  },
 ];
 
 export function solutionBySlug(slug: string): SolutionEntry {
