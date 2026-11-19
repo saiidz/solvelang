@@ -105,6 +105,34 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /api[_-]?key/i);
 });
 
+test("llms pricing facts state the exact shelf and the embedded-payment fact", () => {
+  assert.match(llms, /## Pricing facts/);
+  for (const fact of [
+    "5,000 minutes for $20",
+    "25,000 minutes for $100",
+    "100,000 minutes for $400",
+    "1,000 minutes for $80",
+    "2,000 minutes for $140",
+    "3,000 minutes for $192",
+    "4,000 minutes for $236",
+    "5,000 minutes for $275",
+    "6,000 minutes for $306",
+    "7,000 minutes for $336",
+    "8,000 minutes for $360",
+    "9,000 minutes for $382.50",
+    "10,000 minutes for $400",
+    "10-second minimum per job",
+    "on-demand capacity draw at 2\u00d7",
+    "Developer $49",
+    "Pro $199",
+    "Business $699",
+    "only through its own embedded payment pages",
+    "never through external checkout pages",
+  ]) {
+    assert.ok(llms.includes(fact), `llms.txt states: ${fact}`);
+  }
+});
+
 test("llms.txt follows the llmstxt.org structure", () => {
   // H1 first, then a blockquote summary (the two elements the previous
   // free-prose file lacked when PageSpeed flagged it, Nov 15 2026).
