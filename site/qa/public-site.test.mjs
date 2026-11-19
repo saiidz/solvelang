@@ -1351,6 +1351,39 @@ test("solutions library documents each problem in the four-part shape", () => {
   assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
 });
 
+test("job protection page states only the proven guarantees", () => {
+  const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
+  const entry = solutions.find((candidate) => candidate.slug === "job-protection");
+  assert.ok(entry, "job-protection entry exists");
+  const fix = entry.fix.join("\n");
+  // The membership list: every guarantee below traces to a live, proven
+  // cure in the fixes-to-product study or the reliability pack that
+  // landed after it. If a guarantee is ever removed from the service,
+  // it must leave this page in the same change.
+  assert.match(fix, /never billed for it/, "job protection states engine-runner-only billing");
+  assert.match(fix, /can never be charged twice/, "job protection states exactly-once billing");
+  assert.match(fix, /10-second minimum/, "job protection states the metering floor");
+  assert.match(fix, /Pools never mix/, "job protection states pool separation");
+  assert.match(fix, /reconciliation pass re-reads completed jobs/, "job protection states the safety net");
+  assert.match(fix, /never shut down from under a running job/, "job protection states the termination guard");
+  assert.match(fix, /re-served, never stranded/, "job protection states re-provisioning");
+  assert.match(fix, /availability zones and machine families/, "job protection states diversification");
+  assert.match(fix, /reads the full queue and the full runner list/, "job protection states full enumeration");
+  assert.match(fix, /fails closed rather than showing another customer's numbers/, "job protection states per-account isolation");
+  // The example cites the audit record with its exact numbers.
+  assert.match(entry.exampleText, /54 of 54/, "job protection example cites the billing audit sample");
+  assert.match(entry.exampleText, /63 charges/, "job protection example cites the duplicate scan");
+  assert.match(entry.exampleText, /1,033 minutes/, "job protection example cites the safety net's first pass");
+  // Proof discipline: the 30 GB workspace cure is merged but its
+  // instance-level proof is still outstanding, so it is NOT claimed
+  // until that proof lands (the study's membership rule).
+  assert.doesNotMatch(JSON.stringify(entry), /30 GB|30GB/, "job protection does not claim the unproven workspace size");
+  // The services page names the bundle and points at the page.
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /SolveLang Job Protection/, "services page names Job Protection");
+  assert.match(services, /href="\/solutions\/job-protection\/"/, "services page links the Job Protection page");
+});
+
 test("speed is never free: the minutes surfaces state both speed prices", () => {
   const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
   // How minutes work states the rule in its cause: faster processing

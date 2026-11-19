@@ -150,6 +150,13 @@ test("llms pricing facts state the per-pull-request pool choice with the exact P
   assert.ok(llms.includes("10,000 minutes for $400."));
 });
 
+test("llms job protection section states the guarantees and links the page", () => {
+  assert.match(llms, /## Job Protection/);
+  assert.ok(llms.includes("https://www.solve-lang.com/solutions/job-protection/"), "llms.txt links the Job Protection page");
+  assert.match(llms, /billed only for jobs a SolveLang machine actually ran, exactly once/);
+  assert.match(llms, /never shut down from under a running job/);
+});
+
 test("llms.txt follows the llmstxt.org structure", () => {
   // H1 first, then a blockquote summary (the two elements the previous
   // free-prose file lacked when PageSpeed flagged it, Nov 15 2026).
