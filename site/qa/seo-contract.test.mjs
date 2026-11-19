@@ -133,6 +133,23 @@ test("llms pricing facts state the exact shelf and the embedded-payment fact", (
   }
 });
 
+test("llms pricing facts state the per-pull-request pool choice with the exact PR labels", () => {
+  assert.match(llms, /chosen per pull request with a pull request label/);
+  for (const fact of [
+    "solvelang-runners-high-power",
+    "solvelang-runners-standard",
+    "drawing from the High-Power balance",
+    "drawing from the Standard balance",
+    "jobs already running are not moved",
+  ]) {
+    assert.ok(llms.includes(fact), `llms.txt states: ${fact}`);
+  }
+  // The pool price lines themselves are unaltered by the addition.
+  assert.ok(llms.includes("Runner minutes, Standard pool (2-vCPU-class Linux machines): 5,000 minutes for $20 · 25,000 minutes for $100 · 100,000 minutes for $400."));
+  assert.ok(llms.includes("Runner minutes, High-Power pool (16-vCPU-class Linux machines): 1,000 minutes for $80"));
+  assert.ok(llms.includes("10,000 minutes for $400."));
+});
+
 test("llms.txt follows the llmstxt.org structure", () => {
   // H1 first, then a blockquote summary (the two elements the previous
   // free-prose file lacked when PageSpeed flagged it, Nov 15 2026).
