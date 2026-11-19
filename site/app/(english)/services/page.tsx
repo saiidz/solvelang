@@ -169,6 +169,8 @@ export default function ServicesPage() {
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Label routing:</strong> label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang</code> and that pull request&apos;s jobs route to SolveLang runners instead of your own fleet. Routing is set up once in your workflow file — jobs from labeled pull requests request the SolveLang labels above — and after that, routing a pull request is just adding the label.</p>
 
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the two pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for High-Power stays on High-Power.</p>
+
           <h3 className="mt-8 text-xl font-bold">The shelf</h3>
           <p className="mt-3 max-w-4xl leading-7 text-body">Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it today. Buying happens only on SolveLang&apos;s own checkout page — we never send you to an external checkout.</p>
           <div className="mt-6 grid gap-6 md:grid-cols-2">
