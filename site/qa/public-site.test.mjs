@@ -344,6 +344,20 @@ test("services page publishes the full service list with live and pilot labels",
   assert.match(page, /\/process-solution\//);
 });
 
+test("services page publishes runner-minutes Product and FAQ schema built from its own shelf", () => {
+  const page = read("app/(english)/services/page.tsx");
+  assert.match(page, /"@type": "Product"/);
+  assert.match(page, /SolveLang Runner Minutes/);
+  assert.match(page, /standardPacks\.map/, "schema offers are generated from the visible Standard table");
+  assert.match(page, /highPowerPacks\.map/, "schema offers are generated from the visible High-Power table");
+  assert.match(page, /id="services-runner-minutes-json-ld"/);
+  assert.match(page, /"@type": "FAQPage"/);
+  assert.match(page, /id="services-faq-json-ld"/);
+  assert.match(page, /How are runner minutes metered\?/);
+  assert.match(page, /Is faster processing free\?/);
+  assert.match(page, /Where do I buy runner minutes\?/);
+});
+
 test("services route is registered for the sitemap and linked in primary navigation", () => {
   assert.match(read("app/i18n/routes.ts"), /segment: "services"[^\n]+sitemap: true/);
   assert.ok(primaryLinks.some((link) => link.href === "/services/"), "primary navigation links to /services/");
@@ -362,6 +376,21 @@ test("api pricing page carries the runner minutes shelf summary", () => {
   assert.match(page, /5,000 minutes \$20/);
   assert.match(page, /\/services\//);
   assert.match(page, /\/account\/runner-minutes-checkout\//);
+});
+
+test("api pricing page publishes API plan and runner-minutes schema", () => {
+  const page = read("app/(english)/api-pricing/page.tsx");
+  assert.match(page, /"@type": "Product"/);
+  assert.match(page, /SolveLang API Access Plans/);
+  assert.match(page, /plans\.map/, "API plan offers are generated from the visible plans table");
+  assert.match(page, /id="api-plans-json-ld"/);
+  assert.match(page, /"@type": "AggregateOffer"/);
+  assert.match(page, /lowPrice: "80"/);
+  assert.match(page, /highPrice: "400"/);
+  assert.match(page, /id="api-pricing-runner-minutes-json-ld"/);
+  assert.match(page, /"@type": "FAQPage"/);
+  assert.match(page, /id="api-pricing-faq-json-ld"/);
+  assert.match(page, /What does one API credit cover\?/);
 });
 
 test("runner minutes checkout points at the live service by default", () => {
