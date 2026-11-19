@@ -14,6 +14,8 @@ const searchCrawlers = [
   "PerplexityBot",
 ];
 
+const aiCrawlers = ["GPTBot", "ClaudeBot"];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
@@ -22,7 +24,7 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: privatePaths,
       },
-      ...searchCrawlers.map((userAgent) => ({
+      ...[...searchCrawlers, ...aiCrawlers].map((userAgent) => ({
         userAgent,
         allow: "/",
         disallow: privatePaths,
