@@ -70,13 +70,17 @@ function StripePaymentBox({ box, onDone, onCancel }: {
     setError(null);
     try {
       const returnUrl = window.location.href;
-      const result = box.kind === "card-setup"
-        ? await stripe.confirmSetup({ elements, confirmParams: { return_url: returnUrl }, redirect: "if_required" })
-        : await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl }, redirect: "if_required" });
-      if (result.error) throw new Error(result.error.message ?? "Payment failed.");
-      const settled = box.kind === "card-setup" ? result.setupIntent : result.paymentIntent;
-      if (!settled) throw new Error("Payment did not complete.");
-      onDone(settled.id);
+      if (box.kind === "card-setup") {
+        const result = await stripe.confirmSetup({ elements, confirmParams: { return_url: returnUrl }, redirect: "if_required" });
+        if (result.error) throw new Error(result.error.message ?? "Payment failed.");
+        if (!result.setupIntent) throw new Error("Card setup did not complete.");
+        onDone(result.setupIntent.id);
+      } else {
+        const result = await stripe.confirmPayment({ elements, confirmParams: { return_url: returnUrl }, redirect: "if_required" });
+        if (result.error) throw new Error(result.error.message ?? "Payment failed.");
+        if (!result.paymentIntent) throw new Error("Payment did not complete.");
+        onDone(result.paymentIntent.id);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Payment failed.");
     } finally {
