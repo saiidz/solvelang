@@ -32,6 +32,22 @@ test("navigation uses the shared account menu and unique internal destinations",
     assert.ok(read(`app/(english)${link.href}page.tsx`));
   }
 });
+test("account, checkout, and services surfaces present the per-pull-request pool choice with the exact labels", () => {
+  const home = read("app/account/home/AccountHome.tsx");
+  assert.match(home, /Choose the pool per pull request/);
+  assert.ok(home.includes("solvelang-runners-high-power"), "account home names the High-Power PR label");
+  assert.ok(home.includes("solvelang-runners-standard"), "account home names the Standard PR label");
+  assert.match(home, /Jobs already running are not moved/);
+  assert.match(home, /the balance its minutes are\s*billed to/);
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(checkout, /choose per pull request/);
+  assert.ok(checkout.includes("solvelang-runners-high-power"), "checkout names the High-Power PR label");
+  assert.ok(checkout.includes("solvelang-runners-standard"), "checkout names the Standard PR label");
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /Pool choice per pull request/);
+  assert.match(services, /also work as pull request labels/);
+});
+
 test("live center tab counts read the totals their views show", () => {
   const boardSource = read("app/account/live-center/LiveCenterBoard.tsx");
   const counterStart = boardSource.indexOf("const tabCounter");
