@@ -73,6 +73,7 @@ export function createApiAccessHandler({
   productConnectLink = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
   runTelemetry = null,
+  agentTalkback = null,
   statusProbes = {},
   logger = console,
 }) {
@@ -244,6 +245,21 @@ export function createApiAccessHandler({
       if (method === "GET" && path.endsWith("/telemetry/run-counts")) {
         if (!runTelemetry) throw new ApiAccessError(503, "run_telemetry_disabled", "Run telemetry is not enabled.");
         return response(200, await runTelemetry.readCounts());
+      }
+
+      // Agent talk-back doorway: a read-only MCP facts surface (see
+      // agent-talkback.js). The module is self-contained public-facts
+      // code — it reaches no account, tenant, ledger, Stripe, or
+      // GitHub state — and it carries its own kill switch; a missing
+      // module answers the same disabled refusal as the flag being off.
+      if (path.endsWith("/agent/mcp")) {
+        if (!agentTalkback) throw new ApiAccessError(503, "agent_talkback_disabled", "Agent talk-back is not enabled.");
+        const outcome = await agentTalkback.handle({
+          method,
+          bodyText: bodyText(event),
+          source: event?.requestContext?.http?.sourceIp ?? "unknown",
+        });
+        return response(outcome.statusCode, outcome.body);
       }
 
       if (method === "POST" && path.endsWith("/stripe/subscriptions/webhook")) {
