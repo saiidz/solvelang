@@ -92,6 +92,10 @@ Parameters:
     Type: String
     Default: ""
     Description: Agent talk-back gate for /agent/mcp (the read-only MCP facts surface); only the exact value "true" enables it. Blank (the default) leaves the route answering 503 agent_talkback_disabled. This flag is the kill switch.
+  AgentActionsEnabled:
+    Type: String
+    Default: ""
+    Description: Level 3 agent-actions gate for /agent/actions and the /customer/agent-tokens routes (delegated agent tokens, agent purchases, mandates); only the exact value "true" enables it. Blank (the default) leaves the routes answering 503 agent_actions_disabled. This flag is the kill switch.
   ProductAppSlug:
     Type: String
     Default: "solvelang-process-solution"
@@ -500,6 +504,7 @@ Resources:
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
           AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
           AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
+          AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
@@ -598,6 +603,36 @@ Resources:
           Properties:
             ApiId: !Ref ApiAccessHttpApi
             Path: /agent/{proxy+}
+            Method: POST
+        AgentTokensList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens
+            Method: GET
+        AgentTokensCreate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens
+            Method: POST
+        AgentTokensRevoke:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens/revoke
+            Method: POST
+        AgentPlanPurchasesList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-plan-purchases
+            Method: GET
+        AgentPlanPurchasesAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-plan-purchases
             Method: POST
         CustomerMagicLink:
           Type: HttpApi
