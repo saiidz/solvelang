@@ -244,6 +244,15 @@ export function AccountHome() {
               Buy a minutes pack
             </Link>
           </section>
+
+          <section className={cardClass}>
+            <p className={cardEyebrowClass}>Agent access</p>
+            <h2 className="mt-3 text-2xl font-bold">Agents acting for you</h2>
+            <p className="mt-4 text-slate-300">Delegated tokens for your AI agents, the purchases they prepare for your approval, top-up mandates with hard caps, and the full activity log.</p>
+            <Link href="/account/agent-access/" className={cardLinkClass}>
+              Manage agent access
+            </Link>
+          </section>
         </div>
       </div>
     </main>
