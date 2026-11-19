@@ -163,6 +163,15 @@ function githubApp(environment) {
   return { githubApp: { enabled, ...config, slug } };
 }
 
+function agentTalkback(environment) {
+  // The agent talk-back doorway (read-only MCP facts surface, see
+  // agent-talkback.js) stays dark unless its flag is exactly "true" —
+  // the same fail-closed optional-feature discipline as the flags
+  // above. The flag is also the kill switch: flipping it off refuses
+  // every agent route on the next configuration update or deploy.
+  return { agentTalkbackEnabled: environment.AGENT_TALKBACK_ENABLED === "true" };
+}
+
 function agUiPilot(environment) {
   // The AG-UI pilot (Live Center board as a protocol event stream)
   // is dark unless its flag is exactly "true" — the same fail-closed
@@ -193,7 +202,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,
