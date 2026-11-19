@@ -40,6 +40,7 @@ export const publicRoutes = [
   { segment: "solutions/labels-and-pools", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/sign-in-link-problems", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/see-your-balance", classification: "english-only-technical", sitemap: true },
+  { segment: "solutions/job-protection", classification: "english-only-technical", sitemap: true },
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },

@@ -77,6 +77,12 @@ Prices are in US dollars and include tax: the price shown for a pack or plan is 
 - API access plans, monthly: Developer $49 · Pro $199 · Business $699.
 - SolveLang sells only through its own embedded payment pages on solve-lang.com — never through external checkout pages.
 
+## Job Protection
+
+Every runner minute includes SolveLang Job Protection: you are billed only for jobs a SolveLang machine actually ran, exactly once, metered per second from the job's own GitHub timestamps; a reconciliation pass re-checks finished jobs so engine work is never lost or double-billed; machines are never shut down from under a running job; and jobs are spread across availability zones and machine families so one cloud event cannot take down a whole set at once.
+
+- [Job Protection](https://www.solve-lang.com/solutions/job-protection/): The guarantees behind every runner minute, each one live and proven
+
 ## Optional
 
 - [Source repository](https://github.com/saiidz/solvelang): The open-source SolveLang repository — language runtime, CLI, and web tooling

@@ -1319,7 +1319,7 @@ test("manage page sign-in views keep their endpoints and logic markers", () => {
 
 test("solutions library documents each problem in the four-part shape", () => {
   const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
-  assert.equal(solutions.length, 8, "the library documents exactly the eight known problems");
+  assert.equal(solutions.length, 9, "the library documents exactly the nine known problems");
   assert.equal(new Set(solutions.map((entry) => entry.slug)).size, solutions.length, "solution slugs are unique");
   const routes = read("app/i18n/routes.ts");
   assert.match(routes, /segment: "solutions"[^\\n]+classification: "english-only-technical"[^\\n]+sitemap: true/);

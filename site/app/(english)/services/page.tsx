@@ -203,6 +203,8 @@ export default function ServicesPage() {
               </table>
             </div>
           </div>
+                    <h3 className="mt-8 text-xl font-bold">SolveLang Job Protection</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Every runner minute carries the same built-in protections: you are billed only for jobs a SolveLang machine actually ran, exactly once, metered per second from the job&apos;s own GitHub timestamps; a safety net re-checks every finished job so engine work is never lost or double-billed; machines are never shut down from under a running job, and jobs are spread across zones and machine families so one cloud event cannot take down a whole set at once. The full guarantee list — each one live and proven, none of it an add-on or a tier — is on the <Link href="/solutions/job-protection/" className="font-semibold text-ink underline">Job Protection page</Link>.</p>
           <p className="mt-4 text-sm leading-6 text-body"><strong className="text-ink">Speed Lane Cache:</strong> a 10 GB colocated cache that sits beside the high-power machines, so dependency and build caches load at local speed — $2 per month.</p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/account/runner-minutes-checkout/" className="inline-flex rounded-xl bg-accent-solid px-5 py-3 font-semibold text-ink hover:bg-panel-alt">Buy runner minutes</Link>
