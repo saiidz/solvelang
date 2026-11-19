@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "../../components/JsonLd";
 
 export const metadata: Metadata = {
   title: "Services",
@@ -26,6 +27,91 @@ const highPowerPacks = [
   { minutes: "10,000", price: "$400" },
 ] as const;
 
+const runnerMinutesJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": "https://www.solve-lang.com/services/#runner-minutes",
+  name: "SolveLang Runner Minutes",
+  description:
+    "Prepaid GitHub Actions runner minutes. Queued jobs in connected repositories run on SolveLang-provisioned Linux machines \u2014 a fresh machine for each job, destroyed when the job ends. Minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job. Spot capacity draws at 1\u00d7; minutes that start on guaranteed on-demand capacity draw at 2\u00d7 and are shown as a separate line. Faster processing is never free: it costs on-demand minutes at 2\u00d7, or work on the premium High-Power machines, which draws from the separate High-Power balance at the High-Power prices. Prices include tax. Buying happens only on SolveLang's own checkout page \u2014 never on an external checkout.",
+  brand: { "@id": "https://www.solve-lang.com/#organization" },
+  category: "GitHub Actions runner minutes",
+  offers: [
+    ...standardPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} Standard runner minutes`,
+      price: pack.price.replace("$", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
+    ...highPowerPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} High-Power runner minutes`,
+      price: pack.price.replace("$", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
+  ],
+};
+
+const servicesFaqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://www.solve-lang.com/services/#faq",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "How are runner minutes metered?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do Standard runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Standard packs (2-vCPU-class machines, $0.004 per minute): 5,000 minutes for $20, 25,000 minutes for $100, and 100,000 minutes for $400. Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do High-Power runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "High-Power packs (16-vCPU-class machines; the per-minute price falls as packs grow): 1,000 minutes for $80, 2,000 minutes for $140, 3,000 minutes for $192, 4,000 minutes for $236, 5,000 minutes for $275, 6,000 minutes for $306, 7,000 minutes for $336, 8,000 minutes for $360, 9,000 minutes for $382.50, and 10,000 minutes for $400.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is faster processing free?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Faster processing is never free \u2014 it always has one of two prices: work that starts on guaranteed on-demand capacity consumes minutes at 2\u00d7, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices. Standard work on Spot capacity draws at the plain 1\u00d7 rate.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Where do I buy runner minutes?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Buying happens only on SolveLang's own checkout page \u2014 we never send you to an external checkout. Purchases happen only on SolveLang's own pages.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Do prepaid runner minutes expire or auto-renew?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "You buy a pack once \u2014 minutes never auto-renew. Prepaid minutes expire 12 months after purchase, and your balance and its expiry are always visible in your account.",
+      },
+    },
+  ],
+};
+
 function LiveBadge() {
   return <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent">Live</span>;
 }
@@ -37,6 +123,8 @@ function PilotBadge() {
 export default function ServicesPage() {
   return (
     <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
+      <JsonLd id="services-runner-minutes-json-ld" data={runnerMinutesJsonLd} />
+      <JsonLd id="services-faq-json-ld" data={servicesFaqJsonLd} />
       <div className="mx-auto max-w-6xl">
         <header className="mx-auto max-w-3xl py-12 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">SolveLang services</p>

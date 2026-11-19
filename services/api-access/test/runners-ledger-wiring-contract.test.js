@@ -17,12 +17,12 @@ test("template declares the runners-ledger parameters with blank defaults", asyn
   assert.match(source, / {2}RunnersLedgerAdminToken:\n {4}Type: String\n {4}NoEcho: true\n {4}Default: ""/);
 });
 
-test("both board functions receive the runners-ledger env pair", async () => {
+test("the board functions and the agent-actions function receive the runners-ledger env pair", async () => {
   const source = await text(templateUrl);
   const baseUrls = source.match(/RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl/g) ?? [];
   const tokens = source.match(/RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken/g) ?? [];
-  assert.equal(baseUrls.length, 2, "ApiAccessFunction and GitHubFunction both carry the base URL");
-  assert.equal(tokens.length, 2, "ApiAccessFunction and GitHubFunction both carry the admin token");
+  assert.equal(baseUrls.length, 3, "ApiAccessFunction, GitHubFunction and AgentActionsFunction all carry the base URL");
+  assert.equal(tokens.length, 3, "ApiAccessFunction, GitHubFunction and AgentActionsFunction all carry the admin token");
 });
 
 test("redeploy workflow sources the pair from the production environment", async () => {

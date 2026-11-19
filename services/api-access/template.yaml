@@ -498,7 +498,6 @@ Resources:
           API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
           API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
           API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
-          PRODUCT_BINDING_SECRET: !Ref ProductBindingSecret
           PRODUCT_APP_SLUG: !Ref ProductAppSlug
           API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
           STRIPE_SECRET_KEY: !Ref StripeSecretKey
@@ -510,8 +509,6 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
-          AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
-          AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
