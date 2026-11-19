@@ -78,3 +78,33 @@ test("ApiAccessFunction route count stays at the cured ceiling", async () => {
   assert.equal(eventNames(main).length, 44, "ApiAccessFunction event count is pinned at the policy-safe ceiling");
   assert.equal(eventNames(satellite).length, 5, "AgentActionsFunction carries exactly the five agent routes");
 });
+
+test("AgentActionsFunction shares ApiAccessFunction's execution role and declares no policies of its own", async () => {
+  const source = await readFile(templateUrl, "utf8");
+  const main = resourceBlock(source, "ApiAccessFunction");
+  const satellite = resourceBlock(source, "AgentActionsFunction");
+
+  // The deploy identity cannot create NEW IAM roles in the API
+  // account: creating the satellite's generated role failed in
+  // production (deploy run 44591088243) with a tagging
+  // permissions error. So the satellite must never grow a role
+  // of its own again - it runs under ApiAccessFunctionRole,
+  // whose policy set is exactly the one this function needs
+  // (same code, same handler, identical policies by design).
+  assert.match(satellite, /Role: !GetAtt ApiAccessFunctionRole\.Arn/);
+  assert.equal(
+    satellite.includes("      Policies:"),
+    false,
+    "SAM attaches no policies when Role is set - a Policies block on the satellite would be dead, misleading configuration",
+  );
+  assert.equal(
+    source.includes("AgentActionsFunctionRole"),
+    false,
+    "the satellite's generated-role logical id must never be referenced into existence",
+  );
+
+  // The main function keeps its own generated role and the
+  // policies both functions run under.
+  assert.equal(main.includes("      Policies:"), true, "ApiAccessFunction keeps its Policies - its generated role is the shared one");
+  assert.equal(main.includes("      Role:"), false, "ApiAccessFunction must not point at another function's role");
+});
