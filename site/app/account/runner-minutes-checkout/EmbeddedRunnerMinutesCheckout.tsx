@@ -499,6 +499,11 @@ export function EmbeddedRunnerMinutesCheckout() {
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.speedLane}</pre>
             </div>
           </div>
+          <p className="mt-4 text-sm leading-6 text-body">
+            You can also choose per pull request: label a pull request <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-high-power</code> to
+            run its jobs on the High-Power pool, or <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-standard</code> to keep them on the
+            Standard pool — the pool a job runs on is the balance its minutes are billed to.
+          </p>
           <h3 className="mt-8 text-lg font-bold">The terms, in plain language</h3>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-body">
             {RUNNER_MINUTES_TERMS.map((term) => (
