@@ -19,6 +19,9 @@ import { createApiAccessHandler } from "./api-handler.js";
 import { createDynamoPublicStatusStore } from "./public-status-store.js";
 import { createDynamoRunTelemetryStore } from "./run-telemetry-store.js";
 import { createAgentTalkback } from "./agent-talkback.js";
+import { createDynamoAgentActionsStore } from "./agent-actions-store.js";
+import { createAgentActionsService } from "./agent-actions-service.js";
+import { createAgentActionsHandler } from "./agent-actions-handler.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
 import { createAccessGuardedCustomerAuthService } from "./customer-auth-access-service.js";
@@ -269,6 +272,7 @@ let mergeGovernanceCheckout;
 let subscriptionPortal;
 let subscriptionLifecycle;
 let subscriptionManagementApplication;
+let subscriptionManagementService;
 if (environment.subscriptionBillingEnabled) {
   const stripe = new Stripe(environment.stripeSecretKey, { apiVersion: "2026-06-24.dahlia" });
   stripeGateway = createStripeSubscriptionGateway(stripe, environment.stripeWebhookSecret);
@@ -278,9 +282,10 @@ if (environment.subscriptionBillingEnabled) {
   subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
   subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
   statusProbes.billing = async () => { await stripe.balance.retrieve(); return true; };
+  subscriptionManagementService = createSubscriptionManagementService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true });
   subscriptionManagementApplication = createSubscriptionManagementHandler({
     customerAuth,
-    management: createSubscriptionManagementService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true }),
+    management: subscriptionManagementService,
     siteOrigin: environment.siteOrigin,
     enabled: true,
   });
@@ -361,6 +366,34 @@ const application = createApiAccessHandler({
   statusProbes,
 });
 
+// Level 3 agent actions (design §2, §6): delegated tokens, the
+// authenticated /agent/actions endpoint, and the account holder's
+// plan-purchase approvals. Constructed only when customer accounts
+// exist; the handler itself answers 503 agent_actions_disabled
+// while the AGENT_ACTIONS_ENABLED flag is off, and the service
+// fails closed when the runners pointers are not configured.
+const agentActionsService = environment.customerAccountsEnabled
+  ? createAgentActionsService({
+      store: createDynamoAgentActionsStore(documentClient, environment.customerAuthTable),
+      pepper: environment.customerAuthPepper,
+      runnersBaseUrl: environment.liveCenter?.minutesBaseUrl,
+      runnersAdminToken: environment.liveCenter?.minutesAdminToken,
+      elementsCheckout: elementsCheckout ?? null,
+      subscriptionManagement: subscriptionManagementService ?? null,
+      subscriptionAccount: async (accountId) => guardedService.getSubscriptionAccount(accountId),
+      accountEmail: async (accountId) => (await guardedService.getSubscriptionAccount(accountId))?.email ?? null,
+      enabled: environment.agentActionsEnabled,
+    })
+  : null;
+const agentActionsApplication = createAgentActionsHandler({
+  service: agentActionsService ?? {
+    requireEnabled() { throw new Error("Agent actions are unavailable."); },
+  },
+  customerAuth,
+  siteOrigin: environment.siteOrigin,
+  enabled: Boolean(agentActionsService) && environment.agentActionsEnabled,
+});
+
 const studioWorkspaceApplication = createStudioWorkspaceHandler({
   enabled: environment.enabled && environment.customerAccountsEnabled, customerAuth, siteOrigin: environment.siteOrigin,
   studioAcceptanceOrigin: environment.studioAcceptanceOrigin,
@@ -374,6 +407,7 @@ export async function handler(event) {
   if (path.endsWith("/internal/accounts/access") && accountAccessAdminApplication) return accountAccessAdminApplication(event);
   if (path.includes("/internal/admin/customers") && adminCustomerApplication) return adminCustomerApplication(event);
   if (path.endsWith("/customer/subscriptions/portal") && event?.body && subscriptionManagementApplication) return subscriptionManagementApplication(event);
+  if (path === "/agent/actions" || path.startsWith("/customer/agent-tokens") || path.startsWith("/customer/agent-plan-purchases")) return agentActionsApplication(event);
   return application(event);
 }
 
