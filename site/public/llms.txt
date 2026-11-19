@@ -64,6 +64,18 @@ Deployment evidence is not a live health feed or a general-availability claim. C
 - No production uptime, SLA, adoption, revenue, or performance benchmark is claimed.
 - Private account, checkout, credentials, payment, and uploaded-workflow information is not part of the public search surface.
 
+## Pricing facts
+
+Prices are in US dollars and include tax: the price shown for a pack or plan is the full amount charged for it.
+
+- Runner minutes, Standard pool (2-vCPU-class Linux machines): 5,000 minutes for $20 · 25,000 minutes for $100 · 100,000 minutes for $400.
+- Runner minutes, High-Power pool (16-vCPU-class Linux machines): 1,000 minutes for $80 · 2,000 minutes for $140 · 3,000 minutes for $192 · 4,000 minutes for $236 · 5,000 minutes for $275 · 6,000 minutes for $306 · 7,000 minutes for $336 · 8,000 minutes for $360 · 9,000 minutes for $382.50 · 10,000 minutes for $400.
+- Runner minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job. Most jobs run on spare Spot capacity and draw at 1×; minutes that start on guaranteed on-demand capacity draw at 2× and are always shown as a separate line. Prepaid minutes expire 12 months after purchase and never auto-renew.
+- Faster processing is never free: it costs on-demand minutes at 2×, or work on the premium High-Power machines, which draws from the separate High-Power balance at the High-Power prices above.
+- Speed Lane Cache: a 10 GB colocated cache beside the High-Power machines, $2 per month.
+- API access plans, monthly: Developer $49 · Pro $199 · Business $699.
+- SolveLang sells only through its own embedded payment pages on solve-lang.com — never through external checkout pages.
+
 ## Optional
 
 - [Source repository](https://github.com/saiidz/solvelang): The open-source SolveLang repository — language runtime, CLI, and web tooling
