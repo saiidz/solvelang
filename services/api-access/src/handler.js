@@ -18,6 +18,7 @@ import { createDynamoAdminCrmStore } from "./admin-crm-store.js";
 import { createApiAccessHandler } from "./api-handler.js";
 import { createDynamoPublicStatusStore } from "./public-status-store.js";
 import { createDynamoRunTelemetryStore } from "./run-telemetry-store.js";
+import { createAgentTalkback } from "./agent-talkback.js";
 import { parseApiAccessEnvironment } from "./config.js";
 import { createCustomerAccountService } from "./customer-account.js";
 import { createAccessGuardedCustomerAuthService } from "./customer-auth-access-service.js";
@@ -324,6 +325,12 @@ if (environment.customerAccountsEnabled && environment.customerAuthTable) {
   };
 }
 
+// Agent talk-back doorway: constructed unconditionally — the module
+// itself answers 503 agent_talkback_disabled unless the flag parsed
+// in config.js is exactly "true", so a dark doorway is a refused
+// doorway, never a half-wired one.
+const agentTalkback = createAgentTalkback({ enabled: environment.agentTalkbackEnabled });
+
 const application = createApiAccessHandler({
   service: guardedService,
   enabled: environment.enabled,
@@ -350,6 +357,7 @@ const application = createApiAccessHandler({
   githubApp,
   publicStatusReader: () => publicStatusStore.readSnapshot(),
   runTelemetry,
+  agentTalkback,
   statusProbes,
 });
 
