@@ -510,8 +510,6 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
-          AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
-          AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
