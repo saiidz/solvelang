@@ -61,6 +61,7 @@ jobs:
       RUNNERS_LEDGER_ADMIN_TOKEN: ${{ secrets.RUNNERS_LEDGER_ADMIN_TOKEN }}
       PRODUCT_BINDING_SECRET: ${{ secrets.PRODUCT_BINDING_SECRET }}
       AG_UI_PILOT_ENABLED: ${{ vars.AG_UI_PILOT_ENABLED }}
+      AGENT_TALKBACK_ENABLED: ${{ vars.AGENT_TALKBACK_ENABLED }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
@@ -470,6 +471,7 @@ jobs:
           [[ -z "$SOLVELANG_WEBHOOK_SECRET" ]] || parameters+=(GitHubAppWebhookSecret="$SOLVELANG_WEBHOOK_SECRET")
           [[ -z "$PRODUCT_BINDING_SECRET" ]] || parameters+=(ProductBindingSecret="$PRODUCT_BINDING_SECRET")
           [[ -z "$AG_UI_PILOT_ENABLED" ]] || parameters+=(AgUiPilotEnabled="$AG_UI_PILOT_ENABLED")
+          [[ -z "$AGENT_TALKBACK_ENABLED" ]] || parameters+=(AgentTalkbackEnabled="$AGENT_TALKBACK_ENABLED")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \

@@ -69,6 +69,8 @@ test("robots policy allows search crawlers without exposing private paths", () =
     "Claude-SearchBot",
     "Claude-User",
     "PerplexityBot",
+    "GPTBot",
+    "ClaudeBot",
   ]) {
     assert.match(robots, new RegExp(crawler.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -77,8 +79,6 @@ test("robots policy allows search crawlers without exposing private paths", () =
     assert.ok(robots.includes(`\"${privatePath}\"`), `robots must exclude ${privatePath}`);
   }
 
-  assert.doesNotMatch(robots, /GPTBot/);
-  assert.doesNotMatch(robots, /ClaudeBot/);
   assert.match(robots, /https:\/\/www\.solve-lang\.com\/sitemap\.xml/);
 });
 
