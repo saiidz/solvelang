@@ -453,6 +453,18 @@ Resources:
   # "final policy size (20806) is bigger than the limit (20480)"
   # until they were moved here. New agent routes belong on THIS
   # function, never on ApiAccessFunction.
+  # The satellite also has no IAM role of its own: it runs under
+  # ApiAccessFunctionRole (the Role property below). Creating a
+  # NEW role is not available to the deploy identity - role
+  # creation failed in production (deploy run 44591088243) with
+  # a tagging permissions error ("Encountered a permissions
+  # error performing a tagging operation") - and no new role is
+  # needed: the two functions run the same code and handler
+  # with an identical policy set, so the satellite's permissions
+  # are exactly ApiAccessFunction's. SAM attaches no policies
+  # when Role is set, so this function declares no Policies
+  # block of its own; test/agent-actions-template.test.js pins
+  # the shared-role wiring.
   AgentActionsFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -462,6 +474,8 @@ Resources:
       MemorySize: 256
       Timeout: 30
       Architectures: [arm64]
+      # Shared execution role - see the block comment above.
+      Role: !GetAtt ApiAccessFunctionRole.Arn
       Environment:
         Variables:
           API_ACCESS_ENABLED: !Ref ApiAccessEnabled
@@ -518,60 +532,6 @@ Resources:
           MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
           RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl
           RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiAccountsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiKeysTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiUsageTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiUsageIdempotencyTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiSubscriptionEventsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref ApiCustomerAuthTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref GitHubInstallationsTable
-        - Statement:
-            Effect: Allow
-            Action:
-              - dynamodb:GetItem
-            Resource: !GetAtt PublicStatusTable.Arn
-        - Statement:
-            Effect: Allow
-            Action:
-              - dynamodb:GetItem
-              - dynamodb:UpdateItem
-            Resource: !GetAtt RunTelemetryTable.Arn
-        - !If
-          - AdminCrmFeatureEnabled
-          - DynamoDBCrudPolicy:
-              TableName: !Ref AdminCrmTable
-          - !Ref AWS::NoValue
-        - Statement:
-            Effect: Allow
-            Action:
-              - ses:SendEmail
-            Resource: '*'
-        - !If
-          - CustomerTotpFeatureEnabled
-          - Statement:
-              Effect: Allow
-              Action:
-                - kms:Encrypt
-                - kms:Decrypt
-              Resource: !Ref CustomerTotpKmsKeyArn
-              Condition:
-                StringEquals:
-                  kms:EncryptionContext:purpose: solvelang-customer-totp
-                StringLike:
-                  kms:EncryptionContext:accountId: acct_*
-                ForAllValues:StringEquals:
-                  kms:EncryptionContextKeys:
-                    - purpose
-                    - accountId
-          - !Ref AWS::NoValue
       Events:
         AgentTokensList:
           Type: HttpApi
