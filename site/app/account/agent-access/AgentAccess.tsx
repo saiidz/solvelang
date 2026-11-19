@@ -94,7 +94,7 @@ function StripePaymentBox({ box, onDone, onCancel }: {
         </button>
         <button type="button" className={ghostButtonClass} onClick={onCancel} disabled={busy}>Cancel</button>
       </div>
-      <p className="mt-3 text-xs text-slate-400">Payment happens only here, on SolveLang's own embedded payment page. Your agent never sees your card.</p>
+      <p className="mt-3 text-xs text-slate-400">Payment happens only here, on SolveLang&apos;s own embedded payment page. Your agent never sees your card.</p>
     </div>
   );
 }
@@ -348,7 +348,7 @@ export function AgentAccess() {
           <p className="mt-2 max-w-3xl text-slate-400">
             Give an AI agent a delegated token and it can prepare purchases for you. Nothing is charged without
             your approval here — unless you arm a top-up mandate, which buys only within the hard caps you set.
-            Payment always happens on SolveLang's own embedded payment pages; your agent never sees your card.
+            Payment always happens on SolveLang&apos;s own embedded payment pages; your agent never sees your card.
           </p>
         </header>
 
