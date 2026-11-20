@@ -293,14 +293,16 @@ export class BusClient {
       return;
     }
     if (!this.#acceptIncoming(message)) return;
+    // A message is marked as seen only when a waiter actually
+    // consumes it. A push that arrives before any matching wait is
+    // registered stays unmarked, so the handoff document in the
+    // inbox can still deliver it to a later wait through the scan;
+    // marking it here would poison that scan and lose the message.
+    const matched = this.#waiters.filter((waiter) => waiter.want(message));
+    if (matched.length === 0) return;
     if (!this.#dedup.accept(message)) return;
-    this.#waiters = this.#waiters.filter((waiter) => {
-      if (waiter.want(message)) {
-        waiter.resolve(message);
-        return false;
-      }
-      return true;
-    });
+    this.#waiters = this.#waiters.filter((waiter) => !matched.includes(waiter));
+    for (const waiter of matched) waiter.resolve(message);
   }
 
   /** Persist a directed message as a handoff document in the peer's inbox. */
