@@ -37,7 +37,7 @@ export interface AgentResult {
   wallMs?: number;
   fallbackUsed?: boolean;
   error?: string;
-  metrics: { lateConflicts: number; claimTimeConflicts: number };
+  metrics: { lateConflicts: number; claimTimeConflicts: number; firstClaims: Record<string, boolean> };
 }
 
 function keyMaterial(): { seed: Buffer; publicKey: Buffer } {
