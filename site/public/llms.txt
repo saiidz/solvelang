@@ -26,6 +26,8 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - [Set up the MCP server locally](https://www.solve-lang.com/docs/mcp-server-local-setup/): Install SolveLang and run the published read-only MCP server with npx
 - [Connect to the remote MCP endpoint](https://www.solve-lang.com/docs/remote-mcp-endpoint/): Bearer-authenticated remote MCP — the 10 remote tools, the rate limit, and how it differs from the local server
 - [Context packs](https://www.solve-lang.com/docs/context-packs/): Build a context pack with Solve Context and hand it to an agent
+- [Audit a repository](https://www.solve-lang.com/docs/audit-a-repository/): The browser repository audit and Solve Graph, and what they never do
+- [Runner minutes](https://www.solve-lang.com/docs/runner-minutes/): Buy prepaid GitHub Actions minutes, connect repositories, and choose Standard or High-Power pools
 
 ## Working today
 
