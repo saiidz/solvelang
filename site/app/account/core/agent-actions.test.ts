@@ -7,6 +7,7 @@ import {
   formatCents,
   formatThreshold,
   mandateStatusLine,
+  minutesCheckoutFromApproval,
   purchaseStatusLine,
   type AgentMandateView,
 } from "./agent-actions";
@@ -87,4 +88,41 @@ test("purchase and audit outcome lines are plain words", () => {
   assert.match(auditOutcomeLine("refused_scope"), /lacks the scope/);
   assert.match(auditOutcomeLine("refused_cap"), /cap reached/);
   assert.equal(auditOutcomeLine("mandate_armed"), "Mandate armed by you");
+});
+
+test("minutes approval checkout is read from the nested checkout object", () => {
+  // The literal runners approve answer: approvePurchase returns
+  // { intent, checkout }, and createPackCheckout's checkout carries
+  // the client secret and publishable key. The runners QA suite
+  // pins this same envelope at the producer side.
+  const approved = {
+    intent: { id: "intent-1", status: "approved", packKey: "standard-5000", amountCents: 2000 },
+    checkout: {
+      clientSecret: "pi_123_secret_xyz",
+      paymentIntentId: "pi_123",
+      publishableKey: "pk_live_abc",
+      pack: "standard-5000",
+      amountCents: 2000,
+      currency: "USD",
+    },
+  };
+  assert.deepEqual(minutesCheckoutFromApproval(approved), {
+    clientSecret: "pi_123_secret_xyz",
+    publishableKey: "pk_live_abc",
+  });
+});
+
+test("minutes approval checkout refuses flat or partial shapes", () => {
+  // The pre-fix page read clientSecret / publishableKey at the top
+  // level of the approve answer, where they never exist - a flat
+  // shape must not be treated as a checkout, and neither must a
+  // half-built one (the page falls back to a reload instead of
+  // presenting a broken payment box).
+  assert.equal(minutesCheckoutFromApproval({ clientSecret: "x", publishableKey: "y" }), null);
+  assert.equal(minutesCheckoutFromApproval({ intent: { status: "approved" } }), null);
+  assert.equal(minutesCheckoutFromApproval({ checkout: { clientSecret: "x" } }), null);
+  assert.equal(minutesCheckoutFromApproval({ checkout: { publishableKey: "y" } }), null);
+  assert.equal(minutesCheckoutFromApproval({ checkout: { clientSecret: "", publishableKey: "y" } }), null);
+  assert.equal(minutesCheckoutFromApproval(null), null);
+  assert.equal(minutesCheckoutFromApproval("approved"), null);
 });
