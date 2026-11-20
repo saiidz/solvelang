@@ -1,0 +1,22 @@
+# Smithery configuration for the SolveLang MCP server (local stdio transport).
+# Reference: https://smithery.ai/docs/config#smitheryyaml
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      workspaceRoot:
+        type: string
+        description: >-
+          Absolute path of the repository workspace the read-only server may
+          read. Optional; defaults to the current working directory.
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '--package', '@solvelang/mcp-server@0.3.0', 'solvelang-mcp'],
+      env: {
+        ...(config.workspaceRoot && { SOLVELANG_WORKSPACE_ROOT: config.workspaceRoot })
+      }
+    })
+  exampleConfig:
+    workspaceRoot: ""
