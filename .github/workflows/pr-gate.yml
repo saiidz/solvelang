@@ -1,0 +1,58 @@
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr-gate:
+    name: pr-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch the base branch for the changed-file diff
+        shell: bash
+        run: git fetch origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+
+      - name: Run the SolveLang PR Gate
+        id: gate
+        uses: ./packages/pr-gate
+        with:
+          # Report-only on this repository: the check stays green and the
+          # report is advisory while the policy is tuned. Flip to enforce
+          # (and require the pr-gate check in the ruleset) to make it a gate.
+          mode: report-only
+          policy-path: pr-gate.policy.json
+          base-ref: origin/${{ github.base_ref }}
+          labels: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+
+      - name: Post or update the sticky PR comment
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pr-gate:report -->';
+            let body;
+            try {
+              body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+            } catch {
+              body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the workflow run for details.';
+            }
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
