@@ -7,6 +7,8 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { BusClient } from "../src/bus-client.js";
+import { BusKeyRegistry, parsePrivateKeyText } from "../src/bus-envelope.js";
 import { promisify } from "node:util";
 import assert from "node:assert/strict";
 
@@ -35,7 +37,7 @@ export interface AgentResult {
   wallMs?: number;
   fallbackUsed?: boolean;
   error?: string;
-  metrics: { lateConflicts: number; claimTimeConflicts: number };
+  metrics: { lateConflicts: number; claimTimeConflicts: number; firstClaims: Record<string, boolean> };
 }
 
 function keyMaterial(): { seed: Buffer; publicKey: Buffer } {
@@ -84,6 +86,44 @@ export function setupWorkspace(): string {
     JSON.stringify({ format: "solvelang.key-registry", version: 1, keys: keyEntries }, null, 2),
   );
   return workspace;
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Wait until the workspace's detached daemon is actually serving.
+ * `bus start` returns once the state file exists, which can precede
+ * the daemon accepting connections — and a client that connects in
+ * that gap latches its document fallback for the whole run (the
+ * kill-switch semantics working exactly as designed), so a bus-arm
+ * run started too early silently degrades into a document run and
+ * its claim-time-conflict assertions become load-dependent. Probe
+ * with a real client (the producer identity) until a subscribe
+ * succeeds on the bus; only then may agents be spawned.
+ */
+export async function waitForBusDaemon(workspace: string): Promise<void> {
+  const keysDir = path.join(workspace, "keys");
+  const registry = BusKeyRegistry.fromText(readFileSync(path.join(keysDir, "registry.json"), "utf8"));
+  const privateKey = parsePrivateKeyText(readFileSync(path.join(keysDir, "producer.key.json"), "utf8"));
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      const probe = await BusClient.connect({
+        agent: "producer",
+        workspaceDir: workspace,
+        privateKey,
+        registry,
+      });
+      const ready = !probe.usingFallback;
+      probe.close();
+      if (ready) return;
+    } catch {
+      // State file not written yet, daemon not listening yet, or the
+      // subscribe raced startup — all transient; keep probing.
+    }
+    if (Date.now() > deadline) throw new Error("bus daemon did not become ready within 60s");
+    await sleep(250);
+  }
 }
 
 export async function runAgent(workspace: string, agent: string): Promise<void> {
