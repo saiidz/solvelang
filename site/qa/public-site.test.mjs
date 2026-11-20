@@ -1438,7 +1438,7 @@ test("documentation hub documents each guide with problem-first titles and pinne
   const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
   assert.deepEqual(
     guides.map((entry) => entry.slug),
-    ["mcp-server-local-setup"],
+    ["mcp-server-local-setup", "remote-mcp-endpoint", "context-packs"],
     "the hub ships exactly the guides built so far, in order",
   );
   assert.equal(new Set(guides.map((entry) => entry.slug)).size, guides.length, "guide slugs are unique");
@@ -1475,4 +1475,34 @@ test("documentation hub documents each guide with problem-first titles and pinne
   const llms = read("public/llms.txt");
   assert.ok(llms.includes("https://www.solve-lang.com/docs/"), "llms.txt links the documentation hub");
   assert.ok(llms.includes("https://www.solve-lang.com/docs/mcp-server-local-setup/"), "llms.txt links the local setup guide");
+  const remote = guides.find((entry) => entry.slug === "remote-mcp-endpoint");
+  const remoteText = JSON.stringify(remote);
+  assert.ok(remoteText.includes("https://mcp.solve-lang.com/mcp"), "remote guide states the endpoint URL");
+  for (const tool of [
+    "solvelang_analyze_n8n",
+    "solvelang_generate_n8n_report",
+    "solvelang_graph_find_nodes",
+    "solvelang_graph_search_nodes",
+    "solvelang_graph_dependencies",
+    "solvelang_graph_dependents",
+    "solvelang_graph_shortest_path",
+    "solvelang_graph_impact",
+    "solvelang_graph_explain_impact",
+    "solvelang_capabilities",
+  ]) {
+    assert.ok(remoteText.includes(tool), `remote guide names the remote tool ${tool}`);
+  }
+  assert.ok(remoteText.includes("60 requests per 60 seconds"), "remote guide states the rate limit");
+  assert.ok(remoteText.includes("4 MiB"), "remote guide states the request ceiling");
+  assert.ok(remoteText.includes("no server-side workspace"), "remote guide states the no-workspace limit");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/remote-mcp-endpoint/"), "llms.txt links the remote endpoint guide");
+  const packs = guides.find((entry) => entry.slug === "context-packs");
+  const packsText = JSON.stringify(packs);
+  for (const tool of ["solvelang_context_plan", "solvelang_context_pack", "solvelang_context_retrieve"]) {
+    assert.ok(packsText.includes(tool), `context pack guide names the tool ${tool}`);
+  }
+  assert.ok(packsText.includes("2 MB per-file safety cap"), "context pack guide states the per-file cap");
+  assert.ok(packsText.includes("rejects stale context"), "context pack guide states the stale-retrieval refusal");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/context-packs/"), "llms.txt links the context pack guide");
+  assert.doesNotMatch(JSON.stringify(guides), /benchmark results|\d+% fewer tokens|\d+% token savings/i, "guides carry no benchmark claims");
 });
