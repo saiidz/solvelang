@@ -279,6 +279,120 @@ export const guides: readonly GuideEntry[] = [
       },
     ],
   },
+  {
+    slug: "audit-a-repository",
+    question: "I want to know what is in a repository before an agent changes it",
+    title: "How do I audit a repository with SolveLang?",
+    summary:
+      "Run the free browser repository audit — a deterministic inventory, duplicate and backup findings, technology detection, and downloadable evidence, without executing any repository code — then use Solve Graph when you need dependency and impact answers.",
+    intro: [
+      "Before you hand a repository to an agent — or inherit one yourself — you want a factual map: what is in it, what is duplicated, what looks like a backup or generated output, and which parts everything else depends on. SolveLang gives you two tools for that, both read-only.",
+      "The browser audit inventories an archive you upload. Solve Graph answers dependency and impact questions over a graph of the repository, through the MCP server.",
+    ],
+    sections: [
+      {
+        heading: "Run the browser audit",
+        body: [
+          "The scan stays in your browser: the archive is analysed locally on your machine, and the audit is deterministic — the same archive produces the same findings.",
+        ],
+        steps: [
+          "Open the repository audit page and upload a ZIP or TAR archive of the repository.",
+          "Read the inventory: technology detection, duplicate and backup candidates, and generated-output warnings.",
+          "Download the evidence if you want the findings as a file you can keep or share.",
+        ],
+      },
+      {
+        heading: "What the audit tells you",
+        body: [
+          "A codebase inventory: what files exist, in what proportions, and how the repository is put together.",
+          "Duplicate and backup findings: copies and stray backups that inflate a repository and confuse both humans and agents.",
+          "Architecture signals and generated-output warnings, so you can tell source from build product before anything is changed.",
+        ],
+      },
+      {
+        heading: "Go deeper with Solve Graph",
+        body: [
+          "When the question is about structure — what depends on this file, what breaks if it changes — the Solve Graph tools answer over a canonical graph of the repository: dependencies, dependents, shortest paths, and impact, through the local MCP server or the remote endpoint.",
+          "Graph input can be a workspace-relative canonical graph or raw canonical graph JSON, and it must pass integrity validation before any query runs.",
+        ],
+      },
+    ],
+    limits: [
+      "The audit never executes repository code: no builds, no tests, and no scripts from the archive are run. It inventories and analyses — that is all.",
+      "Graph queries are structural evidence. They do not execute repository code, install dependencies, or prove runtime reachability, criticality, or security.",
+      "Archive extraction is bounded by safety limits: an archive whose decompressed contents exceed them is refused, not silently half-scanned.",
+    ],
+    links: [
+      { href: "/repository-audit/", label: "Run the free repository audit" },
+      { href: "/solve-graph/", label: "Solve Graph — dependency and impact analysis" },
+      { href: "/server-audit/", label: "Server audit" },
+    ],
+  },
+  {
+    slug: "runner-minutes",
+    question: "I want my GitHub Actions to run on SolveLang machines",
+    title: "How do I buy runner minutes and run jobs on SolveLang runners?",
+    summary:
+      "Buy prepaid runner minutes on SolveLang's own checkout, connect your repositories, and route jobs to Standard or High-Power Linux runners — per-second metering, the pool labels, the cache, and the prices exactly as they stand.",
+    intro: [
+      "Runner minutes are prepaid GitHub Actions minutes on SolveLang machines: queued jobs in your connected repositories run on a fresh Linux machine each, destroyed when the job ends, and you are billed per second for the jobs SolveLang actually ran.",
+      "This guide covers the whole path: the prices, buying, connecting a repository, and choosing which pool runs a job.",
+    ],
+    sections: [
+      {
+        heading: "The prices",
+        body: [
+          "Runner minutes, Standard pool (2-vCPU-class Linux machines): 5,000 minutes for $20 · 25,000 minutes for $100 · 100,000 minutes for $400.",
+          "Runner minutes, High-Power pool (16-vCPU-class Linux machines): 1,000 minutes for $80 · 2,000 minutes for $140 · 3,000 minutes for $192 · 4,000 minutes for $236 · 5,000 minutes for $275 · 6,000 minutes for $306 · 7,000 minutes for $336 · 8,000 minutes for $360 · 9,000 minutes for $382.50 · 10,000 minutes for $400.",
+          "Prices are in US dollars and include tax: the price shown for a pack is the full amount charged for it. Standard time works out to $0.004 per minute.",
+          "Speed Lane Cache: a 10 GB colocated cache beside the High-Power machines, $2 per month.",
+        ],
+      },
+      {
+        heading: "Buy and connect",
+        body: [],
+        steps: [
+          "Buy a pack from the services page — buying happens only on SolveLang's own embedded checkout page, never on an external checkout.",
+          "From your account, connect the GitHub repositories you want served. Queued jobs in connected repositories become eligible to run on SolveLang machines.",
+          "Check your balance in your account: Standard and High-Power minutes are separate balances, and each job draws only from the pool it ran on.",
+        ],
+      },
+      {
+        heading: "Route work to a pool",
+        body: [
+          "Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them.",
+        ],
+        code: [
+          {
+            intro: "A job that asks for the Standard pool:",
+            code: ["jobs:", "  test:", "    runs-on: [self-hosted, solvelang-runners-standard]"],
+            outro:
+              "You can also choose the pool per pull request with a label: `solvelang-runners-high-power` runs the pull request's jobs on the High-Power pool, drawing from the High-Power balance; `solvelang-runners-standard` keeps them on the Standard pool, drawing from the Standard balance. The label applies per pull request; jobs already running are not moved, and a job whose workflow file already asks for High-Power stays on High-Power.",
+          },
+        ],
+      },
+      {
+        heading: "How metering works",
+        body: [
+          "Minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job.",
+          "Most jobs run on spare Spot capacity and draw at 1×. If Spot cannot start a job within about 90 seconds, guaranteed on-demand capacity starts it instead; those on-demand minutes draw at 2× and are always shown as their own separate line in your usage.",
+          "Faster processing is never free: it costs on-demand minutes at 2×, or work on the premium High-Power machines, which draws from the separate High-Power balance at the High-Power prices.",
+        ],
+      },
+    ],
+    limits: [
+      "You are billed only for jobs a SolveLang runner actually ran: if one of your own runners, or a GitHub-hosted runner, ran the job instead, it costs you nothing here.",
+      "Prepaid minutes expire 12 months after purchase and never auto-renew.",
+      "At a zero balance, no machines launch at all: a job simply waits for another runner. You can never be charged beyond the minutes you have bought.",
+      "Every runner minute includes Job Protection: billing exactly once per job, a reconciliation pass that re-checks finished jobs, and machines never shut down from under a running job.",
+    ],
+    links: [
+      { href: "/services/", label: "Services — buy runner minutes and see the full shelf" },
+      { href: "/solutions/how-minutes-work/", label: "How minutes and metering work" },
+      { href: "/solutions/labels-and-pools/", label: "Labels and pools, in detail" },
+      { href: "/solutions/job-protection/", label: "Job Protection — the guarantees behind every minute" },
+    ],
+  },
 ];
 
 export function guideBySlug(slug: string): GuideEntry {
