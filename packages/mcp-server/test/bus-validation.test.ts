@@ -16,6 +16,7 @@ import {
   readResult,
   runAgent,
   setupWorkspace,
+  waitForBusDaemon,
 } from "./bus-validation-helpers.js";
 
 test("bus validation: product bus absorbs contention with zero late conflicts", { timeout: 150_000 }, async () => {
@@ -24,6 +25,7 @@ test("bus validation: product bus absorbs contention with zero late conflicts", 
   await execFileAsync(process.execPath, [
     busCliPath, "start", "--workspace", workspace, "--keys", path.join(keysDir, "registry.json"),
   ]);
+  await waitForBusDaemon(workspace);
   const startedAt = Date.now();
   try {
     await Promise.all([runAgent(workspace, "producer"), runAgent(workspace, "reviewer")]);
@@ -42,9 +44,25 @@ test("bus validation: product bus absorbs contention with zero late conflicts", 
     0,
     "the spike's bar: zero late conflicts on the bus",
   );
-  assert.ok(
-    producer.metrics.claimTimeConflicts + reviewer.metrics.claimTimeConflicts >= 2,
-    "contention was absorbed as claim-time conflicts",
+  // Deterministic contention, per event: the barrier releases both
+  // agents together and the granted holder waits for the peer's
+  // first-claim outcome before editing, so for each contended item
+  // exactly one agent's first claim is granted and the other's is
+  // denied at claim time — by construction, not by timing. Exactly
+  // one claim-time conflict per event follows (the denied agent's
+  // retry, after the release, is granted).
+  for (const item of ["shared-config", "changelog"]) {
+    const grants = [producer.metrics.firstClaims?.[item], reviewer.metrics.firstClaims?.[item]];
+    assert.deepEqual(
+      [...grants].sort(),
+      [false, true],
+      `${item}: exactly one first claim granted, the other denied at claim time`,
+    );
+  }
+  assert.equal(
+    producer.metrics.claimTimeConflicts + reviewer.metrics.claimTimeConflicts,
+    2,
+    "contention was absorbed as claim-time conflicts: exactly one per event",
   );
   assertFinalState(workspace);
   console.log(`bus validation wall clock: ${wallMs}ms (spike bus arm median 6,616ms local / 6,649ms EC2)`);
