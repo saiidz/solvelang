@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 // Level 3 agent-actions store (design §2, §6): delegated agent
 // tokens and API-plan purchase intents, kept in the customer auth
@@ -32,13 +32,20 @@ export function createDynamoAgentActionsStore(documentClient, tableName) {
     return Item ?? null;
   }
 
+  // The auth table's only key is the authKey HASH - there is no
+  // sort key to range over, so a Query can never express a prefix
+  // read: DynamoDB requires "=" on the partition key and refuses
+  // begins_with there (a ValidationException at runtime, which is
+  // why token/plan-intent listing failed in production while Put
+  // and Get worked). A filtered Scan is the correct read for these
+  // small per-account record families.
   async function listByPrefix(prefix) {
     const items = [];
     let exclusiveStartKey;
     do {
-      const page = await documentClient.send(new QueryCommand({
+      const page = await documentClient.send(new ScanCommand({
         TableName: tableName,
-        KeyConditionExpression: "begins_with(authKey, :prefix)",
+        FilterExpression: "begins_with(authKey, :prefix)",
         ExpressionAttributeValues: { ":prefix": prefix },
         ExclusiveStartKey: exclusiveStartKey,
       }));
