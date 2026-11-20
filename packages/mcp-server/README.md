@@ -167,6 +167,12 @@ The repository includes a deliberately read-only Streamable HTTP transport (`sol
 
 **The endpoint is built and proven locally; it is NOT deployed.** No public hosted MCP service exists yet: a deployment still requires hosting, HTTPS termination, edge rate limits, privacy/retention controls, a host-held production token, and the owner's explicit production approval. Local plugin/source qualification does not establish that endpoint as live.
 
+## Multi-agent bus
+
+The package also ships the SolveLang multi-agent bus (`solvelang-bus`, `src/bus-cli.ts`, with `src/bus-daemon.ts`, `src/bus-client.ts`, `src/bus-envelope.ts`): a local-first coordination layer for agents sharing a workspace — presence, push signals, and atomic work claims with leases, so contention surfaces at claim time instead of merge time. It layers over the handoff documents above rather than replacing them: the bus carries signals, documents carry truth, and killing the daemon degrades clients to pure document handoffs with no state loss. Messages extend the handoff envelope (content-hash `sch_` ids, at-least-once delivery with idempotent consumers) and can carry Phase 4 Ed25519 signatures in the reserved `sig` field, verified against the same `solvelang.key-registry` v1 registry as signed gates; without a registry the daemon runs in the explicitly named local-open mode (localhost only, no sender authenticity). Full design, lifecycle, and honest limits: `docs/integrations/multi-agent-bus.md`.
+
+The bus is a separate bin and module set. It adds no MCP tools and does not change the read-only tool contract of `solvelang-mcp` or `solvelang-mcp-remote`.
+
 ## Releases
 
 MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.

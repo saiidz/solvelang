@@ -12,6 +12,14 @@ const manifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"
 const expectedFiles = [
   "package/LICENSE",
   "package/README.md",
+  "package/dist/src/bus-cli.d.ts",
+  "package/dist/src/bus-cli.js",
+  "package/dist/src/bus-client.d.ts",
+  "package/dist/src/bus-client.js",
+  "package/dist/src/bus-daemon.d.ts",
+  "package/dist/src/bus-daemon.js",
+  "package/dist/src/bus-envelope.d.ts",
+  "package/dist/src/bus-envelope.js",
   "package/dist/src/context-compaction-tools.d.ts",
   "package/dist/src/context-compaction-tools.js",
   "package/dist/src/context-compaction.d.ts",
@@ -69,6 +77,7 @@ assert.equal(manifest.publishConfig?.access, "public", "scoped package must expl
 assert.deepEqual(manifest.bin, {
   "solvelang-mcp": "dist/src/index.js",
   "solvelang-mcp-remote": "dist/src/remote-cli.js",
+  "solvelang-bus": "dist/src/bus-cli.js",
 });
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "solvelang-packed-"));
