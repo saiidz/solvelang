@@ -1,0 +1,84 @@
+name: "SolveLang PR Gate"
+description: >-
+  Runs the SolveLang PR Gate on a pull request: builds the Solve Graph from
+  the checkout with the repository's own extractors, computes the blast
+  radius of the changed files, generates a verified Solve Context pack for
+  the change + impact set, evaluates the PR policy file, and writes a
+  markdown report (for a sticky PR comment), a JSON result, and the pack.
+inputs:
+  mode:
+    description: "report-only (never fails the job on a policy verdict) or enforce (fails the job when the policy fails)."
+    required: false
+    default: "report-only"
+  policy-path:
+    description: "Path to the PR policy JSON file, relative to the repository root. Empty means: run with no policy (all rules skipped)."
+    required: false
+    default: ""
+  changed-files:
+    description: "Comma-separated changed file paths (repository-relative). When empty, the action computes them with git diff against the PR base ref."
+    required: false
+    default: ""
+  labels:
+    description: "Comma-separated PR labels, used for policy overrides (for example pr-gate:override)."
+    required: false
+    default: ""
+  base-ref:
+    description: "Base ref used to compute changed files when changed-files is empty."
+    required: false
+    default: "origin/main"
+  out-dir:
+    description: "Directory (relative to the repository root) that receives report.md, result.json, and pack.json."
+    required: false
+    default: ".pr-gate-out"
+  task:
+    description: "Optional extra context for the pack builder, appended to the generated pack task."
+    required: false
+    default: ""
+outputs:
+  exit-code:
+    description: "The CLI exit code: 0 pass, 1 policy failure (enforce mode), 2 operational error."
+    value: ${{ steps.gate.outputs.exit-code }}
+  report-path:
+    description: "Path to the generated markdown report."
+    value: ${{ steps.gate.outputs.report-path }}
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "22"
+    - name: Install and build the PR Gate kit
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        npm ci --ignore-scripts --no-audit --no-fund
+        npm run build
+    - name: Run the PR Gate
+      id: gate
+      shell: bash
+      run: |
+        set +e
+        CHANGED="${{ inputs.changed-files }}"
+        if [ -z "$CHANGED" ]; then
+          CHANGED="$(git diff --name-only "${{ inputs.base-ref }}...HEAD" | paste -sd, -)"
+        fi
+        ARGS=(--root "$GITHUB_WORKSPACE" --changed "$CHANGED" --mode "${{ inputs.mode }}" --out "${{ inputs.out-dir }}")
+        if [ -n "${{ inputs.policy-path }}" ]; then ARGS+=(--policy "${{ inputs.policy-path }}"); fi
+        if [ -n "${{ inputs.labels }}" ]; then ARGS+=(--labels "${{ inputs.labels }}"); fi
+        if [ -n "${{ inputs.task }}" ]; then ARGS+=(--task "${{ inputs.task }}"); fi
+        node "${{ github.action_path }}/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+        CODE=$?
+        echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "report-path=${{ inputs.out-dir }}/report.md" >> "$GITHUB_OUTPUT"
+        # Operational errors fail in every mode; policy failures fail only in enforce mode.
+        if [ "$CODE" -eq 2 ]; then exit 2; fi
+        if [ "$CODE" -eq 1 ] && [ "${{ inputs.mode }}" = "enforce" ]; then exit 1; fi
+        exit 0
+    - name: Upload PR Gate artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pr-gate-report
+        path: ${{ inputs.out-dir }}
+        if-no-files-found: ignore
