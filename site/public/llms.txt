@@ -22,6 +22,8 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - [SolveLang MCP/plugin reference](https://www.solve-lang.com/mcp/): MCP and plugin integration reference
 - [Public support](https://www.solve-lang.com/support/): How to get help with SolveLang
 - [Solutions library](https://www.solve-lang.com/solutions/): Step-by-step fixes for common SolveLang problems
+- [Documentation hub](https://www.solve-lang.com/docs/): Problem-first developer guides — MCP setup, the remote endpoint, context packs, repository audit, runner minutes
+- [Set up the MCP server locally](https://www.solve-lang.com/docs/mcp-server-local-setup/): Install SolveLang and run the published read-only MCP server with npx
 
 ## Working today
 

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "description": "Read-only MCP server for repository context: context packs, graph impact analysis, and validation.",
+  "icons": [
+    {
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ],
+      "src": "https://raw.githubusercontent.com/saiidz/solvelang/main/plugins/solvelang/assets/solvelang-mark.svg"
+    }
+  ],
+  "name": "io.github.saiidz/solvelang",
+  "packages": [
+    {
+      "environmentVariables": [
+        {
+          "description": "Absolute path to the workspace the read-only server may inspect. Defaults to the process working directory.",
+          "format": "filepath",
+          "isRequired": false,
+          "isSecret": false,
+          "name": "SOLVELANG_WORKSPACE_ROOT"
+        }
+      ],
+      "identifier": "@solvelang/mcp-server",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "registryType": "npm",
+      "transport": {
+        "type": "stdio"
+      },
+      "version": "0.3.0"
+    }
+  ],
+  "remotes": [
+    {
+      "headers": [
+        {
+          "description": "Bearer token for the SolveLang remote MCP endpoint.",
+          "format": "string",
+          "isRequired": true,
+          "isSecret": true,
+          "name": "Authorization",
+          "value": "Bearer {access_token}",
+          "variables": {
+            "access_token": {
+              "description": "Your SolveLang remote MCP access token.",
+              "format": "string",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ],
+      "type": "streamable-http",
+      "url": "https://mcp.solve-lang.com/mcp"
+    }
+  ],
+  "repository": {
+    "id": "1222532925",
+    "source": "github",
+    "subfolder": "packages/mcp-server",
+    "url": "https://github.com/saiidz/solvelang"
+  },
+  "title": "SolveLang",
+  "version": "0.3.0",
+  "websiteUrl": "https://www.solve-lang.com/mcp/"
+}
