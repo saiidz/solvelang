@@ -4803,7 +4803,10 @@ impl<H: RuntimeHost> Evaluator<H> {
         signers: &[String],
         location: SourceLocation,
     ) -> Result<(), RuntimeError> {
-        if self.active_module.is_some() {
+        // Module context is either a module's own initialization
+        // (active_module) or a call into a module's function
+        // (active_module_calls): both are explicit-module execution.
+        if self.active_module.is_some() || !self.active_module_calls.is_empty() {
             return Err(self.attach_location(
                 RuntimeError::gate_refusal(
                     gate_codes::MODULE_CONTEXT,
