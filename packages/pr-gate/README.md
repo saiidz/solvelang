@@ -81,7 +81,10 @@ The context engine reads workspace files — and the graph document —
 through a reader with a 2 MB safety limit. The gate respects that limit
 instead of failing on it: a changed or impacted file over 2 MB is
 excluded from the pack (it still appears in the blast-radius audit) and
-listed in the report as skipped-oversize; when the serialized Solve
+listed in the report as skipped-oversize; a changed or impacted file that
+is not a text file (its bytes contain a NUL, the context engine's own
+binary signal) is likewise excluded from the pack and listed in the report
+as skipped-binary, never failing the run; when the serialized Solve
 Graph itself exceeds 2 MB (large repositories), the pack is built from
 the changed + impacted file list without graph relevance hints, and the
 report says so.
