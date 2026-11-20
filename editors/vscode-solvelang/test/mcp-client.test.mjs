@@ -90,9 +90,13 @@ test(
       const names = tools.map((tool) => tool.name);
       assert.ok(names.includes("solvelang_context_pack"), "local server must expose the context pack tool");
       assert.ok(names.includes("solvelang_context_plan"), "local server must expose the context plan tool");
-      // Phase 0 verified the local read-only surface at 29 tools; a change
-      // in the count is a deliberate surface change and must update this pin.
-      assert.equal(tools.length, 29);
+      assert.ok(names.includes("solvelang_context_index_query"), "local server must expose the context index query tool");
+      assert.ok(names.includes("solvelang_context_index_status"), "local server must expose the context index status tool");
+      // Phase 0 verified the local read-only surface at 29 tools; Phase 7
+      // added the two read-only Solve Context index tools (31 total). A
+      // change in the count is a deliberate surface change and must update
+      // this pin.
+      assert.equal(tools.length, 31);
       const pack = toolResultJson(
         await client.callTool("solvelang_context_pack", { task: "Assess the impact of changing store.ts" }, 180_000),
       );
