@@ -1,0 +1,45 @@
+name: VS Code Extension CI
+
+on:
+  pull_request:
+    paths:
+      - "editors/vscode-solvelang/**"
+      - "packages/mcp-server/src/**"
+      - ".github/workflows/vscode-extension-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "editors/vscode-solvelang/**"
+      - "packages/mcp-server/src/**"
+      - ".github/workflows/vscode-extension-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: VS Code extension tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/mcp-server/package-lock.json
+
+      - name: Build the local MCP server (the extension smoke test drives it)
+        working-directory: packages/mcp-server
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run the extension tests
+        working-directory: editors/vscode-solvelang
+        env:
+          SOLVELANG_MCP_SERVER_ENTRY: ${{ github.workspace }}/packages/mcp-server/dist/src/index.js
+        run: npm test
