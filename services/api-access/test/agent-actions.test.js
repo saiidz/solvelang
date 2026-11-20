@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
 import { ApiAccessError } from "../src/service.js";
 import { createDynamoAgentActionsStore } from "../src/agent-actions-store.js";
 import { createAgentActionsService } from "../src/agent-actions-service.js";
@@ -28,9 +28,19 @@ function fakeDocumentClient() {
         const item = items.get(command.input.Key.authKey);
         return { Item: item ? structuredClone(item) : undefined };
       }
-      if (command instanceof QueryCommand) {
+      if (command instanceof ScanCommand) {
         const prefix = command.input.ExpressionAttributeValues[":prefix"];
         return { Items: [...items.values()].filter((item) => item.authKey.startsWith(prefix)).map((item) => structuredClone(item)) };
+      }
+      if (command instanceof QueryCommand) {
+        // Real DynamoDB semantics for this table (authKey is the
+        // sole HASH key): a Query whose key condition is anything
+        // but "=" on the partition key is a ValidationException.
+        // The old fake answered it as a prefix filter, which is how
+        // the broken store listing shipped green.
+        const error = new Error("Invalid KeyConditionExpression: The expression can not use the function begins_with for the partition key authKey.");
+        error.name = "ValidationException";
+        throw error;
       }
       throw new Error("unexpected command");
     },
@@ -49,25 +59,38 @@ function fakeRunners({ mandates = [] } = {}) {
     calls.push({ path, method: options.method ?? "GET", body });
     const respond = (status, payload) => ({ ok: status < 400, status, json: async () => payload });
     if (path === "/internal/agent/audit") { audit.push(body); return respond(201, { recorded: true }); }
+    // The real runners service wraps every payload ({ intent },
+    // { mandate }, { mandates }) and answers errors as
+    // { error: <code>, message: <text> }. This fake mirrors those
+    // envelopes exactly - the previous bare-object shapes are how
+    // the contract breaks shipped green.
     if (path === "/internal/agent/purchase-intents" && options.method === "POST") {
       const intent = { id: "intent-min-1", tenantId: body.tenantId, packKey: body.packKey, amountCents: 2000, status: "approval_required", createdAt: "2026-11-19T12:00:00.000Z" };
       intents.set(intent.id, intent);
-      return respond(201, intent);
+      return respond(201, { intent });
     }
     if (path.startsWith("/internal/agent/purchase-intents/")) {
       const parts = path.split("/");
       if (parts.length === 5) return respond(200, { intents: [...intents.values()] });
       const intent = intents.get(parts[5]);
-      return intent ? respond(200, intent) : respond(404, { code: "purchase_intent_not_found", error: "not found" });
+      return intent ? respond(200, { intent }) : respond(404, { error: "purchase_not_found", message: "Purchase not found." });
     }
     if (path === "/internal/agent/mandates/draft") {
-      return respond(201, { id: "mandate-draft-1", status: "draft", coversApiPlans: body.coversApiPlans === true });
+      const spec = body.spec ?? {};
+      return respond(201, {
+        mandate: {
+          id: "mandate-draft-1", status: "draft", tenantId: body.tenantId,
+          packKey: spec.packKey, thresholdSeconds: spec.thresholdSeconds,
+          maxPerPurchaseCents: spec.perPurchaseCapCents, perPurchaseCapCents: spec.perPurchaseCapCents,
+          monthlyCapCents: spec.monthlyCapCents, coversApiPlans: spec.coversApiPlans === true,
+        },
+      });
     }
     if (path.startsWith("/internal/agent/mandates/") && path.endsWith("/revoke")) {
-      return respond(200, { id: "mandate-1", status: "revoked" });
+      return respond(200, { mandate: { id: "mandate-1", status: "revoked" } });
     }
     if (path.startsWith("/internal/agent/mandates/")) return respond(200, { mandates });
-    return respond(404, { code: "not_found", error: "not found" });
+    return respond(404, { error: "not_found", message: "Route not found." });
   };
   return { fetchImpl, calls, audit };
 }

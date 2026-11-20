@@ -176,10 +176,16 @@ export function createAgentActionsService({
     }
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
+      // The runners service answers errors as { error: <code>,
+      // message: <text> } - the envelope its handler writes for every
+      // route. Read the code from `error` and the text from
+      // `message`, so a precise refusal (invalid_mandate, say)
+      // reaches the agent as itself instead of degrading into a
+      // generic runners error carrying the code as its message.
       throw new ApiAccessError(
         response.status >= 400 && response.status < 500 ? response.status : 502,
-        payload.code || "agent_runners_error",
-        payload.error || "The runner-minutes service refused the request.",
+        payload.error || "agent_runners_error",
+        payload.message || "The runner-minutes service refused the request.",
       );
     }
     return payload;
@@ -467,7 +473,7 @@ export function createAgentActionsService({
       switch (name) {
         case "purchase_runner_minutes": {
           requireScope(token, "purchase:runner-minutes", name);
-          const intent = await runners("/internal/agent/purchase-intents", {
+          const { intent } = await runners("/internal/agent/purchase-intents", {
             method: "POST",
             body: {
               tenantId: token.accountId,
@@ -501,7 +507,8 @@ export function createAgentActionsService({
             }
             return view;
           }
-          return runners(`/internal/agent/purchase-intents/${encodeURIComponent(token.accountId)}/${encodeURIComponent(purchaseId)}`);
+          const { intent } = await runners(`/internal/agent/purchase-intents/${encodeURIComponent(token.accountId)}/${encodeURIComponent(purchaseId)}`);
+          return intent;
         }
         case "list_mandates": {
           requireScope(token, "purchases:read", name);
@@ -512,29 +519,36 @@ export function createAgentActionsService({
           requireScope(token, "mandates:manage", name);
           // Draft only — arming is a human act on the embedded
           // account page, never an agent act (design §6).
-          const mandate = await runners("/internal/agent/mandates/draft", {
+          const { mandate } = await runners("/internal/agent/mandates/draft", {
             method: "POST",
             body: {
               tenantId: token.accountId,
+              accountId: token.accountId,
               tokenId: token.tokenId,
               agentLabel: token.label,
-              pool: args.pool,
-              packKey: args.pack,
-              thresholdSeconds: args.thresholdSeconds,
-              perPurchaseCapCents: args.perPurchaseCapCents,
-              monthlyCapCents: args.monthlyCapCents,
-              coversApiPlans: args.coversApiPlans === true,
-              expiresAt: args.expiresAt,
+              // The runners engine reads a nested spec - that is its
+              // handler contract. The tool's flat argument names are
+              // the wire names the engine's validator accepts.
+              spec: {
+                pool: args.pool,
+                packKey: args.pack,
+                thresholdSeconds: args.thresholdSeconds,
+                perPurchaseCapCents: args.perPurchaseCapCents,
+                monthlyCapCents: args.monthlyCapCents,
+                coversApiPlans: args.coversApiPlans === true,
+                expiresAt: args.expiresAt,
+              },
             },
           });
           return { ...mandate, note: "Draft created. A mandate does nothing until the account holder arms it inside their signed-in account." };
         }
         case "revoke_mandate": {
           requireScope(token, "mandates:manage", name);
-          return runners(`/internal/agent/mandates/${encodeURIComponent(token.accountId)}/${encodeURIComponent(args.mandateId)}/revoke`, {
+          const { mandate } = await runners(`/internal/agent/mandates/${encodeURIComponent(token.accountId)}/${encodeURIComponent(args.mandateId)}/revoke`, {
             method: "POST",
             body: { tokenId: token.tokenId, agentLabel: token.label },
           });
+          return mandate;
         }
         default:
           throw new ApiAccessError(400, "unknown_tool", `Unknown tool: ${String(name)}`);
