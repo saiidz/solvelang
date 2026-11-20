@@ -31,6 +31,27 @@ and are never replayed).
 What the hosted hop adds is transport and tenancy: HTTP with long-poll
 delivery instead of local sockets, and **workspaces**.
 
+## Deployment state
+
+**Live since Nov 20, 2026** at `https://relay.solve-lang.com` — a
+dedicated container (`solvelang-relay`) on the SolveLang production
+host, deployed from this repository at the Phase 6 reconciliation merge
+under the owner's explicit production approval, with the host's TLS
+reverse proxy as the public ingress (Let's Encrypt) and DNS on the
+solve-lang.com zone. Verified end-to-end from outside the host before
+being called live: two independent clients coordinating (claim denied
+at claim time for the contender, signed signal delivered, presence
+readable), authenticity refusals (`bus_unsigned`,
+`bus_signature_invalid`, `bus_signer_revoked`) never delivered,
+workspace isolation, the rate limiter answering 429 at its bound, and a
+kill-switch cycle — relay stopped, clients coordinating via document
+handoffs, relay restarted, service recovered. Operations: the config
+and sealed credentials live on the host in the deploy directory
+(`/root/solvelang-relay-deploy/`, mode 600, never in git); stop or
+start with `docker stop solvelang-relay` / `docker start
+solvelang-relay`; full removal is the container plus the
+`relay-solve-lang.yaml` proxy file plus the DNS record.
+
 ## Routes
 
 | Route | Meaning |
