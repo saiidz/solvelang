@@ -112,6 +112,16 @@ arms, metric sources, grading, reproduction, and the publication rule — is
 `AGENT-EVAL-PROTOCOL.md` in this directory, with the fixture registry in
 `agent-eval-fixtures-v1.json`.
 
+The Tier 2 extension registry lives in `agent-eval-fixtures-v2-tier2.json`:
+fifteen fixtures derived one-to-one from the pinned real-source corpus
+(`context-repository-v1.json`) and the independent external subsets, each with
+a written category basis, plus the workspace-materialization spec for
+hash-named snapshot corpora. Its matrix is generated with
+`npm run eval:context:agent-matrix:tier2` and is summarized on its own; a
+Tier 2 summary cannot complete benchmark evidence, because the report
+contract also requires measured pairs in the categories Tier 2 does not
+contain (monorepo-bug-fix and cross-agent-handoff).
+
 A pair must use the same suite/pair fixture identity, pinned fixture revision, agent,
 provider/model and record class. Cross-agent handoff fixtures must identify direction
 as `claude-to-codex` or `codex-to-claude`; other categories cannot set a handoff

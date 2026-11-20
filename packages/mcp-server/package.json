@@ -96,7 +96,7 @@
     "eval:context:agent-matrix": "npm run build && node scripts/generate-agent-eval-matrix.mjs",
     "eval:context:agent-matrix:tier2": "npm run build && node scripts/generate-agent-eval-matrix-tier2.mjs",
     "eval:context:agent-summary": "npm run build && node scripts/render-agent-eval-summary.mjs",
-    "test:context-agent-eval-cli": "npm run build && node --test scripts/context-agent-eval-cli.test.mjs scripts/validate-context-agent-evals.test.mjs scripts/generate-agent-eval-matrix.test.mjs scripts/generate-agent-eval-matrix-tier2.test.mjs scripts/render-agent-eval-summary.test.mjs",
+    "test:context-agent-eval-cli": "npm run build && node --test scripts/context-agent-eval-cli.test.mjs scripts/validate-context-agent-evals.test.mjs scripts/validate-context-agent-evals-tier2.test.mjs scripts/generate-agent-eval-matrix.test.mjs scripts/generate-agent-eval-matrix-tier2.test.mjs scripts/render-agent-eval-summary.test.mjs",
     "test:packed": "node scripts/smoke-packed.mjs",
     "test:plugin-roundtrip": "node scripts/smoke-plugin-roundtrip.mjs",
     "test:release-candidate": "node scripts/validate-release-candidate.mjs",
