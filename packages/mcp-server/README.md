@@ -163,7 +163,9 @@ See:
 
 ## Hosted remote boundary
 
-The repository includes a deliberately read-only Streamable HTTP transport foundation. A public hosted MCP service would still require separate deployment, authentication, rate limits, privacy/retention controls and production approval. Local plugin/source qualification does not establish that endpoint as live.
+The repository includes a deliberately read-only Streamable HTTP transport (`solvelang-mcp-remote`, `src/remote.ts`): the same raw-JSON-only analysis surface described in `docs/integrations/remote-mcp.md`, behind bearer authentication, a 4 MiB request ceiling, and a built-in per-address rate limiter (default 60 requests per 60 seconds, enforced before authentication and MCP parsing). Protocol-level tests and a real-client proof (an MCP SDK client completing a context-pack-driven impact task) pin the behavior, and a reviewed production deployment shape lives in `deploy/`.
+
+**The endpoint is built and proven locally; it is NOT deployed.** No public hosted MCP service exists yet: a deployment still requires hosting, HTTPS termination, edge rate limits, privacy/retention controls, a host-held production token, and the owner's explicit production approval. Local plugin/source qualification does not establish that endpoint as live.
 
 ## Releases
 
