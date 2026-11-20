@@ -92,7 +92,7 @@ try {
   const packedFiles = packResult.files.map(({ path: filePath }) => `package/${filePath}`).sort();
   assert.deepEqual(packedFiles, expectedFiles, "tarball contents must match the reviewed runtime allowlist");
 
-  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js"]) {
+  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js", "dist/src/bus-cli.js"]) {
     const executable = packResult.files.find(({ path: filePath }) => filePath === entrypoint);
     assert.ok(executable, `packed CLI entrypoint is missing: ${entrypoint}`);
     assert.equal(executable.mode & 0o111, 0o111, `packed CLI entrypoint must be executable: ${entrypoint}`);
@@ -115,6 +115,7 @@ try {
   assert.deepEqual(installedPackage.bin, {
     "solvelang-mcp": "dist/src/index.js",
     "solvelang-mcp-remote": "dist/src/remote-cli.js",
+    "solvelang-bus": "dist/src/bus-cli.js",
   });
 
   const installedRuntimeRoot = path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src");
