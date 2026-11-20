@@ -1,0 +1,46 @@
+name: Onboard CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/onboard/**"
+      - "packages/mcp-server/src/**"
+      - "site/app/repository-audit/core/**"
+      - ".github/workflows/onboard-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/onboard/**"
+      - "packages/mcp-server/src/**"
+      - "site/app/repository-audit/core/**"
+      - ".github/workflows/onboard-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Onboard kit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/onboard/package-lock.json
+
+      - name: Build solvec (generated .solve files are validated against it)
+        run: cargo build --manifest-path solvec/Cargo.toml
+
+      - name: Install, build, and test the Onboard kit
+        working-directory: packages/onboard
+        env:
+          SOLVEC_BIN: ${{ github.workspace }}/solvec/target/debug/solvec
+        run: |
+          npm ci
+          npm test
