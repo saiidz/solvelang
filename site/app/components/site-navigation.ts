@@ -5,6 +5,7 @@ export const primaryLinks = [
   { label: "Studio", href: "/studio/" },
   { label: "Services", href: "/services/" },
   { label: "Docs", href: "/docs/" },
+  { label: "Resources", href: "/resources/" },
   { label: "Status", href: "/status/" },
 ] as const;
 
