@@ -91,6 +91,11 @@ export const AGENT_ACTION_TOOLS = Object.freeze([
       additionalProperties: false,
     },
   }),
+  Object.freeze({
+    name: "get_ops_digest",
+    description: "Read the Level 4 operations digest for this account: spend vs mandate caps, near-misses at 80% of a cap, escalations, and the ops loop's decisions not to act. The digest is a view over the shared mandate ledger — agents acting under the same account coordinate through that ledger and the audit log; there is no direct agent-to-agent channel. Requires scope purchases:read. Refuses with agent_ops_disabled while Level 4 is off.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  }),
 ]);
 
 function header(event, name) {

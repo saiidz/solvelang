@@ -182,6 +182,18 @@ function agentActions(environment) {
   return { agentActionsEnabled: environment.AGENT_ACTIONS_ENABLED === "true" };
 }
 
+function agentOps(environment) {
+  // The Level 4 standing-mandate operations gate: it gates only
+  // the Level 4 agent surface (the get_ops_digest tool on
+  // /agent/actions, proxying the runners service's ops digest).
+  // Its own kill switch, independent of the Level 3 flag — unset,
+  // blank, or any other value means the Level 4 tool answers 503
+  // agent_ops_disabled and Level 3 is completely unaffected. The
+  // ops loop itself lives in the runners service behind its own
+  // AGENT_OPS_ENABLED; this flag gates the agent-facing read.
+  return { agentOpsEnabled: environment.AGENT_OPS_ENABLED === "true" };
+}
+
 function agUiPilot(environment) {
   // The AG-UI pilot (Live Center board as a protocol event stream)
   // is dark unless its flag is exactly "true" — the same fail-closed
@@ -212,7 +224,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...agentActions(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...agentActions(environment), ...agentOps(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

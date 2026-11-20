@@ -63,6 +63,7 @@ jobs:
       AG_UI_PILOT_ENABLED: ${{ vars.AG_UI_PILOT_ENABLED }}
       AGENT_TALKBACK_ENABLED: ${{ vars.AGENT_TALKBACK_ENABLED }}
       AGENT_ACTIONS_ENABLED: ${{ vars.AGENT_ACTIONS_ENABLED }}
+      AGENT_OPS_ENABLED: ${{ vars.AGENT_OPS_ENABLED }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
@@ -474,6 +475,7 @@ jobs:
           [[ -z "$AG_UI_PILOT_ENABLED" ]] || parameters+=(AgUiPilotEnabled="$AG_UI_PILOT_ENABLED")
           [[ -z "$AGENT_TALKBACK_ENABLED" ]] || parameters+=(AgentTalkbackEnabled="$AGENT_TALKBACK_ENABLED")
           [[ -z "$AGENT_ACTIONS_ENABLED" ]] || parameters+=(AgentActionsEnabled="$AGENT_ACTIONS_ENABLED")
+          [[ -z "$AGENT_OPS_ENABLED" ]] || parameters+=(AgentOpsEnabled="$AGENT_OPS_ENABLED")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \

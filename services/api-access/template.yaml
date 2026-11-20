@@ -96,6 +96,10 @@ Parameters:
     Type: String
     Default: ""
     Description: Level 3 agent-actions gate for /agent/actions and the /customer/agent-tokens routes (delegated agent tokens, agent purchases, mandates); only the exact value "true" enables it. Blank (the default) leaves the routes answering 503 agent_actions_disabled. This flag is the kill switch.
+  AgentOpsEnabled:
+    Type: String
+    Default: ""
+    Description: Level 4 standing-mandate operations gate for the get_ops_digest tool on /agent/actions (the ops digest read over the shared mandate ledger); only the exact value "true" enables it. Blank (the default) leaves the tool answering 503 agent_ops_disabled. This flag is the Level 4 kill switch, independent of the Level 3 flag; the ops loop itself lives in the runners service behind its own AGENT_OPS_ENABLED.
   ProductAppSlug:
     Type: String
     Default: "solvelang-process-solution"
@@ -524,6 +528,7 @@ Resources:
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
+          AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
@@ -624,6 +629,7 @@ Resources:
           AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
           AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
+          AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant

@@ -143,6 +143,7 @@ export function createAgentActionsService({
   subscriptionAccount = null,
   accountEmail = null,
   enabled = false,
+  opsEnabled = false,
   now = Date.now,
   logger = console,
   rateLimiter = createRateLimiter({ now }),
@@ -157,6 +158,15 @@ export function createAgentActionsService({
   function requireEnabled() {
     if (!enabled) {
       throw new ApiAccessError(503, "agent_actions_disabled", "Agent actions are not enabled.");
+    }
+  }
+
+  // The Level 4 kill switch (design §6): its own flag, its own
+  // error. While off, the Level 4 tool refuses and Level 3 is
+  // completely unaffected.
+  function requireOpsEnabled() {
+    if (!opsEnabled) {
+      throw new ApiAccessError(503, "agent_ops_disabled", "Agent operations are not enabled.");
     }
   }
 
@@ -549,6 +559,18 @@ export function createAgentActionsService({
             body: { tokenId: token.tokenId, agentLabel: token.label },
           });
           return mandate;
+        }
+        case "get_ops_digest": {
+          // Level 4 (design §3/§4): the digest is a view over the
+          // shared mandate ledger in the runners service — spend
+          // vs caps, near-misses, escalations, decisions not to
+          // act. Agents coordinate through that ledger and the
+          // audit log; there is no agent-to-agent channel and no
+          // A2A protocol claim (no settled standard exists).
+          requireOpsEnabled();
+          requireScope(token, "purchases:read", name);
+          const { digest } = await runners(`/internal/agent/ops/digest/${encodeURIComponent(token.accountId)}`);
+          return { digest };
         }
         default:
           throw new ApiAccessError(400, "unknown_tool", `Unknown tool: ${String(name)}`);
