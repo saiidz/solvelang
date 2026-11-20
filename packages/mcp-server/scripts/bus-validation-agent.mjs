@@ -6,13 +6,20 @@
 // one injected block. Documents are written in every step (the
 // client does that itself); the bus carries signals and claims.
 //
+// Contention is deterministic by construction (see sharedEdit):
+// the spike ran both agents in one process and released the two
+// edits at a single program point; two processes instead rendezvous
+// on workspace files, and the claim holder waits for the peer's
+// claim-outcome file before releasing, so the claim-time denial
+// follows from message ordering, never from wall-clock overlap.
+//
 // Usage:
 //   node scripts/bus-validation-agent.mjs --agent producer|reviewer \
 //     --workspace <dir> --keys <dir with registry.json + <agent>.key.json>
 //
 // Writes <workspace>/result-<agent>.json and exits 0 on success.
 import { createHash } from "node:crypto";
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BusClient } from "../dist/src/bus-client.js";
 import { BusKeyRegistry, parsePrivateKeyText } from "../dist/src/bus-envelope.js";
@@ -36,7 +43,7 @@ const sha = (text) => createHash("sha256").update(text).digest("hex");
 const repoFile = (file) => path.join(WORKSPACE, "repo", file);
 const appendLine = (file, line) => appendFileSync(repoFile(file), `${line}\n`);
 
-const metrics = { lateConflicts: 0, claimTimeConflicts: 0, presenceChecks: [] };
+const metrics = { lateConflicts: 0, claimTimeConflicts: 0, presenceChecks: [], firstClaims: {} };
 const t0 = Date.now();
 
 const registry = BusKeyRegistry.fromText(readFileSync(path.join(KEYS_DIR, "registry.json"), "utf8"));
@@ -53,14 +60,55 @@ async function soloEdit(file, line) {
   appendLine(file, line);
 }
 
+// Deterministic contention scaffolding. The rendezvous uses plain
+// files in the workspace, NOT bus messages: synchronization must
+// not itself depend on delivery timing (a bus wait only observes
+// messages its client happens to be waiting for when they arrive,
+// so a send-then-wait rendezvous can miss its own release). Each
+// agent publishes a ready file per contention event and waits for
+// the peer's, so both reach for the same item from the same release
+// point; each then publishes its first claim outcome, and the
+// granted holder waits for the peer's outcome file before editing
+// and releasing — the peer's first claim is therefore necessarily
+// processed by the daemon during the hold, and its denial is a
+// happens-before consequence, not a race inside the edit window.
+// (The failure mode this replaced: the second agent's claim landing
+// after the holder had already released, so no denial was recorded
+// and the contention assertion depended on CI load.) The files live
+// outside repo/ and play no part in the workload's final state.
+const syncDir = path.join(WORKSPACE, "sync");
+mkdirSync(syncDir, { recursive: true });
+
+function publishSync(name, content) {
+  const temporary = path.join(syncDir, `.tmp-${name}`);
+  writeFileSync(temporary, content);
+  renameSync(temporary, path.join(syncDir, name));
+}
+
+async function awaitSync(name) {
+  while (!existsSync(path.join(syncDir, name))) await sleep(20);
+}
+
+async function barrier(item) {
+  publishSync(`${item}.${AGENT}.ready`, "ready");
+  await awaitSync(`${item}.${PEER}.ready`);
+}
+
 // Shared edit, spike semantics on product primitives: through the
 // daemon the claim is atomic (denial = claim-time conflict, wait for
 // the release, edit once on the final base). Through documents
 // (daemon down) the claim is a document the peer sees late, so the
 // conflict surfaces at write time and the loser redoes the work.
 async function sharedEdit(file, line, item) {
+  await barrier(item);
+  let firstAttempt = true;
   for (;;) {
     const res = await client.claim(item, CLAIM_TTL_MS);
+    if (firstAttempt) {
+      firstAttempt = false;
+      metrics.firstClaims[item] = res.granted;
+      publishSync(`${item}.${AGENT}.claim`, JSON.stringify({ granted: res.granted }));
+    }
     if (!res.viaBus) {
       await client.send({ toAgent: PEER, kind: "claim", body: { item } });
       const before = sha(readFileSync(repoFile(file), "utf8"));
@@ -74,7 +122,12 @@ async function sharedEdit(file, line, item) {
       await client.release(item);
       return;
     }
-    if (res.granted) break;
+    if (res.granted) {
+      // Hold the claim until the peer's first claim attempt has been
+      // processed (its outcome file proves it) — see above.
+      await awaitSync(`${item}.${PEER}.claim`);
+      break;
+    }
     metrics.claimTimeConflicts++;
     await Promise.race([
       client.waitForSignalKind(

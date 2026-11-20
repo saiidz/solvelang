@@ -16,6 +16,7 @@ import {
   readResult,
   runAgent,
   setupWorkspace,
+  waitForBusDaemon,
 } from "./bus-validation-helpers.js";
 
 test("bus validation: product bus absorbs contention with zero late conflicts", { timeout: 150_000 }, async () => {
@@ -24,6 +25,7 @@ test("bus validation: product bus absorbs contention with zero late conflicts", 
   await execFileAsync(process.execPath, [
     busCliPath, "start", "--workspace", workspace, "--keys", path.join(keysDir, "registry.json"),
   ]);
+  await waitForBusDaemon(workspace);
   const startedAt = Date.now();
   try {
     await Promise.all([runAgent(workspace, "producer"), runAgent(workspace, "reviewer")]);
