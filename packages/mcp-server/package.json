@@ -1,5 +1,6 @@
 {
   "name": "@solvelang/mcp-server",
+  "mcpName": "io.github.saiidz/solvelang",
   "version": "0.3.0",
   "description": "Local-first and remote-ready, read-only MCP server for deterministic SolveLang and n8n workflow validation",
   "private": false,
@@ -36,6 +37,10 @@
     "dist/src/context-compaction.js",
     "dist/src/context-handoff.d.ts",
     "dist/src/context-handoff.js",
+    "dist/src/context-index-tools.d.ts",
+    "dist/src/context-index-tools.js",
+    "dist/src/context-index.d.ts",
+    "dist/src/context-index.js",
     "dist/src/context-pack.d.ts",
     "dist/src/context-pack.js",
     "dist/src/context-selection.d.ts",
