@@ -253,3 +253,71 @@ test("end-to-end: a changed file over the context engine's 2 MB limit is exclude
   const report = readFileSync(path.join(outDir("big"), "report.md"), "utf8");
   assert.ok(report.includes("exceeds the context engine's 2 MB per-file limit"));
 });
+
+// A small binary file with the real WebAssembly magic header; its bytes
+// contain NULs, which is the context engine's own binary signal.
+const WASM_BYTES = Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+
+test("end-to-end: a binary changed file is skipped from the pack, not fatal", async () => {
+  writeFileSync(path.join(fixtureRoot, "src", "blob.wasm"), WASM_BYTES);
+
+  const reportOnly = await runPrGate({
+    root: fixtureRoot,
+    changedPaths: ["src/blob.wasm", "src/leaf.ts"],
+    mode: "report-only",
+    outDir: outDir("binary-report-only"),
+  });
+  assert.equal(reportOnly.exitCode, 0);
+  assert.ok(reportOnly.result.pack);
+  assert.equal(reportOnly.result.pack.source, "explicit");
+  assert.deepEqual(reportOnly.result.pack.skippedBinaryPaths, ["src/blob.wasm"]);
+  assert.deepEqual(
+    reportOnly.result.pack.files.map((file) => file.path).sort(),
+    ["src/leaf.ts", "src/mid.ts", "src/top.test.ts", "src/top.ts"],
+  );
+  const report = readFileSync(path.join(outDir("binary-report-only"), "report.md"), "utf8");
+  assert.ok(report.includes("is not a text file"));
+  assert.ok(report.includes("`src/blob.wasm`"));
+
+  // In enforce mode the verdict reflects only the text files: the leaf
+  // change's untouched affected validation still fails the run...
+  const enforceFail = await runPrGate({
+    root: fixtureRoot,
+    changedPaths: ["src/blob.wasm", "src/leaf.ts"],
+    mode: "enforce",
+    policyPath,
+    outDir: outDir("binary-enforce-fail"),
+  });
+  assert.equal(enforceFail.exitCode, 1);
+  assert.deepEqual(enforceFail.result.pack?.skippedBinaryPaths, ["src/blob.wasm"]);
+  const verdict = enforceFail.result.policy.evaluation.verdicts.find((v) => v.rule === "affected-validations");
+  assert.equal(verdict?.status, "fail");
+
+  // ...and touching the validation makes the same change set pass.
+  const enforcePass = await runPrGate({
+    root: fixtureRoot,
+    changedPaths: ["src/blob.wasm", "src/leaf.ts", "src/top.test.ts"],
+    mode: "enforce",
+    policyPath,
+    outDir: outDir("binary-enforce-pass"),
+  });
+  assert.equal(enforcePass.exitCode, 0);
+  assert.deepEqual(enforcePass.result.pack?.skippedBinaryPaths, ["src/blob.wasm"]);
+});
+
+test("end-to-end: a PR consisting only of a binary file completes without error", async () => {
+  writeFileSync(path.join(fixtureRoot, "src", "blob.wasm"), WASM_BYTES);
+  for (const mode of ["report-only", "enforce"] as const) {
+    const { exitCode, result } = await runPrGate({
+      root: fixtureRoot,
+      changedPaths: ["src/blob.wasm"],
+      mode,
+      outDir: outDir(`binary-only-${mode}`),
+    });
+    assert.equal(exitCode, 0);
+    assert.ok(result.pack, "a discovery pack is still built from the rest of the checkout");
+    assert.equal(result.pack.source, "discovery");
+    assert.deepEqual(result.pack.skippedBinaryPaths, ["src/blob.wasm"]);
+    assert.ok(result.pack.files.every((file) => file.path !== "src/blob.wasm"));
+  }
+});
