@@ -50,6 +50,7 @@ export type PrGateResult = {
     skippedSensitivePaths: string[];
     skippedMissingPaths: string[];
     skippedOversizePaths: string[];
+    skippedBinaryPaths: string[];
     graphInput: "provided" | "omitted-oversize";
   };
   policy: {
@@ -157,6 +158,10 @@ export function renderReportMarkdown(result: PrGateResult): string {
     if (result.pack.skippedOversizePaths.length > 0) {
       lines.push("");
       lines.push(`Skipped because the file exceeds the context engine's 2 MB per-file limit: ${result.pack.skippedOversizePaths.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    if (result.pack.skippedBinaryPaths.length > 0) {
+      lines.push("");
+      lines.push(`Skipped because the file is not a text file (binary content cannot enter a context pack): ${result.pack.skippedBinaryPaths.map((p) => `\`${p}\``).join(", ")}`);
     }
     if (result.pack.graphInput === "omitted-oversize") {
       lines.push("");

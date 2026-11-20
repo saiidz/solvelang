@@ -81,6 +81,16 @@ export function isSensitiveContextPath(inputPath: string): boolean {
   return basename.endsWith(".key") || basename.endsWith(".p12") || basename.endsWith(".pfx") || basename.endsWith(".pem");
 }
 
+// Mirrors hasBinarySentinel in packages/mcp-server/src/context-workspace.ts:
+// the context engine refuses any explicit source whose decoded text contains
+// a NUL character, and a NUL byte in the raw file is exactly that signal once
+// the file is decoded as UTF-8. Binary candidates are therefore detected
+// here and skipped like oversize files, instead of being handed to the pack
+// builder, whose refusal would abort the whole run as an operational error.
+export function isBinaryContextFile(absolutePath: string): boolean {
+  return readFileSync(absolutePath).includes(0);
+}
+
 async function walkCheckout(root: string, outDirAbsolute: string): Promise<{ entries: RepositorySnapshotEntry[]; fileHashes: Map<string, string> }> {
   const entries: RepositorySnapshotEntry[] = [];
   const fileHashes = new Map<string, string>();
@@ -296,6 +306,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
     const skippedSensitivePaths: string[] = [];
     const skippedMissingPaths: string[] = [];
     const skippedOversizePaths: string[] = [];
+    const skippedBinaryPaths: string[] = [];
     const explicitCandidates: string[] = [];
     const seenCandidates = new Set<string>();
     const consider = (candidate: string) => {
@@ -311,6 +322,10 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
       }
       if (statSync(path.join(root, candidate)).size > PACK_FILE_MAX_BYTES) {
         skippedOversizePaths.push(candidate);
+        return;
+      }
+      if (isBinaryContextFile(path.join(root, candidate))) {
+        skippedBinaryPaths.push(candidate);
         return;
       }
       explicitCandidates.push(candidate);
@@ -342,6 +357,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
         skippedSensitivePaths,
         skippedMissingPaths,
         skippedOversizePaths,
+        skippedBinaryPaths,
         graphInput,
       };
     } else if (changedPaths.length > 0) {
@@ -363,6 +379,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
         skippedSensitivePaths,
         skippedMissingPaths,
         skippedOversizePaths,
+        skippedBinaryPaths,
         graphInput,
       };
     }
