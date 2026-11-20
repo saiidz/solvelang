@@ -1,0 +1,68 @@
+# SolveLang PR Gate — consumer workflow template.
+#
+# Copy this file into your repository as .github/workflows/pr-gate.yml and
+# replace <PINNED_SHA> with the full commit SHA of saiidz/solvelang that
+# contains the version of the kit you want to run (pin a commit, never a
+# floating branch). Put a pr-gate.policy.json at your repository root (see
+# packages/pr-gate/README.md in saiidz/solvelang for the format), or set
+# policy-path to "" to run report-only with no policy.
+#
+# The job posts/updates ONE sticky comment per PR (identified by the
+# <!-- pr-gate:report --> marker in the report) and its conclusion is the
+# gate: in enforce mode it fails when the policy fails. To make the gate
+# block merges, add the "pr-gate" check to your branch protection's
+# required status checks.
+
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr-gate:
+    name: pr-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run the SolveLang PR Gate
+        id: gate
+        uses: saiidz/solvelang/packages/pr-gate@<PINNED_SHA>
+        with:
+          # report-only: the check stays green and the report is advisory.
+          # enforce: the check fails when a policy rule fails.
+          mode: report-only
+          policy-path: pr-gate.policy.json
+          base-ref: origin/${{ github.base_ref }}
+          labels: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+
+      - name: Post or update the sticky PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- pr-gate:report -->';
+            let body;
+            try {
+              body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+            } catch {
+              body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the workflow run for details.';
+            }
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
