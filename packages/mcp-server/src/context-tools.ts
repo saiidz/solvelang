@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MAX_CONTEXT_CHANGED_PATHS, MAX_CONTEXT_GRAPH_ROOTS } from "./context-selection.js";
 import { registerContextCompactionTools } from "./context-compaction-tools.js";
+import { CONTEXT_INDEX_LIMITS, registerContextIndexTools } from "./context-index-tools.js";
 import {
   CONTEXT_HANDOFF_SCHEMA,
   MAX_HANDOFF_CHANGED_PATHS,
@@ -100,6 +101,7 @@ const contextHandoffDocumentSchema = z.object({
 
 export function registerContextTools(server: McpServer): void {
   registerContextCompactionTools(server);
+  registerContextIndexTools(server);
 
   server.registerTool(
     "solvelang_context_plan",
@@ -177,6 +179,8 @@ export function registerContextTools(server: McpServer): void {
         "solvelang_context_compact_structured",
         "solvelang_context_expand_rle",
         "solvelang_context_compaction_capabilities",
+        "solvelang_context_index_query",
+        "solvelang_context_index_status",
         "solvelang_context_capabilities",
       ],
       limits: {
@@ -194,6 +198,8 @@ export function registerContextTools(server: McpServer): void {
         handoffDecisions: MAX_HANDOFF_DECISIONS,
         handoffQuestions: MAX_HANDOFF_QUESTIONS,
         handoffTests: MAX_HANDOFF_TESTS,
+        contextIndexBytes: CONTEXT_INDEX_LIMITS.indexBytes,
+        contextIndexGraphBytes: CONTEXT_INDEX_LIMITS.indexGraphBytes,
       },
       invariants: [
         "Local deterministic ranking/compaction only; no LLM call",
