@@ -1,6 +1,6 @@
 {
-  "sourceCommit": "1ca171ddcf9ffb63d2703504c6808424ec0eea8a",
-  "manifestSha256": "bac6905ab724a5e54dbe87d4edd0fc73beb789af04425ea565385cefb4bf1651",
-  "baseUrl": "/wasm/1ca171ddcf9ffb63d2703504c6808424ec0eea8a/",
+  "sourceCommit": "565fbc1cbd3f752c1e2acfe51d3eb866f224b081",
+  "manifestSha256": "015b7d39f61b74ea02c525c44a54dc1af428be2759f2a8c2e83a4b961deb41d3",
+  "baseUrl": "/wasm/565fbc1cbd3f752c1e2acfe51d3eb866f224b081/",
   "qualificationRun": "PENDING: replaced with the green WASM artifact security run of this re-pin PR before merge (deterministic audited double-build passed locally at this source commit)"
 }
