@@ -165,7 +165,7 @@ See:
 
 The repository includes a deliberately read-only Streamable HTTP transport (`solvelang-mcp-remote`, `src/remote.ts`): the same raw-JSON-only analysis surface described in `docs/integrations/remote-mcp.md`, behind bearer authentication, a 4 MiB request ceiling, and a built-in per-address rate limiter (default 60 requests per 60 seconds, enforced before authentication and MCP parsing). Protocol-level tests and a real-client proof (an MCP SDK client completing a context-pack-driven impact task) pin the behavior, and a reviewed production deployment shape lives in `deploy/`.
 
-**The endpoint is built and proven locally; it is NOT deployed.** No public hosted MCP service exists yet: a deployment still requires hosting, HTTPS termination, edge rate limits, privacy/retention controls, a host-held production token, and the owner's explicit production approval. Local plugin/source qualification does not establish that endpoint as live.
+**The endpoint is LIVE** (deployed 2026-11-20 on the owner's explicit production approval): `https://mcp.solve-lang.com` serves the 10 read-only remote tools behind bearer authentication, as a container on the production host behind TLS, with the built-in rate limit (60 requests per 60 seconds per source) active and the production token held on the host only. Verify at any time: `GET https://mcp.solve-lang.com/healthz` returns `{"status":"ok","service":"solvelang-mcp","mode":"remote-read-only"}`. Still outstanding as production hardening: edge rate limiting in front of the origin and monitoring. The hosted relay for the multi-agent bus is also live, at `https://relay.solve-lang.com` (see the Hosted relay section above).
 
 ## Multi-agent bus
 
