@@ -1433,3 +1433,46 @@ test("run page counts anonymous runs and says so plainly", () => {
   assert.match(beacon, /\/telemetry\/run/);
   assert.match(beacon, /JSON\.stringify\(\{ event \}\)/);
 });
+
+test("documentation hub documents each guide with problem-first titles and pinned facts", () => {
+  const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
+  assert.deepEqual(
+    guides.map((entry) => entry.slug),
+    ["mcp-server-local-setup"],
+    "the hub ships exactly the guides built so far, in order",
+  );
+  assert.equal(new Set(guides.map((entry) => entry.slug)).size, guides.length, "guide slugs are unique");
+  const routes = read("app/i18n/routes.ts");
+  const routeLine = (segment) => routes.split("\n").find((line) => line.includes(`segment: "${segment}"`));
+  assert.match(routeLine("docs"), /classification: "english-only-technical"/, "hub index is an english-only technical route");
+  assert.match(routeLine("docs"), /sitemap: true/, "hub index is in the sitemap");
+  const article = read("app/(english)/docs/DocsArticle.tsx");
+  assert.match(article, /Honest limits/, "every guide renders its honest limits");
+  const index = read("app/(english)/docs/page.tsx");
+  assert.match(index, /from ".\/docs-data"/, "hub index renders from the shared data");
+  assert.match(index, /\/docs\/\$\{entry\.slug\}\//, "index links every entry from the shared data");
+  for (const entry of guides) {
+    assert.ok(entry.question.length > 0, `${entry.slug} carries its problem line for the index`);
+    assert.ok(entry.title.endsWith("?"), `${entry.slug} title is the problem a developer would type`);
+    assert.ok(entry.sections.length >= 3, `${entry.slug} carries at least three sections`);
+    assert.ok(entry.limits.length >= 3, `${entry.slug} states its honest limits`);
+    assert.match(routeLine(`docs/${entry.slug}`), /classification: "english-only-technical"/, `${entry.slug} is registered as an english-only technical route`);
+    assert.match(routeLine(`docs/${entry.slug}`), /sitemap: true/, `${entry.slug} is in the sitemap`);
+    const page = read(`app/(english)/docs/${entry.slug}/page.tsx`);
+    assert.ok(page.includes(`alternatesForRoute("docs/${entry.slug}")`), `${entry.slug} page carries its own canonical alternates`);
+    assert.ok(page.includes(`guideBySlug("${entry.slug}")`), `${entry.slug} page renders its own entry`);
+  }
+  assert.ok(
+    primaryLinks.some((link) => link.label === "Docs" && link.href === "/docs/"),
+    "primary navigation Docs slot points at the hub",
+  );
+  const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
+  const localText = JSON.stringify(local);
+  assert.ok(localText.includes("npx --yes @solvelang/mcp-server@0.3.0"), "local setup guide states the published npx command");
+  assert.ok(localText.includes("SOLVELANG_WORKSPACE_ROOT"), "local setup guide states the workspace root variable");
+  assert.ok(localText.includes("29 read-only tools"), "local setup guide states the published tool count");
+  assert.ok(localText.includes("Node.js 20 or newer"), "local setup guide states the Node requirement");
+  const llms = read("public/llms.txt");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/"), "llms.txt links the documentation hub");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/mcp-server-local-setup/"), "llms.txt links the local setup guide");
+});
