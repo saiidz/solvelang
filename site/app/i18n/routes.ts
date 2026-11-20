@@ -41,6 +41,8 @@ export const publicRoutes = [
   { segment: "solutions/sign-in-link-problems", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/see-your-balance", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/job-protection", classification: "english-only-technical", sitemap: true },
+  { segment: "docs", classification: "english-only-technical", sitemap: true },
+  { segment: "docs/mcp-server-local-setup", classification: "english-only-technical", sitemap: true },
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },
