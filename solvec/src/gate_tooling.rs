@@ -513,6 +513,34 @@ pub fn prepare_gate_book(
     signatures_path: Option<&Path>,
     now_unix_seconds: i64,
 ) -> Result<Option<PreparedGates>, GatePrepError> {
+    // The signatures artifact is loaded even when the workflow
+    // declares no gates at all: a signatures artifact that names a
+    // gate the workflow no longer declares means the gate was
+    // removed after signing, and the run must refuse before anything
+    // executes. The artifact travels with the workflow, so deleting
+    // a gate declaration cannot silently drop the requirement.
+    let signatures_file = signatures_path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_signatures_path(workflow_path));
+    let signatures = if signatures_file.is_file() {
+        load_signatures(&signatures_file).map_err(GatePrepError::Failed)?
+    } else if signatures_path.is_some() {
+        return Err(GatePrepError::Failed(format!(
+            "signatures file '{}' does not exist",
+            signatures_file.display()
+        )));
+    } else {
+        Vec::new()
+    };
+    for record in &signatures {
+        if !declarations.iter().any(|gate| gate.name == record.gate) {
+            return Err(GatePrepError::Refused(format!(
+                "signatures exist for gate '{}', which the workflow no longer declares; the gate was removed after signing. Restore the gate declaration or re-issue the signatures artifact without it",
+                record.gate
+            )));
+        }
+    }
+
     if declarations.is_empty() {
         return Ok(None);
     }
@@ -530,34 +558,6 @@ pub fn prepare_gate_book(
     } else {
         Vec::new()
     };
-
-    let signatures_file = signatures_path
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| default_signatures_path(workflow_path));
-    let signatures = if signatures_file.is_file() {
-        load_signatures(&signatures_file).map_err(GatePrepError::Failed)?
-    } else if signatures_path.is_some() {
-        return Err(GatePrepError::Failed(format!(
-            "signatures file '{}' does not exist",
-            signatures_file.display()
-        )));
-    } else {
-        Vec::new()
-    };
-
-    // A signatures artifact that names a gate the workflow no longer
-    // declares means the gate was removed after signing. The run
-    // refuses before anything executes: the artifact travels with the
-    // workflow, so deleting a gate declaration cannot silently drop
-    // the requirement.
-    for record in &signatures {
-        if !declarations.iter().any(|gate| gate.name == record.gate) {
-            return Err(GatePrepError::Refused(format!(
-                "signatures exist for gate '{}', which the workflow no longer declares; the gate was removed after signing. Restore the gate declaration or re-issue the signatures artifact without it",
-                record.gate
-            )));
-        }
-    }
 
     let mut evidence_sha256 = BTreeMap::new();
     for declaration in declarations {
