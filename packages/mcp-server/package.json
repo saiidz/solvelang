@@ -25,7 +25,8 @@
   ],
   "bin": {
     "solvelang-mcp": "dist/src/index.js",
-    "solvelang-mcp-remote": "dist/src/remote-cli.js"
+    "solvelang-mcp-remote": "dist/src/remote-cli.js",
+    "solvelang-bus": "dist/src/bus-cli.js"
   },
   "files": [
     "dist/src/context-compaction-tools.d.ts",
@@ -42,6 +43,14 @@
     "dist/src/context-tools.js",
     "dist/src/context-workspace.d.ts",
     "dist/src/context-workspace.js",
+    "dist/src/bus-cli.d.ts",
+    "dist/src/bus-cli.js",
+    "dist/src/bus-client.d.ts",
+    "dist/src/bus-client.js",
+    "dist/src/bus-daemon.d.ts",
+    "dist/src/bus-daemon.js",
+    "dist/src/bus-envelope.d.ts",
+    "dist/src/bus-envelope.js",
     "dist/src/index.d.ts",
     "dist/src/index.js",
     "dist/src/n8n.d.ts",
