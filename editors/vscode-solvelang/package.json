@@ -7,25 +7,70 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Programming Languages", "Formatters"],
-  "activationEvents": ["onLanguage:solvelang", "onCommand:solvelang.startLanguageServer", "onCommand:solvelang.formatDocument"],
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "activationEvents": [
+    "onLanguage:solvelang",
+    "onCommand:solvelang.startLanguageServer",
+    "onCommand:solvelang.formatDocument",
+    "onCommand:solvelang.mcpListTools",
+    "onCommand:solvelang.mcpCreateContextPack",
+    "onCommand:solvelang.mcpInspectContextPack",
+    "onCommand:solvelang.mcpStopServer"
+  ],
   "main": "./extension.js",
   "contributes": {
-    "languages": [{
-      "id": "solvelang",
-      "aliases": ["SolveLang", "solve"],
-      "extensions": [".solve"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "solvelang",
-      "scopeName": "source.solvelang",
-      "path": "./syntaxes/solvelang.tmLanguage.json"
-    }],
+    "languages": [
+      {
+        "id": "solvelang",
+        "aliases": [
+          "SolveLang",
+          "solve"
+        ],
+        "extensions": [
+          ".solve"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "solvelang",
+        "scopeName": "source.solvelang",
+        "path": "./syntaxes/solvelang.tmLanguage.json"
+      }
+    ],
     "commands": [
-      { "command": "solvelang.startLanguageServer", "title": "SolveLang: Start Language Server" },
-      { "command": "solvelang.stopLanguageServer", "title": "SolveLang: Stop Language Server" },
-      { "command": "solvelang.formatDocument", "title": "SolveLang: Format Document" }
+      {
+        "command": "solvelang.startLanguageServer",
+        "title": "SolveLang: Start Language Server"
+      },
+      {
+        "command": "solvelang.stopLanguageServer",
+        "title": "SolveLang: Stop Language Server"
+      },
+      {
+        "command": "solvelang.formatDocument",
+        "title": "SolveLang: Format Document"
+      },
+      {
+        "command": "solvelang.mcpListTools",
+        "title": "SolveLang: List MCP Tools"
+      },
+      {
+        "command": "solvelang.mcpCreateContextPack",
+        "title": "SolveLang: Create Context Pack"
+      },
+      {
+        "command": "solvelang.mcpInspectContextPack",
+        "title": "SolveLang: Inspect Context Pack"
+      },
+      {
+        "command": "solvelang.mcpStopServer",
+        "title": "SolveLang: Stop MCP Server"
+      }
     ],
     "configuration": {
       "title": "SolveLang",
@@ -43,7 +88,9 @@
         "solvelang.languageServer.args": {
           "type": "array",
           "default": [],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "Arguments passed to the local solvelsp executable."
         },
         "solvelang.formatter.enabled": {
@@ -55,6 +102,24 @@
           "type": "string",
           "default": "solvec",
           "description": "Local solvec executable used for the fixed fmt subcommand."
+        },
+        "solvelang.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start the configured local SolveLang MCP server for the MCP commands. Disabled by default; no process is started until a SolveLang MCP command runs."
+        },
+        "solvelang.mcp.command": {
+          "type": "string",
+          "default": "solvelang-mcp",
+          "description": "Local SolveLang MCP server executable (the solvelang-mcp bin from @solvelang/mcp-server). It is started only when mcp.enabled is true and a SolveLang MCP command runs."
+        },
+        "solvelang.mcp.args": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Arguments passed to the local SolveLang MCP server executable."
         }
       }
     }
