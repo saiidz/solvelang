@@ -1,0 +1,43 @@
+name: Context Index CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/context-index/**"
+      - "packages/mcp-server/src/**"
+      - "site/app/repository-audit/core/**"
+      - "site/app/solve-graph/core/**"
+      - ".github/workflows/context-index-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/context-index/**"
+      - "packages/mcp-server/src/**"
+      - "site/app/repository-audit/core/**"
+      - "site/app/solve-graph/core/**"
+      - ".github/workflows/context-index-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Context Index kit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/context-index/package-lock.json
+
+      - name: Install, build, and test the Context Index kit
+        working-directory: packages/context-index
+        run: |
+          npm ci
+          npm test
