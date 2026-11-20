@@ -1,4 +1,4 @@
-import { createHash, createPublicKey, timingSafeEqual, verify as cryptoVerify } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { createWriteStream, readFileSync, type WriteStream } from "node:fs";
 import {
   createServer as createNodeHttpServer,
@@ -6,28 +6,43 @@ import {
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
+import {
+  BUS_CODES,
+  BUS_DAEMON_AGENT,
+  BusError,
+  BusKeyRegistry,
+  validateBusMessage,
+  verifyBusMessage,
+  createBusMessage,
+  type BusMessage,
+} from "./bus-envelope.js";
+import { BUS_DEFAULT_CLAIM_TTL_MS, BUS_MAX_CLAIM_TTL_MS } from "./bus-daemon.js";
 import { createRemoteRateLimiter, type RemoteRateLimit } from "./remote.js";
 
 // SolveLang hosted relay — the cross-machine counterpart of the Phase 6
-// local bus daemon (design doc §3.2 Option B; spike verdict: adopt on the
+// bus daemon (design doc §3.2 Option B; spike verdict: adopt on the
 // conflicts leg). The relay carries SIGNALS ONLY: the durable record is
 // still the content-addressed handoff document a message points at via
 // `ref`. Documents carry truth; the bus carries signals.
 //
-// Protocol identity with the local daemon is deliberate: the envelope is
-// the handoff schema extended (design §3.1) with the same content-hash id,
-// the same kinds, and the same claim semantics (atomic grant/deny at claim
-// time, TTL leases, expiry frees the item and is logged + signalled).
-// The one protocol change the hosted hop requires is authenticity: the
-// envelope's reserved `sig` field now carries a Phase 4-style Ed25519
-// signature, and a message that fails authenticity is REFUSED, never
-// relayed (see verifyRelayEnvelopeSignature).
+// The wire protocol is the bus protocol, unchanged: envelopes, content-
+// hash ids, canonical signature payloads, refusal codes, and the key
+// registry are the bus-envelope module's, shared with the local daemon
+// so the two hops cannot drift. Claim semantics are the daemon's
+// (atomic grant/deny at claim time, TTL leases, expiry frees the item
+// and is logged + signalled, claim state recoverable from the audit
+// log). What the hosted hop adds is transport and tenancy: HTTP with
+// long-poll delivery instead of local sockets, and workspaces — a
+// bearer token binds exactly one (workspace, agent) pair and no route
+// can observe another workspace's messages, claims, or presence.
 //
-// State is held per workspace in memory: signals are ephemeral by design,
-// so a relay restart loses undelivered signals but no truth (the audit
-// log is the durable record of what was relayed). Workspaces are fully
-// isolated: a bearer token binds exactly one (workspace, agent) pair and
-// no route can observe another workspace's messages, claims, or presence.
+// Authenticity modes are the bus's: a workspace in "registry" mode
+// (requireSignatures) refuses any message that is unsigned or fails
+// verification against its Phase 4 key registry — refused, never
+// relayed, and the refusal is audited. Claim and presence calls carry
+// no envelope; they are authenticated by the bearer token itself, which
+// is the agent's credential on this hop (the daemon, which has no
+// per-agent credential channel, verifies a signed envelope instead).
 
 export const RELAY_HEALTH_PATH = "/healthz" as const;
 export const RELAY_MESSAGES_PATH = "/relay/messages" as const;
@@ -36,155 +51,19 @@ export const RELAY_CLAIM_RELEASE_PATH = "/relay/claims/release" as const;
 export const RELAY_PRESENCE_PATH = "/relay/presence" as const;
 export const RELAY_MAX_REQUEST_BYTES = 256 * 1024;
 export const RELAY_DEFAULT_PORT = 8788;
-export const RELAY_DEFAULT_CLAIM_TTL_MS = 8_000;
 export const RELAY_MIN_CLAIM_TTL_MS = 250;
-export const RELAY_MAX_CLAIM_TTL_MS = 300_000;
+export const RELAY_DEFAULT_CLAIM_TTL_MS = BUS_DEFAULT_CLAIM_TTL_MS;
+export const RELAY_MAX_CLAIM_TTL_MS = BUS_MAX_CLAIM_TTL_MS;
 export const RELAY_MAX_LONG_POLL_MS = 30_000;
 export const RELAY_RETAINED_MESSAGES_PER_WORKSPACE = 1_000;
-export const RELAY_SIGNATURE_SCHEME = "solvelang-bus-signature-v1" as const;
 
-export const relayMessageKinds = Object.freeze([
-  "signal",
-  "claim",
-  "release",
-  "propose",
-  "accept",
-  "reject",
-  "ping",
-  "pong",
-] as const);
-export type RelayMessageKind = (typeof relayMessageKinds)[number];
-
-export type RelayEnvelope = Readonly<{
-  id: string;
-  fromAgent: string;
-  toAgent: string;
-  kind: RelayMessageKind;
-  body: unknown;
-  ref: string | null;
-  ts: number;
-  sig: string;
-}>;
-
-// Canonical JSON identical to the spike envelope's canonicalization
-// (sorted keys, recursive): the content-hash id must agree byte-for-byte
-// with the local bus for the same logical message.
-export function relayCanonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    const primitive = JSON.stringify(value);
-    return primitive === undefined ? "null" : primitive;
-  }
-  if (Array.isArray(value)) return "[" + value.map((entry) => relayCanonicalJson(entry)).join(",") + "]";
-  const record = value as Record<string, unknown>;
-  return "{" + Object.keys(record).sort().map((key) => JSON.stringify(key) + ":" + relayCanonicalJson(record[key])).join(",") + "}";
-}
-
-export function computeRelayEnvelopeId(core: Readonly<{
-  fromAgent: string;
-  toAgent: string;
-  kind: RelayMessageKind;
-  body?: unknown;
-  ref?: string | null;
-}>): string {
-  const normalized = {
-    fromAgent: core.fromAgent,
-    toAgent: core.toAgent,
-    kind: core.kind,
-    body: core.body ?? null,
-    ref: core.ref ?? null,
-  };
-  return "sch_" + createHash("sha256").update(relayCanonicalJson(normalized), "utf8").digest("hex");
-}
-
-export function createRelayEnvelope(input: Readonly<{
-  fromAgent: string;
-  toAgent: string;
-  kind: RelayMessageKind;
-  body?: unknown;
-  ref?: string | null;
-  ts?: number;
-  sig?: string;
-}>): RelayEnvelope {
-  const body = input.body ?? null;
-  const ref = input.ref ?? null;
-  return {
-    id: computeRelayEnvelopeId({ fromAgent: input.fromAgent, toAgent: input.toAgent, kind: input.kind, body, ref }),
-    fromAgent: input.fromAgent,
-    toAgent: input.toAgent,
-    kind: input.kind,
-    body,
-    ref,
-    ts: input.ts ?? Date.now(),
-    sig: input.sig ?? "",
-  };
-}
-
-// The canonical bytes a signer signs, in the Phase 4 gate-payload style
-// (version line, then one `field:value` line each, trailing newline).
-// The envelope id already binds from/to/kind/body/ref by content hash;
-// naming the fields beside it keeps the signed statement human-auditable.
-export function relaySignaturePayload(envelope: RelayEnvelope, signerKeyId: string): string {
-  return [
-    RELAY_SIGNATURE_SCHEME,
-    `id:${envelope.id}`,
-    `from:${envelope.fromAgent}`,
-    `to:${envelope.toAgent}`,
-    `kind:${envelope.kind}`,
-    `signer:${signerKeyId}`,
-  ].join("\n") + "\n";
-}
-
-export type RelayKeyEntry = Readonly<{
-  id: string;
-  algorithm: "ed25519";
-  public_key: string;
-  status: "active" | "revoked";
-}>;
-
-export type RelaySignatureVerdict =
-  | Readonly<{ ok: true; signer: string }>
-  | Readonly<{ ok: false; code: "signature_required" | "signature_malformed" | "unknown_signer" | "signer_revoked" | "signature_invalid" }>;
-
-const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
-
-export function parseRelaySignature(sig: string): Readonly<{ keyId: string; signature: Buffer }> | null {
-  const match = /^ed25519:([A-Za-z0-9._-]{1,64}):([A-Za-z0-9+/]+={0,2})$/.exec(sig);
-  if (!match) return null;
-  const signature = Buffer.from(match[2]!, "base64");
-  if (signature.length !== 64) return null;
-  return { keyId: match[1]!, signature };
-}
-
-export function verifyRelayEnvelopeSignature(
-  envelope: RelayEnvelope,
-  keys: readonly RelayKeyEntry[],
-): RelaySignatureVerdict {
-  if (envelope.sig === "") return { ok: false, code: "signature_required" };
-  const parsed = parseRelaySignature(envelope.sig);
-  if (!parsed) return { ok: false, code: "signature_malformed" };
-  const entry = keys.find((key) => key.id === parsed.keyId);
-  if (!entry || entry.algorithm !== "ed25519") return { ok: false, code: "unknown_signer" };
-  if (entry.status === "revoked") return { ok: false, code: "signer_revoked" };
-  const rawPublicKey = Buffer.from(entry.public_key, "base64");
-  if (rawPublicKey.length !== 32) return { ok: false, code: "unknown_signer" };
-  let valid = false;
-  try {
-    const publicKey = createPublicKey({
-      key: Buffer.concat([ED25519_SPKI_PREFIX, rawPublicKey]),
-      format: "der",
-      type: "spki",
-    });
-    valid = cryptoVerify(null, Buffer.from(relaySignaturePayload(envelope, parsed.keyId), "utf8"), publicKey, parsed.signature);
-  } catch {
-    valid = false;
-  }
-  return valid ? { ok: true, signer: parsed.keyId } : { ok: false, code: "signature_invalid" };
-}
+export type RelayMessage = BusMessage;
 
 // ---------------------------------------------------------------------------
 // Configuration. The relay's config is a host-held JSON file (never in
-// git): token values exist only as SHA-256 hashes here, and workspace key
-// registries carry public keys only — the Phase 4 registry shape.
+// git): token values exist only as SHA-256 hashes here, and a workspace's
+// signer registry is an embedded `solvelang.key-registry` v1 document
+// (public keys only), parsed by the bus module's own registry reader.
 // ---------------------------------------------------------------------------
 
 export type RelayTokenBinding = Readonly<{ agent: string; tokenSha256: string }>;
@@ -192,7 +71,7 @@ export type RelayTokenBinding = Readonly<{ agent: string; tokenSha256: string }>
 export type RelayWorkspaceConfig = Readonly<{
   id: string;
   requireSignatures: boolean;
-  keys: readonly RelayKeyEntry[];
+  registry: BusKeyRegistry | null;
   tokens: readonly RelayTokenBinding[];
 }>;
 
@@ -222,27 +101,16 @@ export function normalizeRelayConfig(value: unknown): RelayConfig {
     workspaceIds.add(id);
     const requireSignatures = rawWorkspace.requireSignatures === undefined ? true : rawWorkspace.requireSignatures;
     if (typeof requireSignatures !== "boolean") throw new Error(`Relay workspace ${id}: requireSignatures must be a boolean.`);
-    const rawKeys = rawWorkspace.keys === undefined ? [] : rawWorkspace.keys;
-    if (!Array.isArray(rawKeys)) throw new Error(`Relay workspace ${id}: keys must be an array.`);
-    const keyIds = new Set<string>();
-    const keys = rawKeys.map((rawKey) => {
-      if (!isRecord(rawKey)) throw new Error(`Relay workspace ${id}: each key must be an object.`);
-      const keyId = rawKey.id;
-      if (typeof keyId !== "string" || !SAFE_NAME.test(keyId)) throw new Error(`Relay workspace ${id}: a key has an invalid id.`);
-      if (keyIds.has(keyId)) throw new Error(`Relay workspace ${id}: key id ${keyId} is duplicated.`);
-      keyIds.add(keyId);
-      if (rawKey.algorithm !== "ed25519") throw new Error(`Relay workspace ${id}: key ${keyId} must use algorithm ed25519.`);
-      if (typeof rawKey.public_key !== "string" || Buffer.from(rawKey.public_key, "base64").length !== 32) {
-        throw new Error(`Relay workspace ${id}: key ${keyId} public_key must be base64 for a 32-byte Ed25519 key.`);
+    let registry: BusKeyRegistry | null = null;
+    if (rawWorkspace.registry !== undefined && rawWorkspace.registry !== null) {
+      try {
+        registry = BusKeyRegistry.fromJson(rawWorkspace.registry);
+      } catch (error) {
+        throw new Error(`Relay workspace ${id}: registry is not a valid solvelang.key-registry v1 document: ${error instanceof Error ? error.message : String(error)}`);
       }
-      if (rawKey.status !== "active" && rawKey.status !== "revoked") {
-        throw new Error(`Relay workspace ${id}: key ${keyId} status must be active or revoked.`);
-      }
-      const status: "active" | "revoked" = rawKey.status;
-      return { id: keyId, algorithm: "ed25519" as const, public_key: rawKey.public_key as string, status };
-    });
-    if (requireSignatures && keys.length === 0) {
-      throw new Error(`Relay workspace ${id}: requireSignatures is true but no signer keys are registered.`);
+    }
+    if (requireSignatures && !registry) {
+      throw new Error(`Relay workspace ${id}: requireSignatures is true but no key registry is configured (${BUS_CODES.UNCONFIGURED}).`);
     }
     const rawTokens = rawWorkspace.tokens;
     if (!Array.isArray(rawTokens) || rawTokens.length === 0) throw new Error(`Relay workspace ${id}: tokens must be a non-empty array.`);
@@ -263,7 +131,7 @@ export function normalizeRelayConfig(value: unknown): RelayConfig {
       tokenOwners.set(tokenSha256, owner);
       return { agent, tokenSha256 };
     });
-    return { id, requireSignatures, keys, tokens };
+    return { id, requireSignatures, registry, tokens };
   });
   return { workspaces };
 }
@@ -282,8 +150,13 @@ export function loadRelayConfigFile(path: string): RelayConfig {
 // Server
 // ---------------------------------------------------------------------------
 
-type StoredMessage = Readonly<{ seq: number; envelope: RelayEnvelope; receivedAt: number }>;
+type StoredMessage = Readonly<{ seq: number; envelope: BusMessage; receivedAt: number }>;
 type Claim = { holder: string; expiresAt: number };
+
+export type RelayRecoveredState = ReadonlyMap<string, Readonly<{
+  claims: readonly (readonly [string, Claim])[];
+  presence: readonly (readonly [string, number])[];
+}>>;
 
 class WorkspaceState {
   seq = 0;
@@ -292,7 +165,7 @@ class WorkspaceState {
   readonly presence = new Map<string, number>();
   readonly waiters = new Set<() => void>();
 
-  append(envelope: RelayEnvelope, receivedAt: number): StoredMessage {
+  append(envelope: BusMessage, receivedAt: number): StoredMessage {
     this.seq += 1;
     const stored = { seq: this.seq, envelope, receivedAt };
     this.messages.push(stored);
@@ -312,6 +185,7 @@ export type RelayHttpServerOptions = Readonly<{
   trustProxy?: boolean;
   audit?: (entry: RelayAuditEntry) => void;
   now?: () => number;
+  recovered?: RelayRecoveredState;
 }>;
 
 function sendJson(res: ServerResponse, statusCode: number, value: unknown, extraHeaders: Record<string, string> = {}): void {
@@ -352,29 +226,6 @@ function readBoundedBodyErrorStatus(error: unknown): number {
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 
-function normalizeIncomingEnvelope(value: unknown): RelayEnvelope | null {
-  if (!isRecord(value)) return null;
-  const { id, fromAgent, toAgent, kind, ts, sig } = value;
-  if (typeof id !== "string" || !/^sch_[a-f0-9]{64}$/.test(id)) return null;
-  if (typeof fromAgent !== "string" || fromAgent.length === 0 || fromAgent.length > 128 || CONTROL_CHARS.test(fromAgent)) return null;
-  if (typeof toAgent !== "string" || toAgent.length === 0 || toAgent.length > 128 || CONTROL_CHARS.test(toAgent)) return null;
-  if (typeof kind !== "string" || !(relayMessageKinds as readonly string[]).includes(kind)) return null;
-  if (typeof ts !== "number" || !Number.isSafeInteger(ts) || ts <= 0) return null;
-  if (typeof sig !== "string" || sig.length > 4096) return null;
-  const ref = value.ref === undefined ? null : value.ref;
-  if (ref !== null && (typeof ref !== "string" || ref.length > 2048)) return null;
-  return {
-    id,
-    fromAgent,
-    toAgent,
-    kind: kind as RelayMessageKind,
-    body: value.body ?? null,
-    ref,
-    ts,
-    sig,
-  };
-}
-
 export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServer {
   const config = options.config;
   const now = options.now ?? Date.now;
@@ -388,6 +239,13 @@ export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServ
     let state = states.get(workspaceId);
     if (!state) {
       state = new WorkspaceState();
+      const recovered = options.recovered?.get(workspaceId);
+      if (recovered) {
+        for (const [item, claim] of recovered.claims) {
+          if (claim.expiresAt > now()) state.claims.set(item, { ...claim });
+        }
+        for (const [agent, lastSeen] of recovered.presence) state.presence.set(agent, lastSeen);
+      }
       states.set(workspaceId, state);
     }
     return state;
@@ -420,18 +278,14 @@ export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServ
   };
 
   const injectSystemSignal = (state: WorkspaceState, signal: string, item: string): void => {
-    const at = now();
-    const envelope: RelayEnvelope = {
-      id: `sys-${signal}-${item}-${at}-${state.seq + 1}`,
-      fromAgent: "relay",
+    const envelope = createBusMessage({
+      fromAgent: BUS_DAEMON_AGENT,
       toAgent: "*",
       kind: "signal",
       body: { signal, item },
-      ref: null,
-      ts: at,
-      sig: "",
-    };
-    state.append(envelope, at);
+      ts: now(),
+    });
+    state.append(envelope, now());
   };
 
   const sweepExpired = (workspace: RelayWorkspaceConfig, state: WorkspaceState): void => {
@@ -439,7 +293,7 @@ export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServ
     for (const [item, claim] of [...state.claims]) {
       if (claim.expiresAt <= at) {
         state.claims.delete(item);
-        audit({ t: at, event: "claim_expired", workspace: workspace.id, item, holder: claim.holder });
+        audit({ t: at, event: "claim_expired", workspace: workspace.id, item, agent: claim.holder });
         injectSystemSignal(state, "claim_expired", item);
       }
     }
@@ -482,44 +336,46 @@ export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServ
           sendJson(res, readBoundedBodyErrorStatus(error), { error: "invalid_request" });
           return;
         }
-        const envelope = normalizeIncomingEnvelope(body);
-        if (!envelope) {
-          audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: "invalid_envelope" });
-          sendJson(res, 400, { error: "invalid_envelope" });
+        let message: BusMessage;
+        try {
+          message = validateBusMessage(body);
+        } catch (error) {
+          const code = error instanceof BusError ? error.code : BUS_CODES.MALFORMED;
+          audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code });
+          sendJson(res, 400, { error: code });
           return;
         }
-        if (envelope.fromAgent !== agent) {
-          audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: "sender_mismatch", id: envelope.id });
-          sendJson(res, 403, { error: "sender_mismatch" });
+        if (message.fromAgent !== agent) {
+          audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: BUS_CODES.SENDER_MISMATCH, id: message.id });
+          sendJson(res, 403, { error: BUS_CODES.SENDER_MISMATCH });
           return;
         }
-        const expectedId = computeRelayEnvelopeId(envelope);
-        if (expectedId !== envelope.id) {
-          audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: "id_mismatch", id: envelope.id });
-          sendJson(res, 400, { error: "id_mismatch" });
-          return;
-        }
-        // Authenticity gate: a workspace that requires signatures refuses
-        // unsigned or invalidly signed messages outright, and a presented
-        // signature that fails verification is refused in EVERY workspace —
-        // a bad signature is never relayed on the theory that it was
-        // optional. Refusals are audited and nothing is delivered.
-        if (workspace.requireSignatures || envelope.sig !== "") {
-          const verdict = verifyRelayEnvelopeSignature(envelope, workspace.keys);
+        // Authenticity gate, fail-closed: registry-mode workspaces
+        // verify every message; in open workspaces a message that
+        // carries a signature is still verified — a presented-but-bad
+        // signature is never relayed on the theory it was optional.
+        const carriesSignature = message.signer !== null || message.sig !== "";
+        if (workspace.requireSignatures || carriesSignature) {
+          if (!workspace.registry) {
+            audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: BUS_CODES.UNCONFIGURED, id: message.id });
+            sendJson(res, 403, { error: BUS_CODES.UNCONFIGURED });
+            return;
+          }
+          const verdict = verifyBusMessage(message, workspace.registry);
           if (!verdict.ok) {
-            audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: verdict.code, id: envelope.id });
+            audit({ t: now(), event: "message_refused", workspace: workspace.id, agent, code: verdict.code, id: message.id });
             sendJson(res, 403, { error: verdict.code });
             return;
           }
         }
-        const existing = state.messages.find((stored) => stored.envelope.id === envelope.id);
+        const existing = state.messages.find((stored) => stored.envelope.id === message.id);
         if (existing) {
-          sendJson(res, 200, { ok: true, id: envelope.id, seq: existing.seq, duplicate: true });
+          sendJson(res, 200, { ok: true, id: message.id, seq: existing.seq, duplicate: true });
           return;
         }
-        const stored = state.append(envelope, now());
-        audit({ t: now(), event: "message", workspace: workspace.id, agent, id: envelope.id, kind: envelope.kind, toAgent: envelope.toAgent, seq: stored.seq });
-        sendJson(res, 200, { ok: true, id: envelope.id, seq: stored.seq });
+        const stored = state.append(message, now());
+        audit({ t: now(), event: "message", workspace: workspace.id, agent, id: message.id, kind: message.kind, toAgent: message.toAgent, seq: stored.seq });
+        sendJson(res, 200, { ok: true, id: message.id, seq: stored.seq });
         return;
       }
 
@@ -649,6 +505,52 @@ export function createRelayHttpServer(options: RelayHttpServerOptions): HttpServ
   return server;
 }
 
+// ---------------------------------------------------------------------------
+// Startup, including the daemon's recovery discipline: claim + presence
+// state is rebuilt from the append-only audit log (messages are signals
+// and are never replayed; a claim whose lease lapsed while the relay was
+// down recovers as free).
+// ---------------------------------------------------------------------------
+
+export function recoverRelayStateFromAuditLog(path: string, now: () => number = Date.now): RelayRecoveredState {
+  const recovered = new Map<string, { claims: Map<string, Claim>; presence: Map<string, number> }>();
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return new Map();
+  }
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (typeof entry.workspace !== "string") continue;
+    let workspaceState = recovered.get(entry.workspace);
+    if (!workspaceState) {
+      workspaceState = { claims: new Map(), presence: new Map() };
+      recovered.set(entry.workspace, workspaceState);
+    }
+    if (typeof entry.agent === "string" && typeof entry.t === "number") {
+      workspaceState.presence.set(entry.agent, Math.max(workspaceState.presence.get(entry.agent) ?? 0, entry.t));
+    }
+    if (entry.event === "claim_granted" && typeof entry.item === "string" && typeof entry.agent === "string" && typeof entry.expiresAt === "number") {
+      if (entry.expiresAt > now()) workspaceState.claims.set(entry.item, { holder: entry.agent, expiresAt: entry.expiresAt });
+      else workspaceState.claims.delete(entry.item);
+    }
+    if ((entry.event === "claim_released" || entry.event === "claim_expired") && typeof entry.item === "string") {
+      workspaceState.claims.delete(entry.item);
+    }
+  }
+  return new Map([...recovered].map(([id, state]) => [id, {
+    claims: [...state.claims.entries()],
+    presence: [...state.presence.entries()],
+  }]));
+}
+
 export type StartRelayServerOptions = Readonly<{
   config?: RelayConfig;
   configPath?: string;
@@ -658,6 +560,24 @@ export type StartRelayServerOptions = Readonly<{
   trustProxy?: boolean;
   auditLogPath?: string;
 }>;
+
+function relayRateLimitFromEnvironment(): Partial<RemoteRateLimit> | undefined {
+  const limitRaw = process.env.SOLVELANG_RELAY_RATE_LIMIT;
+  const windowRaw = process.env.SOLVELANG_RELAY_RATE_WINDOW_MS;
+  if (limitRaw === undefined && windowRaw === undefined) return undefined;
+  const parsed: { limit?: number; windowMs?: number } = {};
+  if (limitRaw !== undefined) {
+    const limit = Number(limitRaw);
+    if (!Number.isSafeInteger(limit)) throw new Error("SOLVELANG_RELAY_RATE_LIMIT must be an integer (0 disables the limiter).");
+    parsed.limit = limit;
+  }
+  if (windowRaw !== undefined) {
+    const windowMs = Number(windowRaw);
+    if (!Number.isSafeInteger(windowMs)) throw new Error("SOLVELANG_RELAY_RATE_WINDOW_MS must be an integer number of milliseconds.");
+    parsed.windowMs = windowMs;
+  }
+  return parsed;
+}
 
 export async function startRelayServer(options: StartRelayServerOptions = {}): Promise<HttpServer> {
   const config = options.config ?? loadRelayConfigFile(
@@ -669,15 +589,22 @@ export async function startRelayServer(options: StartRelayServerOptions = {}): P
     throw new Error("Relay port must be an integer from 0 through 65535.");
   }
   const trustProxy = options.trustProxy ?? (process.env.SOLVELANG_RELAY_TRUST_PROXY === "1");
-  let auditStream: WriteStream | undefined;
+  const rateLimit = options.rateLimit ?? relayRateLimitFromEnvironment();
   const auditLogPath = options.auditLogPath ?? process.env.SOLVELANG_RELAY_AUDIT_LOG;
+  let auditStream: WriteStream | undefined;
   if (auditLogPath) {
     auditStream = createWriteStream(auditLogPath, { flags: "a" });
   }
   const audit = auditStream
     ? (entry: RelayAuditEntry) => { auditStream!.write(JSON.stringify(entry) + "\n"); }
     : undefined;
-  const server = createRelayHttpServer({ config, rateLimit: options.rateLimit, trustProxy, audit });
+  const recovered = auditLogPath ? recoverRelayStateFromAuditLog(auditLogPath) : undefined;
+  const server = createRelayHttpServer({ config, rateLimit, trustProxy, audit, recovered });
+  if (audit) {
+    let recoveredClaims = 0;
+    if (recovered) for (const state of recovered.values()) recoveredClaims += state.claims.length;
+    audit({ t: Date.now(), event: "relay_start", recoveredClaims });
+  }
   server.on("close", () => { if (auditStream) auditStream.end(); });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
