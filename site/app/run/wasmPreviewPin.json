@@ -2,5 +2,5 @@
   "sourceCommit": "1ca171ddcf9ffb63d2703504c6808424ec0eea8a",
   "manifestSha256": "bac6905ab724a5e54dbe87d4edd0fc73beb789af04425ea565385cefb4bf1651",
   "baseUrl": "/wasm/1ca171ddcf9ffb63d2703504c6808424ec0eea8a/",
-  "qualificationRun": "PENDING: replaced with the green WASM artifact security run of this re-pin PR before merge (deterministic audited double-build passed locally at this source commit)"
+  "qualificationRun": "https://github.com/saiidz/solvelang/actions/runs/44754552250"
 }
