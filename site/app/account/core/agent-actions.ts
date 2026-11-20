@@ -96,7 +96,10 @@ export type AgentOpsDigestMandateView = {
   pool: string;
   packKey: string;
   settledMonthCents: number;
-  reservedMonthCents: number;
+  // The producer's name (runners buildDigest): reservedCents, not
+  // reservedMonthCents. Reading a field the digest never sends is
+  // what rendered "$NaN" on the account page (Nov 19, 2026).
+  reservedCents: number;
   monthlyCapCents: number;
   utilization: number;
   nearMiss: boolean;
@@ -209,6 +212,49 @@ export function mandateVersionLine(mandate: AgentMandateView): string | null {
   return `Version ${mandate.version} — a change is always a new version; the version it replaced stays on this page for the record.`;
 }
 
+// The standing-operations form state, as the account page holds
+// it. The digest cadence carries an explicit "off": "daily" is a
+// stated policy, not a default to be read as "nothing chosen".
+export type AgentOpsFormState = {
+  shiftEnabled: boolean;
+  shiftPackKey: string;
+  shiftPool: string;
+  shiftBelowMinutes: string;
+  pauseEnabled: boolean;
+  pausePercent: string;
+  digestCadence: "daily" | "weekly" | "off";
+};
+
+// The standing-operations policy exactly as the form states it.
+// Null only when the human stated nothing at all: no pool shift,
+// no pause lever, and the digest off. Any stated piece - including
+// a daily digest on its own - is a policy, and the arm request
+// must carry it whole: the runners engine stores what it is sent,
+// and the operations loop runs only mandates whose stored record
+// carries a policy. (The Nov 19, 2026 launch proof armed a
+// digest-daily-only mandate whose policy was read as "nothing
+// stated" and dropped here; the stored mandate had ops: null and
+// the loop never picked it up.)
+export function opsPolicyFromFormState(state: AgentOpsFormState): AgentOpsPolicyView | null {
+  if (!state.shiftEnabled && !state.pauseEnabled && state.digestCadence === "off") return null;
+  return {
+    poolShift: state.shiftEnabled
+      ? {
+          packKey: state.shiftPackKey,
+          pool: state.shiftPool,
+          shiftBelowSeconds: Math.max(1, Number.parseInt(state.shiftBelowMinutes, 10) || 0) * 60,
+        }
+      : null,
+    pause: state.pauseEnabled
+      ? {
+          capFraction: Math.min(99, Math.max(50, Number.parseInt(state.pausePercent, 10) || 90)) / 100,
+          floorSeconds: null,
+        }
+      : null,
+    digestCadence: state.digestCadence === "weekly" ? "weekly" : "daily",
+  };
+}
+
 // One plain-words line describing a standing-operations policy,
 // used for both the armed policy (ops) and an agent's proposal
 // (opsProposal). Null when there is no policy to describe.
@@ -257,7 +303,7 @@ export function auditActionLine(action: string): string | null {
 }
 
 export function digestMandateLine(view: AgentOpsDigestMandateView): string {
-  const used = formatCents(view.settledMonthCents + view.reservedMonthCents);
+  const used = formatCents(view.settledMonthCents + view.reservedCents);
   const cap = formatCents(view.monthlyCapCents);
   const percent = Math.round(view.utilization * 100);
   return `${view.packKey} (${view.pool}) — ${used} of ${cap} this month (${percent}%)${view.nearMiss ? " — near its cap" : ""}`;

@@ -15,6 +15,7 @@ import {
   mandateStatusLine,
   mandateVersionLine,
   minutesCheckoutFromApproval,
+  opsPolicyFromFormState,
   opsPolicySummary,
   purchaseStatusLine,
   type AgentAuditEntryView,
@@ -144,7 +145,7 @@ export function AgentAccess() {
   const [opsShiftBelowMinutes, setOpsShiftBelowMinutes] = useState("30");
   const [opsPauseEnabled, setOpsPauseEnabled] = useState(false);
   const [opsPausePercent, setOpsPausePercent] = useState("90");
-  const [opsDigestCadence, setOpsDigestCadence] = useState<"daily" | "weekly">("daily");
+  const [opsDigestCadence, setOpsDigestCadence] = useState<"daily" | "weekly" | "off">("off");
 
   const load = useCallback(async () => {
     const failures: string[] = [];
@@ -244,20 +245,20 @@ export function AgentAccess() {
     });
   }
 
-  // The standing-operations policy exactly as the form states it.
-  // Null when the human enabled nothing — the mandate is then a
+  // The standing-operations policy exactly as the form states it,
+  // built by the shared helper in core (pinned there). Null only
+  // when the human stated nothing at all — the mandate is then a
   // plain Level 3 top-up mandate, operated as before.
   function opsFromForm(): AgentOpsPolicyView | null {
-    if (!opsShiftEnabled && !opsPauseEnabled && opsDigestCadence === "daily") return null;
-    return {
-      poolShift: opsShiftEnabled
-        ? { packKey: opsShiftPackKey, pool: MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === opsShiftPackKey)?.pool ?? "high-power", shiftBelowSeconds: Math.max(1, Number.parseInt(opsShiftBelowMinutes, 10) || 0) * 60 }
-        : null,
-      pause: opsPauseEnabled
-        ? { capFraction: Math.min(99, Math.max(50, Number.parseInt(opsPausePercent, 10) || 90)) / 100, floorSeconds: null }
-        : null,
+    return opsPolicyFromFormState({
+      shiftEnabled: opsShiftEnabled,
+      shiftPackKey: opsShiftPackKey,
+      shiftPool: MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === opsShiftPackKey)?.pool ?? "high-power",
+      shiftBelowMinutes: opsShiftBelowMinutes,
+      pauseEnabled: opsPauseEnabled,
+      pausePercent: opsPausePercent,
       digestCadence: opsDigestCadence,
-    };
+    });
   }
 
   function formTerms() {
@@ -720,7 +721,8 @@ export function AgentAccess() {
               ) : null}
               <label className="text-sm">
                 <span className="mb-1 block text-slate-400">Operations digest</span>
-                <select className={inputClass} value={opsDigestCadence} onChange={(e) => setOpsDigestCadence(e.target.value as "daily" | "weekly")}>
+                <select className={inputClass} value={opsDigestCadence} onChange={(e) => setOpsDigestCadence(e.target.value as "daily" | "weekly" | "off")}>
+                  <option value="off">Off</option>
                   <option value="daily">Daily</option>
                   <option value="weekly">Weekly</option>
                 </select>
