@@ -7,14 +7,20 @@ import { customerApi, normalizeApiBase, type CustomerDashboard } from "../core/c
 import {
   AGENT_TOKEN_SCOPES,
   MANDATE_PACK_OPTIONS,
+  auditActionLine,
   auditOutcomeLine,
+  digestMandateLine,
   formatCents,
   formatThreshold,
   mandateStatusLine,
+  mandateVersionLine,
   minutesCheckoutFromApproval,
+  opsPolicySummary,
   purchaseStatusLine,
   type AgentAuditEntryView,
   type AgentMandateView,
+  type AgentOpsDigestView,
+  type AgentOpsPolicyView,
   type AgentPaymentMethodView,
   type AgentPurchaseIntentView,
   type AgentTokenView,
@@ -114,6 +120,8 @@ export function AgentAccess() {
   const [intents, setIntents] = useState<AgentPurchaseIntentView[]>([]);
   const [planPurchases, setPlanPurchases] = useState<AgentPurchaseIntentView[]>([]);
   const [audit, setAudit] = useState<AgentAuditEntryView[]>([]);
+  const [digest, setDigest] = useState<AgentOpsDigestView | null>(null);
+  const [opsOff, setOpsOff] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<AgentPaymentMethodView>({ configured: false });
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [stripeBox, setStripeBox] = useState<StripeBoxState>(null);
@@ -129,6 +137,14 @@ export function AgentAccess() {
   const [monthlyCap, setMonthlyCap] = useState("100");
   const [coversApiPlans, setCoversApiPlans] = useState(false);
   const [expiryDays, setExpiryDays] = useState("90");
+  // Standing operations (Level 4) form — stated by the human here;
+  // an agent can never set these, only propose them on a draft.
+  const [opsShiftEnabled, setOpsShiftEnabled] = useState(false);
+  const [opsShiftPackKey, setOpsShiftPackKey] = useState("high-power-1000");
+  const [opsShiftBelowMinutes, setOpsShiftBelowMinutes] = useState("30");
+  const [opsPauseEnabled, setOpsPauseEnabled] = useState(false);
+  const [opsPausePercent, setOpsPausePercent] = useState("90");
+  const [opsDigestCadence, setOpsDigestCadence] = useState<"daily" | "weekly">("daily");
 
   const load = useCallback(async () => {
     const failures: string[] = [];
@@ -157,6 +173,20 @@ export function AgentAccess() {
     setAudit(auditList);
     setPaymentMethod(method);
     if (failures.length > 0 && !disabled) setError(failures[0]);
+    // The Level 4 ops digest has its own kill switch: while
+    // AGENT_OPS_ENABLED is off the route refuses agent_ops_disabled,
+    // which is a quiet "not switched on" state here, never an error.
+    try {
+      const result = await customerApi<{ digest: AgentOpsDigestView }>(RUNNERS_API_BASE, "/customer/runner-minutes/agent/ops/digest", { method: "GET" });
+      setDigest(result.digest);
+      setOpsOff(false);
+    } catch (caught) {
+      const code = (caught as { code?: string })?.code;
+      if (code === "agent_ops_disabled") {
+        setOpsOff(true);
+        setDigest(null);
+      }
+    }
 
   }, []);
 
@@ -202,6 +232,7 @@ export function AgentAccess() {
     pool: string; packKey: string; thresholdSeconds: number;
     perPurchaseCapCents: number; monthlyCapCents: number;
     coversApiPlans: boolean; expiresAt: string | null;
+    ops?: AgentOpsPolicyView | null;
   }) {
     if (!csrfToken) return;
     await act(async () => {
@@ -209,6 +240,51 @@ export function AgentAccess() {
         method: "POST",
         csrfToken,
         body: JSON.stringify(terms),
+      });
+    });
+  }
+
+  // The standing-operations policy exactly as the form states it.
+  // Null when the human enabled nothing — the mandate is then a
+  // plain Level 3 top-up mandate, operated as before.
+  function opsFromForm(): AgentOpsPolicyView | null {
+    if (!opsShiftEnabled && !opsPauseEnabled && opsDigestCadence === "daily") return null;
+    return {
+      poolShift: opsShiftEnabled
+        ? { packKey: opsShiftPackKey, pool: MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === opsShiftPackKey)?.pool ?? "high-power", shiftBelowSeconds: Math.max(1, Number.parseInt(opsShiftBelowMinutes, 10) || 0) * 60 }
+        : null,
+      pause: opsPauseEnabled
+        ? { capFraction: Math.min(99, Math.max(50, Number.parseInt(opsPausePercent, 10) || 90)) / 100, floorSeconds: null }
+        : null,
+      digestCadence: opsDigestCadence,
+    };
+  }
+
+  function formTerms() {
+    const option = MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === packKey) ?? MANDATE_PACK_OPTIONS[0];
+    const days = Number.parseInt(expiryDays, 10);
+    return {
+      pool: option.pool,
+      packKey: option.packKey,
+      thresholdSeconds: Math.max(1, Number.parseInt(thresholdMinutes, 10) || 0) * 60,
+      perPurchaseCapCents: Math.round((Number.parseFloat(perPurchaseCap) || 0) * 100),
+      monthlyCapCents: Math.round((Number.parseFloat(monthlyCap) || 0) * 100),
+      coversApiPlans,
+      expiresAt: Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null,
+      ops: opsFromForm(),
+    };
+  }
+
+  // A mandate change is a new version (Level 4): the current
+  // mandate stops, the replacement starts, the old one stays
+  // listed for the record.
+  async function replaceMandate(mandate: AgentMandateView) {
+    if (!csrfToken) return;
+    await act(async () => {
+      await customerApi(RUNNERS_API_BASE, `/customer/runner-minutes/agent/mandates/${mandate.id}/replace`, {
+        method: "POST",
+        csrfToken,
+        body: JSON.stringify(formTerms()),
       });
     });
   }
@@ -224,7 +300,7 @@ export function AgentAccess() {
     });
   }
 
-  async function armDraft(mandate: AgentMandateView) {
+  async function armDraft(mandate: AgentMandateView, adoptProposal = false) {
     if (!csrfToken) return;
     await act(async () => {
       await customerApi(RUNNERS_API_BASE, `/customer/runner-minutes/agent/mandates/${mandate.id}/arm`, {
@@ -238,6 +314,9 @@ export function AgentAccess() {
           monthlyCapCents: mandate.monthlyCapCents,
           coversApiPlans: mandate.coversApiPlans,
           expiresAt: mandate.expiresAt,
+          // An agent's proposed operations are adopted only when
+          // the human explicitly chooses to — never by default.
+          ...(adoptProposal && mandate.opsProposal ? { ops: mandate.opsProposal } : {}),
         }),
       });
     });
@@ -525,18 +604,40 @@ export function AgentAccess() {
                       {mandate.expiresAt ? ` · Ends ${new Date(mandate.expiresAt).toLocaleDateString("en-US")}` : ""}
                     </p>
                     <p className="mt-1 text-sm text-slate-400">{mandateStatusLine(mandate)}{mandate.agentLabel ? ` · Drafted by ${mandate.agentLabel}` : ""}</p>
+                    {mandateVersionLine(mandate) ? (
+                      <p className="mt-1 text-sm text-slate-400">{mandateVersionLine(mandate)}</p>
+                    ) : null}
+                    {opsPolicySummary(mandate.ops) ? (
+                      <p className="mt-1 text-sm text-slate-400">{opsPolicySummary(mandate.ops)}</p>
+                    ) : null}
+                    {mandate.status === "draft" && opsPolicySummary(mandate.opsProposal) ? (
+                      <p className="mt-1 text-sm text-amber-200">
+                        An agent proposed standing operations for this draft: {opsPolicySummary(mandate.opsProposal)} A proposal does nothing unless you arm the mandate with it.
+                      </p>
+                    ) : null}
+                    {mandate.status === "pending_second_approval" ? (
+                      <p className="mt-1 text-sm text-slate-400">
+                        Approved so far by {(mandate.approvals ?? []).map((approval) => approval.actor).join(", ") || "one approver"} — a second, different approver arms it from their own signed-in session.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex gap-2">
                     {mandate.status === "draft" ? (
                       <button type="button" className={buttonClass} disabled={busy} onClick={() => armDraft(mandate)}>Arm this mandate</button>
                     ) : null}
+                    {mandate.status === "draft" && mandate.opsProposal ? (
+                      <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => armDraft(mandate, true)}>Arm with the proposed operations</button>
+                    ) : null}
                     {mandate.status === "armed" ? (
                       <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => mandateAction(mandate, "pause")}>Pause</button>
                     ) : null}
-                    {mandate.status === "paused" ? (
+                    {mandate.status === "paused" || mandate.status === "suspended" ? (
                       <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => mandateAction(mandate, "resume")}>Resume</button>
                     ) : null}
-                    {mandate.status === "draft" || mandate.status === "armed" || mandate.status === "paused" ? (
+                    {mandate.status === "armed" || mandate.status === "paused" || mandate.status === "suspended" ? (
+                      <button type="button" className={ghostButtonClass} disabled={busy} onClick={() => replaceMandate(mandate)}>Replace with the form values</button>
+                    ) : null}
+                    {mandate.status === "draft" || mandate.status === "armed" || mandate.status === "paused" || mandate.status === "suspended" || mandate.status === "pending_second_approval" ? (
                       <button type="button" className={dangerButtonClass} disabled={busy} onClick={() => mandateAction(mandate, "revoke")}>Revoke</button>
                     ) : null}
                   </div>
@@ -574,27 +675,94 @@ export function AgentAccess() {
               <span>Also cover API plan purchases (off means runner minutes only)</span>
             </label>
           </div>
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <p className={eyebrowClass}>Standing operations (Level 4)</p>
+            <p className="mt-2 text-sm text-slate-400">
+              Optional standing operations you state yourself — an agent can never set these, only propose them
+              on a draft for you to accept or ignore. With any of these on, the operations loop runs this mandate:
+              it reads your balance fresh before every action, writes every action and every decision not to act
+              to the activity log, and stops the mandate for your review if a cap is hit, prices change, or
+              anything looks wrong.
+            </p>
+            {opsOff ? (
+              <p className="mt-3 text-sm text-amber-200">Standing operations are not switched on yet — you can arm the mandate now and the operations begin when the service is enabled.</p>
+            ) : null}
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="flex items-start gap-3 text-sm">
+                <input type="checkbox" className="mt-1" checked={opsShiftEnabled} onChange={(e) => setOpsShiftEnabled(e.target.checked)} />
+                <span><span className="font-bold">Shift pools when very low.</span> <span className="text-slate-400">Below a second, lower line, the top-up buys a pack for the other pool instead — at that pool&apos;s own price.</span></span>
+              </label>
+              <label className="flex items-start gap-3 text-sm">
+                <input type="checkbox" className="mt-1" checked={opsPauseEnabled} onChange={(e) => setOpsPauseEnabled(e.target.checked)} />
+                <span><span className="font-bold">Pause work near the cap.</span> <span className="text-slate-400">Non-urgent work pauses when the month&apos;s mandate spend reaches the line below, and resumes at the start of the next month.</span></span>
+              </label>
+              {opsShiftEnabled ? (
+                <>
+                  <label className="text-sm">
+                    <span className="mb-1 block text-slate-400">Shift buys this pack (other pool)</span>
+                    <select className={inputClass} value={opsShiftPackKey} onChange={(e) => setOpsShiftPackKey(e.target.value)}>
+                      {MANDATE_PACK_OPTIONS.filter((option) => option.pool !== (MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === packKey)?.pool ?? "standard")).map((option) => (
+                        <option key={option.packKey} value={option.packKey}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm">
+                    <span className="mb-1 block text-slate-400">Shift when the balance falls below (minutes)</span>
+                    <input className={inputClass} type="number" min="1" value={opsShiftBelowMinutes} onChange={(e) => setOpsShiftBelowMinutes(e.target.value)} />
+                  </label>
+                </>
+              ) : null}
+              {opsPauseEnabled ? (
+                <label className="text-sm">
+                  <span className="mb-1 block text-slate-400">Pause at this share of the monthly cap (%)</span>
+                  <input className={inputClass} type="number" min="50" max="99" value={opsPausePercent} onChange={(e) => setOpsPausePercent(e.target.value)} />
+                </label>
+              ) : null}
+              <label className="text-sm">
+                <span className="mb-1 block text-slate-400">Operations digest</span>
+                <select className={inputClass} value={opsDigestCadence} onChange={(e) => setOpsDigestCadence(e.target.value as "daily" | "weekly")}>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <button
             type="button"
             className={`${buttonClass} mt-4`}
             disabled={busy || !csrfToken}
-            onClick={() => {
-              const option = MANDATE_PACK_OPTIONS.find((entry) => entry.packKey === packKey) ?? MANDATE_PACK_OPTIONS[0];
-              const days = Number.parseInt(expiryDays, 10);
-              void armMandate({
-                pool: option.pool,
-                packKey: option.packKey,
-                thresholdSeconds: Math.max(1, Number.parseInt(thresholdMinutes, 10) || 0) * 60,
-                perPurchaseCapCents: Math.round((Number.parseFloat(perPurchaseCap) || 0) * 100),
-                monthlyCapCents: Math.round((Number.parseFloat(monthlyCap) || 0) * 100),
-                coversApiPlans,
-                expiresAt: Number.isFinite(days) && days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null,
-              });
-            }}
+            onClick={() => { void armMandate(formTerms()); }}
           >
             Arm mandate
           </button>
         </section>
+
+        {digest ? (
+          <section className={`${cardClass} mt-6`}>
+            <p className={eyebrowClass}>Operations digest</p>
+            <h2 className="mt-3 text-2xl font-bold">Standing operations, last {digest.periodDays} days</h2>
+            <p className="mt-2 text-slate-300">{digest.summaryLine}</p>
+            <div className="mt-4 space-y-2">
+              {digest.mandates.length === 0 ? <p className="text-slate-400">No mandates yet.</p> : digest.mandates.map((view) => (
+                <p key={view.id} className="text-sm text-slate-300">
+                  {digestMandateLine(view)} <span className="text-slate-500">· {view.status}</span>
+                </p>
+              ))}
+            </div>
+            {digest.escalations.length > 0 ? (
+              <div className="mt-4 space-y-2">
+                <p className="text-sm font-bold text-amber-200">Escalations — a mandate stopped and is waiting for you:</p>
+                {digest.escalations.map((escalation, index) => (
+                  <p key={`${escalation.at}-${index}`} className="text-sm text-slate-300">{escalation.summary}</p>
+                ))}
+              </div>
+            ) : null}
+            <p className="mt-4 text-xs text-slate-500">
+              This digest is a view over the same mandate ledger your agents act under — agents coordinate
+              through that ledger and the activity log below, never through a side channel.
+            </p>
+          </section>
+        ) : null}
 
         <section className={`${cardClass} mt-6`}>
           <p className={eyebrowClass}>Activity log</p>
@@ -603,7 +771,7 @@ export function AgentAccess() {
             {audit.length === 0 ? <p className="text-slate-400">No agent activity yet.</p> : audit.map((entry) => (
               <div key={entry.id} className="flex flex-wrap items-baseline justify-between gap-2 rounded-xl border border-white/10 px-4 py-3">
                 <p className="text-sm">
-                  <span className="font-bold">{auditOutcomeLine(entry.outcome)}</span>
+                  <span className="font-bold">{auditActionLine(entry.action) ?? auditOutcomeLine(entry.outcome)}</span>
                   <span className="text-slate-400"> — {entry.summary ?? entry.action}</span>
                 </p>
                 <p className="text-xs text-slate-500">
