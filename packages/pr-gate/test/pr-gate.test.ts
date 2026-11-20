@@ -221,3 +221,35 @@ test("end-to-end: blast-radius ceiling fails above the cap and passes at it", as
   });
   assert.equal(passing.exitCode, 0);
 });
+
+test("end-to-end: a changed file over the context engine's 2 MB limit is excluded from the pack, not fatal", async () => {
+  const bigRoot = path.join(workRoot, "big-repo");
+  mkdirSync(path.join(bigRoot, "src"), { recursive: true });
+  writeFileSync(path.join(bigRoot, "package.json"), "{\"name\":\"big-fixture\",\"private\":true}\n", "utf8");
+  writeFileSync(path.join(bigRoot, "src", "leaf.ts"), "export const leaf = 1;\n", "utf8");
+  const bigContent = "import { leaf } from \"./leaf\";\n// " + "x".repeat(2 * 1024 * 1024) + "\nexport const big = leaf + 1;\n";
+  writeFileSync(path.join(bigRoot, "src", "big.ts"), bigContent, "utf8");
+  const git = (args: string[]) => execFileSync("git", args, { cwd: bigRoot, stdio: "ignore" });
+  git(["init", "-q"]);
+  git(["config", "user.email", "pr-gate-tests@example.com"]);
+  git(["config", "user.name", "PR Gate Tests"]);
+  git(["add", "-A"]);
+  git(["commit", "-qm", "seed"]);
+  const { exitCode, result } = await runPrGate({
+    root: bigRoot,
+    changedPaths: ["src/big.ts", "src/leaf.ts"],
+    mode: "enforce",
+    outDir: outDir("big"),
+  });
+  assert.equal(exitCode, 0);
+  assert.deepEqual(result.changedFiles, [
+    { path: "src/big.ts", mappedToGraphNode: true },
+    { path: "src/leaf.ts", mappedToGraphNode: true },
+  ]);
+  assert.ok(result.pack);
+  assert.deepEqual(result.pack.skippedOversizePaths, ["src/big.ts"]);
+  assert.deepEqual(result.pack.files.map((file) => file.path), ["src/leaf.ts"]);
+  assert.equal(result.pack.graphInput, "provided");
+  const report = readFileSync(path.join(outDir("big"), "report.md"), "utf8");
+  assert.ok(report.includes("exceeds the context engine's 2 MB per-file limit"));
+});
