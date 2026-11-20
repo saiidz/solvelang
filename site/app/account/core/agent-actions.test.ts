@@ -3,13 +3,19 @@ import test from "node:test";
 import {
   AGENT_TOKEN_SCOPES,
   MANDATE_PACK_OPTIONS,
+  auditActionLine,
   auditOutcomeLine,
+  digestMandateLine,
   formatCents,
   formatThreshold,
   mandateStatusLine,
+  mandateVersionLine,
   minutesCheckoutFromApproval,
+  opsPolicySummary,
   purchaseStatusLine,
+  suspensionReasonLine,
   type AgentMandateView,
+  type AgentOpsDigestMandateView,
 } from "./agent-actions";
 
 // Level 3 site pins: the agent-access page's wording and formatting
@@ -110,6 +116,98 @@ test("minutes approval checkout is read from the nested checkout object", () => 
     clientSecret: "pi_123_secret_xyz",
     publishableKey: "pk_live_abc",
   });
+});
+
+test("Level 4 mandate states read in plain words", () => {
+  const base: AgentMandateView = {
+    id: "m1", status: "draft", pool: "standard", packKey: "standard-5000",
+    thresholdSeconds: 3600, perPurchaseCapCents: 2000, monthlyCapCents: 10000,
+    coversApiPlans: false, expiresAt: null, agentLabel: null, lastTriggeredAt: null,
+    createdAt: "2026-11-19T12:00:00.000Z",
+  };
+  assert.match(mandateStatusLine({ ...base, status: "pending_second_approval" }), /second approver/);
+  assert.match(mandateStatusLine({ ...base, status: "pending_second_approval" }), /does nothing until then/);
+  assert.match(mandateStatusLine({ ...base, status: "superseded" }), /newer version/);
+  assert.match(mandateStatusLine({ ...base, status: "superseded" }), /no longer acts/);
+  const suspended = mandateStatusLine({ ...base, status: "suspended", suspendedReason: "cap_reached" });
+  assert.match(suspended, /monthly cap was reached/);
+  assert.match(suspended, /Only you can resume it/);
+  assert.match(mandateStatusLine({ ...base, status: "suspended", suspendedReason: "shelf_changed" }), /prices changed/);
+  assert.match(mandateStatusLine({ ...base, status: "suspended", suspendedReason: null }), /stopped it for your review/);
+});
+
+test("suspension reasons are plain words for every cause", () => {
+  assert.match(suspensionReasonLine("cap_reached"), /monthly cap/);
+  assert.match(suspensionReasonLine("shelf_changed"), /prices changed/);
+  assert.match(suspensionReasonLine("repeated_refusals"), /refused repeatedly/);
+  assert.match(suspensionReasonLine("inputs_unavailable"), /could not be read/);
+  assert.match(suspensionReasonLine("trigger_frequency"), /far more often/);
+  assert.match(suspensionReasonLine("something-else"), /stopped it for your review/);
+  assert.match(suspensionReasonLine(null), /stopped it for your review/);
+});
+
+test("mandate version line appears only from version 2", () => {
+  const base: AgentMandateView = {
+    id: "m1", status: "armed", pool: "standard", packKey: "standard-5000",
+    thresholdSeconds: 3600, perPurchaseCapCents: 2000, monthlyCapCents: 10000,
+    coversApiPlans: false, expiresAt: null, agentLabel: null, lastTriggeredAt: null,
+    createdAt: "2026-11-19T12:00:00.000Z",
+  };
+  assert.equal(mandateVersionLine(base), null);
+  assert.equal(mandateVersionLine({ ...base, version: 1 }), null);
+  assert.match(mandateVersionLine({ ...base, version: 2 }) ?? "", /Version 2/);
+  assert.match(mandateVersionLine({ ...base, version: 3 }) ?? "", /new version/);
+});
+
+test("ops policy summary describes shift, pause and cadence in plain words", () => {
+  assert.equal(opsPolicySummary(null), null);
+  assert.equal(opsPolicySummary(undefined), null);
+  const full = opsPolicySummary({
+    poolShift: { packKey: "high-power-1000", pool: "high-power", shiftBelowSeconds: 1800 },
+    pause: { capFraction: 0.9, floorSeconds: null },
+    digestCadence: "weekly",
+  });
+  assert.match(full ?? "", /high-power-1000/);
+  assert.match(full ?? "", /30 minutes/);
+  assert.match(full ?? "", /90% of the monthly cap/);
+  assert.match(full ?? "", /start of the next month/);
+  assert.match(full ?? "", /digest weekly/);
+  const digestOnly = opsPolicySummary({ poolShift: null, pause: null, digestCadence: "daily" });
+  assert.match(digestOnly ?? "", /Standing operations/);
+  assert.match(digestOnly ?? "", /digest daily/);
+});
+
+test("ops audit actions read in plain words; unknown actions fall back", () => {
+  assert.equal(auditActionLine("ops_topup_triggered"), "Standing top-up bought");
+  assert.equal(auditActionLine("ops_pool_shift"), "Standing top-up shifted pools");
+  assert.equal(auditActionLine("ops_paused"), "Work paused by a mandate");
+  assert.equal(auditActionLine("ops_resumed"), "Work resumed by a mandate");
+  assert.equal(auditActionLine("ops_no_action"), "Operations decided not to act");
+  assert.equal(auditActionLine("ops_escalated"), "Operations stopped a mandate");
+  assert.equal(auditActionLine("ops_digest"), "Operations digest");
+  assert.equal(auditActionLine("reservation_expired"), "A spend reservation expired");
+  assert.equal(auditActionLine("mandate_replaced"), "Mandate replaced by a new version");
+  assert.equal(auditActionLine("mandate_arm_refused"), "Second approval still needed");
+  assert.equal(auditActionLine("purchase_prepared"), null);
+  assert.equal(auditActionLine("anything-else"), null);
+});
+
+test("digest mandate line reports spend vs cap and flags near-misses", () => {
+  const view: AgentOpsDigestMandateView = {
+    id: "m1", status: "armed", pool: "standard", packKey: "standard-5000",
+    settledMonthCents: 2000, reservedMonthCents: 0, monthlyCapCents: 2500,
+    utilization: 0.8, nearMiss: true,
+  };
+  assert.equal(digestMandateLine(view), "standard-5000 (standard) — $20.00 of $25.00 this month (80%) — near its cap");
+  assert.equal(
+    digestMandateLine({ ...view, settledMonthCents: 0, utilization: 0, nearMiss: false }),
+    "standard-5000 (standard) — $0.00 of $25.00 this month (0%)",
+  );
+  // Reserved spend counts toward the month's usage in the line.
+  assert.equal(
+    digestMandateLine({ ...view, settledMonthCents: 1000, reservedMonthCents: 500, utilization: 0.6, nearMiss: false }),
+    "standard-5000 (standard) — $15.00 of $25.00 this month (60%)",
+  );
 });
 
 test("minutes approval checkout refuses flat or partial shapes", () => {
