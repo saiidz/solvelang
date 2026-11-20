@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
 import type { Server as HttpServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { createBusMessage } from "../src/bus-envelope.js";
 import {
-  createRelayEnvelope,
   createRelayHttpServer,
   normalizeRelayConfig,
   relayTokenSha256,
+  startRelayServer,
   type RelayConfig,
 } from "../src/relay.js";
 
@@ -74,12 +78,12 @@ test("messages deliver to the addressed agent and to broadcast, never across wor
   const { server, base } = await boot(testConfig());
   t.after(() => server.close());
 
-  const direct = createRelayEnvelope({ fromAgent: "agent-a", toAgent: "agent-b", kind: "signal", body: { signal: "done", task: "x" } });
+  const direct = createBusMessage({ fromAgent: "agent-a", toAgent: "agent-b", kind: "signal", body: { signal: "done", task: "x" } });
   const posted = await call(base, TOKEN_A, "POST", "/relay/messages", direct);
   assert.equal(posted.status, 200);
   assert.equal(posted.json.ok, true);
 
-  const broadcast = createRelayEnvelope({ fromAgent: "agent-a", toAgent: "*", kind: "signal", body: { signal: "free" } });
+  const broadcast = createBusMessage({ fromAgent: "agent-a", toAgent: "*", kind: "signal", body: { signal: "free" } });
   assert.equal((await call(base, TOKEN_A, "POST", "/relay/messages", broadcast)).status, 200);
 
   const forB = await call(base, TOKEN_B, "GET", "/relay/messages?since=0");
@@ -96,7 +100,7 @@ test("duplicate posts collapse by content-hash id; forged ids and senders are re
   const { server, base } = await boot(testConfig());
   t.after(() => server.close());
 
-  const envelope = createRelayEnvelope({ fromAgent: "agent-a", toAgent: "agent-b", kind: "propose", body: { split: 1 } });
+  const envelope = createBusMessage({ fromAgent: "agent-a", toAgent: "agent-b", kind: "propose", body: { split: 1 } });
   assert.equal((await call(base, TOKEN_A, "POST", "/relay/messages", envelope)).status, 200);
   const again = await call(base, TOKEN_A, "POST", "/relay/messages", envelope);
   assert.equal(again.status, 200);
@@ -107,12 +111,17 @@ test("duplicate posts collapse by content-hash id; forged ids and senders are re
   const forged = { ...envelope, body: { split: 2 } };
   const forgedResult = await call(base, TOKEN_A, "POST", "/relay/messages", forged);
   assert.equal(forgedResult.status, 400);
-  assert.equal(forgedResult.json.error, "id_mismatch");
+  assert.equal(forgedResult.json.error, "bus_id_mismatch");
 
-  const impersonated = createRelayEnvelope({ fromAgent: "agent-b", toAgent: "agent-a", kind: "signal" });
+  const malformed = { ...envelope, schema: "solvelang.bus.message.v999" };
+  const malformedResult = await call(base, TOKEN_A, "POST", "/relay/messages", malformed);
+  assert.equal(malformedResult.status, 400);
+  assert.equal(malformedResult.json.error, "bus_malformed");
+
+  const impersonated = createBusMessage({ fromAgent: "agent-b", toAgent: "agent-a", kind: "signal" });
   const impersonatedResult = await call(base, TOKEN_A, "POST", "/relay/messages", impersonated);
   assert.equal(impersonatedResult.status, 403);
-  assert.equal(impersonatedResult.json.error, "sender_mismatch");
+  assert.equal(impersonatedResult.json.error, "bus_sender_mismatch");
 });
 
 test("claims are atomic at claim time, leased, and released only by the holder", async (t) => {
@@ -174,7 +183,7 @@ test("long-poll wakes early when a message lands", async (t) => {
   const { server, base } = await boot(testConfig());
   t.after(() => server.close());
 
-  const envelope = createRelayEnvelope({ fromAgent: "agent-a", toAgent: "agent-b", kind: "signal", body: { signal: "blocked" } });
+  const envelope = createBusMessage({ fromAgent: "agent-a", toAgent: "agent-b", kind: "signal", body: { signal: "blocked" } });
   const started = Date.now();
   const poll = call(base, TOKEN_B, "GET", "/relay/messages?since=0&waitMs=10000");
   await sleep(150);
@@ -182,6 +191,33 @@ test("long-poll wakes early when a message lands", async (t) => {
   const result = await poll;
   assert.ok(Date.now() - started < 5_000, "poll returned promptly after the message landed");
   assert.deepEqual(result.json.messages.map((m: any) => m.id), [envelope.id]);
+});
+
+test("claim state recovers from the audit log across a restart; messages do not replay", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "relay-recovery-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const auditLogPath = join(dir, "audit.jsonl");
+  const config = testConfig();
+
+  const first = await startRelayServer({ config, auditLogPath, port: 0, host: "127.0.0.1" });
+  const firstAddress = first.address();
+  assert.ok(firstAddress && typeof firstAddress === "object");
+  const base1 = `http://127.0.0.1:${firstAddress.port}`;
+  const claim = await call(base1, TOKEN_A, "POST", "/relay/claims", { item: "src/top.ts", ttlMs: 60_000 });
+  assert.equal(claim.json.granted, true);
+  await new Promise<void>((resolve) => first.close(() => resolve()));
+  await sleep(50);
+
+  const second = await startRelayServer({ config, auditLogPath, port: 0, host: "127.0.0.1" });
+  t.after(() => second.close());
+  const secondAddress = second.address();
+  assert.ok(secondAddress && typeof secondAddress === "object");
+  const base2 = `http://127.0.0.1:${secondAddress.port}`;
+  const competing = await call(base2, TOKEN_B, "POST", "/relay/claims", { item: "src/top.ts", ttlMs: 60_000 });
+  assert.equal(competing.json.granted, false);
+  assert.equal(competing.json.holder, "agent-a");
+  const presence = await call(base2, TOKEN_B, "GET", "/relay/presence?agent=agent-a");
+  assert.equal(typeof presence.json.lastSeen, "number");
 });
 
 test("the rate limiter answers 429 with Retry-After, and oversize bodies 413", async (t) => {
