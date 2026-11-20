@@ -513,6 +513,14 @@ pub fn prepare_gate_book(
     signatures_path: Option<&Path>,
     now_unix_seconds: i64,
 ) -> Result<Option<PreparedGates>, GatePrepError> {
+    // Canonicalize so a bare relative filename (the common
+    // `solvec run gate.solve` invocation from the workflow's own
+    // directory) still yields the real workflow directory: its
+    // parent is the empty path, which cannot be canonicalized
+    // inside the evidence-confinement check.
+    let canonical_workflow_path =
+        std::fs::canonicalize(workflow_path).unwrap_or_else(|_| workflow_path.to_path_buf());
+    let workflow_path = &canonical_workflow_path;
     // The signatures artifact is loaded even when the workflow
     // declares no gates at all: a signatures artifact that names a
     // gate the workflow no longer declares means the gate was
@@ -592,6 +600,14 @@ pub fn sign_gate(
     not_before: Option<i64>,
     not_after: Option<i64>,
 ) -> Result<GateSignatureRecord, String> {
+    // Canonicalize so a bare relative filename (the common
+    // `solvec run gate.solve` invocation from the workflow's own
+    // directory) still yields the real workflow directory: its
+    // parent is the empty path, which cannot be canonicalized
+    // inside the evidence-confinement check.
+    let canonical_workflow_path =
+        std::fs::canonicalize(workflow_path).unwrap_or_else(|_| workflow_path.to_path_buf());
+    let workflow_path = &canonical_workflow_path;
     let Some(declaration) = declarations.iter().find(|gate| gate.name == gate_name) else {
         let declared: Vec<&str> = declarations.iter().map(|gate| gate.name.as_str()).collect();
         return Err(format!(
