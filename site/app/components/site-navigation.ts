@@ -4,7 +4,7 @@ export const primaryLinks = [
   { label: "Browser preview", href: "/run/" },
   { label: "Studio", href: "/studio/" },
   { label: "Services", href: "/services/" },
-  { label: "Docs", href: "/resources/" },
+  { label: "Docs", href: "/docs/" },
   { label: "Status", href: "/status/" },
 ] as const;
 
