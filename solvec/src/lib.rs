@@ -7,6 +7,7 @@
 
 pub mod ai;
 pub mod ast_runtime;
+pub mod gate_tooling;
 pub mod module_resolver;
 mod native_host;
 
