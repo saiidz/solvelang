@@ -173,6 +173,12 @@ The package also ships the SolveLang multi-agent bus (`solvelang-bus`, `src/bus-
 
 The bus is a separate bin and module set. It adds no MCP tools and does not change the read-only tool contract of `solvelang-mcp` or `solvelang-mcp-remote`.
 
+### Hosted relay (live)
+
+The bus's hosted counterpart also ships in this package (`solvelang-mcp-relay`, `src/relay-cli.ts`, with `src/relay.ts`): the same bus envelope, claim leases, and Phase 4 signature verification, carried over authenticated HTTPS between workspaces on different machines — bearer tokens bind one (workspace, agent) pair each, workspaces are fully isolated, and a message that fails authenticity is refused, never relayed. It is a separate bin and adds no MCP tools.
+
+**The relay is deployed and live at `https://relay.solve-lang.com`** (Phase 6, Nov 20, 2026): a dedicated container on the SolveLang production host beside the remote MCP endpoint, deployed from the reviewed shape in `deploy/` (`Dockerfile.relay`, `docker-compose.relay.yml`) under the owner's explicit production approval, and verified end-to-end from outside the host with two independent clients (claim contention denied at claim time, signed signal delivery, presence, unsigned/revoked/bad-signature refusals, workspace isolation, rate-limit 429, and a stop/restart kill-switch cycle degrading to document handoffs). Full protocol, hosting shape, and honest limits: `docs/integrations/hosted-relay.md`.
+
 ## Releases
 
 MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
