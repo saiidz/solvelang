@@ -383,6 +383,7 @@ const agentActionsService = environment.customerAccountsEnabled
       subscriptionAccount: async (accountId) => guardedService.getSubscriptionAccount(accountId),
       accountEmail: async (accountId) => (await guardedService.getSubscriptionAccount(accountId))?.email ?? null,
       enabled: environment.agentActionsEnabled,
+      opsEnabled: environment.agentOpsEnabled,
     })
   : null;
 const agentActionsApplication = createAgentActionsHandler({
