@@ -3,12 +3,13 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use solvec_core::evaluator::{
-    EvaluationLimits, Evaluator, ExportKind as CoreExportKind, ModuleNode as CoreModuleNode,
-    ModuleProgram, RuntimeErrorKind, bounded_syntax_snapshot_bytes, bounded_syntax_snapshot_work,
-    structural_byte_limit,
+    EvaluationLimits, Evaluator, ExportKind as CoreExportKind, GateBook,
+    ModuleNode as CoreModuleNode, ModuleProgram, RuntimeErrorKind, bounded_syntax_snapshot_bytes,
+    bounded_syntax_snapshot_work, structural_byte_limit,
 };
 
 use crate::ast::Stmt;
+use crate::gate_tooling::RegisteredKey;
 use crate::module_resolver::{ExportKind, ModuleGraph};
 use crate::native_host::NativeHost;
 use crate::value::Value;
@@ -116,6 +117,14 @@ impl AstRuntime {
 
     pub fn run(&mut self, statements: &[Stmt]) -> Result<(), RuntimeError> {
         self.evaluator.run(statements)
+    }
+
+    /// Supply the signed-gate state for subsequent runs: the gate
+    /// book the evaluator checks declarations against, and the key
+    /// registry the host verifies signatures with.
+    pub fn set_gates(&mut self, gates: GateBook, keys: Vec<RegisteredKey>) {
+        self.evaluator.set_gates(Some(gates));
+        self.evaluator.host_mut().set_gate_keys(keys);
     }
 
     pub fn run_with_modules(
