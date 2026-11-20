@@ -107,6 +107,11 @@ future baseline-versus-Solve-Context Claude and Codex runs. It does **not** laun
 agent or contact a provider. The caller supplies records collected by a separately
 authorized run, and the local harness validates and summarizes them.
 
+The operator run protocol for producing those measured records — task set,
+arms, metric sources, grading, reproduction, and the publication rule — is
+`AGENT-EVAL-PROTOCOL.md` in this directory, with the fixture registry in
+`agent-eval-fixtures-v1.json`.
+
 A pair must use the same suite/pair fixture identity, pinned fixture revision, agent,
 provider/model and record class. Cross-agent handoff fixtures must identify direction
 as `claude-to-codex` or `codex-to-claude`; other categories cannot set a handoff
