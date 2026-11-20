@@ -15,9 +15,9 @@ use std::rc::Rc;
 
 use solvec_core::ast::Stmt;
 use solvec_core::evaluator::{
-    collect_gate_declarations, gate_canonical_payload, gate_codes, Capability, DenyAllHost,
-    Evaluator, ExportKind, GateBook, GateCheck, GateRefusal, GateSignatureRecord, HostError,
-    HostRequest, ModuleNode, ModuleProgram, RuntimeHost,
+    Capability, DenyAllHost, Evaluator, ExportKind, GateBook, GateCheck, GateRefusal,
+    GateSignatureRecord, HostError, HostRequest, ModuleNode, ModuleProgram, RuntimeHost,
+    collect_gate_declarations, gate_canonical_payload, gate_codes,
 };
 use solvec_core::{lexer, parser::Parser, semantic, value::Value};
 
@@ -343,10 +343,7 @@ guarded()
                     source: library.to_string(),
                     statements: parse(library),
                     dependencies: Vec::new(),
-                    exports: BTreeMap::from([(
-                        "guarded".to_string(),
-                        ExportKind::Function,
-                    )]),
+                    exports: BTreeMap::from([("guarded".to_string(), ExportKind::Function)]),
                 },
             ),
             (
@@ -360,13 +357,10 @@ guarded()
                 },
             ),
         ]),
-        order: vec![
-            "library.solve".to_string(),
-            "entry.solve".to_string(),
-        ],
+        order: vec!["library.solve".to_string(), "entry.solve".to_string()],
     };
-    let mut evaluator = Evaluator::new(DenyAllHost)
-        .with_gates(book(vec![record("release", "release_key")]));
+    let mut evaluator =
+        Evaluator::new(DenyAllHost).with_gates(book(vec![record("release", "release_key")]));
     let error = evaluator
         .run_modules(&modules)
         .expect_err("a gate executed inside a module refuses in v1");
@@ -408,12 +402,12 @@ gate release {
     evidence "b.json"
 }
 "#;
-    let diagnostics = semantic::check(&parse(source))
-        .expect_err("duplicate gate names are rejected");
+    let diagnostics =
+        semantic::check(&parse(source)).expect_err("duplicate gate names are rejected");
     assert!(
-        diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.message.contains("duplicate gate declaration 'release'")),
+        diagnostics.iter().any(|diagnostic| diagnostic
+            .message
+            .contains("duplicate gate declaration 'release'")),
         "expected a duplicate gate diagnostic, got {diagnostics:?}"
     );
 }
