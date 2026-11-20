@@ -1,6 +1,6 @@
 {
-  "sourceCommit": "bccf380288afa9f2025b5027080db31ef4d9b0be",
-  "manifestSha256": "0de46277f984e7d41eddc00480ec46de5925a6e24f8347a68f79298c1eece10f",
-  "baseUrl": "/wasm/bccf380288afa9f2025b5027080db31ef4d9b0be/",
-  "qualificationRun": "https://github.com/saiidz/solvelang/actions/runs/43630731449"
+  "sourceCommit": "6b177ec618c84e1d3ee74d8023049f72eabfb641",
+  "manifestSha256": "a29320ff70d009dd763432d5cc170513b244534403fe6693a6ca5a2a7223af0a",
+  "baseUrl": "/wasm/6b177ec618c84e1d3ee74d8023049f72eabfb641/",
+  "qualificationRun": "https://github.com/saiidz/solvelang/actions/runs/44747203650"
 }
