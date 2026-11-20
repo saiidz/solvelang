@@ -212,3 +212,57 @@ test("bus client: presence reports the peer's last-seen through the daemon", asy
     await daemon.close();
   }
 });
+test("bus client: a signal pushed before any wait is registered still reaches a later wait", async () => {
+  const workspace = tempWorkspace();
+  const daemon = await startBusDaemon({ logPath: path.join(workspace, "bus.jsonl") });
+  const producer = await BusClient.connect({ agent: "producer", port: daemon.port, workspaceDir: workspace });
+  const reviewer = await BusClient.connect({ agent: "reviewer", port: daemon.port, workspaceDir: workspace, pollMs: 100 });
+  try {
+    // The send completes (and the daemon pushes) BEFORE the reviewer
+    // registers any wait. The push finds no waiter; the message must
+    // survive on its handoff document alone, and the later wait's
+    // inbox scan must still be able to deliver it. (Regression: the
+    // push path used to dedup-mark the message on arrival, which
+    // poisoned every later scan and lost the message outright.)
+    const sent = await producer.sendSignal("reviewer", { step: "A3" });
+    await sleep(300); // let the early push arrive and be handled
+
+    const outcome = await Promise.race([
+      reviewer.waitForSignalKind("signal", (body) => (body as { step?: string })?.step === "A3"),
+      sleep(3_000).then(() => null),
+    ]);
+    assert.ok(outcome, "a message pushed before the wait registered must still be delivered");
+    assert.equal(outcome.id, sent.id);
+    assert.equal((outcome.body as { step: string }).step, "A3");
+  } finally {
+    producer.close();
+    reviewer.close();
+    await daemon.close();
+  }
+});
+
+test("bus client: duplicate pushes plus the inbox document deliver exactly once", async () => {
+  const workspace = tempWorkspace();
+  const daemon = await startBusDaemon({ logPath: path.join(workspace, "bus.jsonl"), duplicateDeliveries: true });
+  const producer = await BusClient.connect({ agent: "producer", port: daemon.port, workspaceDir: workspace });
+  const reviewer = await BusClient.connect({ agent: "reviewer", port: daemon.port, workspaceDir: workspace, pollMs: 100 });
+  try {
+    const waiting = reviewer.waitForSignalKind("signal", (body) => (body as { step?: string })?.step === "A1");
+    const sent = await producer.sendSignal("reviewer", { step: "A1" });
+    const received = await waiting;
+    assert.equal(received.id, sent.id);
+
+    // The push arrived twice and the document still sits in the
+    // inbox; whichever path delivered first consumed the message,
+    // so a second wait for the same signal must not resolve.
+    const second = await Promise.race([
+      reviewer.waitForSignalKind("signal", (body) => (body as { step?: string })?.step === "A1").then(() => "resolved"),
+      sleep(600).then(() => "timeout"),
+    ]);
+    assert.equal(second, "timeout");
+  } finally {
+    producer.close();
+    reviewer.close();
+    await daemon.close();
+  }
+});
