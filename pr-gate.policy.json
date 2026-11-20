@@ -1,0 +1,1 @@
+{"maxImpactNodes":250,"overrideLabel":"pr-gate:override","protectedPaths":[{"glob":".github/workflows/**"},{"glob":"services/api-access/src/**"}],"requireAffectedValidations":false,"version":1}
