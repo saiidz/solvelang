@@ -362,3 +362,112 @@ test("module separation: the Level 2 read-only surface cannot reach Level 3 code
   const service = readFileSync(new URL("../src/agent-actions-service.js", import.meta.url), "utf8");
   assert.doesNotMatch(service, /from "\.\/agent-talkback\.js"/, "Level 3 does not route through the read-only surface");
 });
+
+// ---- Contract pins for the Nov 19, 2026 launch-E2E defects ----
+// Each side's suite used to mock this boundary with a shape the
+// other side never sent; these tests pin the literal wire contract
+// (the runners QA suite pins the same bodies from its side).
+
+test("contract: create_topup_mandate sends the runners engine a nested spec in wire names", async () => {
+  const { service, runners } = makeService();
+  const { validated } = await makeToken(service);
+  const draft = await service.callTool({
+    token: validated,
+    name: "create_topup_mandate",
+    args: { pool: "standard", pack: "standard-5000", thresholdSeconds: 3600, perPurchaseCapCents: 2000, monthlyCapCents: 2000 },
+  });
+  // The tool result is the mandate itself - the runners { mandate }
+  // envelope unwrapped - not the envelope.
+  assert.equal(draft.id, "mandate-draft-1");
+  assert.equal(draft.status, "draft");
+  assert.equal(draft.thresholdSeconds, 3600);
+  assert.equal(draft.perPurchaseCapCents, 2000);
+  const draftCall = runners.calls.find((call) => call.path === "/internal/agent/mandates/draft");
+  assert.deepEqual(draftCall.body, {
+    tenantId: "acct-a",
+    accountId: "acct-a",
+    tokenId: validated.tokenId,
+    agentLabel: "CI Agent",
+    spec: {
+      pool: "standard",
+      packKey: "standard-5000",
+      thresholdSeconds: 3600,
+      perPurchaseCapCents: 2000,
+      monthlyCapCents: 2000,
+      coversApiPlans: false,
+    },
+  });
+});
+
+test("contract: a runners validation refusal reaches the agent with its own code and message", async () => {
+  const doc = fakeDocumentClient();
+  const store = createDynamoAgentActionsStore(doc, "auth-table");
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: "invalid_mandate", message: "Mandate monthly cap cannot be below its per-purchase cap." }),
+  });
+  const service = createAgentActionsService({
+    store, pepper: PEPPER, runnersBaseUrl: "https://runners.example", runnersAdminToken: "admin-token",
+    fetchImpl, enabled: true,
+  });
+  const { validated } = await makeToken(service);
+  await assert.rejects(
+    () => service.callTool({
+      token: validated,
+      name: "create_topup_mandate",
+      args: { pool: "standard", pack: "standard-5000", thresholdSeconds: 3600, perPurchaseCapCents: 2000, monthlyCapCents: 1000 },
+    }),
+    (error) => error.code === "invalid_mandate"
+      && error.publicMessage === "Mandate monthly cap cannot be below its per-purchase cap."
+      && error.statusCode === 400,
+  );
+});
+
+test("contract: purchase_runner_minutes returns the intent itself, with its approvalUrl", async () => {
+  const { service } = makeService();
+  const { validated } = await makeToken(service);
+  const result = await service.callTool({
+    token: validated, name: "purchase_runner_minutes",
+    args: { pack: "standard-5000", idempotencyKey: "k-9" },
+  });
+  assert.equal(result.id, "intent-min-1");
+  assert.equal(result.status, "approval_required");
+  assert.equal(result.amountCents, 2000);
+  assert.match(result.approvalUrl, /agent-access/);
+  const status = await service.callTool({
+    token: validated, name: "get_purchase_status", args: { purchaseId: "intent-min-1" },
+  });
+  assert.equal(status.id, "intent-min-1");
+  assert.equal(status.status, "approval_required");
+});
+
+test("contract: the token list loads through the handler on the real store (the page's read)", async () => {
+  const { service } = makeService();
+  const handler = createAgentActionsHandler({ service, customerAuth, siteOrigin: "https://www.solve-lang.com", enabled: true });
+  const created = await handler(event({
+    path: "/customer/agent-tokens",
+    headers: { "x-solvelang-csrf": "csrf-1" },
+    body: { label: "CI Agent", scopes: ["purchases:read"] },
+  }));
+  assert.equal(created.statusCode, 201);
+  const listed = await handler(event({ path: "/customer/agent-tokens", method: "GET" }));
+  assert.equal(listed.statusCode, 200);
+  const payload = JSON.parse(listed.body);
+  assert.equal(payload.tokens.length, 1, "the created token lists (the Nov 19 page showed none)");
+  assert.equal(payload.tokens[0].label, "CI Agent");
+  assert.deepEqual(payload.tokens[0].scopes, ["purchases:read"]);
+  assert.equal(payload.tokens[0].revokedAt, null);
+  assert.ok(payload.tokens[0].createdAt);
+});
+
+test("store: prefix listing returns only the account's own records", async () => {
+  const doc = fakeDocumentClient();
+  const store = createDynamoAgentActionsStore(doc, "auth-table");
+  await store.putToken({ accountId: "acct-a", tokenId: "t1", label: "A", scopes: ["purchases:read"], createdAt: "2026-11-19T00:00:00.000Z", revokedAt: null });
+  await store.putToken({ accountId: "acct-b", tokenId: "t2", label: "B", scopes: ["purchases:read"], createdAt: "2026-11-19T00:00:00.000Z", revokedAt: null });
+  await store.putPlanIntent({ accountId: "acct-a", id: "p1", status: "approval_required" });
+  await store.putPlanIntent({ accountId: "acct-b", id: "p2", status: "approval_required" });
+  assert.deepEqual((await store.listTokens("acct-a")).map((entry) => entry.tokenId), ["t1"]);
+  assert.deepEqual((await store.listPlanIntents("acct-a")).map((entry) => entry.id), ["p1"]);
+});
