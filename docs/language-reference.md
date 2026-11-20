@@ -481,6 +481,32 @@ cargo run -- run ../examples/agent.solve
 
 OpenAI-backed `ask` sends the agent instruction, approved tool names, and user message to OpenAI. It may cost money. SolveLang does not execute external tools for the model yet.
 
+## Signed Gates
+
+A `gate` statement is a checkpoint that execution can pass only with
+a valid signature from a registered key over the gate's evidence:
+
+```solve
+gate release {
+  evidence "evidence/report.json"
+  signer release_key
+}
+```
+
+The `evidence` entry is required and points at a file inside the
+workflow's directory; `signer` entries are optional and repeatable
+(no `signer` entries means any registered, active key may sign).
+When a run reaches the gate, the runtime checks the signature
+against the workflow's exact bytes and the evidence's current
+bytes; any problem — no signature, an unregistered or revoked
+signer, tampered workflow or evidence, an expired window — refuses
+the gate with a distinct code, exits with status 7, and stops the
+run before any later statement executes. Keys are generated with
+`solvec keygen`, registered in `solve-keys.json` beside the
+workflow, and gates are signed with `solvec sign`. The full guide —
+formats, revocation, the refusal-code table, and what a signature
+does *not* prove — is [signed gates](signed-gates.md).
+
 ## Runtime Safety
 
 Use hardened execution for pure, side-effect-free evaluation:

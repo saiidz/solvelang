@@ -19,7 +19,8 @@ begin with `//` and continue to the newline.
 Identifiers begin with an ASCII letter or `_`, followed by Unicode
 alphanumeric characters or `_`. Reserved words are `let`, `fn`, `return`, `if`,
 `else`, `while`, `for`, `in`, `break`, `continue`, `print`, `true`, `false`,
-`and`, `or`, `not`, `agent`, `tool`, `instruction`, and `ask`. The words
+`and`, `or`, `not`, `agent`, `tool`, `instruction`, `ask`, `gate`,
+`evidence`, and `signer`. The words
 `import`, `export`, `as`, and `from` are contextual: they are recognized as
 module syntax only in the complete top-level forms defined below, so ordinary
 identifier uses remain compatible where they do not form one of those forms.
@@ -51,7 +52,7 @@ legacyInclude    = "import" text ;
 
 statement        = letDecl | assignStmt | printStmt | returnStmt | functionDecl
                  | ifStmt | whileStmt | forStmt | breakStmt | continueStmt
-                 | agentStmt | askStmt | expression ;
+                 | agentStmt | askStmt | gateStmt | expression ;
 letDecl          = "let" identifier "=" expression ;
 assignStmt       = identifier "=" expression ;
 printStmt        = "print" "(" expression ")" ;
@@ -65,6 +66,8 @@ continueStmt     = "continue" ;
 agentStmt        = "agent" identifier "{" { newline }
                    { ( "instruction" text | "tool" identifier ) { newline } } "}" ;
 askStmt          = "ask" identifier "(" expression ")" ;
+gateStmt         = "gate" identifier "{" { newline }
+                   { ( "evidence" text | "signer" identifier ) { newline } } "}" ;
 block            = "{" { newline } { statement { newline } } "}" ;
 
 expression       = or ;
@@ -147,6 +150,45 @@ executing source to resolve dynamic function rebinding.
 
 `agent`, `tool`, `instruction`, and `ask` are experimental; they are not a
 stable provider contract or an unattended production-workflow guarantee.
+
+## Signed gates
+
+A `gate` statement declares a checkpoint that execution may pass only
+with a valid Ed25519 signature from a registered key. The declaration
+names the gate, gives one required `evidence` entry (a text path,
+resolved inside the entry workflow's directory tree), and may list
+`signer` key ids; an empty signer list admits any registered, active
+key. Gate names are unique per workflow (duplicates are a semantic
+error). Signer ids are identifiers, so key ids used in a gate block
+must be identifier-shaped.
+
+The signature covers a canonical byte record binding the gate name,
+the SHA-256 digest of the exact configured entry source (including
+flattened legacy includes), the SHA-256 digest of the evidence
+bytes, the signer id, and an optional validity window; the canonical
+form is versioned (`solvelang-gate-signature-v1`) and defined once in
+the core so signer and verifier cannot drift. When execution reaches
+a gate, the evaluator verifies — in order — signature presence,
+declared-signer match, workflow digest, evidence availability and
+digest, and the validity window against the host-supplied clock, and
+the host then verifies the signature against its public-key
+registry. Every failure is a refusal with a distinct stable code
+(`gate_unsigned`, `gate_signer_not_allowed`, `gate_workflow_mismatch`,
+`gate_evidence_unavailable`, `gate_evidence_mismatch`,
+`gate_clock_unavailable`, `gate_not_yet_valid`, `gate_expired`,
+`gate_unknown_signer`, `gate_signer_revoked`, `gate_signature_invalid`,
+`gate_verification_unavailable`, `gate_unconfigured`,
+`gate_module_context`, `gate_removed`); the run aborts and no later
+statement executes. A signatures artifact that names a gate the
+workflow no longer declares refuses the run before execution
+(`gate_removed`). Hosts that cannot verify signatures refuse every
+gate (`gate_verification_unavailable`): refusal is the default, not
+a warning. Gates are entry-workflow statements in this version; a
+gate reached while an explicit module executes refuses
+`gate_module_context`. The formats, tooling, and honest limits are
+documented in [signed gates](docs/signed-gates.md). Any change to
+this section must add executable conformance coverage (the gate
+suites in `solvec-core/tests/` and `solvec/tests/`).
 
 ## Local modules and legacy includes
 
