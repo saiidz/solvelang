@@ -547,6 +547,12 @@ export function createAgentActionsService({
                 monthlyCapCents: args.monthlyCapCents,
                 coversApiPlans: args.coversApiPlans === true,
                 expiresAt: args.expiresAt,
+                // An agent's ops argument is a PROPOSAL: forwarded
+                // as opsProposal, which the runners engine stores
+                // inert on the draft. It is never forwarded as the
+                // mandate's ops - stating operations is the account
+                // holder's act alone (Level 4 design, section 1).
+                ...(args.ops !== undefined ? { opsProposal: args.ops } : {}),
               },
             },
           });

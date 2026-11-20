@@ -65,7 +65,7 @@ export const AGENT_ACTION_TOOLS = Object.freeze([
   }),
   Object.freeze({
     name: "create_topup_mandate",
-    description: "Create a DRAFT standing top-up mandate. A draft does nothing: only the account holder can arm a mandate, inside their signed-in account. Requires scope mandates:manage.",
+    description: "Create a DRAFT standing top-up mandate. A draft does nothing: only the account holder can arm a mandate, inside their signed-in account. The optional ops argument PROPOSES Level 4 standing operations for the draft: a proposal is stored inert and does nothing unless the account holder arms the mandate with it - an agent can propose operations, never set them. Requires scope mandates:manage.",
     inputSchema: {
       type: "object",
       properties: {
@@ -76,6 +76,31 @@ export const AGENT_ACTION_TOOLS = Object.freeze([
         monthlyCapCents: { type: "integer", description: "Hard cap on mandate spend per calendar month, in cents." },
         coversApiPlans: { type: "boolean", description: "Whether the mandate may also execute API plan purchases. Default false." },
         expiresAt: { type: "string", description: "Optional ISO expiry. Default 90 days after arming." },
+        ops: {
+          type: "object",
+          description: "Optional PROPOSED standing operations (Level 4) for this draft: a pool shift, a pause lever, and a digest cadence. Stored inert as a proposal; only the account holder can turn a proposal into a mandate's stated operations, on the account page.",
+          properties: {
+            poolShift: {
+              type: ["object", "null"],
+              properties: {
+                packKey: { type: "string", description: "Pack to buy instead when shifting - must be in the other pool." },
+                shiftBelowSeconds: { type: "integer", description: "Shift when the balance falls below this many seconds." },
+              },
+              required: ["packKey", "shiftBelowSeconds"],
+              additionalProperties: false,
+            },
+            pause: {
+              type: ["object", "null"],
+              properties: {
+                capFraction: { type: "number", description: "Pause non-urgent work when the month's mandate spend reaches this fraction of the monthly cap (0-1)." },
+                floorSeconds: { type: ["integer", "null"], description: "Optional balance floor for the pause lever, in seconds." },
+              },
+              additionalProperties: false,
+            },
+            digestCadence: { type: "string", enum: ["daily", "weekly"], description: "How often the operations digest is written. Default daily." },
+          },
+          additionalProperties: false,
+        },
       },
       required: ["pool", "pack", "thresholdSeconds", "perPurchaseCapCents", "monthlyCapCents"],
       additionalProperties: false,

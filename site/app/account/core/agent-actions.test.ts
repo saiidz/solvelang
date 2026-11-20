@@ -195,7 +195,7 @@ test("ops audit actions read in plain words; unknown actions fall back", () => {
 test("digest mandate line reports spend vs cap and flags near-misses", () => {
   const view: AgentOpsDigestMandateView = {
     id: "m1", status: "armed", pool: "standard", packKey: "standard-5000",
-    settledMonthCents: 2000, reservedMonthCents: 0, monthlyCapCents: 2500,
+    settledMonthCents: 2000, reservedCents: 0, monthlyCapCents: 2500,
     utilization: 0.8, nearMiss: true,
   };
   assert.equal(digestMandateLine(view), "standard-5000 (standard) — $20.00 of $25.00 this month (80%) — near its cap");
@@ -205,7 +205,7 @@ test("digest mandate line reports spend vs cap and flags near-misses", () => {
   );
   // Reserved spend counts toward the month's usage in the line.
   assert.equal(
-    digestMandateLine({ ...view, settledMonthCents: 1000, reservedMonthCents: 500, utilization: 0.6, nearMiss: false }),
+    digestMandateLine({ ...view, settledMonthCents: 1000, reservedCents: 500, utilization: 0.6, nearMiss: false }),
     "standard-5000 (standard) — $15.00 of $25.00 this month (60%)",
   );
 });
