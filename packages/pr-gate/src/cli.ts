@@ -16,7 +16,7 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -51,6 +51,11 @@ export type PrGateRunOptions = {
 const SKIPPED_DIRECTORIES = new Set([".git", "node_modules", "dist", ".pr-gate", ".next", ".studio-test-dist"]);
 const MAX_EXPLICIT_PACK_PATHS = 128; // mirrors MAX_CONTEXT_EXPLICIT_PATHS in the context engine
 const MAX_WALK_BYTES_PER_FILE = 8 * 1024 * 1024;
+// The context engine reads workspace files — and the graph document —
+// through the MCP workspace reader, which refuses anything over 2 MB
+// (packages/mcp-server/src/workspace.ts, MAX_FILE_BYTES). Oversize inputs
+// are excluded up front and reported, instead of failing the whole run.
+const PACK_FILE_MAX_BYTES = 2 * 1024 * 1024;
 
 function toPosix(value: string): string {
   return value.split(path.sep).join("/");
@@ -175,8 +180,11 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
     }
 
     // Stage the canonical graph inside the workspace for the context engine.
+    const graphSerialized = serializeSolveGraphDocument(document);
+    const graphBytes = Buffer.byteLength(graphSerialized, "utf8");
+    const graphInput: "provided" | "omitted-oversize" = graphBytes <= PACK_FILE_MAX_BYTES ? "provided" : "omitted-oversize";
     await mkdir(stagingDir, { recursive: true });
-    await writeFile(path.join(stagingDir, "solve-graph.json"), serializeSolveGraphDocument(document), "utf8");
+    await writeFile(path.join(stagingDir, "solve-graph.json"), graphSerialized, "utf8");
 
     // 2. Blast radius from the changed files.
     const index = await createSolveGraphQueryIndex(document);
@@ -287,6 +295,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
     ].filter(Boolean).join(" ");
     const skippedSensitivePaths: string[] = [];
     const skippedMissingPaths: string[] = [];
+    const skippedOversizePaths: string[] = [];
     const explicitCandidates: string[] = [];
     const seenCandidates = new Set<string>();
     const consider = (candidate: string) => {
@@ -298,6 +307,10 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
       }
       if (!existsSync(path.join(root, candidate))) {
         skippedMissingPaths.push(candidate);
+        return;
+      }
+      if (statSync(path.join(root, candidate)).size > PACK_FILE_MAX_BYTES) {
+        skippedOversizePaths.push(candidate);
         return;
       }
       explicitCandidates.push(candidate);
@@ -313,7 +326,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
       const workspacePack = await buildWorkspaceContextPack(task, {
         paths: explicitPaths,
         changedPaths,
-        graphPath: ".pr-gate/solve-graph.json",
+        ...(graphInput === "provided" ? { graphPath: ".pr-gate/solve-graph.json" } : {}),
         ...(options.budgetBytes ? { budgetBytes: options.budgetBytes } : {}),
       });
       await writeFile(path.join(outDir, "pack.json"), JSON.stringify(workspacePack, null, 2), "utf8");
@@ -328,11 +341,13 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
         files: workspacePack.pack.entries.map((entry) => ({ path: entry.path, sourceSha256: entry.sourceSha256 })),
         skippedSensitivePaths,
         skippedMissingPaths,
+        skippedOversizePaths,
+        graphInput,
       };
     } else if (changedPaths.length > 0) {
       const workspacePack = await buildWorkspaceContextPack(task, {
         changedPaths,
-        graphPath: ".pr-gate/solve-graph.json",
+        ...(graphInput === "provided" ? { graphPath: ".pr-gate/solve-graph.json" } : {}),
         ...(options.budgetBytes ? { budgetBytes: options.budgetBytes } : {}),
       });
       await writeFile(path.join(outDir, "pack.json"), JSON.stringify(workspacePack, null, 2), "utf8");
@@ -347,6 +362,8 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
         files: workspacePack.pack.entries.map((entry) => ({ path: entry.path, sourceSha256: entry.sourceSha256 })),
         skippedSensitivePaths,
         skippedMissingPaths,
+        skippedOversizePaths,
+        graphInput,
       };
     }
 
@@ -387,6 +404,7 @@ export async function runPrGate(options: PrGateRunOptions): Promise<{ exitCode: 
         executionStatus: document.execution.status,
         truncated: document.execution.truncated,
         truncationReasons: [...document.execution.truncationReasons],
+        serializedBytes: graphBytes,
       },
       impact: impactSection,
       affectedValidations: affectedSection,

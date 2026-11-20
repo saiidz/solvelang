@@ -22,6 +22,7 @@ export type PrGateResult = {
     executionStatus: string;
     truncated: boolean;
     truncationReasons: string[];
+    serializedBytes: number;
   };
   impact: {
     rootCount: number;
@@ -48,6 +49,8 @@ export type PrGateResult = {
     files: { path: string; sourceSha256: string }[];
     skippedSensitivePaths: string[];
     skippedMissingPaths: string[];
+    skippedOversizePaths: string[];
+    graphInput: "provided" | "omitted-oversize";
   };
   policy: {
     source: string;
@@ -150,6 +153,14 @@ export function renderReportMarkdown(result: PrGateResult): string {
     if (result.pack.skippedMissingPaths.length > 0) {
       lines.push("");
       lines.push(`Skipped because the file does not exist at this revision: ${result.pack.skippedMissingPaths.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    if (result.pack.skippedOversizePaths.length > 0) {
+      lines.push("");
+      lines.push(`Skipped because the file exceeds the context engine's 2 MB per-file limit: ${result.pack.skippedOversizePaths.map((p) => `\`${p}\``).join(", ")}`);
+    }
+    if (result.pack.graphInput === "omitted-oversize") {
+      lines.push("");
+      lines.push(`Graph hints omitted: the serialized Solve Graph is ${result.graph.serializedBytes} bytes, over the context engine's 2 MB graph-input limit; the pack was built from the changed + impacted file list directly.`);
     }
   }
   lines.push("");
