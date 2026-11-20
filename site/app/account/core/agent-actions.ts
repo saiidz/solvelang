@@ -53,9 +53,19 @@ export const AGENT_TOKEN_SCOPES: AgentTokenScope[] = [
   },
 ];
 
+// Level 4 standing operations on a mandate (design §1): the
+// human states these on this page; an agent may only ever
+// PROPOSE them (opsProposal on a draft), never set them.
+export type AgentOpsPolicyView = {
+  poolShift: { packKey: string; pool: string; shiftBelowSeconds: number } | null;
+  pause: { capFraction: number; floorSeconds: number | null } | null;
+  digestCadence: "daily" | "weekly";
+};
+
 export type AgentMandateView = {
   id: string;
-  status: "draft" | "armed" | "paused" | "revoked" | "expired";
+  status: "draft" | "armed" | "paused" | "revoked" | "expired"
+    | "pending_second_approval" | "suspended" | "superseded";
   pool: "standard" | "high-power";
   packKey: string;
   thresholdSeconds: number;
@@ -66,6 +76,50 @@ export type AgentMandateView = {
   agentLabel: string | null;
   lastTriggeredAt: string | null;
   createdAt: string;
+  // Level 4 fields (absent on mandates written before Level 4).
+  version?: number;
+  supersedesId?: string | null;
+  supersededById?: string | null;
+  shelfVersion?: string | null;
+  suspendedReason?: string | null;
+  approvals?: { actor: string; at: string }[];
+  ops?: AgentOpsPolicyView | null;
+  opsProposal?: AgentOpsPolicyView | null;
+};
+
+// The Level 4 ops digest: a view over the shared mandate ledger
+// in the runners service (GET /customer/runner-minutes/agent/ops/
+// digest), never a separate record that could drift from it.
+export type AgentOpsDigestMandateView = {
+  id: string;
+  status: string;
+  pool: string;
+  packKey: string;
+  settledMonthCents: number;
+  reservedMonthCents: number;
+  monthlyCapCents: number;
+  utilization: number;
+  nearMiss: boolean;
+};
+
+export type AgentOpsDigestView = {
+  tenantId: string;
+  generatedAt: string;
+  periodDays: number;
+  mandates: AgentOpsDigestMandateView[];
+  spendByPoolCents: Record<string, number>;
+  actions: {
+    topUpsTriggered: number;
+    poolShifts: number;
+    purchasesCompleted: number;
+    pauses: number;
+    resumes: number;
+    decisionsNotToAct: number;
+  };
+  reservationsExpiredUnfulfilled: number;
+  nearMisses: { mandateId: string; utilization: number; monthlyCapCents: number }[];
+  escalations: { mandateId: string | null; at: string; summary: string }[];
+  summaryLine: string;
 };
 
 export type AgentPurchaseIntentView = {
@@ -110,6 +164,23 @@ export function formatThreshold(seconds: number): string {
     : `${minutes} minutes`;
 }
 
+export function suspensionReasonLine(reason: string | null | undefined): string {
+  switch (reason) {
+    case "cap_reached":
+      return "its monthly cap was reached.";
+    case "shelf_changed":
+      return "prices changed since it was armed — resuming it confirms the new prices.";
+    case "repeated_refusals":
+      return "its purchases were refused repeatedly.";
+    case "inputs_unavailable":
+      return "its balance could not be read reliably.";
+    case "trigger_frequency":
+      return "it triggered far more often than a standing mandate should.";
+    default:
+      return "the operations loop stopped it for your review.";
+  }
+}
+
 export function mandateStatusLine(mandate: AgentMandateView): string {
   switch (mandate.status) {
     case "draft":
@@ -122,9 +193,74 @@ export function mandateStatusLine(mandate: AgentMandateView): string {
       return "Revoked — permanently off.";
     case "expired":
       return "Expired — its end date has passed.";
+    case "pending_second_approval":
+      return "Waiting for a second approver — above the largest single pack, two people must arm a mandate. It does nothing until then.";
+    case "suspended":
+      return `Suspended — ${suspensionReasonLine(mandate.suspendedReason)} Only you can resume it.`;
+    case "superseded":
+      return "Superseded — replaced by a newer version below. Kept for the record; it no longer acts.";
     default:
       return mandate.status;
   }
+}
+
+export function mandateVersionLine(mandate: AgentMandateView): string | null {
+  if (!mandate.version || mandate.version <= 1) return null;
+  return `Version ${mandate.version} — a change is always a new version; the version it replaced stays on this page for the record.`;
+}
+
+// One plain-words line describing a standing-operations policy,
+// used for both the armed policy (ops) and an agent's proposal
+// (opsProposal). Null when there is no policy to describe.
+export function opsPolicySummary(policy: AgentOpsPolicyView | null | undefined): string | null {
+  if (!policy) return null;
+  const parts: string[] = [];
+  if (policy.poolShift) {
+    parts.push(`if the balance falls below ${formatThreshold(policy.poolShift.shiftBelowSeconds)}, the top-up buys ${policy.poolShift.packKey} for the ${policy.poolShift.pool} pool instead`);
+  }
+  if (policy.pause) {
+    parts.push(`new work pauses when the month's spend reaches ${Math.round(policy.pause.capFraction * 100)}% of the monthly cap, and resumes at the start of the next month`);
+  }
+  parts.push(`operations digest ${policy.digestCadence === "weekly" ? "weekly" : "daily"}`);
+  return `Standing operations: ${parts.join("; ")}.`;
+}
+
+// Labels for the Level 4 audit actions, so the activity log reads
+// in plain words instead of raw outcome codes. Returns null for
+// actions it does not know (the caller falls back to the Level 3
+// outcome wording).
+export function auditActionLine(action: string): string | null {
+  switch (action) {
+    case "ops_topup_triggered":
+      return "Standing top-up bought";
+    case "ops_pool_shift":
+      return "Standing top-up shifted pools";
+    case "ops_paused":
+      return "Work paused by a mandate";
+    case "ops_resumed":
+      return "Work resumed by a mandate";
+    case "ops_no_action":
+      return "Operations decided not to act";
+    case "ops_escalated":
+      return "Operations stopped a mandate";
+    case "ops_digest":
+      return "Operations digest";
+    case "reservation_expired":
+      return "A spend reservation expired";
+    case "mandate_replaced":
+      return "Mandate replaced by a new version";
+    case "mandate_arm_refused":
+      return "Second approval still needed";
+    default:
+      return null;
+  }
+}
+
+export function digestMandateLine(view: AgentOpsDigestMandateView): string {
+  const used = formatCents(view.settledMonthCents + view.reservedMonthCents);
+  const cap = formatCents(view.monthlyCapCents);
+  const percent = Math.round(view.utilization * 100);
+  return `${view.packKey} (${view.pool}) — ${used} of ${cap} this month (${percent}%)${view.nearMiss ? " — near its cap" : ""}`;
 }
 
 export type MinutesApprovalCheckout = {
