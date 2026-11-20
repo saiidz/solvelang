@@ -11,6 +11,7 @@ import {
   formatCents,
   formatThreshold,
   mandateStatusLine,
+  minutesCheckoutFromApproval,
   purchaseStatusLine,
   type AgentAuditEntryView,
   type AgentMandateView,
@@ -247,13 +248,16 @@ export function AgentAccess() {
     setBusy(true);
     setError(null);
     try {
-      const approved = await customerApi<{ clientSecret?: string; publishableKey?: string }>(
+      const approved = await customerApi<unknown>(
         RUNNERS_API_BASE,
         `/customer/runner-minutes/agent/purchase-intents/${intent.id}/approve`,
         { method: "POST", csrfToken, body: JSON.stringify({}) },
       );
-      if (approved.clientSecret && approved.publishableKey) {
-        setStripeBox({ kind: "minutes-approve", clientSecret: approved.clientSecret, publishableKey: approved.publishableKey, intentId: intent.id });
+      // The approve answer is { intent, checkout } - the embedded
+      // checkout material is nested (see minutesCheckoutFromApproval).
+      const checkout = minutesCheckoutFromApproval(approved);
+      if (checkout) {
+        setStripeBox({ kind: "minutes-approve", clientSecret: checkout.clientSecret, publishableKey: checkout.publishableKey, intentId: intent.id });
       } else if (csrfToken) {
         await load();
       }

@@ -127,6 +127,30 @@ export function mandateStatusLine(mandate: AgentMandateView): string {
   }
 }
 
+export type MinutesApprovalCheckout = {
+  clientSecret: string;
+  publishableKey: string;
+};
+
+// The runners approve endpoint answers { intent, checkout }: the
+// embedded-checkout material (the PaymentIntent client secret and
+// the publishable key) lives on the NESTED checkout object, never at
+// the top level. Reading it from the top level is the defect that
+// left the Nov 19, 2026 approval with a PaymentIntent created
+// server-side and no payment step on the page - the activity log
+// even said "embedded checkout opened". Anything that is not the
+// full nested pair is not a checkout: the page falls back to a
+// reload instead of presenting a half-built payment box.
+export function minutesCheckoutFromApproval(result: unknown): MinutesApprovalCheckout | null {
+  if (!result || typeof result !== "object") return null;
+  const checkout = (result as { checkout?: unknown }).checkout;
+  if (!checkout || typeof checkout !== "object") return null;
+  const { clientSecret, publishableKey } = checkout as { clientSecret?: unknown; publishableKey?: unknown };
+  if (typeof clientSecret !== "string" || !clientSecret) return null;
+  if (typeof publishableKey !== "string" || !publishableKey) return null;
+  return { clientSecret, publishableKey };
+}
+
 export function purchaseStatusLine(status: string): string {
   switch (status) {
     case "approval_required":
