@@ -22,6 +22,59 @@ export const REMOTE_MCP_MIN_TOKEN_BYTES = 32;
 export const REMOTE_MCP_MAX_TOKEN_BYTES = 1024;
 export const REMOTE_OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge" as const;
 
+export const REMOTE_MCP_RATE_LIMIT = Object.freeze({ limit: 60, windowMs: 60_000 });
+
+export type RemoteRateLimit = Readonly<{ limit: number; windowMs: number }>;
+
+export function normalizeRemoteRateLimit(value: Partial<RemoteRateLimit> | undefined): RemoteRateLimit {
+  const limit = value?.limit ?? REMOTE_MCP_RATE_LIMIT.limit;
+  const windowMs = value?.windowMs ?? REMOTE_MCP_RATE_LIMIT.windowMs;
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > 100_000) {
+    throw new Error("Remote MCP rate limit must be an integer from 0 through 100000 requests per window (0 disables the limiter).");
+  }
+  if (!Number.isSafeInteger(windowMs) || windowMs < 100 || windowMs > 3_600_000) {
+    throw new Error("Remote MCP rate limit window must be an integer from 100 through 3600000 milliseconds.");
+  }
+  return { limit, windowMs };
+}
+
+// Fixed-window, per-source-address limiter, mirroring the agent talk-back
+// doorway in-handler pattern (services/api-access/src/agent-talkback.js):
+// the limit is enforced before authentication and before any MCP parsing,
+// so floods and credential guessing are throttled at the same boundary.
+// The key is the socket source address as seen by this process; behind a
+// shared proxy that aggregates callers, so production deployments still
+// need edge rate limiting as well (see docs/integrations/remote-mcp.md).
+export function createRemoteRateLimiter(
+  rateLimit: RemoteRateLimit,
+  now: () => number = Date.now,
+): Readonly<{ check: (source: string | undefined) => Readonly<{ allowed: boolean; retryAfterSeconds: number }> }> {
+  const windows = new Map<string, { startedAt: number; count: number }>();
+  return {
+    check(source: string | undefined) {
+      if (rateLimit.limit <= 0) return { allowed: true, retryAfterSeconds: 0 };
+      const key = typeof source === "string" && source.length > 0 ? source : "unknown";
+      const at = now();
+      const window = windows.get(key);
+      if (!window || at - window.startedAt >= rateLimit.windowMs) {
+        if (windows.size >= 4_096) {
+          for (const [entryKey, entry] of windows) {
+            if (at - entry.startedAt >= rateLimit.windowMs) windows.delete(entryKey);
+          }
+        }
+        windows.set(key, { startedAt: at, count: 1 });
+        return { allowed: true, retryAfterSeconds: 0 };
+      }
+      window.count += 1;
+      if (window.count <= rateLimit.limit) return { allowed: true, retryAfterSeconds: 0 };
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((window.startedAt + rateLimit.windowMs - at) / 1_000)),
+      };
+    },
+  };
+}
+
 export type RemoteAuthMode = "bearer" | "noauth";
 
 export function normalizeRemoteAuthMode(value: string | undefined): RemoteAuthMode {
@@ -120,8 +173,9 @@ const remoteSolveGraphShortestPathInputSchema = z.object({
   maxVisited: z.number().int().min(1).max(10_000).optional(),
 });
 
-export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: RemoteAuthMode }> = {}): McpServer {
+export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: RemoteAuthMode; rateLimit?: RemoteRateLimit | null }> = {}): McpServer {
   const authMode = options.authMode ?? "bearer";
+  const rateLimit: RemoteRateLimit | null = options.rateLimit === undefined ? { ...REMOTE_MCP_RATE_LIMIT } : options.rateLimit;
   const server = new McpServer(
     { name: "solvelang-remote", version: "0.3.0" },
     {
@@ -285,6 +339,7 @@ export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: Re
       inputModes: ["raw JSON processed only in memory"],
       limits: {
         maxRequestBytes: REMOTE_MCP_MAX_REQUEST_BYTES,
+        rateLimit: rateLimit ? { maxRequestsPerWindow: rateLimit.limit, windowMs: rateLimit.windowMs } : null,
         maxN8nBytes: MAX_N8N_BYTES,
         maxN8nNodes: MAX_N8N_NODES,
         maxSolveGraphBytes: MAX_SOLVE_GRAPH_BYTES,
@@ -294,7 +349,7 @@ export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: Re
       authentication: authMode === "noauth" ? "anonymous" : "bearer",
       privacy: [
         authMode === "noauth"
-          ? "Public plugin mode accepts anonymous requests; production deployments must enforce edge rate limits and abuse controls."
+          ? "Public plugin mode accepts anonymous requests; the built-in per-address rate limiter is enforced before MCP parsing, and production deployments must also enforce edge rate limits and abuse controls."
           : "Bearer authentication is required before MCP request parsing.",
         "No workflow execution",
         "No workspace or filesystem reads",
@@ -367,12 +422,15 @@ export type RemoteHttpServerOptions = Readonly<{
   authMode?: RemoteAuthMode;
   mcpPath?: string;
   openaiChallengeToken?: string;
+  rateLimit?: Partial<RemoteRateLimit> | false;
 }>;
 
 export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions): HttpServer {
   const authMode = options.authMode ?? "bearer";
   const bearerToken = authMode === "bearer" ? normalizeRemoteBearerToken(options.bearerToken ?? "") : undefined;
   const openaiChallengeToken = normalizeOpenAiAppsChallengeToken(options.openaiChallengeToken);
+  const rateLimit: RemoteRateLimit | null = options.rateLimit === false ? null : normalizeRemoteRateLimit(options.rateLimit);
+  const rateLimiter = rateLimit ? createRemoteRateLimiter(rateLimit) : null;
   const mcpPath = options.mcpPath ?? REMOTE_MCP_DEFAULT_PATH;
   if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$/.test(mcpPath) || mcpPath.includes("?")) {
     throw new Error("Remote MCP path must be a safe absolute URL path.");
@@ -402,6 +460,13 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         sendJson(res, 405, { error: "method_not_allowed" }, { Allow: "POST" });
         return;
       }
+      if (rateLimiter) {
+        const verdict = rateLimiter.check(req.socket.remoteAddress);
+        if (!verdict.allowed) {
+          sendJson(res, 429, { error: "rate_limited" }, { "Retry-After": String(verdict.retryAfterSeconds) });
+          return;
+        }
+      }
       if (authMode === "bearer" && !remoteBearerHeaderMatches(req.headers.authorization, bearerToken!)) {
         sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
         return;
@@ -418,7 +483,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         return;
       }
 
-      const mcpServer = createRemoteSolveLangMcpServer({ authMode });
+      const mcpServer = createRemoteSolveLangMcpServer({ authMode, rateLimit });
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
@@ -444,7 +509,26 @@ export type StartRemoteSolveLangServerOptions = Readonly<{
   port?: number;
   mcpPath?: string;
   openaiChallengeToken?: string;
+  rateLimit?: Partial<RemoteRateLimit> | false;
 }>;
+
+function remoteRateLimitFromEnvironment(): Partial<RemoteRateLimit> | undefined {
+  const limitRaw = process.env.SOLVELANG_REMOTE_RATE_LIMIT;
+  const windowRaw = process.env.SOLVELANG_REMOTE_RATE_WINDOW_MS;
+  if (limitRaw === undefined && windowRaw === undefined) return undefined;
+  const parsed: { limit?: number; windowMs?: number } = {};
+  if (limitRaw !== undefined) {
+    const limit = Number(limitRaw);
+    if (!Number.isSafeInteger(limit)) throw new Error("SOLVELANG_REMOTE_RATE_LIMIT must be an integer (0 disables the limiter).");
+    parsed.limit = limit;
+  }
+  if (windowRaw !== undefined) {
+    const windowMs = Number(windowRaw);
+    if (!Number.isSafeInteger(windowMs)) throw new Error("SOLVELANG_REMOTE_RATE_WINDOW_MS must be an integer number of milliseconds.");
+    parsed.windowMs = windowMs;
+  }
+  return parsed;
+}
 
 export async function startRemoteSolveLangServer(options: StartRemoteSolveLangServerOptions = {}): Promise<HttpServer> {
   const authMode = options.authMode ?? normalizeRemoteAuthMode(process.env.SOLVELANG_REMOTE_AUTH_MODE);
@@ -456,7 +540,8 @@ export async function startRemoteSolveLangServer(options: StartRemoteSolveLangSe
     throw new Error("Remote MCP port must be an integer from 0 through 65535.");
   }
   const mcpPath = options.mcpPath ?? process.env.SOLVELANG_REMOTE_PATH ?? REMOTE_MCP_DEFAULT_PATH;
-  const server = createRemoteSolveLangHttpServer({ bearerToken, authMode, mcpPath, openaiChallengeToken });
+  const rateLimit = options.rateLimit ?? remoteRateLimitFromEnvironment();
+  const server = createRemoteSolveLangHttpServer({ bearerToken, authMode, mcpPath, openaiChallengeToken, rateLimit });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
       server.off("listening", onListening);

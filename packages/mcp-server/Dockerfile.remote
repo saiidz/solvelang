@@ -10,7 +10,10 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     SOLVELANG_REMOTE_HOST=0.0.0.0 \
-    SOLVELANG_REMOTE_PORT=8787
+    SOLVELANG_REMOTE_PORT=8787 \
+    SOLVELANG_REMOTE_AUTH_MODE=bearer \
+    SOLVELANG_REMOTE_RATE_LIMIT=60 \
+    SOLVELANG_REMOTE_RATE_WINDOW_MS=60000
 COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
