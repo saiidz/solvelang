@@ -1,0 +1,36 @@
+# Production-shaped deployment for the SolveLang hosted relay (Phase 6).
+#
+# STATUS: deploy gated on the owner's production word for the hosted
+# relay (given Nov 20, 2026) and on this file's stack being merged.
+#
+# The container binds to localhost only: the host's TLS reverse proxy is
+# the single public ingress (HTTPS termination for relay.solve-lang.com).
+# The relay config (token hashes + workspace key registries, public keys
+# only) lives in ./relay.config.json on the host — never in git; see
+# relay.config.example.json. The append-only audit log is written to the
+# ./relay-data volume (/data inside the container).
+services:
+  solvelang-relay:
+    build:
+      context: ..
+      dockerfile: Dockerfile.relay
+    image: solvelang-relay:0.3.0
+    container_name: solvelang-relay
+    restart: unless-stopped
+    env_file:
+      - ./relay.env
+    environment:
+      SOLVELANG_RELAY_HOST: "0.0.0.0"
+      SOLVELANG_RELAY_PORT: "8788"
+      SOLVELANG_RELAY_CONFIG: "/app/relay.config.json"
+      SOLVELANG_RELAY_AUDIT_LOG: "/data/audit.jsonl"
+    ports:
+      - "127.0.0.1:8788:8788"
+    volumes:
+      - ./relay.config.json:/app/relay.config.json:ro
+      - ./relay-data:/data
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
