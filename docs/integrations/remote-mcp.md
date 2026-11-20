@@ -35,6 +35,7 @@ The server uses MCP Streamable HTTP in stateless mode.
 - Authentication: bearer-protected by default; an explicit `SOLVELANG_REMOTE_AUTH_MODE=noauth` mode exists for public, read-only plugin deployment.
 - Request content type: `application/json`.
 - Request ceiling: 4 MiB before MCP parsing.
+- Rate limiting: a built-in fixed-window limiter (default 60 requests per 60 seconds per source address) is enforced in the HTTP handler before authentication and before MCP parsing, answering `429` with `Retry-After` once exhausted. It is configurable via `SOLVELANG_REMOTE_RATE_LIMIT` / `SOLVELANG_REMOTE_RATE_WINDOW_MS` (0 disables; invalid values fail closed at startup) and the effective limit is reported by `solvelang_capabilities`. The limiter key is the socket source address as seen by the process, so behind a shared proxy it aggregates callers — edge rate limiting remains required in production.
 - N8n/Solve Graph input ceilings remain the existing 2 MiB analysis limits.
 - HTTP responses use `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 - Raw workflow/graph input is not intentionally logged or persisted by the application.
@@ -76,7 +77,9 @@ SOLVELANG_REMOTE_PORT=8787 \\
 npm run start:remote
 ```
 
-A production container build is available at `packages/mcp-server/Dockerfile.remote`. Build it with `packages/mcp-server` as the Docker build context. Public deployment still requires HTTPS termination, rate limiting, monitoring and an explicit production rollout.
+A production container build is available at `packages/mcp-server/Dockerfile.remote`. Build it with `packages/mcp-server` as the Docker build context. A reviewed production deployment shape (localhost-bound container behind a TLS reverse proxy, host-held env file, hardened container flags) is checked in at `packages/mcp-server/deploy/`. The endpoint's behavior is pinned by protocol-level tests plus a real-client proof (an MCP SDK client completing a context-pack-driven impact task against the locally running server) in `packages/mcp-server/test/remote.test.ts` and `packages/mcp-server/test/remote-client-proof.test.ts`.
+
+**Deployment state (Phase 5, 2026-11-20): built and proven locally, NOT deployed.** No public endpoint exists, `mcp.solve-lang.com` does not serve this server, and no production bearer token has been created. Public deployment still requires HTTPS termination, edge rate limiting, monitoring, and the owner's explicit production approval for the exact deployment.
 
 The packaged executable is also named `solvelang-mcp-remote`.
 
@@ -87,7 +90,7 @@ Before connecting Claude's server-side MCP connector or any internet client, a s
 1. HTTPS termination with a stable public hostname.
 2. Production secret storage and rotation for the bearer credential, or a separately reviewed OAuth upgrade.
 3. Network/firewall policy that exposes only the intended HTTPS ingress.
-4. Rate limiting and abuse monitoring at the edge/runtime.
+4. Rate limiting and abuse monitoring at the edge/runtime (the runtime limiter ships built in; edge limiting and monitoring are still required).
 5. Request/response logging configured so raw JSON and Authorization headers are not retained.
 6. Retention/deletion policy and incident-response ownership.
 7. Health/availability monitoring and rollback/disable controls.
