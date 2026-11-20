@@ -844,6 +844,7 @@ pub struct Evaluator<H: RuntimeHost> {
     active_module_calls: Vec<String>,
     active_module: Option<String>,
     module_execution_enabled: bool,
+    gates: Option<GateBook>,
 }
 
 impl Default for Evaluator<DenyAllHost> {
@@ -896,6 +897,7 @@ impl<H: RuntimeHost> Evaluator<H> {
             active_module_calls: Vec::new(),
             active_module: None,
             module_execution_enabled: false,
+            gates: None,
         }
     }
 
@@ -915,6 +917,21 @@ impl<H: RuntimeHost> Evaluator<H> {
     pub fn with_limits(mut self, limits: EvaluationLimits) -> Self {
         self.limits = limits;
         self
+    }
+
+    pub fn with_gates(mut self, gates: GateBook) -> Self {
+        self.gates = Some(gates);
+        self
+    }
+
+    /// Supply (or clear) the gate book for subsequent runs. A run that
+    /// reaches a gate without a book is refused: gates fail closed.
+    pub fn set_gates(&mut self, gates: Option<GateBook>) {
+        self.gates = gates;
+    }
+
+    pub fn gates(&self) -> Option<&GateBook> {
+        self.gates.as_ref()
     }
 
     pub fn limits(&self) -> EvaluationLimits {
@@ -2218,6 +2235,7 @@ impl<H: RuntimeHost> Evaluator<H> {
                 | Stmt::Break { .. }
                 | Stmt::Continue { .. }
                 | Stmt::Ask { .. }
+                | Stmt::Gate { .. }
                 | Stmt::Expr(_) => {}
             }
         }
@@ -2957,7 +2975,8 @@ impl<H: RuntimeHost> Evaluator<H> {
                 | Stmt::Export { .. }
                 | Stmt::Break { .. }
                 | Stmt::Continue { .. }
-                | Stmt::Agent { .. } => Ok(()),
+                | Stmt::Agent { .. }
+                | Stmt::Gate { .. } => Ok(()),
             }
         });
         if pushed {
@@ -3294,7 +3313,8 @@ impl<H: RuntimeHost> Evaluator<H> {
             | Stmt::NamedModuleImport { .. }
             | Stmt::Break { .. }
             | Stmt::Continue { .. }
-            | Stmt::Agent { .. } => Ok(()),
+            | Stmt::Agent { .. }
+            | Stmt::Gate { .. } => Ok(()),
             Stmt::Export { declaration, .. } => match declaration {
                 crate::ast::ExportedDeclaration::Let {
                     name,
@@ -4077,7 +4097,10 @@ impl<H: RuntimeHost> Evaluator<H> {
                 ));
             }
             match statement {
-                Stmt::LegacyInclude { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+                Stmt::LegacyInclude { .. }
+                | Stmt::Break { .. }
+                | Stmt::Continue { .. }
+                | Stmt::Gate { .. } => {}
                 Stmt::ModuleImport {
                     namespace,
                     location,
@@ -4769,6 +4792,62 @@ impl<H: RuntimeHost> Evaluator<H> {
         Ok(ControlFlow::None)
     }
 
+    /// The signed-gate seam: when execution reaches a gate statement,
+    /// the gate is verified before any later statement runs. Every
+    /// failure is a refusal with a stable code, and the run aborts:
+    /// there is no path around a gate inside the evaluator.
+    fn execute_gate(
+        &mut self,
+        name: &str,
+        evidence: &str,
+        signers: &[String],
+        location: SourceLocation,
+    ) -> Result<(), RuntimeError> {
+        if self.active_module.is_some() {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(
+                    gate_codes::MODULE_CONTEXT,
+                    format!(
+                        "gate '{name}' was reached inside an explicit module; gates are entry-workflow statements in this version"
+                    ),
+                ),
+                location,
+            ));
+        }
+        let declaration = GateDeclaration {
+            name: name.to_string(),
+            evidence: evidence.to_string(),
+            signers: signers.to_vec(),
+        };
+        let Some(book) = &self.gates else {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(
+                    gate_codes::UNCONFIGURED,
+                    format!(
+                        "gate '{name}' cannot pass because this run was given no gate book (no signatures or key data were supplied)"
+                    ),
+                ),
+                location,
+            ));
+        };
+        let check = match precheck_gate(book, &declaration) {
+            Ok(check) => check,
+            Err(refusal) => {
+                return Err(self.attach_location(
+                    RuntimeError::gate_refusal(&refusal.code, refusal.message),
+                    location,
+                ));
+            }
+        };
+        if let Err(refusal) = self.host.verify_gate(&check) {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(&refusal.code, refusal.message),
+                location,
+            ));
+        }
+        Ok(())
+    }
+
     fn execute(&mut self, statement: &Stmt) -> Result<ControlFlow, RuntimeError> {
         self.charge_step(statement_location(statement))?;
         match statement {
@@ -4983,6 +5062,15 @@ impl<H: RuntimeHost> Evaluator<H> {
                 location,
             } => {
                 self.insert_agent(name, instruction, tools, *location)?;
+                Ok(ControlFlow::None)
+            }
+            Stmt::Gate {
+                name,
+                evidence,
+                signers,
+                location,
+            } => {
+                self.execute_gate(name, evidence, signers, *location)?;
                 Ok(ControlFlow::None)
             }
             Stmt::Ask {
@@ -6542,6 +6630,51 @@ impl SyntaxSnapshotBudget {
     }
 }
 
+/// Collect every gate declaration in a statement list, including
+/// gates nested in blocks and function bodies, in source order. Hosts
+/// use this to prepare a [`GateBook`] before a run and to sign gates
+/// without executing the workflow.
+pub fn collect_gate_declarations(statements: &[Stmt]) -> Vec<GateDeclaration> {
+    let mut declarations = Vec::new();
+    collect_gate_declarations_into(statements, &mut declarations);
+    declarations
+}
+
+fn collect_gate_declarations_into(statements: &[Stmt], declarations: &mut Vec<GateDeclaration>) {
+    for statement in statements {
+        match statement {
+            Stmt::Gate {
+                name,
+                evidence,
+                signers,
+                ..
+            } => declarations.push(GateDeclaration {
+                name: name.clone(),
+                evidence: evidence.clone(),
+                signers: signers.clone(),
+            }),
+            Stmt::Function { body, .. } => collect_gate_declarations_into(body, declarations),
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { body, .. },
+                ..
+            } => collect_gate_declarations_into(body, declarations),
+            Stmt::Export { .. } => {}
+            Stmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_gate_declarations_into(then_branch, declarations);
+                collect_gate_declarations_into(else_branch, declarations);
+            }
+            Stmt::While { body, .. } | Stmt::For { body, .. } => {
+                collect_gate_declarations_into(body, declarations)
+            }
+            _ => {}
+        }
+    }
+}
+
 fn snapshot_statements(
     statements: &[Stmt],
     budget: &mut SyntaxSnapshotBudget,
@@ -6638,6 +6771,19 @@ fn snapshot_statement(
             budget.string(instruction)?;
             for tool in tools {
                 budget.string(tool)?;
+            }
+            Ok(())
+        }
+        Stmt::Gate {
+            name,
+            evidence,
+            signers,
+            ..
+        } => {
+            budget.string(name)?;
+            budget.string(evidence)?;
+            for signer in signers {
+                budget.string(signer)?;
             }
             Ok(())
         }
@@ -6909,6 +7055,7 @@ fn statement_location(statement: &Stmt) -> SourceLocation {
         | Stmt::Break { location }
         | Stmt::Continue { location }
         | Stmt::Agent { location, .. }
+        | Stmt::Gate { location, .. }
         | Stmt::Ask { location, .. } => *location,
         Stmt::Expr(expression) => expression.location,
     }

@@ -178,6 +178,12 @@ pub enum Stmt {
         tools: Vec<String>,
         location: SourceLocation,
     },
+    Gate {
+        name: String,
+        evidence: String,
+        signers: Vec<String>,
+        location: SourceLocation,
+    },
     Ask {
         agent: String,
         message: Expr,

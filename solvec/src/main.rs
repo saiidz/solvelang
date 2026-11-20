@@ -268,6 +268,7 @@ impl CliFailure {
             "invalid_workflow" => 4,
             "import_denied" | "capability_denied" | "read_only_input" => 5,
             "runtime_error" => 6,
+            "gate_refused" => 7,
             _ => 1,
         }
     }
@@ -460,7 +461,16 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
         runtime.run(&entry.statements)
     };
     result.map_err(|error| {
-        CliFailure::runtime(entry.source.remap_runtime_message(&error.to_string()))
+        let remapped = entry.source.remap_runtime_message(&error.to_string());
+        if let Some(code) = error.gate_code() {
+            CliFailure::preflight(
+                "gate_refused",
+                "workflow gate was refused",
+                format!("Gate refused [{code}]: {remapped}"),
+            )
+        } else {
+            CliFailure::runtime(remapped)
+        }
     })?;
 
     if options.json {
@@ -1339,6 +1349,7 @@ fn preflight_statements(
                 ));
             }
             Stmt::Agent { .. } => {}
+            Stmt::Gate { .. } => {}
             Stmt::Ask { message, .. } => {
                 if hardened {
                     return Err(capability_failure(
