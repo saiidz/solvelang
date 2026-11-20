@@ -45,6 +45,8 @@ export const publicRoutes = [
   { segment: "docs/mcp-server-local-setup", classification: "english-only-technical", sitemap: true },
   { segment: "docs/remote-mcp-endpoint", classification: "english-only-technical", sitemap: true },
   { segment: "docs/context-packs", classification: "english-only-technical", sitemap: true },
+  { segment: "docs/audit-a-repository", classification: "english-only-technical", sitemap: true },
+  { segment: "docs/runner-minutes", classification: "english-only-technical", sitemap: true },
   { segment: "demo/support-triage", classification: "english-only-technical", sitemap: true },
   { segment: "checkout", classification: "checkout-sensitive", sitemap: false },
   { segment: "success", classification: "noindex-utility", sitemap: false },

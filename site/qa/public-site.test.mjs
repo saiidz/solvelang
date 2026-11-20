@@ -1438,7 +1438,7 @@ test("documentation hub documents each guide with problem-first titles and pinne
   const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
   assert.deepEqual(
     guides.map((entry) => entry.slug),
-    ["mcp-server-local-setup", "remote-mcp-endpoint", "context-packs"],
+    ["mcp-server-local-setup", "remote-mcp-endpoint", "context-packs", "audit-a-repository", "runner-minutes"],
     "the hub ships exactly the guides built so far, in order",
   );
   assert.equal(new Set(guides.map((entry) => entry.slug)).size, guides.length, "guide slugs are unique");
