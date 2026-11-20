@@ -8,9 +8,15 @@ Usage:
   solvec fmt [--check] <file.solve>  Format source without changing meaning
   solvec tokens <file.solve>         Print lexer tokens
   solvec ast <file.solve>            Print parsed AST
+  solvec keygen --id <id> --out <key-file>
+                                     Generate a gate signing key; prints the registry entry
+  solvec sign <file.solve> --gate <name> --key <key-file> [--registry <file>] [--signatures <file>] [--not-before <unix>] [--not-after <unix>]
+                                     Sign one gate of a workflow into its signatures file
   solvec version                     Print canonical package version
 
 Local structured-run options:
+  --keys <file>                      Gate key registry (default: solve-keys.json beside the workflow)
+  --signatures <file>                Gate signatures (default: <file>.signatures.json beside the workflow)
   --input <file>                     Inject strict JSON as read-only 'input'
   --json                             Emit one hardened deterministic JSON envelope
   --safe                             Deny runtime capabilities and unsafe tools
