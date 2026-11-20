@@ -5,7 +5,7 @@ import { GetCommand, PutCommand, QueryCommand, ScanCommand } from "@aws-sdk/lib-
 import { ApiAccessError } from "../src/service.js";
 import { createDynamoAgentActionsStore } from "../src/agent-actions-store.js";
 import { createAgentActionsService } from "../src/agent-actions-service.js";
-import { createAgentActionsHandler } from "../src/agent-actions-handler.js";
+import { AGENT_ACTION_TOOLS, createAgentActionsHandler } from "../src/agent-actions-handler.js";
 
 // Level 3 (api-access) pins: delegated tokens are hashed at rest and
 // shown once; the authenticated agent endpoint enforces scopes,
@@ -470,4 +470,35 @@ test("store: prefix listing returns only the account's own records", async () =>
   await store.putPlanIntent({ accountId: "acct-b", id: "p2", status: "approval_required" });
   assert.deepEqual((await store.listTokens("acct-a")).map((entry) => entry.tokenId), ["t1"]);
   assert.deepEqual((await store.listPlanIntents("acct-a")).map((entry) => entry.id), ["p1"]);
+});
+
+
+test("contract: create_topup_mandate forwards an agent's ops as an inert proposal, never as ops", async () => {
+  const { service, runners } = makeService();
+  const { validated } = await makeToken(service);
+  const proposal = { poolShift: null, pause: { capFraction: 0.9, floorSeconds: null }, digestCadence: "weekly" };
+  const draft = await service.callTool({
+    token: validated,
+    name: "create_topup_mandate",
+    args: {
+      pool: "standard", pack: "standard-5000", thresholdSeconds: 3600,
+      perPurchaseCapCents: 2000, monthlyCapCents: 2000,
+      ops: proposal,
+    },
+  });
+  assert.equal(draft.status, "draft");
+  const draftCall = runners.calls.find((call) => call.path === "/internal/agent/mandates/draft");
+  // The proposal crosses the seam as opsProposal - the field the
+  // runners engine stores inert on a draft (its QA suite pins the
+  // landing). The mandate's own ops field is never sent by an
+  // agent path: stating operations is the account holder's act.
+  assert.deepEqual(draftCall.body.spec.opsProposal, proposal);
+  assert.ok(!("ops" in draftCall.body.spec), "an agent path never sends the mandate's ops field");
+});
+
+test("contract: the create_topup_mandate schema advertises the ops proposal as optional", () => {
+  const tool = AGENT_ACTION_TOOLS.find((entry) => entry.name === "create_topup_mandate");
+  assert.ok(tool, "create_topup_mandate is listed on the MCP surface");
+  assert.ok(tool.inputSchema.properties.ops, "ops is an advertised argument");
+  assert.ok(!tool.inputSchema.required.includes("ops"), "ops stays optional");
 });

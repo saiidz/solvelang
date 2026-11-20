@@ -11,11 +11,13 @@ import {
   mandateStatusLine,
   mandateVersionLine,
   minutesCheckoutFromApproval,
+  opsPolicyFromFormState,
   opsPolicySummary,
   purchaseStatusLine,
   suspensionReasonLine,
   type AgentMandateView,
   type AgentOpsDigestMandateView,
+  type AgentOpsFormState,
 } from "./agent-actions";
 
 // Level 3 site pins: the agent-access page's wording and formatting
@@ -223,4 +225,70 @@ test("minutes approval checkout refuses flat or partial shapes", () => {
   assert.equal(minutesCheckoutFromApproval({ checkout: { clientSecret: "", publishableKey: "y" } }), null);
   assert.equal(minutesCheckoutFromApproval(null), null);
   assert.equal(minutesCheckoutFromApproval("approved"), null);
+});
+
+const opsFormState = (overrides: Partial<AgentOpsFormState> = {}): AgentOpsFormState => ({
+  shiftEnabled: false,
+  shiftPackKey: "high-power-1000",
+  shiftPool: "high-power",
+  shiftBelowMinutes: "30",
+  pauseEnabled: false,
+  pausePercent: "90",
+  digestCadence: "off",
+  ...overrides,
+});
+
+test("ops policy from form state: nothing stated is a plain mandate", () => {
+  assert.equal(opsPolicyFromFormState(opsFormState()), null);
+});
+
+test("ops policy from form state: a stated digest alone is a policy (the Nov 19, 2026 launch-proof shape)", () => {
+  // The launch proof armed with shift off, pause off, digest
+  // Daily - and the page read the daily cadence as "nothing
+  // stated", sending ops: null. The stored mandate was a plain
+  // Level 3 mandate (ops: null in the runners ledger) and the
+  // operations loop evaluated 0 mandates. A stated cadence is a
+  // stated policy, daily included.
+  assert.deepEqual(
+    opsPolicyFromFormState(opsFormState({ digestCadence: "daily" })),
+    { poolShift: null, pause: null, digestCadence: "daily" },
+  );
+  assert.deepEqual(
+    opsPolicyFromFormState(opsFormState({ digestCadence: "weekly" })),
+    { poolShift: null, pause: null, digestCadence: "weekly" },
+  );
+});
+
+test("ops policy from form state: shift and pause map to the wire policy", () => {
+  assert.deepEqual(
+    opsPolicyFromFormState(opsFormState({ shiftEnabled: true, pauseEnabled: true })),
+    {
+      poolShift: { packKey: "high-power-1000", pool: "high-power", shiftBelowSeconds: 1800 },
+      pause: { capFraction: 0.9, floorSeconds: null },
+      digestCadence: "daily",
+    },
+  );
+});
+
+test("digest mandate line formats the producer's payload shape (runners buildDigest)", () => {
+  // The fixture is the producer's own (solvelang-runners
+  // test/agent-ops.test.js): buildDigest emits exactly these
+  // fields per mandate - settledMonthCents and reservedCents.
+  // The page formats from this shape; when the producer's shape
+  // changes, this fixture changes with it, never the reverse.
+  // (The invented reservedMonthCents is what rendered "$NaN".)
+  const producerView: AgentOpsDigestMandateView = {
+    id: "mandate-1", pool: "standard", packKey: "standard-5000", status: "armed",
+    monthlyCapCents: 2500, settledMonthCents: 2000, reservedCents: 0,
+    utilization: 0.8, nearMiss: true,
+  };
+  assert.equal(
+    digestMandateLine(producerView),
+    "standard-5000 (standard) \u2014 $20.00 of $25.00 this month (80%) \u2014 near its cap",
+  );
+  // A live reservation counts toward the month's usage.
+  assert.equal(
+    digestMandateLine({ ...producerView, settledMonthCents: 1000, reservedCents: 500, utilization: 0.6, nearMiss: false }),
+    "standard-5000 (standard) \u2014 $15.00 of $25.00 this month (60%)",
+  );
 });
