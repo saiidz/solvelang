@@ -13,18 +13,30 @@ documents carry truth.** Anything that matters still lands as a
 content-addressed handoff document; a relay message points at it via
 `ref` and is worthless as evidence on its own.
 
-## Protocol
+## One protocol, two hops
 
-Plain JSON over HTTPS. The envelope is the handoff schema extended
-(design §3.1), byte-identical in identity to the local bus: `id` is
-`sch_<sha256>` over the canonical core `{fromAgent, toAgent, kind,
-body, ref}`; kinds are `signal`, `claim`, `release`, `propose`,
-`accept`, `reject`, `ping`, `pong`.
+The wire protocol is the bus protocol, unchanged: the relay imports the
+bus envelope module (`packages/mcp-server/src/bus-envelope.ts`) — the
+same envelope shape (`solvelang.bus.message.v1`), the same content-hash
+ids (`sch_<sha256>` over the canonical core), the same signature
+payload, the same refusal codes (`bus_*`), and the same Phase 4 key
+registry — so the local daemon hop and the hosted relay hop cannot
+drift apart. Claim semantics are the daemon's too: atomic grant/deny at
+claim time, TTL leases (default 30 s, max 10 min), expiry frees the item
+and is audit-logged and broadcast as a `claim_expired` system signal
+from the `daemon` sender, and claim + presence state is recoverable
+from the append-only audit log after a restart (messages are signals
+and are never replayed).
+
+What the hosted hop adds is transport and tenancy: HTTP with long-poll
+delivery instead of local sockets, and **workspaces**.
+
+## Routes
 
 | Route | Meaning |
 |---|---|
 | `GET /healthz` | Liveness. Open, never rate-limited. |
-| `POST /relay/messages` | Publish one envelope. Returns its stream `seq`; a repost of the same `id` returns `duplicate: true` and delivers nothing twice. |
+| `POST /relay/messages` | Publish one bus envelope. Returns its stream `seq`; a repost of the same `id` returns `duplicate: true` and delivers nothing twice. |
 | `GET /relay/messages?since=<seq>&waitMs=<ms>` | Long-poll delivery for the caller's agent (addressed + `*` broadcast), at-least-once; consumers dedupe by `id`. |
 | `POST /relay/claims` `{item, ttlMs?}` | Atomic claim: `{granted: true}` or `{granted: false, holder}` — decided at claim time, never at merge time. |
 | `POST /relay/claims/release` `{item}` | Release; only the holder can release. Broadcasts a `claim_released` signal. |
@@ -32,45 +44,54 @@ body, ref}`; kinds are `signal`, `claim`, `release`, `propose`,
 | `GET /relay/presence?agent=<name>` | `{lastSeen, silentMs}` for an agent in the caller's workspace. |
 | `POST /relay/presence` | Heartbeat. (Any authenticated request also refreshes presence.) |
 
-Claims carry leases (default TTL 8 s, bounds 250 ms – 300 s). An expired
-lease frees the item, is written to the audit log, and is broadcast as a
-`claim_expired` signal. Every message, refusal, and claim event is
-appended to the relay's append-only audit log (JSONL) — the log is the
-record of what was relayed.
+Every message, refusal, and claim event is appended to the relay's
+append-only audit log (JSONL) — the log is the record of what was
+relayed, and the recovery source for claim state.
 
 ## Authentication and isolation
 
 - Every route except `/healthz` requires a bearer token. A token binds
   exactly one **(workspace, agent)** pair; the server stores only the
-  token's SHA-256 hash and compares timing-safe. `fromAgent` must equal
-  the token's agent.
+  token's SHA-256 hash and compares timing-safe. The envelope's
+  `fromAgent` must equal the token's agent (`bus_sender_mismatch`).
 - Workspaces are fully isolated: no route can observe another
   workspace's messages, claims, or presence.
-- A fixed-window rate limiter (default 300 requests / 60 s per source)
-  is enforced **before** authentication, answering `429` with
-  `Retry-After`. Requests are bounded at 256 KiB (`413`).
+- A fixed-window rate limiter (default 300 requests / 60 s per source,
+  configurable via `SOLVELANG_RELAY_RATE_LIMIT` /
+  `SOLVELANG_RELAY_RATE_WINDOW_MS`) is enforced **before**
+  authentication, answering `429` with `Retry-After`. Requests are
+  bounded at 256 KiB (`413`).
 
 ## Authenticity — signatures are real here
 
-The local bus inherits the handoff trust model (integrity, no proof of
-sender). The hosted relay is the cross-machine hop, so the envelope's
-reserved `sig` field carries a Phase 4-style Ed25519 signature:
+The local bus has two modes: `local-open` (integrity only, localhost)
+and `registry` (every message signed). A workspace maps onto the same
+choice via `requireSignatures`:
 
-```
-sig = "ed25519:<key-id>:<base64 signature>"
-payload = "solvelang-bus-signature-v1\nid:<id>\nfrom:<from>\nto:<to>\nkind:<kind>\nsigner:<key-id>\n"
-```
+- `requireSignatures: true` (the default): the workspace carries a
+  `solvelang.key-registry` v1 document — the Phase 4 registry format,
+  public keys only, revocation is a status flip to `revoked` — and
+  every message is verified with the bus module's `verifyBusMessage`.
+  Unsigned → `bus_unsigned`; unknown signer → `bus_unknown_signer`;
+  revoked signer → `bus_signer_revoked`; bad signature →
+  `bus_signature_invalid`. A refused message is never relayed, and the
+  refusal is audit-logged.
+- `requireSignatures: false`: unsigned messages are accepted, but a
+  message that **carries** a signature is still verified — a
+  presented-but-bad signature is never relayed on the theory it was
+  optional.
 
-Workspace key registries use the Phase 4 registry JSON shape (public
-keys only; revocation is a status flip to `revoked`). A workspace with
-`requireSignatures: true` refuses unsigned messages
-(`signature_required`). A presented signature that fails verification
-is refused in **every** workspace: `signature_malformed`,
-`unknown_signer`, `signer_revoked`, or `signature_invalid`. A refused
-message is never relayed, and the refusal is audit-logged. Claim and
-presence calls are authenticated by the bearer token itself (the token
-is the agent's credential); envelope signatures protect the relayed
-message stream.
+The signature itself is the bus's: `signer` names the Phase 4 key id,
+`sig` is the base64 Ed25519 signature over the canonical payload
+(version line, then `id` / `from` / `to` / `kind` / `ts` /
+`body-sha256` / `ref` / `signer` lines). A keypair made for signed
+gates (`solvec keygen`) signs relay messages unchanged.
+
+Claim and presence calls carry no envelope; on this hop they are
+authenticated by the bearer token itself, which is the agent's
+credential. (The local daemon, which has no per-agent credential
+channel, verifies a signed envelope attached to the claim instead. The
+claim *semantics* — atomicity, leases, signals — are identical.)
 
 ## Hosting shape
 
@@ -84,11 +105,13 @@ on a host volume. The service is deliberately **not** on the Lambda/API
 surface: claims, presence, and long-poll waits are stateful, and a
 request-scoped runtime cannot hold them honestly.
 
-State is in-memory per workspace by design. Signals are ephemeral: a
-relay restart loses undelivered signals and live claims, but no truth —
-handoff documents were always the record, and clients re-claim after a
-restart. Retention is the last 1,000 messages per workspace for
-long-poll catch-up; the audit log is the durable trail.
+Message state is in-memory per workspace by design. Signals are
+ephemeral: a relay restart loses undelivered signals, but no truth —
+handoff documents were always the record. Live claims and presence
+survive a restart via audit-log recovery; a lease that lapsed while
+the relay was down recovers as free. Retention is the last 1,000
+messages per workspace for long-poll catch-up; the audit log is the
+durable trail.
 
 ## Kill switch
 

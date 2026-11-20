@@ -26,7 +26,8 @@
   "bin": {
     "solvelang-mcp": "dist/src/index.js",
     "solvelang-mcp-remote": "dist/src/remote-cli.js",
-    "solvelang-bus": "dist/src/bus-cli.js"
+    "solvelang-bus": "dist/src/bus-cli.js",
+    "solvelang-mcp-relay": "dist/src/relay-cli.js"
   },
   "files": [
     "dist/src/context-compaction-tools.d.ts",
@@ -55,6 +56,10 @@
     "dist/src/index.js",
     "dist/src/n8n.d.ts",
     "dist/src/n8n.js",
+    "dist/src/relay-cli.d.ts",
+    "dist/src/relay-cli.js",
+    "dist/src/relay.d.ts",
+    "dist/src/relay.js",
     "dist/src/remote-cli.d.ts",
     "dist/src/remote-cli.js",
     "dist/src/remote.d.ts",
@@ -113,7 +118,8 @@
     "test:distribution-finalization": "node scripts/qualify-distribution-finalization.mjs",
     "prepack": "npm run build && node scripts/prepare-pack.mjs",
     "start": "node dist/src/index.js",
-    "start:remote": "node dist/src/remote-cli.js"
+    "start:remote": "node dist/src/remote-cli.js",
+    "start:relay": "node dist/src/relay-cli.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

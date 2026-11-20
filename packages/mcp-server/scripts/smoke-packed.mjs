@@ -38,6 +38,10 @@ const expectedFiles = [
   "package/dist/src/index.js",
   "package/dist/src/n8n.d.ts",
   "package/dist/src/n8n.js",
+  "package/dist/src/relay-cli.d.ts",
+  "package/dist/src/relay-cli.js",
+  "package/dist/src/relay.d.ts",
+  "package/dist/src/relay.js",
   "package/dist/src/remote-cli.d.ts",
   "package/dist/src/remote-cli.js",
   "package/dist/src/remote.d.ts",
@@ -78,6 +82,7 @@ assert.deepEqual(manifest.bin, {
   "solvelang-mcp": "dist/src/index.js",
   "solvelang-mcp-remote": "dist/src/remote-cli.js",
   "solvelang-bus": "dist/src/bus-cli.js",
+  "solvelang-mcp-relay": "dist/src/relay-cli.js",
 });
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "solvelang-packed-"));
@@ -92,7 +97,7 @@ try {
   const packedFiles = packResult.files.map(({ path: filePath }) => `package/${filePath}`).sort();
   assert.deepEqual(packedFiles, expectedFiles, "tarball contents must match the reviewed runtime allowlist");
 
-  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js", "dist/src/bus-cli.js"]) {
+  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js", "dist/src/bus-cli.js", "dist/src/relay-cli.js"]) {
     const executable = packResult.files.find(({ path: filePath }) => filePath === entrypoint);
     assert.ok(executable, `packed CLI entrypoint is missing: ${entrypoint}`);
     assert.equal(executable.mode & 0o111, 0o111, `packed CLI entrypoint must be executable: ${entrypoint}`);
@@ -116,6 +121,7 @@ try {
     "solvelang-mcp": "dist/src/index.js",
     "solvelang-mcp-remote": "dist/src/remote-cli.js",
     "solvelang-bus": "dist/src/bus-cli.js",
+    "solvelang-mcp-relay": "dist/src/relay-cli.js",
   });
 
   const installedRuntimeRoot = path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src");
