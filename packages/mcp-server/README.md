@@ -85,6 +85,10 @@ Current repository source includes:
 - `solvelang_context_compact_structured`
 - `solvelang_context_expand_rle`
 - `solvelang_context_capabilities`
+- `solvelang_context_index_query`
+- `solvelang_context_index_status`
+
+The two index tools answer from the workspace's persistent Solve Context index (`.solve/context-index.json`, built and refreshed by the `solvelang-context-index` CLI in `@solvelang/context-index`) instead of re-walking the workspace: lexical + graph-structure ranking over content-hashed records, with every excerpt hash-verified against the index before it is returned. See `docs/integrations/context-index.md`.
 
 Solve Context is deterministic/local-first. It selects exact bounded context, preserves source/excerpt provenance, rejects stale retrieval, supports portable Claude ↔ Codex handoff state, and provides correctness-first lossless structured compaction/expansion. These tools do not launch agents, call providers, mutate repositories or imply a provider proxy.
 
