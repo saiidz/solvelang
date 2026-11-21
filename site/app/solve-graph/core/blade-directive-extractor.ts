@@ -216,7 +216,7 @@ function parseDirectiveReference(
   atOffset: number,
   name: DirectiveName,
 ): { reference?: BladeViewReference; next: number } {
-  let index = skipWhitespace(source, atOffset + 1 + name.length);
+  const index = skipWhitespace(source, atOffset + 1 + name.length);
   if (source[index] !== "(") return { next: atOffset + 1 + name.length };
   const scanned = scanArgumentList(source, index);
   if (!scanned) return { next: source.length };
