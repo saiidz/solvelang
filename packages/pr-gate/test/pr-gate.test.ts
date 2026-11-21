@@ -11,7 +11,7 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, truncateSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -319,5 +319,58 @@ test("end-to-end: a PR consisting only of a binary file completes without error"
     assert.equal(result.pack.source, "discovery");
     assert.deepEqual(result.pack.skippedBinaryPaths, ["src/blob.wasm"]);
     assert.ok(result.pack.files.every((file) => file.path !== "src/blob.wasm"));
+  }
+});
+
+test("end-to-end: a checkout with an oversize (>8 MB) file and a symlink still gets a verdict", async () => {
+  // Regression: walkCheckout used to feed size-only entries (files over
+  // the 8 MB walk cap) and symlink entries into the ingestion engine,
+  // which throws on both — the whole gate run died with an operational
+  // error and no report was written. The fixture is generated at test
+  // time in a temp dir; the big file is sparse, so nothing large is
+  // committed or stored.
+  const giantWork = mkdtempSync(path.join(tmpdir(), "pr-gate-giant-"));
+  try {
+    const repo = path.join(giantWork, "repo");
+    mkdirSync(path.join(repo, "src"), { recursive: true });
+    writeFileSync(path.join(repo, "package.json"), "{\"name\":\"fixture\",\"private\":true}\n");
+    writeFileSync(path.join(repo, "src", "leaf.ts"), "export const leaf = 1;\n");
+    writeFileSync(path.join(repo, "src", "top.ts"), "import { leaf } from \"./leaf\";\nexport const top = leaf + 1;\n");
+    const bigPath = path.join(repo, "assets-big.bin");
+    writeFileSync(bigPath, Buffer.alloc(64));
+    truncateSync(bigPath, 9 * 1024 * 1024);
+    symlinkSync(path.join(repo, "src", "leaf.ts"), path.join(repo, "src", "leaf-link.ts"));
+    const git = (args: string[]) => execFileSync("git", args, { cwd: repo, stdio: "ignore" });
+    git(["init", "-q"]);
+    git(["config", "user.email", "pr-gate-tests@example.com"]);
+    git(["config", "user.name", "PR Gate Tests"]);
+    git(["add", "-A"]);
+    git(["commit", "-qm", "seed"]);
+
+    const { exitCode, result } = await runPrGate({
+      root: repo,
+      changedPaths: ["assets-big.bin", "src/leaf.ts"],
+      mode: "report-only",
+      outDir: path.join(giantWork, "out"),
+    });
+    assert.equal(exitCode, 0);
+    assert.equal(result.graph.integrityVerified, true);
+    assert.equal(result.graph.executionStatus, "complete");
+    // The oversize file contributes no graph node; the text file does.
+    assert.deepEqual(result.changedFiles, [
+      { path: "assets-big.bin", mappedToGraphNode: false },
+      { path: "src/leaf.ts", mappedToGraphNode: true },
+    ]);
+    // ...and the oversize file is still reported honestly through the
+    // pack's skipped-oversize list.
+    assert.ok(result.pack);
+    assert.deepEqual(result.pack.skippedOversizePaths, ["assets-big.bin"]);
+    // The report artifacts were written (pre-fix, the run died first).
+    assert.ok(existsSync(path.join(giantWork, "out", "report.md")));
+    assert.ok(existsSync(path.join(giantWork, "out", "result.json")));
+    const report = readFileSync(path.join(giantWork, "out", "report.md"), "utf8");
+    assert.ok(report.includes(REPORT_MARKER));
+  } finally {
+    rmSync(giantWork, { recursive: true, force: true });
   }
 });
