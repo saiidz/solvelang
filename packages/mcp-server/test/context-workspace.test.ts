@@ -84,3 +84,33 @@ test("explicit source order does not change the context pack identity", { concur
     assert.deepEqual(first, second);
   });
 });
+
+test("explicit paths skip oversize and binary files instead of failing", { concurrency: false }, async () => {
+  await withWorkspace(async (root) => {
+    await seedWorkspace(root);
+    await writeFile(path.join(root, "src", "big.sql"), `-- ${"x".repeat(2_200_000)}\n`, "utf8");
+    await writeFile(path.join(root, "src", "clip.bin"), Buffer.from([0, 1, 2, 0, 3]));
+
+    const result = await buildWorkspaceContextPack("invoice retry", {
+      paths: ["src/invoice.ts", "src/big.sql", "src/clip.bin"],
+      budgetBytes: 8_192,
+    });
+    assert.equal(result.workspace.mode, "explicit");
+    assert.deepEqual(result.pack.entries.map((entry) => entry.path), ["src/invoice.ts"]);
+    assert.equal(result.workspace.selectedFiles, 1);
+    assert.equal(result.workspace.skippedOversize, 1);
+    assert.equal(result.workspace.skippedUnsupported, 1);
+  });
+});
+
+test("explicit paths with no eligible sources fail honestly", { concurrency: false }, async () => {
+  await withWorkspace(async (root) => {
+    await seedWorkspace(root);
+    await writeFile(path.join(root, "src", "big.sql"), `-- ${"x".repeat(2_200_000)}\n`, "utf8");
+
+    await assert.rejects(
+      () => buildWorkspaceContextPack("invoice retry", { paths: ["src/big.sql"], budgetBytes: 8_192 }),
+      /No eligible text sources/,
+    );
+  });
+});
