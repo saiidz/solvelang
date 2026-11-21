@@ -310,7 +310,10 @@ async function assembleSnapshot(walked: WalkedFile[]): Promise<AssembledSnapshot
 
   for (const file of walked) {
     if (file.symlink) {
-      entries.push({ path: file.path, kind: "symlink" });
+      // Symlinks are noted in the walk and skipped for records, but they
+      // are withheld from the snapshot entries: the ingestion engine
+      // rejects symlink entries outright, so feeding one would fail the
+      // whole build over a file the index never records.
       hashes.set(file.path, null);
       continue;
     }
@@ -320,7 +323,12 @@ async function assembleSnapshot(walked: WalkedFile[]): Promise<AssembledSnapshot
       continue;
     }
     if (file.bytes > MAX_WALK_READ_BYTES) {
-      entries.push({ path: file.path, kind: "file", declaredByteSize: file.bytes });
+      // Size-only entries are withheld from the snapshot entries, exactly
+      // like sensitive paths above: the ingestion engine requires
+      // Uint8Array content for every file entry it accepts, so feeding a
+      // content-less entry would fail the whole build. The file is still
+      // recorded oversize from the walk data alone (see computeRecord);
+      // it simply contributes no node to the extracted graph.
       hashes.set(file.path, null);
       continue;
     }
