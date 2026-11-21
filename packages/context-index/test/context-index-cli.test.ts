@@ -88,3 +88,25 @@ test("refresh without an index is an operational error (exit 2)", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("build and query survive giant files in the tree (CLI)", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "solvelang-context-index-cli-giant-"));
+  try {
+    await write(root, "package.json", `${JSON.stringify({ name: "cli-giant-fixture", private: true }, null, 2)}\n`);
+    await write(root, "src/util.ts", UTIL_V1);
+    const line = "INSERT INTO cities (id, name) VALUES (1, 'Springfield');\n";
+    await write(root, "src/cities.sql", line.repeat(Math.ceil((9 * 1024 * 1024) / line.length)));
+
+    const build = await cli(["build", root], root);
+    assert.equal(build.code, 0, build.stderr);
+    const buildReport = JSON.parse(build.stdout);
+    assert.deepEqual(buildReport.counts.skippedOversize, ["src/cities.sql"]);
+
+    const query = await cli(["query", root, "--task", "format widget name"], root);
+    assert.equal(query.code, 0, query.stderr);
+    const entryPaths = JSON.parse(query.stdout).pack.entries.map((entry: { path: string }) => entry.path);
+    assert.ok(entryPaths.includes("src/util.ts"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -20,7 +20,7 @@ import {
   type ContextSelectionMetadata,
 } from "./context-selection.js";
 import { parseSolveGraphText } from "./solve-graph.js";
-import { readWorkspaceText, workspaceRoot } from "./workspace.js";
+import { readWorkspaceText, resolveWorkspaceFilePath, workspaceRoot } from "./workspace.js";
 
 export const CONTEXT_PLAN_SCHEMA = "solvelang.context.plan.v0" as const;
 export const CONTEXT_WORKSPACE_PACK_SCHEMA = "solvelang.context.workspace-pack.v0" as const;
@@ -169,11 +169,25 @@ async function loadExplicitSources(paths: string[]): Promise<{ sources: ContextS
   const normalizedPaths = [...new Set(paths.map(normalizeContextPath))].sort();
   const sources: ContextSource[] = [];
   let selectedSourceBytes = 0;
+  let skippedUnsupported = 0;
+  let skippedOversize = 0;
 
   for (const inputPath of normalizedPaths) {
     if (isSensitivePath(inputPath)) throw new Error(`Context access to sensitive path ${inputPath} is denied.`);
+    // Skip-and-count, the same discipline discovery mode applies: one
+    // oversize or binary file must never fail the whole pack request.
+    // The skipped files are reported in the workspace metadata below.
+    const absolutePath = await resolveWorkspaceFilePath(inputPath);
+    const metadata = await stat(absolutePath);
+    if (metadata.isFile() && (metadata.size === 0 || metadata.size > MAX_CONTEXT_SOURCE_BYTES)) {
+      skippedOversize += 1;
+      continue;
+    }
     const { text } = await readWorkspaceText(inputPath);
-    if (hasBinarySentinel(text)) throw new Error(`Context path ${inputPath} does not appear to be a text file.`);
+    if (hasBinarySentinel(text)) {
+      skippedUnsupported += 1;
+      continue;
+    }
     const bytes = Buffer.byteLength(text, "utf8");
     if (selectedSourceBytes + bytes > MAX_CONTEXT_DISCOVERY_BYTES) {
       throw new Error(`Explicit context sources exceed the ${MAX_CONTEXT_DISCOVERY_BYTES} byte aggregate safety limit.`);
@@ -181,6 +195,8 @@ async function loadExplicitSources(paths: string[]): Promise<{ sources: ContextS
     sources.push({ path: inputPath, text });
     selectedSourceBytes += bytes;
   }
+
+  if (sources.length === 0) throw new Error("No eligible text sources were found in the configured workspace.");
 
   return {
     sources,
@@ -191,8 +207,8 @@ async function loadExplicitSources(paths: string[]): Promise<{ sources: ContextS
       selectedFiles: sources.length,
       selectedSourceBytes,
       skippedSensitive: 0,
-      skippedUnsupported: 0,
-      skippedOversize: 0,
+      skippedUnsupported,
+      skippedOversize,
       discoveryTruncated: false,
     },
   };
