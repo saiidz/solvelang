@@ -109,13 +109,20 @@ async function walkCheckout(root: string, outDirAbsolute: string): Promise<{ ent
         continue;
       }
       if (child.isSymbolicLink()) {
-        entries.push({ path: relative, kind: "symlink" });
+        // Symlinks are withheld from the snapshot entries: the ingestion
+        // engine rejects symlink entries outright, so feeding one would
+        // fail the whole run over a file the graph never records.
         continue;
       }
       if (!child.isFile()) continue;
       const stats = await lstat(absolute);
       if (stats.size > MAX_WALK_BYTES_PER_FILE) {
-        entries.push({ path: relative, kind: "file", declaredByteSize: stats.size });
+        // Size-only entries are withheld from the snapshot entries, exactly
+        // like symlinks above: the ingestion engine requires Uint8Array
+        // content for every file entry it accepts, so feeding a
+        // content-less entry would fail the whole run. The file simply
+        // contributes no node to the extracted graph; a changed oversize
+        // file is still reported through the pack's skipped-oversize list.
         continue;
       }
       const bytes = await readFile(absolute);
