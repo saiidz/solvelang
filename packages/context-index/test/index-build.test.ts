@@ -11,7 +11,7 @@
 //   * additions and deletions are detected by content hash.
 
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -263,5 +263,77 @@ test("oversize files are indexed as oversize and binary content gets no record",
     assert.match(big.sha256 ?? "", /^[a-f0-9]{64}$/);
     assert.ok(report.index.counts.skippedOversize.includes("packages/core/src/big.ts"));
     assert.equal(report.index.records.some((record) => record.path === "packages/core/src/binary.ts"), false);
+  });
+});
+
+test("giant text files above the walk cap are recorded oversize, never fatal", async () => {
+  await withFixture(async (root) => {
+    // ~9 MB of SQL inserts: over the 2 MB pack cap AND over the 8 MB
+    // walk read cap, so the walker carries the file size-only. This is
+    // the UCS dogfood repro shape (a cities seeder chunk).
+    const line = "INSERT INTO cities (id, name) VALUES (1, 'Springfield');\n";
+    const sql = line.repeat(Math.ceil((9 * 1024 * 1024) / line.length));
+    await write(root, "database/seeders/cities.sql", sql);
+
+    const report = await buildContextIndex(root);
+    const record = recordOf(report.index, "database/seeders/cities.sql");
+    assert.equal(record.oversize, true);
+    assert.equal(record.bytes, Buffer.byteLength(sql));
+    assert.equal(record.sha256, null);
+    assert.deepEqual(record.terms, []);
+    assert.deepEqual(record.declarations, []);
+    assert.ok(report.index.counts.skippedOversize.includes("database/seeders/cities.sql"));
+
+    // Nothing of the giant file's content is excerpted into the index.
+    const rawIndex = await readFile(path.join(root, ".solve", CONTEXT_INDEX_FILE), "utf8");
+    assert.equal(rawIndex.includes("INSERT INTO cities"), false);
+
+    // The rest of the tree indexed normally.
+    assert.ok(recordOf(report.index, "packages/core/src/util.ts").declarations.includes("formatWidgetName"));
+  });
+});
+
+test("giant binary files above the walk cap get no record and never fail the build", async () => {
+  await withFixture(async (root) => {
+    const bytes = Buffer.alloc(9 * 1024 * 1024, 0);
+    bytes.write("ftypmp42", 4, "ascii");
+    const destination = path.join(root, "media/clip.m4v");
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, bytes);
+
+    const report = await buildContextIndex(root);
+    assert.equal(report.index.records.some((record) => record.path === "media/clip.m4v"), false);
+    assert.equal(report.index.counts.skippedOversize.includes("media/clip.m4v"), false);
+    assert.ok(recordOf(report.index, "packages/core/src/util.ts"));
+  });
+});
+
+test("a generated file just above the walk cap builds and refreshes cleanly", async () => {
+  await withFixture(async (root) => {
+    // Sparse generated content just over the 8 MB size-only threshold.
+    const filler = `${"x".repeat(1024)}\n`;
+    await write(root, "logs/huge.txt", filler.repeat(8 * 1024 + 64));
+
+    const report = await buildContextIndex(root);
+    const record = recordOf(report.index, "logs/huge.txt");
+    assert.equal(record.oversize, true);
+    assert.equal(record.sha256, null);
+
+    const refresh = await refreshContextIndex(root);
+    assert.equal(refresh.changed, false);
+  });
+});
+
+test("a mixed tree with a giant file and a symlink indexes its small files normally", async () => {
+  await withFixture(async (root) => {
+    const line = "INSERT INTO cities (id, name) VALUES (1, 'Springfield');\n";
+    await write(root, "database/seeders/cities.sql", line.repeat(Math.ceil((9 * 1024 * 1024) / line.length)));
+    await symlink("util.ts", path.join(root, "packages/core/src/util-link.ts"));
+
+    const report = await buildContextIndex(root);
+    const widget = recordOf(report.index, "packages/core/src/widget.ts");
+    assert.deepEqual(widget.imports, ["packages/core/src/util.ts"]);
+    assert.equal(report.index.records.some((record) => record.path === "packages/core/src/util-link.ts"), false);
+    assert.equal(recordOf(report.index, "database/seeders/cities.sql").oversize, true);
   });
 });
