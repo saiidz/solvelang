@@ -1,0 +1,19 @@
+// A release workflow guarded by a signed gate.
+//
+// The gate passes only when a registered signer has signed this
+// exact workflow together with the evidence file below. Without a
+// valid signature the runtime refuses at the gate and the release
+// steps after it never run. See docs/signed-gates.md for the full
+// guide (key generation, registration, signing, revocation).
+//
+// Try it:
+//   solvec keygen --id release_key --out release_key.key.json
+//   # add the printed entry to solve-keys.json beside this file
+//   solvec sign gated_release.solve --gate release --key release_key.key.json
+//   solvec run gated_release.solve
+print("Preparing release")
+gate release {
+    evidence "sample_input.json"
+    signer release_key
+}
+print("Gate passed: release approved")

@@ -1,0 +1,37 @@
+name: PR Gate CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/pr-gate/**"
+      - ".github/workflows/pr-gate-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/pr-gate/**"
+      - ".github/workflows/pr-gate-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: PR Gate kit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/pr-gate/package-lock.json
+
+      - name: Install, build, and test the PR Gate kit
+        working-directory: packages/pr-gate
+        run: |
+          npm ci
+          npm test

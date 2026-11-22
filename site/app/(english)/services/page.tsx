@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { JsonLd } from "../../components/JsonLd";
 
 export const metadata: Metadata = {
   title: "Services",
@@ -26,6 +27,91 @@ const highPowerPacks = [
   { minutes: "10,000", price: "$400" },
 ] as const;
 
+const runnerMinutesJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": "https://www.solve-lang.com/services/#runner-minutes",
+  name: "SolveLang Runner Minutes",
+  description:
+    "Prepaid GitHub Actions runner minutes. Queued jobs in connected repositories run on SolveLang-provisioned Linux machines \u2014 a fresh machine for each job, destroyed when the job ends. Minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job. Spot capacity draws at 1\u00d7; minutes that start on guaranteed on-demand capacity draw at 2\u00d7 and are shown as a separate line. Faster processing is never free: it costs on-demand minutes at 2\u00d7, or work on the premium High-Power machines, which draws from the separate High-Power balance at the High-Power prices. Prices include tax. Buying happens only on SolveLang's own checkout page \u2014 never on an external checkout.",
+  brand: { "@id": "https://www.solve-lang.com/#organization" },
+  category: "GitHub Actions runner minutes",
+  offers: [
+    ...standardPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} Standard runner minutes`,
+      price: pack.price.replace("$", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
+    ...highPowerPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} High-Power runner minutes`,
+      price: pack.price.replace("$", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
+  ],
+};
+
+const servicesFaqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://www.solve-lang.com/services/#faq",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "How are runner minutes metered?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Minutes meter per second, measured from each job's own start and finish timestamps on GitHub, with a 10-second minimum per job.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do Standard runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Standard packs (2-vCPU-class machines, $0.004 per minute): 5,000 minutes for $20, 25,000 minutes for $100, and 100,000 minutes for $400. Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do High-Power runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "High-Power packs (16-vCPU-class machines; the per-minute price falls as packs grow): 1,000 minutes for $80, 2,000 minutes for $140, 3,000 minutes for $192, 4,000 minutes for $236, 5,000 minutes for $275, 6,000 minutes for $306, 7,000 minutes for $336, 8,000 minutes for $360, 9,000 minutes for $382.50, and 10,000 minutes for $400.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is faster processing free?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Faster processing is never free \u2014 it always has one of two prices: work that starts on guaranteed on-demand capacity consumes minutes at 2\u00d7, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices. Standard work on Spot capacity draws at the plain 1\u00d7 rate.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Where do I buy runner minutes?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Buying happens only on SolveLang's own checkout page \u2014 we never send you to an external checkout. Purchases happen only on SolveLang's own pages.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Do prepaid runner minutes expire or auto-renew?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "You buy a pack once \u2014 minutes never auto-renew. Prepaid minutes expire 12 months after purchase, and your balance and its expiry are always visible in your account.",
+      },
+    },
+  ],
+};
+
 function LiveBadge() {
   return <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent">Live</span>;
 }
@@ -37,6 +123,8 @@ function PilotBadge() {
 export default function ServicesPage() {
   return (
     <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
+      <JsonLd id="services-runner-minutes-json-ld" data={runnerMinutesJsonLd} />
+      <JsonLd id="services-faq-json-ld" data={servicesFaqJsonLd} />
       <div className="mx-auto max-w-6xl">
         <header className="mx-auto max-w-3xl py-12 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">SolveLang services</p>
@@ -81,6 +169,8 @@ export default function ServicesPage() {
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Label routing:</strong> label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang</code> and that pull request&apos;s jobs route to SolveLang runners instead of your own fleet. Routing is set up once in your workflow file — jobs from labeled pull requests request the SolveLang labels above — and after that, routing a pull request is just adding the label.</p>
 
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the two pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for High-Power stays on High-Power.</p>
+
           <h3 className="mt-8 text-xl font-bold">The shelf</h3>
           <p className="mt-3 max-w-4xl leading-7 text-body">Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it today. Buying happens only on SolveLang&apos;s own checkout page — we never send you to an external checkout.</p>
           <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -113,6 +203,8 @@ export default function ServicesPage() {
               </table>
             </div>
           </div>
+                    <h3 className="mt-8 text-xl font-bold">SolveLang Job Protection</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Every runner minute carries the same built-in protections: you are billed only for jobs a SolveLang machine actually ran, exactly once, metered per second from the job&apos;s own GitHub timestamps; a safety net re-checks every finished job so engine work is never lost or double-billed; machines are never shut down from under a running job, and jobs are spread across zones and machine families so one cloud event cannot take down a whole set at once. The full guarantee list — each one live and proven, none of it an add-on or a tier — is on the <Link href="/solutions/job-protection/" className="font-semibold text-ink underline">Job Protection page</Link>.</p>
           <p className="mt-4 text-sm leading-6 text-body"><strong className="text-ink">Speed Lane Cache:</strong> a 10 GB colocated cache that sits beside the high-power machines, so dependency and build caches load at local speed — $2 per month.</p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/account/runner-minutes-checkout/" className="inline-flex rounded-xl bg-accent-solid px-5 py-3 font-semibold text-ink hover:bg-panel-alt">Buy runner minutes</Link>

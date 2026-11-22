@@ -1,0 +1,21 @@
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci
+COPY src ./src
+COPY test ./test
+RUN npm run build && npm prune --omit=dev
+
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production \
+    SOLVELANG_RELAY_HOST=0.0.0.0 \
+    SOLVELANG_RELAY_PORT=8788 \
+    SOLVELANG_RELAY_TRUST_PROXY=1 \
+    SOLVELANG_RELAY_AUDIT_LOG=/data/audit.jsonl
+COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+USER node
+EXPOSE 8788
+CMD ["node", "dist/src/relay-cli.js"]

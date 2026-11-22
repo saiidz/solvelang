@@ -6,6 +6,9 @@ edition = "2024"
 [dependencies]
 serde_json = "1"
 solvec-core = { path = "../solvec-core" }
+ed25519-dalek = "2"
+sha2 = "0.10"
+getrandom = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 
 [target.'cfg(windows)'.dependencies]

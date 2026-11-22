@@ -62,6 +62,7 @@ impl Checker {
     fn new(statements: &[Stmt]) -> Self {
         let mut functions = HashMap::new();
         let mut agents = HashMap::new();
+        let mut gates = HashSet::new();
         let mut imported_bindings = HashSet::new();
         let mut named_import_bindings = HashSet::new();
         let mut namespace_imports = HashSet::new();
@@ -131,6 +132,14 @@ impl Checker {
                         location.column,
                         format!("duplicate agent declaration '{}'", name),
                         "Use a distinct agent name.",
+                    ));
+                }
+                Stmt::Gate { name, location, .. } if !gates.insert(name.clone()) => {
+                    diagnostics.push(Diagnostic::new(
+                        location.line,
+                        location.column,
+                        format!("duplicate gate declaration '{}'", name),
+                        "Use a distinct gate name; signatures are recorded per gate name.",
                     ));
                 }
                 _ => {}
@@ -310,7 +319,10 @@ impl Checker {
                         params.iter().cloned(),
                     );
                 }
-                Stmt::Break { .. } | Stmt::Continue { .. } | Stmt::Agent { .. } => {}
+                Stmt::Break { .. }
+                | Stmt::Continue { .. }
+                | Stmt::Agent { .. }
+                | Stmt::Gate { .. } => {}
                 Stmt::Ask {
                     agent,
                     message,

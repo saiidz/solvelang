@@ -15,6 +15,7 @@ Explicit help, version, and successful command results use stdout. Human failure
 | 4 | Invalid workflow/static semantics or formatting check failure |
 | 5 | Import/capability/read-only-input policy denial |
 | 6 | Runtime evaluation failure |
+| 7 | Signed-gate refusal (the specific `gate_*` code is in the message) |
 
 OS termination/signals are outside this application status contract. Consumers must continue to treat every nonzero status as failure. Do not use a status as authorization to retry a side effect.
 
@@ -23,3 +24,21 @@ OS termination/signals are outside this application status contract. Consumers m
 `run --json` emits `schema: "solvelang.cli-run"` and `version: 1`, as defined in [the JSON schema](../solvec/qa/cli-run-v1.schema.json). Existing advisory, result, and sanitized error fields are retained. Failure output never adds source text, paths, input values, or partial runtime outputs. Version negotiation is not supported; consumers should reject unknown versions. Help/version themselves are text commands and reject extra arguments including `--json` through the error envelope.
 
 Migration from the earlier unversioned pre-release: accept the two additive schema fields; do not assume every failure is exit 1; read invalid-argument usage from stderr rather than stdout. No tagged release is published by this change.
+
+## Signed gates
+
+`solvec keygen --id <id> --out <key-file> [--force]` generates an
+Ed25519 gate signing key, writes the private-key artifact owner-only,
+and prints the public registry entry on stdout. `solvec sign
+<file.solve> --gate <name> --key <key-file> [--registry <file>]
+[--signatures <file>] [--not-before <unix>] [--not-after <unix>]`
+signs one gate into the signatures artifact (defaults:
+`solve-keys.json` and `<file>.signatures.json` beside the workflow);
+it fails without producing a signature when the key is unregistered,
+revoked, mismatched, or not declared by the gate. `solvec run`
+accepts `--keys <file>` and `--signatures <file>` with the same
+defaults. A gate refusal is exit 7 with the specific code in the
+human message; in `--json` mode the envelope error code is
+`gate_refused`. A signatures artifact naming a gate the workflow no
+longer declares refuses the run before execution (`gate_removed`).
+See [signed gates](signed-gates.md).

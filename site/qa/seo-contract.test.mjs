@@ -69,6 +69,8 @@ test("robots policy allows search crawlers without exposing private paths", () =
     "Claude-SearchBot",
     "Claude-User",
     "PerplexityBot",
+    "GPTBot",
+    "ClaudeBot",
   ]) {
     assert.match(robots, new RegExp(crawler.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -77,8 +79,6 @@ test("robots policy allows search crawlers without exposing private paths", () =
     assert.ok(robots.includes(`\"${privatePath}\"`), `robots must exclude ${privatePath}`);
   }
 
-  assert.doesNotMatch(robots, /GPTBot/);
-  assert.doesNotMatch(robots, /ClaudeBot/);
   assert.match(robots, /https:\/\/www\.solve-lang\.com\/sitemap\.xml/);
 });
 
@@ -105,6 +105,58 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /api[_-]?key/i);
 });
 
+test("llms pricing facts state the exact shelf and the embedded-payment fact", () => {
+  assert.match(llms, /## Pricing facts/);
+  for (const fact of [
+    "5,000 minutes for $20",
+    "25,000 minutes for $100",
+    "100,000 minutes for $400",
+    "1,000 minutes for $80",
+    "2,000 minutes for $140",
+    "3,000 minutes for $192",
+    "4,000 minutes for $236",
+    "5,000 minutes for $275",
+    "6,000 minutes for $306",
+    "7,000 minutes for $336",
+    "8,000 minutes for $360",
+    "9,000 minutes for $382.50",
+    "10,000 minutes for $400",
+    "10-second minimum per job",
+    "on-demand capacity draw at 2\u00d7",
+    "Developer $49",
+    "Pro $199",
+    "Business $699",
+    "only through its own embedded payment pages",
+    "never through external checkout pages",
+  ]) {
+    assert.ok(llms.includes(fact), `llms.txt states: ${fact}`);
+  }
+});
+
+test("llms pricing facts state the per-pull-request pool choice with the exact PR labels", () => {
+  assert.match(llms, /chosen per pull request with a pull request label/);
+  for (const fact of [
+    "solvelang-runners-high-power",
+    "solvelang-runners-standard",
+    "drawing from the High-Power balance",
+    "drawing from the Standard balance",
+    "jobs already running are not moved",
+  ]) {
+    assert.ok(llms.includes(fact), `llms.txt states: ${fact}`);
+  }
+  // The pool price lines themselves are unaltered by the addition.
+  assert.ok(llms.includes("Runner minutes, Standard pool (2-vCPU-class Linux machines): 5,000 minutes for $20 · 25,000 minutes for $100 · 100,000 minutes for $400."));
+  assert.ok(llms.includes("Runner minutes, High-Power pool (16-vCPU-class Linux machines): 1,000 minutes for $80"));
+  assert.ok(llms.includes("10,000 minutes for $400."));
+});
+
+test("llms job protection section states the guarantees and links the page", () => {
+  assert.match(llms, /## Job Protection/);
+  assert.ok(llms.includes("https://www.solve-lang.com/solutions/job-protection/"), "llms.txt links the Job Protection page");
+  assert.match(llms, /billed only for jobs a SolveLang machine actually ran, exactly once/);
+  assert.match(llms, /never shut down from under a running job/);
+});
+
 test("llms.txt follows the llmstxt.org structure", () => {
   // H1 first, then a blockquote summary (the two elements the previous
   // free-prose file lacked when PageSpeed flagged it, Nov 15 2026).
@@ -119,7 +171,7 @@ test("llms.txt follows the llmstxt.org structure", () => {
 });
 
 test("homepage follows the approved product order and preserves maturity boundaries", () => {
-  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "id=\"runner-minutes\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
   let previous = -1;
   for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
   assert.match(landing, /Real capability\./);

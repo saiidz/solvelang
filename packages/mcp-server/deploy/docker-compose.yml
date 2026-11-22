@@ -1,0 +1,29 @@
+# Production-shaped deployment for the SolveLang remote MCP endpoint.
+#
+# STATUS: NOT DEPLOYED. This file is the reviewed deployment shape only.
+# Running it in production is gated on the owner's fresh production word.
+#
+# The container binds to localhost only: the host's TLS reverse proxy is
+# the single public ingress (HTTPS termination for mcp.solve-lang.com).
+# The bearer token lives in ./remote.env on the host (never in git);
+# see remote.env.example.
+services:
+  solvelang-mcp-remote:
+    build:
+      context: ..
+      dockerfile: Dockerfile.remote
+    image: solvelang-mcp-remote:0.3.0
+    container_name: solvelang-mcp-remote
+    restart: unless-stopped
+    env_file:
+      - ./remote.env
+    environment:
+      SOLVELANG_REMOTE_HOST: "0.0.0.0"
+      SOLVELANG_REMOTE_PORT: "8787"
+    ports:
+      - "127.0.0.1:8787:8787"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

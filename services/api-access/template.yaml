@@ -88,6 +88,18 @@ Parameters:
     Type: String
     Default: ""
     Description: AG-UI pilot gate for /customer/live-center/ag-ui (the Live Center board as a read-only AG-UI event stream); only the exact value "true" enables it. Blank (the default) leaves the route answering 503 ag_ui_pilot_disabled.
+  AgentTalkbackEnabled:
+    Type: String
+    Default: ""
+    Description: Agent talk-back gate for /agent/mcp (the read-only MCP facts surface); only the exact value "true" enables it. Blank (the default) leaves the route answering 503 agent_talkback_disabled. This flag is the kill switch.
+  AgentActionsEnabled:
+    Type: String
+    Default: ""
+    Description: Level 3 agent-actions gate for /agent/actions and the /customer/agent-tokens routes (delegated agent tokens, agent purchases, mandates); only the exact value "true" enables it. Blank (the default) leaves the routes answering 503 agent_actions_disabled. This flag is the kill switch.
+  AgentOpsEnabled:
+    Type: String
+    Default: ""
+    Description: Level 4 standing-mandate operations gate for the get_ops_digest tool on /agent/actions (the ops digest read over the shared mandate ledger); only the exact value "true" enables it. Blank (the default) leaves the tool answering 503 agent_ops_disabled. This flag is the Level 4 kill switch, independent of the Level 3 flag; the ops loop itself lives in the runners service behind its own AGENT_OPS_ENABLED.
   ProductAppSlug:
     Type: String
     Default: "solvelang-process-solution"
@@ -312,6 +324,19 @@ Resources:
       SSESpecification:
         SSEEnabled: true
 
+  RunTelemetryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: counterKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: counterKey
+          KeyType: HASH
+      SSESpecification:
+        SSEEnabled: true
+
   ApiSubscriptionEventsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -424,6 +449,126 @@ Resources:
                 - Authorization
               ReauthorizeEvery: 0
 
+  # Level 3 agent actions ride their own function (the same code
+  # and handler as ApiAccessFunction — the GitHubFunction pattern)
+  # because Lambda resource policies are capped at 20,480 bytes
+  # and the main function's policy is at that limit: the five
+  # agent-route permissions failed creation in production with
+  # "final policy size (20806) is bigger than the limit (20480)"
+  # until they were moved here. New agent routes belong on THIS
+  # function, never on ApiAccessFunction.
+  # The satellite also has no IAM role of its own: it runs under
+  # ApiAccessFunctionRole (the Role property below). Creating a
+  # NEW role is not available to the deploy identity - role
+  # creation failed in production (deploy run 44591088243) with
+  # a tagging permissions error ("Encountered a permissions
+  # error performing a tagging operation") - and no new role is
+  # needed: the two functions run the same code and handler
+  # with an identical policy set, so the satellite's permissions
+  # are exactly ApiAccessFunction's. SAM attaches no policies
+  # when Role is set, so this function declares no Policies
+  # block of its own; test/agent-actions-template.test.js pins
+  # the shared-role wiring.
+  AgentActionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: src/handler.handler
+      CodeUri: .
+      MemorySize: 256
+      Timeout: 30
+      Architectures: [arm64]
+      # Shared execution role - see the block comment above.
+      Role: !GetAtt ApiAccessFunctionRole.Arn
+      Environment:
+        Variables:
+          API_ACCESS_ENABLED: !Ref ApiAccessEnabled
+          API_ACCESS_MODE: !Ref ApiAccessMode
+          API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
+          API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
+          API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
+          API_ADMIN_CRM_ENABLED: !Ref AdminCrmEnabled
+          API_ADMIN_CRM_TABLE: !If [AdminCrmFeatureEnabled, !Ref AdminCrmTable, disabled]
+          API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
+          API_SUBSCRIPTION_BILLING_ENABLED: !Ref SubscriptionBillingEnabled
+          API_KEY_PEPPER: !Ref ApiKeyPepper
+          API_KEY_PEPPER_PREVIOUS: !Ref ApiKeyPepperPrevious
+          API_ACCESS_ADMIN_SECRET: !Ref ApiAccessAdminSecret
+          API_CUSTOMER_AUTH_PEPPER: !Ref CustomerAuthPepper
+          API_CUSTOMER_AUTH_PEPPER_PREVIOUS: !Ref CustomerAuthPepperPrevious
+          API_CUSTOMER_AUTH_EMAIL_SENDER: !Ref CustomerAuthEmailSender
+          API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
+          SITE_ORIGIN: !Ref SiteOrigin
+          PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          RUN_TELEMETRY_TABLE: !Ref RunTelemetryTable
+          STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
+          API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
+          API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
+          API_KEYS_TABLE: !Ref ApiKeysTable
+          API_KEYS_ACCOUNT_INDEX: AccountIdIndex
+          API_USAGE_TABLE: !Ref ApiUsageTable
+          API_USAGE_IDEMPOTENCY_TABLE: !Ref ApiUsageIdempotencyTable
+          API_SUBSCRIPTION_EVENTS_TABLE: !Ref ApiSubscriptionEventsTable
+          API_CUSTOMER_AUTH_TABLE: !Ref ApiCustomerAuthTable
+          API_GITHUB_APP_ID: !Ref GitHubAppId
+          API_GITHUB_APP_CLIENT_ID: !Ref GitHubAppClientId
+          API_GITHUB_APP_CLIENT_SECRET: !Ref GitHubAppClientSecret
+          API_GITHUB_APP_PRIVATE_KEY: !Ref GitHubAppPrivateKey
+          API_GITHUB_APP_WEBHOOK_SECRET: !Ref GitHubAppWebhookSecret
+          API_GITHUB_APP_SLUG: !Ref GitHubAppSlug
+          PRODUCT_APP_SLUG: !Ref ProductAppSlug
+          API_GITHUB_INSTALLATIONS_TABLE: !Ref GitHubInstallationsTable
+          STRIPE_SECRET_KEY: !Ref StripeSecretKey
+          STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: !Ref StripeSubscriptionWebhookSecret
+          STRIPE_API_DEVELOPER_PRICE_ID: !Ref StripeApiDeveloperPriceId
+          STRIPE_API_PRO_PRICE_ID: !Ref StripeApiProPriceId
+          STRIPE_API_BUSINESS_PRICE_ID: !Ref StripeApiBusinessPriceId
+          STRIPE_MGOV_REGULAR_MONTHLY_PRICE_ID: !Ref StripeMgovRegularMonthlyPriceId
+          STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
+          STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
+          STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
+          AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
+          MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
+          MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
+          MGOV_PILOT_TENANT: !Ref MgovPilotTenant
+          MGOV_PILOT_OWNER: !Ref MgovPilotOwner
+          MGOV_PILOT_REPO: !Ref MgovPilotRepo
+          MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
+          RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl
+          RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken
+      Events:
+        AgentTokensList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens
+            Method: GET
+        AgentTokensCreate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens
+            Method: POST
+        AgentTokensRevoke:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-tokens/revoke
+            Method: POST
+        AgentPlanPurchasesList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-plan-purchases
+            Method: GET
+        AgentPlanPurchasesAction:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/agent-plan-purchases
+            Method: POST
+
   ApiAccessFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -453,6 +598,7 @@ Resources:
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          RUN_TELEMETRY_TABLE: !Ref RunTelemetryTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
           API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
@@ -481,6 +627,9 @@ Resources:
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
           AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
+          AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
+          AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
+          AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
@@ -509,6 +658,12 @@ Resources:
             Action:
               - dynamodb:GetItem
             Resource: !GetAtt PublicStatusTable.Arn
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource: !GetAtt RunTelemetryTable.Arn
         - !If
           - AdminCrmFeatureEnabled
           - DynamoDBCrudPolicy:
@@ -556,6 +711,24 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /public/status/{proxy+}
             Method: GET
+        TelemetryRun:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /telemetry/run
+            Method: POST
+        TelemetryRunCounts:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /telemetry/run-counts
+            Method: GET
+        AgentMcp:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /agent/{proxy+}
+            Method: POST
         CustomerMagicLink:
           Type: HttpApi
           Properties:
@@ -918,6 +1091,14 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${ApiAccessFunction}"
+      RetentionInDays: 90
+
+  AgentActionsFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AgentActionsFunction}"
       RetentionInDays: 90
 
   PublicStatusCollectorFunction:

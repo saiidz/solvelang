@@ -240,8 +240,30 @@ export function AccountHome() {
                 ) : null}
               </div>
             ) : null}
+            <div className="mt-6 border-t border-white/10 pt-5">
+              <p className="text-sm font-semibold">Choose the pool per pull request</p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                Label a pull request <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-high-power</code> and
+                its jobs run on the High-Power pool, drawing from your High-Power minutes. Label it{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-standard</code> and its jobs stay on the
+                Standard pool, drawing from your Standard minutes.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">
+                The label applies per pull request. Jobs already running are not moved, and the pool a job runs on is the balance its minutes are
+                billed to. A job whose workflow file already asks for High-Power stays on High-Power.
+              </p>
+            </div>
             <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
               Buy a minutes pack
+            </Link>
+          </section>
+
+          <section className={cardClass}>
+            <p className={cardEyebrowClass}>Agent access</p>
+            <h2 className="mt-3 text-2xl font-bold">Agents acting for you</h2>
+            <p className="mt-4 text-slate-300">Delegated tokens for your AI agents, the purchases they prepare for your approval, top-up mandates with hard caps, and the full activity log.</p>
+            <Link href="/account/agent-access/" className={cardLinkClass}>
+              Manage agent access
             </Link>
           </section>
         </div>

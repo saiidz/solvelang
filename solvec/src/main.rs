@@ -3,9 +3,12 @@ mod windows_entry_identity;
 
 use solvec::ast::{Expr, ExprKind, Stmt};
 use solvec::ast_runtime::ExecutionPolicy;
+use solvec::gate_tooling::{GatePrepError, RegisteredKey};
 use solvec::{
-    ast_runtime, diagnostics, formatter, lexer, lint, module_resolver, parser, semantic, value,
+    ast_runtime, diagnostics, formatter, gate_tooling, lexer, lint, module_resolver, parser,
+    semantic, value,
 };
+use solvec_core::evaluator::{GateBook, collect_gate_declarations, gate_codes};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -21,6 +24,8 @@ const MAX_INPUT_BYTES: u64 = 1_048_576;
 #[derive(Debug, PartialEq)]
 enum Command {
     Run(RunOptions),
+    Keygen(KeygenOptions),
+    Sign(SignOptions),
     Validate,
     Check,
     Lint,
@@ -29,6 +34,23 @@ enum Command {
     Ast,
     Version,
     Help,
+}
+
+#[derive(Debug, PartialEq)]
+struct KeygenOptions {
+    id: String,
+    out: PathBuf,
+    force: bool,
+}
+
+#[derive(Debug, PartialEq)]
+struct SignOptions {
+    gate: String,
+    key: PathBuf,
+    registry: Option<PathBuf>,
+    signatures: Option<PathBuf>,
+    not_before: Option<i64>,
+    not_after: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -46,6 +68,8 @@ struct RunOptions {
     http_connect_timeout_ms: u64,
     http_request_timeout_ms: u64,
     http_max_body_bytes: usize,
+    keys_path: Option<PathBuf>,
+    signatures_path: Option<PathBuf>,
 }
 
 impl RunOptions {
@@ -72,6 +96,8 @@ impl Default for RunOptions {
             http_request_timeout_ms: ExecutionPolicy::DEFAULT_HTTP_REQUEST_TIMEOUT.as_millis()
                 as u64,
             http_max_body_bytes: ExecutionPolicy::DEFAULT_HTTP_MAX_BODY_BYTES,
+            keys_path: None,
+            signatures_path: None,
         }
     }
 }
@@ -268,6 +294,7 @@ impl CliFailure {
             "invalid_workflow" => 4,
             "import_denied" | "capability_denied" | "read_only_input" => 5,
             "runtime_error" => 6,
+            "gate_refused" => 7,
             _ => 1,
         }
     }
@@ -369,10 +396,15 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
         return Ok(());
     }
 
+    if let Command::Keygen(options) = &command {
+        return execute_keygen(options);
+    }
+
     let filename = filename.ok_or_else(|| CliFailure::arguments("missing SolveLang file"))?;
 
     match command {
         Command::Run(options) => execute_run(&filename, options),
+        Command::Sign(options) => execute_sign(&filename, &options),
         Command::Validate => {
             let source = load_source_with_imports(&filename, false)?;
             validate_diagnostics(&source)?;
@@ -422,7 +454,89 @@ fn dispatch(args: &[String]) -> Result<(), CliFailure> {
             println!("{:#?}", parse_source(&source)?);
             Ok(())
         }
-        Command::Version | Command::Help => Ok(()),
+        Command::Version | Command::Help | Command::Keygen(_) => Ok(()),
+    }
+}
+
+fn execute_keygen(options: &KeygenOptions) -> Result<(), CliFailure> {
+    if options.out.exists() && !options.force {
+        return Err(CliFailure::arguments(format!(
+            "key file '{}' already exists; pass --force to overwrite it",
+            options.out.display()
+        )));
+    }
+    let generated = gate_tooling::generate_key(&options.id).map_err(CliFailure::source)?;
+    gate_tooling::write_private_key_file(&options.out, &generated.private_key_json)
+        .map_err(CliFailure::source)?;
+    println!("✓ Created Ed25519 signing key '{}'", generated.id);
+    println!(
+        "private key (keep it secret; never commit it): {}",
+        options.out.display()
+    );
+    println!("Add this entry to the key registry (default: solve-keys.json beside the workflow):");
+    println!("{}", generated.registry_entry_json);
+    Ok(())
+}
+
+fn execute_sign(filename: &str, options: &SignOptions) -> Result<(), CliFailure> {
+    let entry = freeze_entry_with_imports(filename, false)?;
+    let workflow_path = Path::new(filename);
+    let registry = options
+        .registry
+        .clone()
+        .unwrap_or_else(|| gate_tooling::default_registry_path(workflow_path));
+    let signatures = options
+        .signatures
+        .clone()
+        .unwrap_or_else(|| gate_tooling::default_signatures_path(workflow_path));
+    let declarations = collect_gate_declarations(&entry.statements);
+    let record = gate_tooling::sign_gate(
+        &declarations,
+        &entry.source.content,
+        workflow_path,
+        &options.gate,
+        &options.key,
+        &registry,
+        &signatures,
+        options.not_before,
+        options.not_after,
+    )
+    .map_err(CliFailure::source)?;
+    println!("✓ Signed gate '{}'", record.gate);
+    println!("signer: {}", record.signer);
+    println!("workflow sha256: {}", record.workflow_sha256);
+    println!("evidence sha256: {}", record.evidence_sha256);
+    println!("signatures: {}", signatures.display());
+    Ok(())
+}
+
+/// Build the gate book for a run when the workflow declares gates.
+/// Workflows without gates return `Ok(None)` and run exactly as
+/// before; a signatures artifact naming a removed gate refuses here,
+/// before anything executes.
+fn prepare_run_gate_setup(
+    entry: &FrozenWorkflowEntry,
+    filename: &str,
+    options: &RunOptions,
+) -> Result<Option<(GateBook, Vec<RegisteredKey>)>, CliFailure> {
+    let declarations = collect_gate_declarations(&entry.statements);
+    let workflow_path = Path::new(filename);
+    match gate_tooling::prepare_gate_book(
+        &declarations,
+        &entry.source.content,
+        workflow_path,
+        options.keys_path.as_deref(),
+        options.signatures_path.as_deref(),
+        gate_tooling::now_unix_seconds(),
+    ) {
+        Ok(Some(prepared)) => Ok(Some((prepared.book, prepared.keys))),
+        Ok(None) => Ok(None),
+        Err(GatePrepError::Refused(detail)) => Err(CliFailure::preflight(
+            "gate_refused",
+            "workflow gate was refused",
+            format!("Gate refused [{}]: {detail}", gate_codes::REMOVED),
+        )),
+        Err(GatePrepError::Failed(message)) => Err(CliFailure::source(message)),
     }
 }
 
@@ -439,6 +553,7 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
     preflight_workflow(&entry.statements, input.is_some(), options.hardened())?;
     preflight_resolved_modules(&module_graph, options.hardened())?;
 
+    let gate_setup = prepare_run_gate_setup(&entry, filename, &options)?;
     let mut runtime = ast_runtime::AstRuntime::with_input(
         policy,
         &entry.source.content,
@@ -446,6 +561,9 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
         input,
         options.json,
     );
+    if let Some((book, keys)) = gate_setup {
+        runtime.set_gates(book, keys);
+    }
     if options.hardened() && !options.json {
         println!("{}", ADVISORY_LABEL);
     }
@@ -460,7 +578,16 @@ fn execute_run(filename: &str, options: RunOptions) -> Result<(), CliFailure> {
         runtime.run(&entry.statements)
     };
     result.map_err(|error| {
-        CliFailure::runtime(entry.source.remap_runtime_message(&error.to_string()))
+        let remapped = entry.source.remap_runtime_message(&error.to_string());
+        if let Some(code) = error.gate_code() {
+            CliFailure::preflight(
+                "gate_refused",
+                "workflow gate was refused",
+                format!("Gate refused [{code}]: {remapped}"),
+            )
+        } else {
+            CliFailure::runtime(remapped)
+        }
     })?;
 
     if options.json {
@@ -526,6 +653,8 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
             }
         }
         "run" => parse_run_args(&args[1..]),
+        "keygen" => parse_keygen_args(&args[1..]),
+        "sign" => parse_sign_args(&args[1..]),
         "validate" => parse_file_command(Command::Validate, &args[1..]),
         "check" => parse_file_command(Command::Check, &args[1..]),
         "lint" => parse_file_command(Command::Lint, &args[1..]),
@@ -555,6 +684,247 @@ fn parse_args(args: &[String]) -> Result<(Command, Option<String>), String> {
             }
         }
     }
+}
+
+fn parse_keygen_args(args: &[String]) -> Result<(Command, Option<String>), String> {
+    let mut id: Option<String> = None;
+    let mut out: Option<PathBuf> = None;
+    let mut force = false;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--id" => {
+                if id.is_some() {
+                    return Err("--id may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--id requires a key id".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--id requires a key id".to_string());
+                }
+                id = Some(value.clone());
+            }
+            "--out" => {
+                if out.is_some() {
+                    return Err("--out may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--out requires a file".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--out requires a file".to_string());
+                }
+                out = Some(PathBuf::from(value));
+            }
+            "--force" => force = true,
+            value if value.starts_with("--id=") => {
+                if id.is_some() {
+                    return Err("--id may only be provided once".to_string());
+                }
+                let value = &value["--id=".len()..];
+                if value.is_empty() {
+                    return Err("--id requires a key id".to_string());
+                }
+                id = Some(value.to_string());
+            }
+            value if value.starts_with("--out=") => {
+                if out.is_some() {
+                    return Err("--out may only be provided once".to_string());
+                }
+                let value = &value["--out=".len()..];
+                if value.is_empty() {
+                    return Err("--out requires a file".to_string());
+                }
+                out = Some(PathBuf::from(value));
+            }
+            value => return Err(format!("unknown keygen option '{value}'")),
+        }
+        index += 1;
+    }
+    let id = id.ok_or_else(|| "keygen requires --id <key-id>".to_string())?;
+    let out = out.ok_or_else(|| "keygen requires --out <private-key-file>".to_string())?;
+    Ok((Command::Keygen(KeygenOptions { id, out, force }), None))
+}
+
+fn parse_sign_args(args: &[String]) -> Result<(Command, Option<String>), String> {
+    let mut filename: Option<String> = None;
+    let mut gate: Option<String> = None;
+    let mut key: Option<PathBuf> = None;
+    let mut registry: Option<PathBuf> = None;
+    let mut signatures: Option<PathBuf> = None;
+    let mut not_before: Option<i64> = None;
+    let mut not_after: Option<i64> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--gate" => {
+                if gate.is_some() {
+                    return Err("--gate may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--gate requires a gate name".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--gate requires a gate name".to_string());
+                }
+                gate = Some(value.clone());
+            }
+            "--key" => {
+                if key.is_some() {
+                    return Err("--key may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--key requires a file".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--key requires a file".to_string());
+                }
+                key = Some(PathBuf::from(value));
+            }
+            "--registry" => {
+                if registry.is_some() {
+                    return Err("--registry may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--registry requires a file".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--registry requires a file".to_string());
+                }
+                registry = Some(PathBuf::from(value));
+            }
+            "--signatures" => {
+                if signatures.is_some() {
+                    return Err("--signatures may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--signatures requires a file".to_string())?;
+                if value.is_empty() || value.starts_with('-') {
+                    return Err("--signatures requires a file".to_string());
+                }
+                signatures = Some(PathBuf::from(value));
+            }
+            "--not-before" => {
+                if not_before.is_some() {
+                    return Err("--not-before may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--not-before requires a unix timestamp".to_string())?;
+                not_before = Some(
+                    value
+                        .parse()
+                        .map_err(|_| "--not-before expects a unix timestamp".to_string())?,
+                );
+            }
+            "--not-after" => {
+                if not_after.is_some() {
+                    return Err("--not-after may only be provided once".to_string());
+                }
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "--not-after requires a unix timestamp".to_string())?;
+                not_after = Some(
+                    value
+                        .parse()
+                        .map_err(|_| "--not-after expects a unix timestamp".to_string())?,
+                );
+            }
+            value if value.starts_with("--gate=") => {
+                if gate.is_some() {
+                    return Err("--gate may only be provided once".to_string());
+                }
+                let value = &value["--gate=".len()..];
+                if value.is_empty() {
+                    return Err("--gate requires a gate name".to_string());
+                }
+                gate = Some(value.to_string());
+            }
+            value if value.starts_with("--key=") => {
+                if key.is_some() {
+                    return Err("--key may only be provided once".to_string());
+                }
+                let value = &value["--key=".len()..];
+                if value.is_empty() {
+                    return Err("--key requires a file".to_string());
+                }
+                key = Some(PathBuf::from(value));
+            }
+            value if value.starts_with("--registry=") => {
+                if registry.is_some() {
+                    return Err("--registry may only be provided once".to_string());
+                }
+                let value = &value["--registry=".len()..];
+                if value.is_empty() {
+                    return Err("--registry requires a file".to_string());
+                }
+                registry = Some(PathBuf::from(value));
+            }
+            value if value.starts_with("--signatures=") => {
+                if signatures.is_some() {
+                    return Err("--signatures may only be provided once".to_string());
+                }
+                let value = &value["--signatures=".len()..];
+                if value.is_empty() {
+                    return Err("--signatures requires a file".to_string());
+                }
+                signatures = Some(PathBuf::from(value));
+            }
+            value if value.starts_with("--not-before=") => {
+                if not_before.is_some() {
+                    return Err("--not-before may only be provided once".to_string());
+                }
+                not_before = Some(
+                    value["--not-before=".len()..]
+                        .parse()
+                        .map_err(|_| "--not-before expects a unix timestamp".to_string())?,
+                );
+            }
+            value if value.starts_with("--not-after=") => {
+                if not_after.is_some() {
+                    return Err("--not-after may only be provided once".to_string());
+                }
+                not_after = Some(
+                    value["--not-after=".len()..]
+                        .parse()
+                        .map_err(|_| "--not-after expects a unix timestamp".to_string())?,
+                );
+            }
+            value if value.starts_with('-') => {
+                return Err(format!("unknown sign option '{value}'"));
+            }
+            value => {
+                if filename.is_some() {
+                    return Err(format!("unexpected extra file '{value}'"));
+                }
+                filename = Some(value.to_string());
+            }
+        }
+        index += 1;
+    }
+    let gate = gate.ok_or_else(|| "sign requires --gate <name>".to_string())?;
+    let key = key.ok_or_else(|| "sign requires --key <private-key-file>".to_string())?;
+    Ok((
+        Command::Sign(SignOptions {
+            gate,
+            key,
+            registry,
+            signatures,
+            not_before,
+            not_after,
+        }),
+        filename,
+    ))
 }
 
 fn parse_format_command(args: &[String]) -> Result<(Command, Option<String>), String> {
@@ -632,6 +1002,32 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
                 }
                 options.json = true;
             }
+            "--keys" => {
+                if options.keys_path.is_some() {
+                    return Err("--keys may only be provided once".to_string());
+                }
+                index += 1;
+                let path = args
+                    .get(index)
+                    .ok_or_else(|| "--keys requires a file".to_string())?;
+                if path.starts_with('-') {
+                    return Err("--keys requires a file".to_string());
+                }
+                options.keys_path = Some(PathBuf::from(path));
+            }
+            "--signatures" => {
+                if options.signatures_path.is_some() {
+                    return Err("--signatures may only be provided once".to_string());
+                }
+                index += 1;
+                let path = args
+                    .get(index)
+                    .ok_or_else(|| "--signatures requires a file".to_string())?;
+                if path.starts_with('-') {
+                    return Err("--signatures requires a file".to_string());
+                }
+                options.signatures_path = Some(PathBuf::from(path));
+            }
             "--input" => {
                 if options.input_path.is_some() {
                     return Err("--input may only be provided once".to_string());
@@ -673,6 +1069,26 @@ fn parse_run_args(args: &[String]) -> Result<(Command, Option<String>), String> 
                 index += 1;
                 options.http_max_body_bytes =
                     parse_usize_option(args.get(index), "--http-max-body-bytes")?;
+            }
+            value if value.starts_with("--keys=") => {
+                if options.keys_path.is_some() {
+                    return Err("--keys may only be provided once".to_string());
+                }
+                let path = &value["--keys=".len()..];
+                if path.is_empty() {
+                    return Err("--keys requires a file".to_string());
+                }
+                options.keys_path = Some(PathBuf::from(path));
+            }
+            value if value.starts_with("--signatures=") => {
+                if options.signatures_path.is_some() {
+                    return Err("--signatures may only be provided once".to_string());
+                }
+                let path = &value["--signatures=".len()..];
+                if path.is_empty() {
+                    return Err("--signatures requires a file".to_string());
+                }
+                options.signatures_path = Some(PathBuf::from(path));
             }
             value if value.starts_with("--input=") => {
                 if options.input_path.is_some() {
@@ -1339,6 +1755,7 @@ fn preflight_statements(
                 ));
             }
             Stmt::Agent { .. } => {}
+            Stmt::Gate { .. } => {}
             Stmt::Ask { message, .. } => {
                 if hardened {
                     return Err(capability_failure(
@@ -1477,9 +1894,15 @@ Usage:
   solvec fmt [--check] <file.solve>  Format source without changing meaning
   solvec tokens <file.solve>         Print lexer tokens
   solvec ast <file.solve>            Print parsed AST
+  solvec keygen --id <id> --out <key-file>
+                                     Generate a gate signing key; prints the registry entry
+  solvec sign <file.solve> --gate <name> --key <key-file> [--registry <file>] [--signatures <file>] [--not-before <unix>] [--not-after <unix>]
+                                     Sign one gate of a workflow into its signatures file
   solvec version                     Print canonical package version
 
 Local structured-run options:
+  --keys <file>                      Gate key registry (default: solve-keys.json beside the workflow)
+  --signatures <file>                Gate signatures (default: <file>.signatures.json beside the workflow)
   --input <file>                     Inject strict JSON as read-only 'input'
   --json                             Emit one hardened deterministic JSON envelope
   --safe                             Deny runtime capabilities and unsafe tools

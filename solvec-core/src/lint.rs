@@ -103,6 +103,7 @@ impl Linter {
             Stmt::Break { .. }
             | Stmt::Continue { .. }
             | Stmt::Agent { .. }
+            | Stmt::Gate { .. }
             | Stmt::LegacyInclude { .. }
             | Stmt::ModuleImport { .. }
             | Stmt::NamedModuleImport { .. } => {}
@@ -184,6 +185,7 @@ fn statement_location(statement: &Stmt) -> SourceLocation {
         | Stmt::Break { location }
         | Stmt::Continue { location }
         | Stmt::Agent { location, .. }
+        | Stmt::Gate { location, .. }
         | Stmt::Ask { location, .. } => *location,
         Stmt::Expr(expr) => expr.location,
     }

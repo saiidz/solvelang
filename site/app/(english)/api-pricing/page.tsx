@@ -1,15 +1,95 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { accountAvailability, billingAvailability } from "../../product-capabilities";
+import { JsonLd } from "../../components/JsonLd";
 export const metadata: Metadata = { title: "API Pricing", description: "Compare SolveLang Developer, Pro, and Business monthly weighted-credit API plans." };
 const plans = [
   { name: "Developer", key: "developer", price: "$49", description: "For prototypes, internal tools, and early repository-audit integrations.", credits: "1,000", keys: "2", highlighted: false },
   { name: "Pro", key: "pro", price: "$199", description: "For larger test workloads and teams evaluating monthly API capacity.", credits: "10,000", keys: "3", highlighted: true },
   { name: "Business", key: "business", price: "$699", description: "For teams evaluating higher-volume audits across multiple services.", credits: "50,000", keys: "5", highlighted: false },
 ] as const;
+const apiPlansJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": "https://www.solve-lang.com/api-pricing/#api-plans",
+  name: "SolveLang API Access Plans",
+  description:
+    "Monthly weighted-credit API plans for the SolveLang API and repository-audit integrations. One base credit covers up to 5,000 input tokens and 1,000 output tokens; larger jobs consume multiple credits, and every plan has a hard monthly limit. Subscriptions renew monthly until canceled.",
+  brand: { "@id": "https://www.solve-lang.com/#organization" },
+  offers: plans.map((plan) => ({
+    "@type": "Offer",
+    name: `${plan.name} API plan`,
+    price: plan.price.replace("$", ""),
+    priceCurrency: "USD",
+    description: `${plan.description} ${plan.credits} weighted credits per UTC calendar month \u00b7 ${plan.keys} active API keys. Price is per month.`,
+    availability: "https://schema.org/InStock",
+    url: "https://www.solve-lang.com/api-pricing/",
+  })),
+};
+
+const runnerMinutesJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  "@id": "https://www.solve-lang.com/api-pricing/#runner-minutes",
+  name: "SolveLang Runner Minutes",
+  description:
+    "Prepaid GitHub Actions runner minutes. Buy a pack once, connect GitHub, and queued jobs run on fresh SolveLang-provisioned Linux machines \u2014 metered per second from each job's own start and finish, Spot at 1\u00d7 with on-demand minutes drawn at 2\u00d7 as a separate line. Runner-minutes prices include tax. The full runner-minutes shelf is published on the services page.",
+  brand: { "@id": "https://www.solve-lang.com/#organization" },
+  category: "GitHub Actions runner minutes",
+  offers: [
+    { "@type": "Offer", name: "5,000 Standard runner minutes", price: "20", priceCurrency: "USD", availability: "https://schema.org/InStock", url: "https://www.solve-lang.com/services/" },
+    { "@type": "Offer", name: "25,000 Standard runner minutes", price: "100", priceCurrency: "USD", availability: "https://schema.org/InStock", url: "https://www.solve-lang.com/services/" },
+    { "@type": "Offer", name: "100,000 Standard runner minutes", price: "400", priceCurrency: "USD", availability: "https://schema.org/InStock", url: "https://www.solve-lang.com/services/" },
+    { "@type": "AggregateOffer", name: "High-Power runner minutes", lowPrice: "80", highPrice: "400", priceCurrency: "USD", offerCount: 10, url: "https://www.solve-lang.com/services/" },
+  ],
+};
+
+const apiPricingFaqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "@id": "https://www.solve-lang.com/api-pricing/#faq",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What does one API credit cover?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "One base credit covers up to 5,000 input tokens and 1,000 output tokens. Larger jobs consume multiple credits, and every plan has a hard monthly limit.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do the SolveLang API plans cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Developer is $49 per month, with 1,000 weighted credits per UTC calendar month and 2 active API keys. Pro is $199 per month, with 10,000 weighted credits per UTC calendar month and 3 active API keys. Business is $699 per month, with 50,000 weighted credits per UTC calendar month and 5 active API keys.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Do API subscriptions renew automatically?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Subscriptions renew monthly until canceled. Schedule cancellation in your subscription account to stop renewal at the current period end.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Standard packs: 5,000 minutes $20, 25,000 minutes $100, 100,000 minutes $400. High-Power packs run from 1,000 minutes at $80 to 10,000 minutes at $400, and the Speed Lane Cache is $2 per month. Runner-minutes prices include tax. Minutes are metered per second from each job's own start and finish, Spot at 1\u00d7 with on-demand minutes drawn at 2\u00d7 as a separate line.",
+      },
+    },
+  ],
+};
+
 export default function ApiPricingPage() {
   return (
     <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
+      <JsonLd id="api-plans-json-ld" data={apiPlansJsonLd} />
+      <JsonLd id="api-pricing-runner-minutes-json-ld" data={runnerMinutesJsonLd} />
+      <JsonLd id="api-pricing-faq-json-ld" data={apiPricingFaqJsonLd} />
       <div className="mx-auto max-w-6xl">
         <header className="mx-auto max-w-3xl py-12 text-center"><p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">SolveLang API</p><h1 className="mt-5 text-5xl font-bold tracking-tight md:text-7xl">Pay for measured work, not an uncapped AI request.</h1><p className="mt-6 text-lg leading-8 text-body">One base credit covers up to 5,000 input tokens and 1,000 output tokens. Larger jobs consume multiple credits.</p></header>
         <section className="mb-10 rounded-3xl border border-warning bg-warning-soft p-8" aria-labelledby="api-subscription-availability"><p className="text-sm font-semibold uppercase tracking-[0.2em] text-warning">Availability</p><h2 id="api-subscription-availability" className="mt-3 text-2xl font-bold">API subscription availability</h2><p className="mt-3 max-w-4xl leading-7 text-body">{billingAvailability}</p><p className="mt-3 text-sm leading-6 text-body">Subscriptions renew monthly until canceled. UPCOMINGSOUNDS S.R.L. is the operator and merchant; Stripe processes payments. Review the amount and any tax or other charge Stripe actually displays at checkout before confirming payment. Schedule cancellation in your subscription account to stop renewal at the current period end. Review <Link className="font-semibold text-ink underline" href="/terms/">Terms</Link>, <Link className="font-semibold text-ink underline" href="/refund-policy/">Refund Policy</Link>, and <Link className="font-semibold text-ink underline" href="/billing/">Billing FAQ</Link> before purchase.</p></section>

@@ -123,6 +123,271 @@ impl std::fmt::Display for HostError {
 
 impl std::error::Error for HostError {}
 
+/// Version of the signed-gate format understood by this runtime.
+pub const GATE_FORMAT_VERSION: u32 = 1;
+
+/// Format identifier of the public-key registry artifact a host loads
+/// signer keys from.
+pub const GATE_KEY_REGISTRY_FORMAT: &str = "solvelang.key-registry";
+
+/// Format identifier of the artifact that carries gate signatures for
+/// one workflow.
+pub const GATE_SIGNATURES_FORMAT: &str = "solvelang.gate-signatures";
+
+/// Format identifier of the private-key artifact a signer holds.
+/// Private keys are never loaded by the runtime; this identifier exists
+/// so tools can refuse to mistake one artifact kind for another.
+pub const GATE_PRIVATE_KEY_FORMAT: &str = "solvelang.private-key";
+
+/// The only signature algorithm defined by the signed-gate format.
+pub const GATE_ALGORITHM_ED25519: &str = "ed25519";
+
+/// Stable machine-readable refusal codes for signed gates. Every gate
+/// refusal carries exactly one of these codes so callers can distinguish
+/// failure modes without parsing human-readable messages.
+pub mod gate_codes {
+    /// No signature record exists for the gate.
+    pub const UNSIGNED: &str = "gate_unsigned";
+    /// The signature's signer is not in the gate's declared signer list.
+    pub const SIGNER_NOT_ALLOWED: &str = "gate_signer_not_allowed";
+    /// The signature was made over a different workflow source.
+    pub const WORKFLOW_MISMATCH: &str = "gate_workflow_mismatch";
+    /// The host supplied no digest of the gate's current evidence.
+    pub const EVIDENCE_UNAVAILABLE: &str = "gate_evidence_unavailable";
+    /// The evidence changed after the signature was made.
+    pub const EVIDENCE_MISMATCH: &str = "gate_evidence_mismatch";
+    /// The signature's validity window has not started.
+    pub const NOT_YET_VALID: &str = "gate_not_yet_valid";
+    /// The signature's validity window has ended.
+    pub const EXPIRED: &str = "gate_expired";
+    /// The signature carries a validity window but the host supplied no
+    /// current time to check it against.
+    pub const CLOCK_UNAVAILABLE: &str = "gate_clock_unavailable";
+    /// The signer key is not in the host's key registry.
+    pub const UNKNOWN_SIGNER: &str = "gate_unknown_signer";
+    /// The signer key is registered but revoked.
+    pub const SIGNER_REVOKED: &str = "gate_signer_revoked";
+    /// The signature does not verify over the canonical payload.
+    pub const SIGNATURE_INVALID: &str = "gate_signature_invalid";
+    /// The host does not implement gate signature verification.
+    pub const VERIFICATION_UNAVAILABLE: &str = "gate_verification_unavailable";
+    /// The evaluator was given no gate book for a run that reaches a gate.
+    pub const UNCONFIGURED: &str = "gate_unconfigured";
+    /// A gate was reached from an explicit-module context; gates are an
+    /// entry-workflow construct in this format version.
+    pub const MODULE_CONTEXT: &str = "gate_module_context";
+    /// A signatures artifact names a gate the workflow no longer declares.
+    pub const REMOVED: &str = "gate_removed";
+}
+
+/// A gate declaration as written in a workflow: the gate's name, the
+/// evidence path it was declared with, and the signer key ids allowed
+/// to satisfy it. An empty signer list allows any registered, active
+/// key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateDeclaration {
+    pub name: String,
+    pub evidence: String,
+    pub signers: Vec<String>,
+}
+
+/// One signature over one gate, as carried by a signatures artifact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateSignatureRecord {
+    pub gate: String,
+    pub workflow_sha256: String,
+    pub evidence_sha256: String,
+    pub signer: String,
+    pub not_before: Option<i64>,
+    pub not_after: Option<i64>,
+    pub signature: String,
+}
+
+/// The gate data a host supplies to the evaluator for one run.
+///
+/// `workflow_sha256` is the SHA-256 hex digest of the exact source
+/// bytes the evaluator was configured with; the host computes it
+/// because source loading is a host concern. `evidence_sha256` maps
+/// each declared gate name to the SHA-256 hex digest of its evidence
+/// bytes as read by the host when the run was prepared.
+/// `now_unix_seconds` is the host's current time for validity-window
+/// checks; the evaluator never reads a clock itself. A gate whose
+/// signature carries a validity window is refused when no current time
+/// was supplied: verification fails closed.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GateBook {
+    pub workflow_sha256: String,
+    pub signatures: Vec<GateSignatureRecord>,
+    pub evidence_sha256: BTreeMap<String, String>,
+    pub now_unix_seconds: Option<i64>,
+}
+
+impl GateBook {
+    pub fn signature_for(&self, gate: &str) -> Option<&GateSignatureRecord> {
+        self.signatures.iter().find(|record| record.gate == gate)
+    }
+}
+
+/// A gate refusal: a stable machine-readable code plus a human-readable
+/// explanation. Refusal is the default outcome of every gate check; a
+/// gate passes only when every check succeeds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateRefusal {
+    pub code: String,
+    pub message: String,
+}
+
+impl GateRefusal {
+    pub fn new(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            code: code.to_string(),
+            message: message.into(),
+        }
+    }
+}
+
+/// The cryptographic check that crosses the host interface once every
+/// pure data check has passed. The host verifies `signature` (base64)
+/// over `payload` with the registered public key named by `signer`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateCheck {
+    pub gate: String,
+    pub signer: String,
+    pub signature: String,
+    pub payload: Vec<u8>,
+}
+
+/// The canonical bytes a gate signature covers. The form is a
+/// domain-separated, newline-delimited record, so a signature can
+/// never be replayed across formats, workflows, gates, or evidence:
+///
+/// ```text
+/// solvelang-gate-signature-v1
+/// workflow-sha256:<hex digest of the workflow source>
+/// gate:<gate name>
+/// evidence-sha256:<hex digest of the evidence bytes>
+/// signer:<signer key id>
+/// not-before:<unix seconds, or - when unbounded>
+/// not-after:<unix seconds, or - when unbounded>
+/// ```
+///
+/// Every line, including the last, ends with a newline. Signers and
+/// verifiers must construct the payload through this function so the
+/// bytes cannot drift apart.
+pub fn gate_canonical_payload(record: &GateSignatureRecord) -> Vec<u8> {
+    let not_before = record
+        .not_before
+        .map_or_else(|| "-".to_string(), |value| value.to_string());
+    let not_after = record
+        .not_after
+        .map_or_else(|| "-".to_string(), |value| value.to_string());
+    format!(
+        "solvelang-gate-signature-v1\nworkflow-sha256:{}\ngate:{}\nevidence-sha256:{}\nsigner:{}\nnot-before:{}\nnot-after:{}\n",
+        record.workflow_sha256,
+        record.gate,
+        record.evidence_sha256,
+        record.signer,
+        not_before,
+        not_after
+    )
+    .into_bytes()
+}
+
+/// Every gate check that is a pure data comparison, in refusal order:
+/// signature presence, signer allowlist, workflow binding, evidence
+/// binding, and the validity window. On success the caller hands the
+/// returned [`GateCheck`] to the host for the cryptographic check; the
+/// gate passes only if that also succeeds.
+pub fn precheck_gate(
+    book: &GateBook,
+    declaration: &GateDeclaration,
+) -> Result<GateCheck, GateRefusal> {
+    let Some(record) = book.signature_for(&declaration.name) else {
+        return Err(GateRefusal::new(
+            gate_codes::UNSIGNED,
+            format!(
+                "gate '{}' has no signature; sign it with a registered key before running",
+                declaration.name
+            ),
+        ));
+    };
+    if !declaration.signers.is_empty() && !declaration.signers.contains(&record.signer) {
+        return Err(GateRefusal::new(
+            gate_codes::SIGNER_NOT_ALLOWED,
+            format!(
+                "gate '{}' was signed by '{}', who is not one of its declared signers",
+                declaration.name, record.signer
+            ),
+        ));
+    }
+    if record.workflow_sha256 != book.workflow_sha256 {
+        return Err(GateRefusal::new(
+            gate_codes::WORKFLOW_MISMATCH,
+            format!(
+                "gate '{}' was signed for workflow {} but the current workflow is {}; the workflow changed after signing",
+                declaration.name, record.workflow_sha256, book.workflow_sha256
+            ),
+        ));
+    }
+    let Some(evidence_sha256) = book.evidence_sha256.get(&declaration.name) else {
+        return Err(GateRefusal::new(
+            gate_codes::EVIDENCE_UNAVAILABLE,
+            format!(
+                "gate '{}' evidence '{}' could not be read, so its digest cannot be checked",
+                declaration.name, declaration.evidence
+            ),
+        ));
+    };
+    if evidence_sha256 != &record.evidence_sha256 {
+        return Err(GateRefusal::new(
+            gate_codes::EVIDENCE_MISMATCH,
+            format!(
+                "gate '{}' evidence changed after signing (signed {}, current {})",
+                declaration.name, record.evidence_sha256, evidence_sha256
+            ),
+        ));
+    }
+    if record.not_before.is_some() || record.not_after.is_some() {
+        let Some(now) = book.now_unix_seconds else {
+            return Err(GateRefusal::new(
+                gate_codes::CLOCK_UNAVAILABLE,
+                format!(
+                    "gate '{}' signature carries a validity window but no current time was supplied to check it against",
+                    declaration.name
+                ),
+            ));
+        };
+        if let Some(not_before) = record.not_before
+            && now < not_before
+        {
+            return Err(GateRefusal::new(
+                gate_codes::NOT_YET_VALID,
+                format!(
+                    "gate '{}' signature is not valid before {} (current time {})",
+                    declaration.name, not_before, now
+                ),
+            ));
+        }
+        if let Some(not_after) = record.not_after
+            && now > not_after
+        {
+            return Err(GateRefusal::new(
+                gate_codes::EXPIRED,
+                format!(
+                    "gate '{}' signature expired at {} (current time {})",
+                    declaration.name, not_after, now
+                ),
+            ));
+        }
+    }
+    Ok(GateCheck {
+        gate: declaration.name.clone(),
+        signer: record.signer.clone(),
+        signature: record.signature.clone(),
+        payload: gate_canonical_payload(record),
+    })
+}
+
 pub trait RuntimeHost {
     /// Decide whether a capability is permitted without performing the request
     /// or causing any other observable effect. Preflight relies on this method
@@ -138,6 +403,18 @@ pub trait RuntimeHost {
         request: HostRequest,
         max_response_bytes: usize,
     ) -> Result<Value, HostError>;
+
+    /// Verify the cryptographic signature on one gate after the
+    /// evaluator's pure data checks have passed. The default
+    /// implementation refuses every gate: a host that does not
+    /// implement gate verification fails closed, and no gate can pass
+    /// by accident.
+    fn verify_gate(&self, _check: &GateCheck) -> Result<(), GateRefusal> {
+        Err(GateRefusal::new(
+            gate_codes::VERIFICATION_UNAVAILABLE,
+            "this host does not provide gate signature verification",
+        ))
+    }
 
     fn emit_output(&mut self, _value: &Value) -> Result<(), HostError> {
         Ok(())
@@ -265,6 +542,7 @@ pub struct RuntimeError {
     message: String,
     capability: Option<Capability>,
     context: Option<Box<RuntimeErrorContext>>,
+    gate_code: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -286,6 +564,20 @@ impl RuntimeError {
             message: message.into(),
             capability: None,
             context: None,
+            gate_code: None,
+        }
+    }
+
+    /// Build the error for a refused signed gate. The refusal code is
+    /// carried separately from the message so CLI and API callers can
+    /// map it without parsing text.
+    pub fn gate_refusal(code: &str, message: impl Into<String>) -> Self {
+        Self {
+            kind: RuntimeErrorKind::CapabilityDenied,
+            message: message.into(),
+            capability: None,
+            context: None,
+            gate_code: Some(code.to_string()),
         }
     }
 
@@ -307,6 +599,7 @@ impl RuntimeError {
                 filename,
                 hint,
             })),
+            gate_code: None,
         }
     }
 
@@ -337,6 +630,7 @@ impl RuntimeError {
             message: error.message,
             capability: Some(error.capability),
             context: None,
+            gate_code: None,
         }
     }
 
@@ -350,6 +644,12 @@ impl RuntimeError {
 
     pub fn capability(&self) -> Option<&Capability> {
         self.capability.as_ref()
+    }
+
+    /// The stable refusal code when this error is a signed-gate
+    /// refusal, or `None` for every other failure.
+    pub fn gate_code(&self) -> Option<&str> {
+        self.gate_code.as_deref()
     }
 
     pub fn location(&self) -> Option<SourceLocation> {
@@ -544,6 +844,7 @@ pub struct Evaluator<H: RuntimeHost> {
     active_module_calls: Vec<String>,
     active_module: Option<String>,
     module_execution_enabled: bool,
+    gates: Option<GateBook>,
 }
 
 impl Default for Evaluator<DenyAllHost> {
@@ -596,6 +897,7 @@ impl<H: RuntimeHost> Evaluator<H> {
             active_module_calls: Vec::new(),
             active_module: None,
             module_execution_enabled: false,
+            gates: None,
         }
     }
 
@@ -615,6 +917,21 @@ impl<H: RuntimeHost> Evaluator<H> {
     pub fn with_limits(mut self, limits: EvaluationLimits) -> Self {
         self.limits = limits;
         self
+    }
+
+    pub fn with_gates(mut self, gates: GateBook) -> Self {
+        self.gates = Some(gates);
+        self
+    }
+
+    /// Supply (or clear) the gate book for subsequent runs. A run that
+    /// reaches a gate without a book is refused: gates fail closed.
+    pub fn set_gates(&mut self, gates: Option<GateBook>) {
+        self.gates = gates;
+    }
+
+    pub fn gates(&self) -> Option<&GateBook> {
+        self.gates.as_ref()
     }
 
     pub fn limits(&self) -> EvaluationLimits {
@@ -1918,6 +2235,7 @@ impl<H: RuntimeHost> Evaluator<H> {
                 | Stmt::Break { .. }
                 | Stmt::Continue { .. }
                 | Stmt::Ask { .. }
+                | Stmt::Gate { .. }
                 | Stmt::Expr(_) => {}
             }
         }
@@ -2657,7 +2975,8 @@ impl<H: RuntimeHost> Evaluator<H> {
                 | Stmt::Export { .. }
                 | Stmt::Break { .. }
                 | Stmt::Continue { .. }
-                | Stmt::Agent { .. } => Ok(()),
+                | Stmt::Agent { .. }
+                | Stmt::Gate { .. } => Ok(()),
             }
         });
         if pushed {
@@ -2994,7 +3313,8 @@ impl<H: RuntimeHost> Evaluator<H> {
             | Stmt::NamedModuleImport { .. }
             | Stmt::Break { .. }
             | Stmt::Continue { .. }
-            | Stmt::Agent { .. } => Ok(()),
+            | Stmt::Agent { .. }
+            | Stmt::Gate { .. } => Ok(()),
             Stmt::Export { declaration, .. } => match declaration {
                 crate::ast::ExportedDeclaration::Let {
                     name,
@@ -3777,7 +4097,10 @@ impl<H: RuntimeHost> Evaluator<H> {
                 ));
             }
             match statement {
-                Stmt::LegacyInclude { .. } | Stmt::Break { .. } | Stmt::Continue { .. } => {}
+                Stmt::LegacyInclude { .. }
+                | Stmt::Break { .. }
+                | Stmt::Continue { .. }
+                | Stmt::Gate { .. } => {}
                 Stmt::ModuleImport {
                     namespace,
                     location,
@@ -4469,6 +4792,65 @@ impl<H: RuntimeHost> Evaluator<H> {
         Ok(ControlFlow::None)
     }
 
+    /// The signed-gate seam: when execution reaches a gate statement,
+    /// the gate is verified before any later statement runs. Every
+    /// failure is a refusal with a stable code, and the run aborts:
+    /// there is no path around a gate inside the evaluator.
+    fn execute_gate(
+        &mut self,
+        name: &str,
+        evidence: &str,
+        signers: &[String],
+        location: SourceLocation,
+    ) -> Result<(), RuntimeError> {
+        // Module context is either a module's own initialization
+        // (active_module) or a call into a module's function
+        // (active_module_calls): both are explicit-module execution.
+        if self.active_module.is_some() || !self.active_module_calls.is_empty() {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(
+                    gate_codes::MODULE_CONTEXT,
+                    format!(
+                        "gate '{name}' was reached inside an explicit module; gates are entry-workflow statements in this version"
+                    ),
+                ),
+                location,
+            ));
+        }
+        let declaration = GateDeclaration {
+            name: name.to_string(),
+            evidence: evidence.to_string(),
+            signers: signers.to_vec(),
+        };
+        let Some(book) = &self.gates else {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(
+                    gate_codes::UNCONFIGURED,
+                    format!(
+                        "gate '{name}' cannot pass because this run was given no gate book (no signatures or key data were supplied)"
+                    ),
+                ),
+                location,
+            ));
+        };
+        let check = match precheck_gate(book, &declaration) {
+            Ok(check) => check,
+            Err(refusal) => {
+                return Err(self.attach_location(
+                    RuntimeError::gate_refusal(&refusal.code, refusal.message),
+                    location,
+                ));
+            }
+        };
+        if let Err(refusal) = self.host.verify_gate(&check) {
+            return Err(self.attach_location(
+                RuntimeError::gate_refusal(&refusal.code, refusal.message),
+                location,
+            ));
+        }
+        Ok(())
+    }
+
     fn execute(&mut self, statement: &Stmt) -> Result<ControlFlow, RuntimeError> {
         self.charge_step(statement_location(statement))?;
         match statement {
@@ -4683,6 +5065,15 @@ impl<H: RuntimeHost> Evaluator<H> {
                 location,
             } => {
                 self.insert_agent(name, instruction, tools, *location)?;
+                Ok(ControlFlow::None)
+            }
+            Stmt::Gate {
+                name,
+                evidence,
+                signers,
+                location,
+            } => {
+                self.execute_gate(name, evidence, signers, *location)?;
                 Ok(ControlFlow::None)
             }
             Stmt::Ask {
@@ -6242,6 +6633,51 @@ impl SyntaxSnapshotBudget {
     }
 }
 
+/// Collect every gate declaration in a statement list, including
+/// gates nested in blocks and function bodies, in source order. Hosts
+/// use this to prepare a [`GateBook`] before a run and to sign gates
+/// without executing the workflow.
+pub fn collect_gate_declarations(statements: &[Stmt]) -> Vec<GateDeclaration> {
+    let mut declarations = Vec::new();
+    collect_gate_declarations_into(statements, &mut declarations);
+    declarations
+}
+
+fn collect_gate_declarations_into(statements: &[Stmt], declarations: &mut Vec<GateDeclaration>) {
+    for statement in statements {
+        match statement {
+            Stmt::Gate {
+                name,
+                evidence,
+                signers,
+                ..
+            } => declarations.push(GateDeclaration {
+                name: name.clone(),
+                evidence: evidence.clone(),
+                signers: signers.clone(),
+            }),
+            Stmt::Function { body, .. } => collect_gate_declarations_into(body, declarations),
+            Stmt::Export {
+                declaration: ExportedDeclaration::Function { body, .. },
+                ..
+            } => collect_gate_declarations_into(body, declarations),
+            Stmt::Export { .. } => {}
+            Stmt::If {
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_gate_declarations_into(then_branch, declarations);
+                collect_gate_declarations_into(else_branch, declarations);
+            }
+            Stmt::While { body, .. } | Stmt::For { body, .. } => {
+                collect_gate_declarations_into(body, declarations)
+            }
+            _ => {}
+        }
+    }
+}
+
 fn snapshot_statements(
     statements: &[Stmt],
     budget: &mut SyntaxSnapshotBudget,
@@ -6338,6 +6774,19 @@ fn snapshot_statement(
             budget.string(instruction)?;
             for tool in tools {
                 budget.string(tool)?;
+            }
+            Ok(())
+        }
+        Stmt::Gate {
+            name,
+            evidence,
+            signers,
+            ..
+        } => {
+            budget.string(name)?;
+            budget.string(evidence)?;
+            for signer in signers {
+                budget.string(signer)?;
             }
             Ok(())
         }
@@ -6609,6 +7058,7 @@ fn statement_location(statement: &Stmt) -> SourceLocation {
         | Stmt::Break { location }
         | Stmt::Continue { location }
         | Stmt::Agent { location, .. }
+        | Stmt::Gate { location, .. }
         | Stmt::Ask { location, .. } => *location,
         Stmt::Expr(expression) => expression.location,
     }

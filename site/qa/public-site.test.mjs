@@ -32,6 +32,22 @@ test("navigation uses the shared account menu and unique internal destinations",
     assert.ok(read(`app/(english)${link.href}page.tsx`));
   }
 });
+test("account, checkout, and services surfaces present the per-pull-request pool choice with the exact labels", () => {
+  const home = read("app/account/home/AccountHome.tsx");
+  assert.match(home, /Choose the pool per pull request/);
+  assert.ok(home.includes("solvelang-runners-high-power"), "account home names the High-Power PR label");
+  assert.ok(home.includes("solvelang-runners-standard"), "account home names the Standard PR label");
+  assert.match(home, /Jobs already running are not moved/);
+  assert.match(home, /the balance its minutes are\s*billed to/);
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(checkout, /choose per pull request/);
+  assert.ok(checkout.includes("solvelang-runners-high-power"), "checkout names the High-Power PR label");
+  assert.ok(checkout.includes("solvelang-runners-standard"), "checkout names the Standard PR label");
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /Pool choice per pull request/);
+  assert.match(services, /also work as pull request labels/);
+});
+
 test("live center tab counts read the totals their views show", () => {
   const boardSource = read("app/account/live-center/LiveCenterBoard.tsx");
   const counterStart = boardSource.indexOf("const tabCounter");
@@ -202,11 +218,43 @@ test("homepage renders its sections from the shared component and landing is not
   const homepage = read("app/(english)/page.tsx");
   const landing = read("app/components/homepage/LandingPage.tsx");
   assert.match(homepage, /import LandingPage from "\.\.\/components\/homepage\/LandingPage";/);
-  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "id=\"runner-minutes\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
   let previous = -1;
   for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
   assert.equal(existsSync(new URL("../app/(english)/landing", import.meta.url)), false);
   assert.equal(existsSync(new URL("../app/(english)/landing/page.tsx", import.meta.url)), false);
+});
+
+test("homepage carries the Runner Minutes section and the fifth chooser card", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  /* the dedicated section sits between WHAT WE VERIFY and the Built band,
+     numbered in sequence; the chooser section is renumbered to match */
+  const sectionStart = landing.indexOf('id="runner-minutes"');
+  assert.ok(sectionStart > landing.indexOf('id="evidence"'), "runner minutes section follows evidence");
+  assert.ok(sectionStart < landing.indexOf("styles.builtBand"), "runner minutes section precedes the built band");
+  assert.ok(sectionStart < landing.indexOf('id="quickstart"'), "runner minutes section precedes the chooser");
+  const section = landing.slice(sectionStart, landing.indexOf("styles.builtBand"));
+  assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
+  assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
+  assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
+  assert.ok(section.includes("Start with 300 free Standard minutes: they are added automatically when you connect GitHub \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
+  assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
+  assert.ok(section.includes("Every minute carries Job Protection \u2014 billed only for jobs a SolveLang machine actually ran, exactly once."), "proof line");
+  assert.ok(section.includes('href="/services/"'), "section links to services");
+  assert.ok(section.includes('href="/solutions/job-protection/"'), "section links to job protection");
+  assert.ok(section.includes("How it works"), "services link label");
+  assert.ok(section.includes("The guarantees"), "job protection link label");
+  /* the chooser: renumbered eyebrow and five cards, the fifth is Runner Minutes */
+  assert.ok(landing.includes("07 / START WITH SOLVE"), "chooser eyebrow renumbered");
+  assert.ok(!landing.includes("06 / START WITH SOLVE"), "old chooser eyebrow is gone");
+  const chooser = landing.slice(landing.indexOf('id="quickstart"'), landing.indexOf("styles.finalSection"));
+  const cards = chooser.match(/<article data-reveal/g) ?? [];
+  assert.equal(cards.length, 5, "chooser has five cards");
+  assert.ok(chooser.includes("<span>05 / PREPAID RUNNER MINUTES</span>"), "fifth card title line");
+  assert.ok(chooser.includes("<h3>Runner Minutes</h3>"), "fifth card heading");
+  assert.ok(chooser.includes("Run your GitHub Actions on SolveLang machines. Prepaid minutes, metered per second, on fresh machines created per job."), "fifth card body");
+  assert.ok(chooser.includes('href="/services/"'), "fifth card links to services");
+  assert.ok(chooser.includes("See Runner Minutes"), "fifth card link label");
 });
 
 const {
@@ -344,6 +392,20 @@ test("services page publishes the full service list with live and pilot labels",
   assert.match(page, /\/process-solution\//);
 });
 
+test("services page publishes runner-minutes Product and FAQ schema built from its own shelf", () => {
+  const page = read("app/(english)/services/page.tsx");
+  assert.match(page, /"@type": "Product"/);
+  assert.match(page, /SolveLang Runner Minutes/);
+  assert.match(page, /standardPacks\.map/, "schema offers are generated from the visible Standard table");
+  assert.match(page, /highPowerPacks\.map/, "schema offers are generated from the visible High-Power table");
+  assert.match(page, /id="services-runner-minutes-json-ld"/);
+  assert.match(page, /"@type": "FAQPage"/);
+  assert.match(page, /id="services-faq-json-ld"/);
+  assert.match(page, /How are runner minutes metered\?/);
+  assert.match(page, /Is faster processing free\?/);
+  assert.match(page, /Where do I buy runner minutes\?/);
+});
+
 test("services route is registered for the sitemap and linked in primary navigation", () => {
   assert.match(read("app/i18n/routes.ts"), /segment: "services"[^\n]+sitemap: true/);
   assert.ok(primaryLinks.some((link) => link.href === "/services/"), "primary navigation links to /services/");
@@ -364,6 +426,21 @@ test("api pricing page carries the runner minutes shelf summary", () => {
   assert.match(page, /\/account\/runner-minutes-checkout\//);
 });
 
+test("api pricing page publishes API plan and runner-minutes schema", () => {
+  const page = read("app/(english)/api-pricing/page.tsx");
+  assert.match(page, /"@type": "Product"/);
+  assert.match(page, /SolveLang API Access Plans/);
+  assert.match(page, /plans\.map/, "API plan offers are generated from the visible plans table");
+  assert.match(page, /id="api-plans-json-ld"/);
+  assert.match(page, /"@type": "AggregateOffer"/);
+  assert.match(page, /lowPrice: "80"/);
+  assert.match(page, /highPrice: "400"/);
+  assert.match(page, /id="api-pricing-runner-minutes-json-ld"/);
+  assert.match(page, /"@type": "FAQPage"/);
+  assert.match(page, /id="api-pricing-faq-json-ld"/);
+  assert.match(page, /What does one API credit cover\?/);
+});
+
 test("runner minutes checkout points at the live service by default", () => {
   const component = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   assert.match(component, /NEXT_PUBLIC_RUNNER_MINUTES_BASE_URL \|\| "https:\/\/runners\.solve-lang\.com"/);
@@ -378,6 +455,27 @@ test("runner minutes checkout terms state the GitHub fee is absorbed, never pass
   assert.match(checkout, /\$0\.002 per minute fee for self-hosted runners/);
   assert.match(checkout, /SolveLang absorbs it — it is never passed through to you/);
   assert.doesNotMatch(checkout, /passed through at cost/);
+});
+
+test("terms of use carry the three trial sentences verbatim in the entitlements section", () => {
+  const legal = JSON.parse(read("app/legal-content.json"));
+  const section = legal.terms.find(([heading]) => heading === "Tokens, credits, entitlements, and requests");
+  assert.ok(section, "the terms keep the tokens, credits, entitlements, and requests section");
+  const paragraphs = section[1];
+  // Decision D7 (Saiid, Nov 21, 2026) approved the three trial sentences
+  // from the trial-abuse procedure spec (section 5.4) word-for-word: one
+  // trial per person/legal entity, non-transferable with the repository
+  // carrying its trial history, and the revoke/suspend right where trials
+  // are farmed. They ship as one paragraph in this section and may not be
+  // paraphrased, softened, or dropped.
+  const trialParagraph = paragraphs.find((paragraph) => paragraph.includes("One trial per person/legal entity"));
+  assert.ok(trialParagraph, "the entitlements section carries the trial paragraph");
+  assert.ok(trialParagraph.includes("One trial per person/legal entity, regardless of accounts, installations, or repositories used."));
+  assert.ok(trialParagraph.includes("Trials are non-transferable and a transferred repository carries its trial history with it."));
+  assert.ok(trialParagraph.includes("We may revoke unused trial minutes and suspend eligibility where trials are farmed."));
+  // The build-local copy must stay byte-identical to the canonical
+  // entitlement contract copy (also pinned by the check-core legal test).
+  assert.equal(read("app/legal-content.json"), read("../services/entitlements/src/legal-content.json"));
 });
 
 test("runner minutes checkout carries an optional verification code in the payment action area", () => {
@@ -936,6 +1034,97 @@ test("homepage hero: dark island keeps light mode from hiding the headline", () 
   assert.match(hero, /id="homepage-title"[^>]*text-ink/);
 });
 
+test("homepage light bands: light island keeps dark mode from hiding band text", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  const globals = read("app/globals.css");
+  /* the bands' artwork stays light in both themes; the band re-pins light tokens */
+  assert.match(globals, /\.light-island \{/);
+  const island = globals.slice(globals.indexOf(".light-island {"));
+  assert.match(island, /--ink: #0f172a;/);
+  assert.match(island, /--body-text: #1e293b;/);
+  assert.match(island, /--accent: #0969da;/);
+  /* every literal-light band carries the island: capabilities (bg #f5f6f4),
+     the Solve Context pin wrap (#eaf0f3), and quickstart (bg #f5f6f4) */
+  assert.match(landing, /id="capabilities" className="light-island /);
+  assert.match(landing, /id="quickstart" className="light-island /);
+  assert.match(landing, /scPinWrap\} light-island/);
+  /* the capability headline stays on the token; the island is what makes it resolve light */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.capabilityRow h3 \{[^}]*color: var\(--ink\)/);
+});
+
+test("homepage boundary section: text rides theme tokens, not literal light hexes", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  const boundary = landing.slice(landing.indexOf('id="boundaries"'), landing.indexOf('id="capabilities"'));
+  assert.match(boundary, /id="boundary-title"/);
+  /* the section background follows the theme (var(--canvas) below); its text must
+     follow too \u2014 the literal light hexes were written for the dark canvas and
+     wash out on the light one (measured 1.9:1 / 1.5:1 / 2.1:1 settled) */
+  assert.doesNotMatch(boundary, /text-\[#8ab7ff\]/);
+  assert.doesNotMatch(boundary, /text-\[#c2cfdf\]/);
+  assert.doesNotMatch(boundary, /text-\[#9fb0c6\]/);
+  /* the heading accent span rides the accent token, like the section eyebrow
+     and the ledger numbers in the same section */
+  assert.match(boundary, /<span className="text-accent">Explicit boundaries\.<\/span>/);
+  /* both intro paragraphs ride the body-text token, like the body copy of the
+     sibling theme-following sections (evidenceLedger p, benchmarkBand p) */
+  assert.match(boundary, /text-xl leading-8 text-body/);
+  assert.match(boundary, /mt-6 max-w-2xl leading-8 text-body/);
+  /* and the section itself stays theme-following \u2014 no island conversion */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.boundarySection \{ background: var\(--canvas\); \}/);
+});
+
+test("homepage sweep sections: text rides theme tokens, not literal light hexes", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  /* the four remaining theme-following spots flagged after the boundary fix:
+     the Studio, Evidence, Built, and Final sections sit on var(--canvas) /
+     var(--panel), so their text must follow the theme too — the literal pale
+     hexes were written for the dark canvas and wash out on the light one
+     (measured 1.55:1 / 1.59:1 / 1.58:1 / 2.27:1 / 1.65:1 / 1.87:1 settled) */
+  for (const literal of ["#a7cbff", "#b9c8dc", "#b8c9d9", "#93a9bd", "#bacbdf", "#8cb9ff"]) {
+    assert.ok(!landing.includes(`text-[${literal}]`), `literal ${literal} is gone from the homepage`);
+  }
+  /* general guard: no literal text hex survives anywhere on the homepage's
+     theme-following sections. The only literal text hexes allowed in the file
+     are the theme-independent page root (dark text on its own literal light
+     background) and the Solve Context light island (dark literals on its
+     fixed light background) — strip exactly those two contexts, then the
+     rest of the file must be clean. */
+  const withoutRoot = landing.replace('<LandingAnimation className="bg-[#f5f6f4] text-[#102036]">', "");
+  assert.ok(withoutRoot.length < landing.length, "the page-root literal context was found and stripped");
+  const contextStart = withoutRoot.indexOf('id="solve-context"');
+  const contextEnd = withoutRoot.indexOf('id="evidence"');
+  assert.ok(contextStart >= 0 && contextEnd > contextStart, "the Solve Context island slice is located");
+  const themeFollowing = withoutRoot.slice(0, contextStart) + withoutRoot.slice(contextEnd);
+  assert.doesNotMatch(themeFollowing, /text-\[#[0-9a-fA-F]{3,8}\]/);
+  /* Studio: the statement line is blue emphasis, so it rides the accent token
+     like the boundary heading span; the paragraph under it rides body-text,
+     like the .studioActions paragraphs in the same section */
+  const studio = landing.slice(landing.indexOf('id="studio"'), landing.indexOf('id="solve-context"'));
+  assert.match(studio, /tracking-\[-0\.03em\] text-accent sm:text-3xl/);
+  assert.match(studio, /mt-5 max-w-xl leading-8 text-body/);
+  /* Evidence: both the lead and the body paragraph ride the body-text token,
+     like the evidenceLedger and benchmarkBand paragraphs in the same section */
+  const evidence = landing.slice(landing.indexOf('id="evidence"'), landing.indexOf("styles.builtBand"));
+  assert.match(evidence, /text-xl leading-8 text-body/);
+  assert.match(evidence, /max-w-lg leading-8 text-body/);
+  /* Built band: its paragraph rides the body-text token, like the
+     benchmarkBand paragraph on the sibling band */
+  const built = landing.slice(landing.indexOf("styles.builtBand"), landing.indexOf('id="quickstart"'));
+  assert.match(built, /mt-2 text-body/);
+  /* Final: the heading accent span rides the accent token — the same device
+     as the boundary heading span fixed before it */
+  const final = landing.slice(landing.indexOf("styles.finalSection"));
+  assert.match(final, /<span className="text-accent">Automate second\.<\/span>/);
+  /* and the sections themselves stay theme-following — no island conversion */
+  const landingCss = read("app/components/homepage/landing.module.css");
+  assert.match(landingCss, /\.studioSection \{ background: var\(--canvas\);/);
+  assert.match(landingCss, /\.evidenceSection \{ background: var\(--canvas\); \}/);
+  assert.match(landingCss, /\.builtBand \{[^}]*background: var\(--panel\);/);
+  assert.match(landingCss, /\.finalSection \{ background: var\(--canvas\);/);
+});
+
 test("sidebar Work group carries the Audit entry after Server audit, active on /audit/", () => {
   const sidebar = read("app/components/AccountSidebar.tsx");
   // One plain single-line entry: the Audit label, the /audit/ target,
@@ -1183,7 +1372,7 @@ test("manage page sign-in views keep their endpoints and logic markers", () => {
 
 test("solutions library documents each problem in the four-part shape", () => {
   const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
-  assert.equal(solutions.length, 8, "the library documents exactly the eight known problems");
+  assert.equal(solutions.length, 9, "the library documents exactly the nine known problems");
   assert.equal(new Set(solutions.map((entry) => entry.slug)).size, solutions.length, "solution slugs are unique");
   const routes = read("app/i18n/routes.ts");
   assert.match(routes, /segment: "solutions"[^\\n]+classification: "english-only-technical"[^\\n]+sitemap: true/);
@@ -1213,6 +1402,39 @@ test("solutions library documents each problem in the four-part shape", () => {
   // Customer-facing copy states only what a customer can see or do: no
   // internal storage, infrastructure, or implementation vocabulary.
   assert.doesNotMatch(JSON.stringify(solutions), /ledger|dynamodb|lambda|\bec2\b|instance id/i);
+});
+
+test("job protection page states only the proven guarantees", () => {
+  const { solutions } = require("../.studio-test-dist/public-site/(english)/solutions/solutions-data.js");
+  const entry = solutions.find((candidate) => candidate.slug === "job-protection");
+  assert.ok(entry, "job-protection entry exists");
+  const fix = entry.fix.join("\n");
+  // The membership list: every guarantee below traces to a live, proven
+  // cure in the fixes-to-product study or the reliability pack that
+  // landed after it. If a guarantee is ever removed from the service,
+  // it must leave this page in the same change.
+  assert.match(fix, /never billed for it/, "job protection states engine-runner-only billing");
+  assert.match(fix, /can never be charged twice/, "job protection states exactly-once billing");
+  assert.match(fix, /10-second minimum/, "job protection states the metering floor");
+  assert.match(fix, /Pools never mix/, "job protection states pool separation");
+  assert.match(fix, /reconciliation pass re-reads completed jobs/, "job protection states the safety net");
+  assert.match(fix, /never shut down from under a running job/, "job protection states the termination guard");
+  assert.match(fix, /re-served, never stranded/, "job protection states re-provisioning");
+  assert.match(fix, /availability zones and machine families/, "job protection states diversification");
+  assert.match(fix, /reads the full queue and the full runner list/, "job protection states full enumeration");
+  assert.match(fix, /fails closed rather than showing another customer's numbers/, "job protection states per-account isolation");
+  // The example cites the audit record with its exact numbers.
+  assert.match(entry.exampleText, /54 of 54/, "job protection example cites the billing audit sample");
+  assert.match(entry.exampleText, /63 charges/, "job protection example cites the duplicate scan");
+  assert.match(entry.exampleText, /1,033 minutes/, "job protection example cites the safety net's first pass");
+  // Proof discipline: the 30 GB workspace cure is merged but its
+  // instance-level proof is still outstanding, so it is NOT claimed
+  // until that proof lands (the study's membership rule).
+  assert.doesNotMatch(JSON.stringify(entry), /30 GB|30GB/, "job protection does not claim the unproven workspace size");
+  // The services page names the bundle and points at the page.
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /SolveLang Job Protection/, "services page names Job Protection");
+  assert.match(services, /href="\/solutions\/job-protection\/"/, "services page links the Job Protection page");
 });
 
 test("speed is never free: the minutes surfaces state both speed prices", () => {
@@ -1252,4 +1474,108 @@ test("status summary label and link use the theme accent token, never the low-co
   assert.doesNotMatch(source, /#a9cdff/i);
   assert.match(source, /tracking-widest text-accent">Current public status/);
   assert.match(source, /ml-auto text-sm font-semibold text-accent underline/);
+});
+
+test("run page counts anonymous runs and says so plainly", () => {
+  const page = read("app/(english)/run/page.tsx");
+  assert.match(page, /Your code never leaves your browser \u2014 the only thing we record is an anonymous count that a run happened, never your code or its content\./);
+  assert.doesNotMatch(page, /Nothing is sent to a server/);
+  assert.match(page, /sendRunBeacon\("start"\)/);
+  assert.match(page, /sendRunBeacon\("complete"\)/);
+  const beacon = read("app/run/runBeacon.ts");
+  assert.match(beacon, /\/telemetry\/run/);
+  assert.match(beacon, /JSON\.stringify\(\{ event \}\)/);
+});
+
+test("documentation hub documents each guide with problem-first titles and pinned facts", () => {
+  const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
+  assert.deepEqual(
+    guides.map((entry) => entry.slug),
+    ["mcp-server-local-setup", "remote-mcp-endpoint", "context-packs", "audit-a-repository", "runner-minutes"],
+    "the hub ships exactly the guides built so far, in order",
+  );
+  assert.equal(new Set(guides.map((entry) => entry.slug)).size, guides.length, "guide slugs are unique");
+  const routes = read("app/i18n/routes.ts");
+  const routeLine = (segment) => routes.split("\n").find((line) => line.includes(`segment: "${segment}"`));
+  assert.match(routeLine("docs"), /classification: "english-only-technical"/, "hub index is an english-only technical route");
+  assert.match(routeLine("docs"), /sitemap: true/, "hub index is in the sitemap");
+  const article = read("app/(english)/docs/DocsArticle.tsx");
+  assert.match(article, /Honest limits/, "every guide renders its honest limits");
+  const index = read("app/(english)/docs/page.tsx");
+  assert.match(index, /from ".\/docs-data"/, "hub index renders from the shared data");
+  assert.match(index, /\/docs\/\$\{entry\.slug\}\//, "index links every entry from the shared data");
+  for (const entry of guides) {
+    assert.ok(entry.question.length > 0, `${entry.slug} carries its problem line for the index`);
+    assert.ok(entry.title.endsWith("?"), `${entry.slug} title is the problem a developer would type`);
+    assert.ok(entry.sections.length >= 3, `${entry.slug} carries at least three sections`);
+    assert.ok(entry.limits.length >= 3, `${entry.slug} states its honest limits`);
+    assert.match(routeLine(`docs/${entry.slug}`), /classification: "english-only-technical"/, `${entry.slug} is registered as an english-only technical route`);
+    assert.match(routeLine(`docs/${entry.slug}`), /sitemap: true/, `${entry.slug} is in the sitemap`);
+    const page = read(`app/(english)/docs/${entry.slug}/page.tsx`);
+    assert.ok(page.includes(`alternatesForRoute("docs/${entry.slug}")`), `${entry.slug} page carries its own canonical alternates`);
+    assert.ok(page.includes(`guideBySlug("${entry.slug}")`), `${entry.slug} page renders its own entry`);
+  }
+  assert.ok(
+    primaryLinks.some((link) => link.label === "Docs" && link.href === "/docs/"),
+    "primary navigation Docs slot points at the hub",
+  );
+  const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
+  const localText = JSON.stringify(local);
+  assert.ok(localText.includes("npx --yes @solvelang/mcp-server@0.3.0"), "local setup guide states the published npx command");
+  assert.ok(localText.includes("SOLVELANG_WORKSPACE_ROOT"), "local setup guide states the workspace root variable");
+  assert.ok(localText.includes("29 read-only tools"), "local setup guide states the published tool count");
+  assert.ok(localText.includes("Node.js 20 or newer"), "local setup guide states the Node requirement");
+  const llms = read("public/llms.txt");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/"), "llms.txt links the documentation hub");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/mcp-server-local-setup/"), "llms.txt links the local setup guide");
+  const remote = guides.find((entry) => entry.slug === "remote-mcp-endpoint");
+  const remoteText = JSON.stringify(remote);
+  assert.ok(remoteText.includes("https://mcp.solve-lang.com/mcp"), "remote guide states the endpoint URL");
+  for (const tool of [
+    "solvelang_analyze_n8n",
+    "solvelang_generate_n8n_report",
+    "solvelang_graph_find_nodes",
+    "solvelang_graph_search_nodes",
+    "solvelang_graph_dependencies",
+    "solvelang_graph_dependents",
+    "solvelang_graph_shortest_path",
+    "solvelang_graph_impact",
+    "solvelang_graph_explain_impact",
+    "solvelang_capabilities",
+  ]) {
+    assert.ok(remoteText.includes(tool), `remote guide names the remote tool ${tool}`);
+  }
+  assert.ok(remoteText.includes("60 requests per 60 seconds"), "remote guide states the rate limit");
+  assert.ok(remoteText.includes("4 MiB"), "remote guide states the request ceiling");
+  assert.ok(remoteText.includes("no server-side workspace"), "remote guide states the no-workspace limit");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/remote-mcp-endpoint/"), "llms.txt links the remote endpoint guide");
+  const packs = guides.find((entry) => entry.slug === "context-packs");
+  const packsText = JSON.stringify(packs);
+  for (const tool of ["solvelang_context_plan", "solvelang_context_pack", "solvelang_context_retrieve"]) {
+    assert.ok(packsText.includes(tool), `context pack guide names the tool ${tool}`);
+  }
+  assert.ok(packsText.includes("2 MB per-file safety cap"), "context pack guide states the per-file cap");
+  assert.ok(packsText.includes("rejects stale context"), "context pack guide states the stale-retrieval refusal");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/context-packs/"), "llms.txt links the context pack guide");
+  assert.doesNotMatch(JSON.stringify(guides), /benchmark results|\d+% fewer tokens|\d+% token savings/i, "guides carry no benchmark claims");
+  const audit = guides.find((entry) => entry.slug === "audit-a-repository");
+  const auditText = JSON.stringify(audit);
+  assert.ok(auditText.includes("ZIP or TAR"), "audit guide states the archive formats");
+  assert.ok(auditText.includes("never executes repository code"), "audit guide states the no-execution limit");
+  assert.ok(auditText.includes("stays in your browser"), "audit guide states the browser-local scan");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/audit-a-repository/"), "llms.txt links the audit guide");
+  const minutes = guides.find((entry) => entry.slug === "runner-minutes");
+  const minutesText = JSON.stringify(minutes);
+  const standardLine = "Runner minutes, Standard pool (2-vCPU-class Linux machines): 5,000 minutes for $20 · 25,000 minutes for $100 · 100,000 minutes for $400.";
+  const highPowerLine = "Runner minutes, High-Power pool (16-vCPU-class Linux machines): 1,000 minutes for $80 · 2,000 minutes for $140 · 3,000 minutes for $192 · 4,000 minutes for $236 · 5,000 minutes for $275 · 6,000 minutes for $306 · 7,000 minutes for $336 · 8,000 minutes for $360 · 9,000 minutes for $382.50 · 10,000 minutes for $400.";
+  assert.ok(llms.includes(standardLine), "llms.txt states the Standard shelf");
+  assert.ok(minutesText.includes(standardLine), "runner minutes guide quotes the Standard shelf exactly as llms.txt states it");
+  assert.ok(llms.includes(highPowerLine), "llms.txt states the High-Power shelf");
+  assert.ok(minutesText.includes(highPowerLine), "runner minutes guide quotes the High-Power shelf exactly as llms.txt states it");
+  assert.ok(minutesText.includes("Speed Lane Cache: a 10 GB colocated cache beside the High-Power machines, $2 per month."), "runner minutes guide quotes the cache price exactly");
+  assert.ok(minutesText.includes("solvelang-runners-high-power"), "runner minutes guide names the High-Power PR label");
+  assert.ok(minutesText.includes("solvelang-runners-standard"), "runner minutes guide names the Standard PR label");
+  assert.ok(minutesText.includes("never on an external checkout"), "runner minutes guide states the embedded-checkout fact");
+  assert.ok(minutesText.includes("expire 12 months after purchase"), "runner minutes guide states the expiry");
+  assert.ok(llms.includes("https://www.solve-lang.com/docs/runner-minutes/"), "llms.txt links the runner minutes guide");
 });

@@ -12,12 +12,24 @@ const manifest = JSON.parse(await readFile(path.join(packageRoot, "package.json"
 const expectedFiles = [
   "package/LICENSE",
   "package/README.md",
+  "package/dist/src/bus-cli.d.ts",
+  "package/dist/src/bus-cli.js",
+  "package/dist/src/bus-client.d.ts",
+  "package/dist/src/bus-client.js",
+  "package/dist/src/bus-daemon.d.ts",
+  "package/dist/src/bus-daemon.js",
+  "package/dist/src/bus-envelope.d.ts",
+  "package/dist/src/bus-envelope.js",
   "package/dist/src/context-compaction-tools.d.ts",
   "package/dist/src/context-compaction-tools.js",
   "package/dist/src/context-compaction.d.ts",
   "package/dist/src/context-compaction.js",
   "package/dist/src/context-handoff.d.ts",
   "package/dist/src/context-handoff.js",
+  "package/dist/src/context-index-tools.d.ts",
+  "package/dist/src/context-index-tools.js",
+  "package/dist/src/context-index.d.ts",
+  "package/dist/src/context-index.js",
   "package/dist/src/context-pack.d.ts",
   "package/dist/src/context-pack.js",
   "package/dist/src/context-selection.d.ts",
@@ -30,6 +42,10 @@ const expectedFiles = [
   "package/dist/src/index.js",
   "package/dist/src/n8n.d.ts",
   "package/dist/src/n8n.js",
+  "package/dist/src/relay-cli.d.ts",
+  "package/dist/src/relay-cli.js",
+  "package/dist/src/relay.d.ts",
+  "package/dist/src/relay.js",
   "package/dist/src/remote-cli.d.ts",
   "package/dist/src/remote-cli.js",
   "package/dist/src/remote.d.ts",
@@ -69,6 +85,8 @@ assert.equal(manifest.publishConfig?.access, "public", "scoped package must expl
 assert.deepEqual(manifest.bin, {
   "solvelang-mcp": "dist/src/index.js",
   "solvelang-mcp-remote": "dist/src/remote-cli.js",
+  "solvelang-bus": "dist/src/bus-cli.js",
+  "solvelang-mcp-relay": "dist/src/relay-cli.js",
 });
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "solvelang-packed-"));
@@ -83,7 +101,7 @@ try {
   const packedFiles = packResult.files.map(({ path: filePath }) => `package/${filePath}`).sort();
   assert.deepEqual(packedFiles, expectedFiles, "tarball contents must match the reviewed runtime allowlist");
 
-  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js"]) {
+  for (const entrypoint of ["dist/src/index.js", "dist/src/remote-cli.js", "dist/src/bus-cli.js", "dist/src/relay-cli.js"]) {
     const executable = packResult.files.find(({ path: filePath }) => filePath === entrypoint);
     assert.ok(executable, `packed CLI entrypoint is missing: ${entrypoint}`);
     assert.equal(executable.mode & 0o111, 0o111, `packed CLI entrypoint must be executable: ${entrypoint}`);
@@ -106,6 +124,8 @@ try {
   assert.deepEqual(installedPackage.bin, {
     "solvelang-mcp": "dist/src/index.js",
     "solvelang-mcp-remote": "dist/src/remote-cli.js",
+    "solvelang-bus": "dist/src/bus-cli.js",
+    "solvelang-mcp-relay": "dist/src/relay-cli.js",
   });
 
   const installedRuntimeRoot = path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src");

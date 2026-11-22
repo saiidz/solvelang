@@ -119,6 +119,7 @@ impl Parser {
                 }
                 Some(statement)
             }
+            Token::Gate => self.gate_statement(),
             Token::Ask => self.ask_statement(),
             Token::Identifier(_) if self.check_next(&Token::Equal) => self.assignment_statement(),
             _ => Some(Stmt::Expr(self.expression())),
@@ -474,6 +475,68 @@ impl Parser {
             Stmt::Break { location }
         } else {
             Stmt::Continue { location }
+        })
+    }
+
+    fn gate_statement(&mut self) -> Option<Stmt> {
+        let location = self.advance_location();
+        let name = self.consume_identifier("Expected gate name after 'gate'.")?;
+        if !self.consume(
+            &Token::LeftBrace,
+            "Invalid gate declaration: missing opening '{'.",
+            "Use syntax like: gate release {",
+        ) {
+            return None;
+        }
+        self.skip_newlines();
+        let mut evidence = String::new();
+        let mut signers = Vec::new();
+
+        while !self.check(&Token::RightBrace) && !self.is_at_end() {
+            self.skip_newlines();
+            if self.matches(&Token::Evidence) {
+                match self.advance() {
+                    Token::Text(text) => evidence = text,
+                    _ => self.error_previous(
+                        "Invalid gate evidence: expected quoted text.",
+                        "Use syntax like: evidence \"evidence/report.json\"",
+                    ),
+                }
+            } else if self.matches(&Token::Signer) {
+                if let Some(signer) =
+                    self.consume_identifier("Expected signer key id after 'signer'.")
+                {
+                    signers.push(signer);
+                }
+            } else {
+                self.error_here(
+                    "Invalid gate declaration entry.",
+                    "Use evidence \"path\" or signer key-id inside the gate block.",
+                );
+                self.synchronize_statement();
+            }
+            self.skip_newlines();
+        }
+
+        if !self.consume(
+            &Token::RightBrace,
+            "Unclosed gate block: missing '}'.",
+            "Add a matching closing brace after the gate body.",
+        ) {
+            return None;
+        }
+        if evidence.is_empty() {
+            self.error_previous(
+                "Invalid gate declaration: missing evidence entry.",
+                "Add evidence \"path\" inside the gate block; a gate without evidence cannot be signed.",
+            );
+            return None;
+        }
+        Some(Stmt::Gate {
+            name,
+            evidence,
+            signers,
+            location,
         })
     }
 

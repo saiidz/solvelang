@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acceptance-origin.js";
 import { unverifiedPublicStatus } from "./public-status.js";
+import { runEventFromBody } from "./run-telemetry.js";
 import { agUiBoardErrorEvents, agUiBoardEvents, agUiRunIds, encodeAgUiSse } from "./ag-ui.js";
 
 // A sign-in form submitted faster than this is a bot, not a person.
@@ -71,6 +72,8 @@ export function createApiAccessHandler({
   githubApp = null,
   productConnectLink = null,
   publicStatusReader = async () => unverifiedPublicStatus(),
+  runTelemetry = null,
+  agentTalkback = null,
   statusProbes = {},
   logger = console,
 }) {
@@ -229,6 +232,34 @@ export function createApiAccessHandler({
       }
       if (method === "GET" && path.endsWith("/health")) {
         return response(200, { status: "ok", service: "solvelang-api-access" });
+      }
+
+      // Anonymous playground run counts: the beacon payload is a single
+      // event field (see run-telemetry.js), validated before anything is
+      // recorded, and the counts route serves aggregates only.
+      if (method === "POST" && path.endsWith("/telemetry/run")) {
+        if (!runTelemetry) throw new ApiAccessError(503, "run_telemetry_disabled", "Run telemetry is not enabled.");
+        await runTelemetry.record(runEventFromBody(parseJson(event)));
+        return response(204, {});
+      }
+      if (method === "GET" && path.endsWith("/telemetry/run-counts")) {
+        if (!runTelemetry) throw new ApiAccessError(503, "run_telemetry_disabled", "Run telemetry is not enabled.");
+        return response(200, await runTelemetry.readCounts());
+      }
+
+      // Agent talk-back doorway: a read-only MCP facts surface (see
+      // agent-talkback.js). The module is self-contained public-facts
+      // code — it reaches no account, tenant, ledger, Stripe, or
+      // GitHub state — and it carries its own kill switch; a missing
+      // module answers the same disabled refusal as the flag being off.
+      if (path.endsWith("/agent/mcp")) {
+        if (!agentTalkback) throw new ApiAccessError(503, "agent_talkback_disabled", "Agent talk-back is not enabled.");
+        const outcome = await agentTalkback.handle({
+          method,
+          bodyText: bodyText(event),
+          source: event?.requestContext?.http?.sourceIp ?? "unknown",
+        });
+        return response(outcome.statusCode, outcome.body);
       }
 
       if (method === "POST" && path.endsWith("/stripe/subscriptions/webhook")) {

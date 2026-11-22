@@ -3,15 +3,19 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use reqwest::blocking::Client;
-use solvec_core::evaluator::{Capability, HostError, HostRequest, RuntimeHost};
+use solvec_core::evaluator::{
+    Capability, GateCheck, GateRefusal, HostError, HostRequest, RuntimeHost,
+};
 use solvec_core::value::Value;
 
 use crate::ai;
 use crate::ast_runtime::ExecutionPolicy;
+use crate::gate_tooling::{self, RegisteredKey};
 
 pub(crate) struct NativeHost {
     policy: ExecutionPolicy,
     capture_output: bool,
+    gate_keys: Vec<RegisteredKey>,
 }
 
 impl NativeHost {
@@ -19,7 +23,15 @@ impl NativeHost {
         Self {
             policy,
             capture_output,
+            gate_keys: Vec::new(),
         }
+    }
+
+    /// Supply the key registry this host verifies gate signatures
+    /// against. Without keys, every gate signer is unknown and every
+    /// gate refuses: verification fails closed.
+    pub(crate) fn set_gate_keys(&mut self, keys: Vec<RegisteredKey>) {
+        self.gate_keys = keys;
     }
 
     fn http_get(&self, url: &str, max_response_bytes: usize) -> Result<Value, HostError> {
@@ -393,6 +405,10 @@ impl RuntimeHost for NativeHost {
             | Capability::Environment
             | Capability::UnknownCall(_) => Ok(()),
         }
+    }
+
+    fn verify_gate(&self, check: &GateCheck) -> Result<(), GateRefusal> {
+        gate_tooling::verify_gate_signature(&self.gate_keys, check)
     }
 
     fn invoke(
