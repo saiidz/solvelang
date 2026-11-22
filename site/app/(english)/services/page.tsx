@@ -27,6 +27,12 @@ const highPowerPacks = [
   { minutes: "10,000", price: "$400" },
 ] as const;
 
+const premiumPacks = [
+  { minutes: "5,000", price: "$2,500" },
+  { minutes: "25,000", price: "$12,500" },
+  { minutes: "100,000", price: "$50,000" },
+] as const;
+
 const runnerMinutesJsonLd = {
   "@context": "https://schema.org",
   "@type": "Product",
@@ -53,6 +59,14 @@ const runnerMinutesJsonLd = {
       availability: "https://schema.org/InStock",
       url: "https://www.solve-lang.com/services/",
     })),
+    ...premiumPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} Premium runner minutes`,
+      price: pack.price.replace("$", "").replace(",", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
   ],
 };
 
@@ -75,6 +89,14 @@ const servicesFaqJsonLd = {
       acceptedAnswer: {
         "@type": "Answer",
         text: "Standard packs (2-vCPU-class machines, $0.004 per minute): 5,000 minutes for $20, 25,000 minutes for $100, and 100,000 minutes for $400. Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do Premium runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 25,000 minutes for $12,500, and 100,000 minutes for $50,000.",
       },
     },
     {
@@ -158,9 +180,9 @@ export default function ServicesPage() {
             <li>Linux runners for private repositories.</li>
           </ul>
 
-          <h3 className="mt-8 text-xl font-bold">Two pools, chosen by label</h3>
-          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them. Faster processing is never free — it always has one of two prices: work that starts on guaranteed On-demand capacity consumes minutes at 2×, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices below. Standard work on Spot capacity draws at the plain 1× rate.</p>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <h3 className="mt-8 text-xl font-bold">Three pools, chosen by label</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them. Premium runs on 96-vCPU-class machines for the heaviest suites. Faster processing is never free — it always has one of two prices: work that starts on guaranteed On-demand capacity consumes minutes at 2×, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices below. Premium work draws from its own separate Premium balance at the Premium prices below. Standard work on Spot capacity draws at the plain 1× rate.</p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="font-semibold text-body">Standard</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-standard]</pre>
@@ -173,10 +195,14 @@ export default function ServicesPage() {
               <p className="font-semibold text-body">Speed lane</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-high-power, solvelang-runners-speed]</pre>
             </div>
+            <div>
+              <p className="font-semibold text-body">Premium</p>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-premium]</pre>
+            </div>
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Label routing:</strong> label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang</code> and that pull request&apos;s jobs route to SolveLang runners instead of your own fleet. Routing is set up once in your workflow file — jobs from labeled pull requests request the SolveLang labels above — and after that, routing a pull request is just adding the label.</p>
 
-          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the two pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for High-Power stays on High-Power.</p>
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-premium</code> and its jobs run on the Premium pool, drawing from your Premium balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for a stronger pool stays on that pool.</p>
 
           <h3 className="mt-8 text-xl font-bold">The shelf</h3>
           <p className="mt-3 max-w-4xl leading-7 text-body">Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it today. Buying happens only on SolveLang&apos;s own checkout page — we never send you to an external checkout.</p>
@@ -204,6 +230,20 @@ export default function ServicesPage() {
                 </thead>
                 <tbody>
                   {highPowerPacks.map((pack) => (
+                    <tr key={pack.minutes} className="border-b border-line last:border-0"><td className="py-2 font-semibold">{pack.minutes}</td><td className="py-2">{pack.price}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-2xl border border-line bg-canvas p-6">
+              <h4 className="text-lg font-bold">Premium minutes</h4>
+              <p className="mt-1 text-sm text-muted">$0.50 per minute, 96-vCPU-class machines.</p>
+              <table className="mt-4 w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-muted"><th className="py-2 font-semibold">Minutes</th><th className="py-2 font-semibold">Price</th></tr>
+                </thead>
+                <tbody>
+                  {premiumPacks.map((pack) => (
                     <tr key={pack.minutes} className="border-b border-line last:border-0"><td className="py-2 font-semibold">{pack.minutes}</td><td className="py-2">{pack.price}</td></tr>
                   ))}
                 </tbody>
