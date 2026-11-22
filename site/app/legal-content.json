@@ -84,7 +84,8 @@
     [
       "Tokens, credits, entitlements, and requests",
       [
-        "Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. API subscription allowances are limited to the plan and current entitlement gates described on the API Pricing page."
+        "Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. API subscription allowances are limited to the plan and current entitlement gates described on the API Pricing page.",
+        "One trial per person/legal entity, regardless of accounts, installations, or repositories used. Trials are non-transferable and a transferred repository carries its trial history with it. We may revoke unused trial minutes and suspend eligibility where trials are farmed."
       ]
     ],
     [
