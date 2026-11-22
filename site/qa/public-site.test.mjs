@@ -1655,3 +1655,30 @@ test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, 
   assert.ok(llms.includes("- Runner minutes, Premium pool (96-vCPU-class Linux machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500 · 25,000 minutes for $12,500 · 100,000 minutes for $50,000."), "llms pricing facts carry the premium line exactly");
   assert.ok(llms.includes("solvelang-runners-premium runs the pull request's jobs on the Premium pool, drawing from the Premium balance"), "llms names the premium PR label");
 });
+
+test("Step 1: MCP install surfaces state the working --package command verbatim", () => {
+  const working = "npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp";
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.ok(landing.includes(`<pre><code>${working}</code></pre>`), "homepage card states the working command");
+  assert.doesNotMatch(landing, /npx --yes @solvelang\/mcp-server/);
+  const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
+  const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
+  const localText = JSON.stringify(local);
+  assert.ok(localText.includes(working), "local setup guide states the working command");
+  assert.ok(localText.includes("--package"), "local setup guide Codex form uses the --package args");
+  assert.ok(
+    localText.includes("the pinned package command above is the supported route today"),
+    "local setup guide states the supported-route sentence",
+  );
+  assert.doesNotMatch(localText, /npx --yes @solvelang\/mcp-server@0\.3\.0/);
+  assert.doesNotMatch(localText, /the npx path above is the supported route today/);
+  const setup = read("app/(english)/mcp-setup/page.tsx");
+  assert.ok(
+    setup.includes('args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]'),
+    "mcp setup states the working Codex args",
+  );
+  assert.ok(setup.includes(`solvelang -- ${working}`), "mcp setup states the working Claude registration");
+  assert.ok(setup.includes("required-evidence denominator.</p>"), "mcp setup summarizer sentence is cleaned");
+  assert.doesNotMatch(setup, /after #920/);
+  assert.doesNotMatch(setup, /npx --yes @solvelang\/mcp-server@0\.3\.0/);
+});
