@@ -1600,3 +1600,34 @@ test("documentation hub documents each guide with problem-first titles and pinne
   assert.ok(minutesText.includes("expire 12 months after purchase"), "runner minutes guide states the expiry");
   assert.ok(llms.includes("https://www.solve-lang.com/docs/runner-minutes/"), "llms.txt links the runner minutes guide");
 });
+
+test("romanian legal segment has its own root layout and unchanged page content", () => {
+  // The /ro/ segment lives outside the (english) route group, whose layout
+  // is the English root layout, so /ro/ needs a root layout of its own;
+  // Next 16.4.5 refuses to build the four statutory pages without one.
+  const layoutUrl = new URL("../app/ro/layout.tsx", import.meta.url);
+  assert.equal(existsSync(layoutUrl), true, "/ro/ segment must carry its own root layout");
+  const layout = read("app/ro/layout.tsx");
+  assert.match(layout, /<html lang="ro" dir="ltr">/);
+  assert.match(layout, /<body>\{children\}<\/body>/);
+  assert.match(layout, /import "\.\.\/globals\.css";/);
+  assert.doesNotMatch(layout, /SiteHeader|LegalFooter|ThemeDeviceListener/, "the /ro/ root layout must not gain the English site's chrome");
+  // The four statutory pages keep rendering their romanianLegal components.
+  const pages = {
+    "app/ro/terms/page.tsx": "RomanianTerms",
+    "app/ro/refund-policy/page.tsx": "RomanianRefundPolicy",
+    "app/ro/withdraw/page.tsx": "RomanianWithdraw",
+    "app/ro/preflight-privacy/page.tsx": "RomanianPreflightPrivacy",
+  };
+  for (const [pagePath, component] of Object.entries(pages)) {
+    const page = read(pagePath);
+    assert.ok(page.includes(`import { ${component} } from "../../i18n/romanianLegal";`), `${pagePath} imports ${component}`);
+    assert.ok(page.includes(`return <${component} />;`), `${pagePath} renders ${component}`);
+  }
+  // Content markers: the legal shell and the four page headings are unchanged.
+  const legal = read("app/i18n/romanianLegal.tsx");
+  assert.match(legal, /<main lang="ro" dir="ltr" className="min-h-screen bg-canvas px-6 py-14 text-ink sm:py-20">/);
+  for (const heading of ["Termeni de utilizare SolveLang", "Politica de rambursare", "Retragerea din contract", "Confidențialitate Workflow Preflight"]) {
+    assert.ok(legal.includes(heading), `romanianLegal keeps the heading: ${heading}`);
+  }
+});
