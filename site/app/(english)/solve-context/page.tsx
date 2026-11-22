@@ -29,8 +29,8 @@ export default function SolveContextPage() {
             <div className="mt-4 space-y-4 leading-7 text-body">
               <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
               <p>Status: <strong>implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.3.0 package; not yet proven by complete real-agent/provider measurements</strong></p>
-              <p>Tracking epic: #898</p>
-              <p>Repository status reconciled through #920 on 2026-09-15.</p>
+              <p>Independent evaluation: in progress</p>
+              <p>Repository status reconciled on 2026-09-15.</p>
             </div>
           </section>
 
@@ -57,7 +57,7 @@ export default function SolveContextPage() {
                 <li>pinned first-party real-source regressions from SolveLang;</li>
                 <li>independently pinned Chalk and node-fetch source subsets with equal-budget lexical/changed-path/graph-assisted comparisons;</li>
                 <li>an offline agent-run record/report contract for future approved real Claude/Codex measurements;</li>
-                <li>#920 pair-integrity rules requiring baseline and Solve Context arms to use the same fixture/provider/model/agent/record class, outcome-evaluation basis and required-evidence denominator.</li>
+                <li>Pair-integrity rules requiring baseline and Solve Context arms to use the same fixture/provider/model/agent/record class, outcome-evaluation basis and required-evidence denominator.</li>
               </ol>
             </div>
           </section>
