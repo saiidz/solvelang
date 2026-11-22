@@ -48,6 +48,7 @@ type RunnerMinutesAccountView = {
   balances: {
     standard: { minutes: number };
     highPower: { minutes: number };
+    premium?: { minutes: number };
     cache: { gbMonths: number };
   };
 };
@@ -232,7 +233,7 @@ export function AccountHome() {
     );
   }
 
-  const totalMinutes = minutes ? minutes.standard.minutes + minutes.highPower.minutes : 0;
+  const totalMinutes = minutes ? minutes.standard.minutes + minutes.highPower.minutes + (minutes.premium?.minutes ?? 0) : 0;
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
@@ -271,6 +272,9 @@ export function AccountHome() {
                 <p className="mt-2 text-sm text-slate-400">
                   Standard: {minutes.standard.minutes.toLocaleString("en-US")} minutes · High-power: {minutes.highPower.minutes.toLocaleString("en-US")} minutes
                 </p>
+                {minutes.premium && minutes.premium.minutes > 0 ? (
+                  <p className="mt-1 text-sm text-slate-400">Premium: {minutes.premium.minutes.toLocaleString("en-US")} minutes</p>
+                ) : null}
                 {minutes.cache.gbMonths > 0 ? (
                   <p className="mt-1 text-sm text-slate-400">Speed lane cache: {minutes.cache.gbMonths} GB-months</p>
                 ) : null}
@@ -366,7 +370,9 @@ export function AccountHome() {
             <div className="mt-6 border-t border-white/10 pt-5">
               <p className="text-sm font-semibold">Choose the pool per pull request</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Label a pull request <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-high-power</code> and
+                Label a pull request <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-premium</code> and
+                its jobs run on the Premium pool, drawing from your Premium minutes. Label it{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-high-power</code> and
                 its jobs run on the High-Power pool, drawing from your High-Power minutes. Label it{" "}
                 <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-standard</code> and its jobs stay on the
                 Standard pool, drawing from your Standard minutes.

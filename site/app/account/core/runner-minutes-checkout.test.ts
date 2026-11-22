@@ -45,7 +45,7 @@ test("pack resolution defaults safely and honors real keys", () => {
   assert.equal(resolveRunnerMinutesPack("bogus").key, "standard-5000");
   assert.equal(resolveRunnerMinutesPack("high-power-5000").totalDollars, 275);
   assert.equal(resolveRunnerMinutesPack("speed-lane-cache-10").pool, "cache");
-  assert.equal(RUNNER_MINUTES_ALL_PACKS.length, 14);
+  assert.equal(RUNNER_MINUTES_ALL_PACKS.length, 17);
 });
 
 test("the flow copy encodes confirm-before-spin-up", () => {
