@@ -73,7 +73,7 @@ test("premium packs match the service catalog: flat $0.50/min, owner-priced", ()
   for (const pack of RUNNER_MINUTES_PREMIUM_PACKS) {
     assert.equal(pack.pool, "premium");
     assert.equal(pack.anchor, true, `${pack.key} is an owner-set price`);
-    assert.equal(pack.totalDollars / pack.minutes, 0.5, `${pack.key} is exactly $0.50/min`);
+    assert.equal(pack.minutes === null ? null : pack.totalDollars / pack.minutes, 0.5, `${pack.key} is exactly $0.50/min`);
   }
   assert.equal(resolveRunnerMinutesPack("premium-25000").totalDollars, 12500);
   assert.equal(RUNNER_MINUTES_LABELS.premium, "runs-on: [self-hosted, solvelang-runners-premium]");
