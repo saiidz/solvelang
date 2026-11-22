@@ -1,6 +1,6 @@
 [mcp_servers.solvelang]
 command = "npx"
-args = ["--yes", "@solvelang/mcp-server"]
+args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
