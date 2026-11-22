@@ -171,7 +171,7 @@ test("llms.txt follows the llmstxt.org structure", () => {
 });
 
 test("homepage follows the approved product order and preserves maturity boundaries", () => {
-  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "id=\"runner-minutes\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
   let previous = -1;
   for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
   assert.match(landing, /Real capability\./);

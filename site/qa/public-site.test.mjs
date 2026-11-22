@@ -218,11 +218,43 @@ test("homepage renders its sections from the shared component and landing is not
   const homepage = read("app/(english)/page.tsx");
   const landing = read("app/components/homepage/LandingPage.tsx");
   assert.match(homepage, /import LandingPage from "\.\.\/components\/homepage\/LandingPage";/);
-  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
+  const sections = ["<InteractiveHero />", "id=\"boundaries\"", "id=\"capabilities\"", "id=\"studio\"", "id=\"solve-context\"", "id=\"evidence\"", "id=\"runner-minutes\"", "className={styles.builtBand}", "id=\"quickstart\"", "className={styles.finalSection}"];
   let previous = -1;
   for (const section of sections) { const index = landing.indexOf(section); assert.ok(index > previous, `${section} follows the previous section`); previous = index; }
   assert.equal(existsSync(new URL("../app/(english)/landing", import.meta.url)), false);
   assert.equal(existsSync(new URL("../app/(english)/landing/page.tsx", import.meta.url)), false);
+});
+
+test("homepage carries the Runner Minutes section and the fifth chooser card", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  /* the dedicated section sits between WHAT WE VERIFY and the Built band,
+     numbered in sequence; the chooser section is renumbered to match */
+  const sectionStart = landing.indexOf('id="runner-minutes"');
+  assert.ok(sectionStart > landing.indexOf('id="evidence"'), "runner minutes section follows evidence");
+  assert.ok(sectionStart < landing.indexOf("styles.builtBand"), "runner minutes section precedes the built band");
+  assert.ok(sectionStart < landing.indexOf('id="quickstart"'), "runner minutes section precedes the chooser");
+  const section = landing.slice(sectionStart, landing.indexOf("styles.builtBand"));
+  assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
+  assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
+  assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
+  assert.ok(section.includes("Start with 300 free Standard minutes: they are added automatically when you connect GitHub \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
+  assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
+  assert.ok(section.includes("Every minute carries Job Protection \u2014 billed only for jobs a SolveLang machine actually ran, exactly once."), "proof line");
+  assert.ok(section.includes('href="/services/"'), "section links to services");
+  assert.ok(section.includes('href="/solutions/job-protection/"'), "section links to job protection");
+  assert.ok(section.includes("How it works"), "services link label");
+  assert.ok(section.includes("The guarantees"), "job protection link label");
+  /* the chooser: renumbered eyebrow and five cards, the fifth is Runner Minutes */
+  assert.ok(landing.includes("07 / START WITH SOLVE"), "chooser eyebrow renumbered");
+  assert.ok(!landing.includes("06 / START WITH SOLVE"), "old chooser eyebrow is gone");
+  const chooser = landing.slice(landing.indexOf('id="quickstart"'), landing.indexOf("styles.finalSection"));
+  const cards = chooser.match(/<article data-reveal/g) ?? [];
+  assert.equal(cards.length, 5, "chooser has five cards");
+  assert.ok(chooser.includes("<span>05 / PREPAID RUNNER MINUTES</span>"), "fifth card title line");
+  assert.ok(chooser.includes("<h3>Runner Minutes</h3>"), "fifth card heading");
+  assert.ok(chooser.includes("Run your GitHub Actions on SolveLang machines. Prepaid minutes, metered per second, on fresh machines created per job."), "fifth card body");
+  assert.ok(chooser.includes('href="/services/"'), "fifth card links to services");
+  assert.ok(chooser.includes("See Runner Minutes"), "fifth card link label");
 });
 
 const {
