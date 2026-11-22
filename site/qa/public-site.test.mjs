@@ -1742,3 +1742,12 @@ test("Step 1: /services/ carries the Live/Main/Pilot status matrix verbatim", ()
   assert.doesNotMatch(matrix, /Premium/);
   assert.doesNotMatch(matrix, /44%|24\.8%|token comparison/i);
 });
+
+test("Step 1 S8: the header loading state is a neutral Account label", () => {
+  const header = read("app/components/SiteHeader.tsx");
+  assert.doesNotMatch(header, /Checking account status/);
+  assert.ok(
+    header.includes('sessionState === "loading" ? (\n                <p className="px-4 py-3 text-sm font-semibold text-chrome-muted">Account</p>'),
+    "the loading branch renders the neutral Account label",
+  );
+});
