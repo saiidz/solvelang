@@ -50,7 +50,7 @@ assert.deepEqual(mcp, {
   mcpServers: {
     solvelang: {
       command: "npx",
-      args: ["--yes", `@solvelang/mcp-server@${packageJson.version}`],
+      args: ["-y", "--package", `@solvelang/mcp-server@${packageJson.version}`, "solvelang-mcp"],
     },
   },
 });
