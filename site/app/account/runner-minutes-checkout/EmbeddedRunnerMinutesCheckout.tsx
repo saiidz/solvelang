@@ -15,6 +15,7 @@ import {
   RUNNER_MINUTES_CACHE_PACKS,
   RUNNER_MINUTES_FLOW_STEPS,
   RUNNER_MINUTES_HIGH_POWER_PACKS,
+  RUNNER_MINUTES_PREMIUM_PACKS,
   RUNNER_MINUTES_LABELS,
   RUNNER_MINUTES_STANDARD_PACKS,
   RUNNER_MINUTES_TERMS,
@@ -377,6 +378,15 @@ export function EmbeddedRunnerMinutesCheckout() {
                 </fieldset>
 
                 <fieldset className="mt-6">
+                  <legend className="text-sm font-semibold text-body">Premium minutes — 96-core machines for the heaviest suites</legend>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                    {RUNNER_MINUTES_PREMIUM_PACKS.map((candidate) => (
+                      <PackButton key={candidate.key} pack={candidate} selected={pack.key === candidate.key} onSelect={() => setPack(candidate)} />
+                    ))}
+                  </div>
+                </fieldset>
+
+                <fieldset className="mt-6">
                   <legend className="text-sm font-semibold text-body">Speed lane cache — stored next to the machines</legend>
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {RUNNER_MINUTES_CACHE_PACKS.map((candidate) => (
@@ -485,7 +495,7 @@ export function EmbeddedRunnerMinutesCheckout() {
           </ol>
           <h3 className="mt-8 text-lg font-bold">Point your workflows at the runners</h3>
           <p className="mt-2 text-sm leading-6 text-body">After your order is placed, jobs pick their pool by the runs-on label in the workflow file:</p>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="font-semibold text-body">Standard</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.standard}</pre>
@@ -495,12 +505,17 @@ export function EmbeddedRunnerMinutesCheckout() {
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.highPower}</pre>
             </div>
             <div>
+              <p className="font-semibold text-body">Premium</p>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.premium}</pre>
+            </div>
+            <div>
               <p className="font-semibold text-body">Speed lane</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-panel p-3 text-xs text-accent">{RUNNER_MINUTES_LABELS.speedLane}</pre>
             </div>
           </div>
           <p className="mt-4 text-sm leading-6 text-body">
-            You can also choose per pull request: label a pull request <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-high-power</code> to
+            You can also choose per pull request: label a pull request <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-premium</code> to
+            run its jobs on the Premium pool, <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-high-power</code> to
             run its jobs on the High-Power pool, or <code className="rounded bg-panel px-1.5 py-0.5 text-[13px] text-accent">solvelang-runners-standard</code> to keep them on the
             Standard pool — the pool a job runs on is the balance its minutes are billed to.
           </p>
