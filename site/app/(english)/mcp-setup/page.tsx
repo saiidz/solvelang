@@ -70,7 +70,7 @@ codex plugin add solvelang@solvelang`}</code></pre>
                   <p>Manual MCP configuration for the published line:</p>
                   <pre className={pre}><code>{`[mcp_servers.solvelang]
 command = "npx"
-args = ["--yes", "@solvelang/mcp-server@0.3.0"]
+args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
@@ -87,7 +87,7 @@ SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
 /plugin install solvelang@solvelang`}</code></pre>
                   <p>Reload plugins or begin a new Claude Code session after installation.</p>
                   <p>Manual published-line registration:</p>
-                  <pre className={pre}><code>{`claude mcp add --transport stdio \\\n  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \\\n  solvelang -- npx --yes @solvelang/mcp-server@0.3.0`}</code></pre>
+                  <pre className={pre}><code>{`claude mcp add --transport stdio \\\n  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \\\n  solvelang -- npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp`}</code></pre>
                 </div>
               </section>
             </div>
@@ -153,7 +153,7 @@ npm run test:plugin-roundtrip
 npm run test:packed`}</code></pre>
               <p>To summarize separately authorized real-agent records:</p>
               <pre className={pre}><code>{`cat approved-agent-run-records.json | npm run eval:context:agent-records`}</code></pre>
-              <p>The summarizer itself performs no provider/network call and uses no credentials. Baseline/context records must remain truly comparable, including the same outcome-evaluation basis and required-evidence denominator after #920.</p>
+              <p>The summarizer itself performs no provider/network call and uses no credentials. Baseline/context records must remain truly comparable, including the same outcome-evaluation basis and required-evidence denominator.</p>
               <p>Passing repository tests is not evidence of real Claude/Codex token savings, live provider cache behavior or marketplace distribution.</p>
             </div>
           </section>

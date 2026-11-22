@@ -1545,7 +1545,7 @@ test("documentation hub documents each guide with problem-first titles and pinne
   );
   const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
   const localText = JSON.stringify(local);
-  assert.ok(localText.includes("npx --yes @solvelang/mcp-server@0.3.0"), "local setup guide states the published npx command");
+  assert.ok(localText.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"), "local setup guide states the published npx command");
   assert.ok(localText.includes("SOLVELANG_WORKSPACE_ROOT"), "local setup guide states the workspace root variable");
   assert.ok(localText.includes("29 read-only tools"), "local setup guide states the published tool count");
   assert.ok(localText.includes("Node.js 20 or newer"), "local setup guide states the Node requirement");
