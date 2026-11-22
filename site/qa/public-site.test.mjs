@@ -1682,3 +1682,39 @@ test("Step 1: MCP install surfaces state the working --package command verbatim"
   assert.doesNotMatch(setup, /after #920/);
   assert.doesNotMatch(setup, /npx --yes @solvelang\/mcp-server@0\.3\.0/);
 });
+
+test("Step 1: homepage and solve-context copy carries no internal issue references", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.ok(
+    landing.includes("Real provider token and performance comparisons will be published only when the independent evaluation supports them."),
+    "homepage Solve Context sentence is cleaned",
+  );
+  assert.ok(
+    landing.includes("Solve Context provider-token, latency, and quality comparisons will be published only when the independent evaluation supports them."),
+    "homepage benchmark-band sentence is cleaned",
+  );
+  assert.ok(
+    landing.includes("Studio passed six authenticated acceptance checks and a bounded production save/reload, isolation, and local-first smoke."),
+    "homepage Studio sentence is kept",
+  );
+  assert.doesNotMatch(landing, /#898/);
+  assert.doesNotMatch(landing, /acceptance-origin cleanup/);
+  const statusHealth = read("app/(english)/status/StatusHealth.tsx");
+  assert.ok(
+    statusHealth.includes("Public status probes and component boundaries are listed on the status page"),
+    "homepage status summary states the neutral line",
+  );
+  assert.ok(
+    statusHealth.includes('not_monitored: "Current health not fully verified"'),
+    "the /status/ not-monitored label is unchanged (S9)",
+  );
+  const solveContext = read("app/(english)/solve-context/page.tsx");
+  assert.ok(solveContext.includes("<p>Independent evaluation: in progress</p>"), "solve-context status block is cleaned");
+  assert.ok(
+    solveContext.includes("<p>Repository status reconciled on 2026-09-15.</p>"),
+    "solve-context keeps the reconciliation date without the issue reference",
+  );
+  assert.ok(solveContext.includes("<li>Pair-integrity rules requiring"), "solve-context pair-integrity sentence is cleaned");
+  assert.doesNotMatch(solveContext, /Tracking epic/);
+  assert.doesNotMatch(solveContext, /#920/);
+});
