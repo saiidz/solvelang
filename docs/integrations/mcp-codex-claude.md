@@ -44,7 +44,7 @@ Manual MCP configuration for the published line:
 ```toml
 [mcp_servers.solvelang]
 command = "npx"
-args = ["--yes", "@solvelang/mcp-server@0.3.0"]
+args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
@@ -70,7 +70,7 @@ Manual published-line registration:
 ```bash
 claude mcp add --transport stdio \
   --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \
-  solvelang -- npx --yes @solvelang/mcp-server@0.3.0
+  solvelang -- npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp
 ```
 
 ## Use current repository source
@@ -148,7 +148,7 @@ To summarize separately authorized real-agent records:
 cat approved-agent-run-records.json | npm run eval:context:agent-records
 ```
 
-The summarizer itself performs no provider/network call and uses no credentials. Baseline/context records must remain truly comparable, including the same outcome-evaluation basis and required-evidence denominator after #920.
+The summarizer itself performs no provider/network call and uses no credentials. Baseline/context records must remain truly comparable, including the same outcome-evaluation basis and required-evidence denominator.
 
 Passing repository tests is not evidence of real Claude/Codex token savings, live provider cache behavior or marketplace distribution.
 
