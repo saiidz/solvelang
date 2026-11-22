@@ -68,7 +68,7 @@ The long-term goal is not to replace every workflow engine. SolveLang may be mos
 
 ## Current maturity
 
-SolveLang is an **open-source workflow intelligence product** with a versioned local runtime, browser Studio, and production API/account infrastructure. General managed workflow execution remains gated. This README was reconciled on **2026-09-15** against repository state through PR **#920**. Live GitHub state always wins if that checkpoint becomes stale.
+SolveLang is an **open-source workflow intelligence product** with a versioned local runtime, browser Studio, and production API/account infrastructure. General managed workflow execution remains gated. This README was reconciled on **2026-09-15** against repository state. Live GitHub state always wins if that checkpoint becomes stale.
 
 The repository contains a working Rust lexer, parser, AST, interpreter, CLI, diagnostics, implementation-backed 0.1 language specification, explicit local modules, browser/WASM tooling, Workflow Intelligence Studio, bounded Repository/Server Audit surfaces, Self-Driving safety/execution contracts, a substantially implemented Solve Context layer, and a separately deployed production customer-account/API/Admin/TOTP foundation.
 
@@ -92,7 +92,7 @@ Public claims should use these labels.
 - bounded read-only Repository Audit / Solve Graph and Server Audit product surfaces
 - a pure Rust evaluator core and deny-all WASM wrapper with shared conformance and deterministic limits
 - repository-safe Self-Driving Observe/Suggest, patch/preflight, single-use execution-plan/finalization, GitHub-write and PostHog safety contracts; live provider activation and production rollout remain separately gated
-- **Solve Context** plan/pack/retrieve tools, content-addressed retrieval, Claude ↔ Codex handoff, lossless JSON/log/diff compaction, changed-path + supplied-graph ranking, pinned real-source regressions and strict agent-measurement record/report contracts through #913–#920
+- **Solve Context** plan/pack/retrieve tools, content-addressed retrieval, Claude ↔ Codex handoff, lossless JSON/log/diff compaction, changed-path + supplied-graph ranking, pinned real-source regressions and strict agent-measurement record/report contracts
 - repository-qualified connected-support code with native IMAP/SMTP plus optional Gmail, durable event/action state, safe cutover/recovery, account controls and monitoring preparation; live activation remains separate
 - production API access, customer password accounts, private Admin/TOTP infrastructure, live API subscription billing, and live Runner Minutes purchasing on the account pages
 - repository examples, tests, schemas, documentation, and launch-readiness controls
@@ -293,7 +293,7 @@ solvec <file.solve> --tokens
 solvec <file.solve> --ast
 ```
 
-The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and Linux x86_64 release evidence is supplemented by successful macOS ARM64 and Windows x64 candidate qualification in #941; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
+The canonical `solvec version` command and non-publishing release-candidate/tag-regeneration gates are implemented. No new public CLI version/tag/release is selected or published merely by those gates, and Linux x86_64 release evidence is supplemented by successful macOS ARM64 and Windows x64 candidate qualification; see [`docs/release-candidate-dry-run.md`](docs/release-candidate-dry-run.md) and [`docs/tagged-release-regeneration.md`](docs/tagged-release-regeneration.md).
 
 ## Runtime safety
 
