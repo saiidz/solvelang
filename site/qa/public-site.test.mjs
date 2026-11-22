@@ -392,6 +392,27 @@ test("services page publishes the full service list with live and pilot labels",
   assert.match(page, /\/process-solution\//);
 });
 
+test("services page onboarding section states the four real steps and the full promise", () => {
+  const page = read("app/(english)/services/page.tsx");
+  assert.match(page, /How onboarding works/);
+  assert.match(page, /Four steps, once:/);
+  assert.match(page, /Sign in<\/strong> and open Runner Minutes in your account\./);
+  assert.match(page, /Install the SolveLang GitHub App<\/strong> on your account or organization, pick the repositories it may serve, and accept the permissions\./);
+  assert.match(page, /Buy a minutes pack<\/strong> on SolveLang&apos;s own checkout page — jobs draw against that balance, metered per second\./);
+  assert.match(page, /Point your workflows at SolveLang<\/strong> — set/);
+  assert.ok(page.includes("runs-on: [self-hosted, solvelang-runners-standard]"), "onboarding states the Standard runs-on label step");
+  assert.match(page, /\(or the High-Power label\) in the workflows you want served\./);
+  assert.match(page, /From then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand\./);
+  assert.match(page, /Repositories you add to the installation later are picked up automatically\./);
+  const order = ["Sign in</strong>", "Install the SolveLang GitHub App</strong>", "Buy a minutes pack</strong>", "Point your workflows at SolveLang</strong>", "Repositories you add to the installation later"];
+  const indices = order.map((s) => page.indexOf(s));
+  assert.ok(indices.every((i) => i >= 0), "all four steps and the closing promise are present");
+  assert.ok(indices.every((v, i) => i === 0 || v > indices[i - 1]), "the four steps appear in order before the closing promise");
+  assert.doesNotMatch(page, /Zero-step onboarding/);
+  assert.doesNotMatch(page, /That is the whole setup/);
+  assert.doesNotMatch(page, /Sign in, install the SolveLang GitHub App, pick your repositories/);
+});
+
 test("services page publishes runner-minutes Product and FAQ schema built from its own shelf", () => {
   const page = read("app/(english)/services/page.tsx");
   assert.match(page, /"@type": "Product"/);
