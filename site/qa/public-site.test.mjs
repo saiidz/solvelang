@@ -369,7 +369,7 @@ test("process solution hero pairs the headline with the queue animation", () => 
 test("services page publishes the full service list with live and pilot labels", () => {
   const page = read("app/(english)/services/page.tsx");
   assert.match(page, /Runner Minutes/);
-  assert.match(page, /Zero-step onboarding/);
+  assert.match(page, /How onboarding works/);
   assert.match(page, /Label routing/);
   for (const price of ["$20", "$100", "$400", "$80", "$140", "$192", "$236", "$275", "$306", "$336", "$360", "$382.50"]) {
     assert.ok(page.includes(price), `services page lists the ${price} shelf price`);
