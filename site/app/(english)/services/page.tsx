@@ -139,8 +139,15 @@ export default function ServicesPage() {
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body">Prepaid GitHub Actions runner minutes. Buy a pack once — minutes never auto-renew — connect GitHub a single time, and queued jobs in your repositories run on SolveLang-provisioned Linux machines automatically. Every job runs on a fresh machine created for that job alone and destroyed when the job ends.</p>
 
-          <h3 className="mt-8 text-xl font-bold">Zero-step onboarding</h3>
-          <p className="mt-3 max-w-4xl leading-7 text-body">Sign in, install the SolveLang GitHub App, pick your repositories, and accept the permissions. That is the whole setup: from then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand.</p>
+          <h3 className="mt-8 text-xl font-bold">How onboarding works</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Four steps, once:</p>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 leading-7 text-body">
+            <li><strong className="text-ink">Sign in</strong> and open Runner Minutes in your account.</li>
+            <li><strong className="text-ink">Install the SolveLang GitHub App</strong> on your account or organization, pick the repositories it may serve, and accept the permissions.</li>
+            <li><strong className="text-ink">Buy a minutes pack</strong> on SolveLang&apos;s own checkout page — jobs draw against that balance, metered per second.</li>
+            <li><strong className="text-ink">Point your workflows at SolveLang</strong> — set <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">runs-on: [self-hosted, solvelang-runners-standard]</code> (or the High-Power label) in the workflows you want served.</li>
+          </ol>
+          <p className="mt-3 max-w-4xl leading-7 text-body">From then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand. Repositories you add to the installation later are picked up automatically.</p>
 
           <h3 className="mt-8 text-xl font-bold">How metering works</h3>
           <ul className="mt-3 list-disc space-y-2 pl-5 leading-7 text-body">
