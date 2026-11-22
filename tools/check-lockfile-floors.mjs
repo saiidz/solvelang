@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 
 const FLOORS = [
   { crate: "quinn-udp", min: "0.5.16", advisory: "RUSTSEC-2026-0538" },
+  { crate: "url", min: "2.5.9", advisory: "RUSTSEC-2026-0592" },
 ];
 
 function compareVersions(a, b) {
