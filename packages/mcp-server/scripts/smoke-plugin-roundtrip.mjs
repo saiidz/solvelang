@@ -37,7 +37,7 @@ assert.deepEqual(mcpManifest, {
   mcpServers: {
     solvelang: {
       command: "npx",
-      args: ["--yes", `@solvelang/mcp-server@${packageManifest.version}`],
+      args: ["-y", "--package", `@solvelang/mcp-server@${packageManifest.version}`, "solvelang-mcp"],
     },
   },
 }, "Codex and Claude must resolve the same pinned SolveLang MCP package");
