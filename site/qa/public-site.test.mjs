@@ -1718,3 +1718,27 @@ test("Step 1: homepage and solve-context copy carries no internal issue referenc
   assert.doesNotMatch(solveContext, /Tracking epic/);
   assert.doesNotMatch(solveContext, /#920/);
 });
+
+test("Step 1: /services/ carries the Live/Main/Pilot status matrix verbatim", () => {
+  const services = read("app/(english)/services/page.tsx");
+  const start = services.indexOf('aria-labelledby="status-matrix-heading"');
+  assert.ok(start > 0, "matrix section exists on /services/");
+  const matrix = services.slice(start, services.indexOf("</section>", start));
+  assert.ok(matrix.includes("What is live, what is published, what is pilot"), "matrix heading");
+  assert.ok(matrix.includes("This table is the single reference for what each one is today"), "matrix intro");
+  assert.ok(matrix.includes("Pre-1.0 — active development"), "CLI row status");
+  assert.ok(matrix.includes("(build <code>565fbc1c</code>)"), "/run/ row names the pinned WASM build");
+  assert.ok(matrix.includes("29 tools in the published package"), "local MCP row tool count");
+  assert.ok(
+    matrix.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"),
+    "local MCP row carries the working install command",
+  );
+  assert.ok(matrix.includes("10 tools, no server-side workspace"), "hosted MCP row boundary");
+  assert.ok(matrix.includes("Start with 300 free Standard minutes when you connect GitHub"), "runner minutes row trial line");
+  assert.ok(matrix.includes("faster is never free"), "runner minutes row speed line");
+  assert.ok(matrix.includes("Developer $49/month (1,000 credits)"), "API plans row");
+  assert.ok(matrix.includes("There is no public price and no self-serve signup yet."), "pilot row boundary");
+  assert.ok(matrix.includes("November 22, 2026"), "matrix verification date");
+  assert.doesNotMatch(matrix, /Premium/);
+  assert.doesNotMatch(matrix, /44%|24\.8%|token comparison/i);
+});
