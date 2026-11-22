@@ -47,3 +47,95 @@ export function runnerMinutesToggleLabel(status: RunnerMinutesStatus): "Start mi
 // every surface that shows the control.
 export const RUNNER_MINUTES_PAUSED_LINE =
   "Your minutes are paused — jobs will not run and no minutes will be used.";
+
+// ---------------------------------------------------------------------------
+// Start mode — the per-account choice between auto-start and
+// approve-each-run.
+//
+// The account view carries `startMode`: "auto" (the default — jobs
+// start as soon as they queue, exactly as they always have) or
+// "approve" (each queued job waits for the customer's approval
+// before anything is provisioned; nothing is billed for the wait,
+// because billing runs from the job's GitHub start to its GitHub
+// completion). An older service does not send the field at all —
+// absence means auto, never approve.
+//
+// Setting the mode is a POST to the start-mode route with the
+// session's CSRF token, like every customer write; the view also
+// carries `pendingApprovals` — the jobs waiting for a decision,
+// each decidable through its own approve/decline route. After every
+// write the caller re-reads the account and renders the state the
+// service reports — never a blind local flip.
+
+export type RunnerMinutesStartMode = "auto" | "approve";
+
+// The slice of the account view the start-mode contract reads.
+export type RunnerMinutesAccountStartModeView = {
+  startMode?: RunnerMinutesStartMode;
+  pendingApprovals?: RunnerMinutesPendingApproval[];
+};
+
+export function runnerMinutesStartMode(
+  account: RunnerMinutesAccountStartModeView,
+): RunnerMinutesStartMode {
+  return account.startMode === "approve" ? "approve" : "auto";
+}
+
+export const RUNNER_MINUTES_START_MODE_PATH = "/customer/runner-minutes/start-mode";
+
+export function runnerMinutesStartModeLabel(mode: RunnerMinutesStartMode): "Auto-start" | "Approve each run" {
+  return mode === "approve" ? "Approve each run" : "Auto-start";
+}
+
+// Shown under the control in approve mode: the plain-language
+// statement of what waiting means.
+export const RUNNER_MINUTES_APPROVE_LINE =
+  "Jobs wait for your approval before they run. Nothing is provisioned — and nothing is billed — until you approve.";
+
+// Shown with the pending approvals list, verbatim: the honest
+// limit of declining. We cannot cancel the customer's GitHub job —
+// the app has no permission to — so the copy says exactly that.
+export const RUNNER_MINUTES_DECLINE_LINE =
+  "Declining means we won't run it — the job stays queued in GitHub until you cancel it there";
+
+// One job waiting for the customer's decision, in the shape the
+// account view carries it.
+export type RunnerMinutesPendingApproval = {
+  id: string;
+  jobId: string;
+  runId: number | null;
+  repo: string;
+  workflowName: string | null;
+  jobName: string | null;
+  pool: string;
+  status: string;
+  queuedAt: string | null;
+  createdAt: string;
+};
+
+export function runnerMinutesPendingApprovals(
+  account: RunnerMinutesAccountStartModeView,
+): RunnerMinutesPendingApproval[] {
+  return Array.isArray(account.pendingApprovals) ? account.pendingApprovals : [];
+}
+
+export function runnerMinutesApprovalPath(
+  approvalId: string,
+  decision: "approve" | "decline",
+): string {
+  return `/customer/runner-minutes/approvals/${encodeURIComponent(approvalId)}/${decision}`;
+}
+
+export function runnerMinutesPoolLabel(pool: string): "High-Power" | "Standard" {
+  return pool === "high-power" ? "High-Power" : "Standard";
+}
+
+// The queued time as the card shows it: a fixed UTC rendering, so
+// every customer sees the same unambiguous clock reading. An
+// unparseable value is shown as-is rather than hidden.
+export function runnerMinutesQueuedLabel(queuedAt: string | null): string {
+  if (!queuedAt) return "Queued time not reported";
+  const parsed = new Date(queuedAt);
+  if (Number.isNaN(parsed.getTime())) return queuedAt;
+  return `${parsed.toUTCString().replace(" GMT", "")} UTC`;
+}
