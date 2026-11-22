@@ -5,6 +5,7 @@ import {
   RUNNER_MINUTES_CACHE_PACKS,
   RUNNER_MINUTES_FLOW_STEPS,
   RUNNER_MINUTES_HIGH_POWER_PACKS,
+  RUNNER_MINUTES_PREMIUM_PACKS,
   RUNNER_MINUTES_LABELS,
   RUNNER_MINUTES_STANDARD_PACKS,
   RUNNER_MINUTES_TERMS,
@@ -58,4 +59,22 @@ test("labels and terms carry the product facts", () => {
   assert.match(RUNNER_MINUTES_LABELS.speedLane, /solvelang-runners-speed/);
   assert.ok(RUNNER_MINUTES_TERMS.some((t) => t.includes("twice the pack rate")));
   assert.ok(RUNNER_MINUTES_TERMS.some((t) => t.includes("12 months")));
+});
+
+test("premium packs match the service catalog: flat $0.50/min, owner-priced", () => {
+  assert.deepEqual(
+    RUNNER_MINUTES_PREMIUM_PACKS.map((p) => [p.key, p.minutes, p.totalDollars]),
+    [
+      ["premium-5000", 5_000, 2500],
+      ["premium-25000", 25_000, 12500],
+      ["premium-100000", 100_000, 50000],
+    ],
+  );
+  for (const pack of RUNNER_MINUTES_PREMIUM_PACKS) {
+    assert.equal(pack.pool, "premium");
+    assert.equal(pack.anchor, true, `${pack.key} is an owner-set price`);
+    assert.equal(pack.totalDollars / pack.minutes, 0.5, `${pack.key} is exactly $0.50/min`);
+  }
+  assert.equal(resolveRunnerMinutesPack("premium-25000").totalDollars, 12500);
+  assert.equal(RUNNER_MINUTES_LABELS.premium, "runs-on: [self-hosted, solvelang-runners-premium]");
 });
