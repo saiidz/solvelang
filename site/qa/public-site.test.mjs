@@ -457,6 +457,27 @@ test("runner minutes checkout terms state the GitHub fee is absorbed, never pass
   assert.doesNotMatch(checkout, /passed through at cost/);
 });
 
+test("terms of use carry the three trial sentences verbatim in the entitlements section", () => {
+  const legal = JSON.parse(read("app/legal-content.json"));
+  const section = legal.terms.find(([heading]) => heading === "Tokens, credits, entitlements, and requests");
+  assert.ok(section, "the terms keep the tokens, credits, entitlements, and requests section");
+  const paragraphs = section[1];
+  // Decision D7 (Saiid, Nov 21, 2026) approved the three trial sentences
+  // from the trial-abuse procedure spec (section 5.4) word-for-word: one
+  // trial per person/legal entity, non-transferable with the repository
+  // carrying its trial history, and the revoke/suspend right where trials
+  // are farmed. They ship as one paragraph in this section and may not be
+  // paraphrased, softened, or dropped.
+  const trialParagraph = paragraphs.find((paragraph) => paragraph.includes("One trial per person/legal entity"));
+  assert.ok(trialParagraph, "the entitlements section carries the trial paragraph");
+  assert.ok(trialParagraph.includes("One trial per person/legal entity, regardless of accounts, installations, or repositories used."));
+  assert.ok(trialParagraph.includes("Trials are non-transferable and a transferred repository carries its trial history with it."));
+  assert.ok(trialParagraph.includes("We may revoke unused trial minutes and suspend eligibility where trials are farmed."));
+  // The build-local copy must stay byte-identical to the canonical
+  // entitlement contract copy (also pinned by the check-core legal test).
+  assert.equal(read("app/legal-content.json"), read("../services/entitlements/src/legal-content.json"));
+});
+
 test("runner minutes checkout carries an optional verification code in the payment action area", () => {
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   // The field exists, in plain language, wired to its own state.
