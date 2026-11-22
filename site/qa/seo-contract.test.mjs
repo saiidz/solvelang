@@ -179,8 +179,8 @@ test("homepage follows the approved product order and preserves maturity boundar
   assert.match(landing, /Repository-tested/);
   assert.match(landing, /Deployed/);
   assert.match(landing, /VERIFIED LIVE/);
-  assert.match(landing, /temporary acceptance-origin cleanup remains a separate follow-up/i);
-  assert.match(landing, /Real provider token and performance comparisons will be published only when the independent #898 evaluation supports them/);
+  assert.doesNotMatch(landing, /temporary acceptance-origin cleanup remains a separate follow-up/i);
+  assert.match(landing, /Real provider token and performance comparisons will be published only when the independent evaluation supports them/);
   assert.match(landing, /host side effects denied/);
   assert.match(landing, /general managed execution remain separate gates/);
   assert.doesNotMatch(landing, /FAQPage/);
