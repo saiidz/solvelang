@@ -616,10 +616,13 @@ test("account home runner minutes card carries the same pause and start control"
   // Toggling posts through the shared endpoint helper with the
   // account CSRF token, then re-reads the account and renders the
   // reported state — the same discipline as the checkout control.
+  // The re-read applies the reported view through applyMinutesView,
+  // which resolves the status through the shared resolver (the
+  // whole-file assertion above).
   const toggle = home.slice(home.indexOf("async function toggleMinutes()"), home.indexOf('if (screen === "loading")'));
   assert.match(toggle, /runnerMinutesTogglePath\(minutesStatus\)/);
   assert.match(toggle, /method: "POST", csrfToken: dashboard\.csrfToken/);
-  assert.match(toggle, /setMinutesStatus\(runnerMinutesStatus\(view\)\)/);
+  assert.match(toggle, /await rereadMinutes\(\)/);
   assert.match(toggle, /setMinutesError\(caught instanceof Error \? caught\.message/);
   // The control renders only once the balance read has reported, so
   // the card never offers a toggle on a guessed state.
