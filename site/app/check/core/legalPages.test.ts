@@ -30,7 +30,7 @@ test("Terms and Refund Policy pages contain their required customer-facing headi
   assert.match(terms, /legalContent/);
   assert.match(refundPolicy, /legalContent/);
   assert.match(legalContent, /UPCOMINGSOUNDS S\.R\.L\./);
-  assert.match(legalContent, /2026-10-27-v4/);
+  assert.match(legalContent, /2026-11-22-v5/);
   assert.match(legalContent, /API subscriptions renew monthly until canceled/);
   assert.match(legalContent, /API subscription cancellation and refunds/);
   assert.match(legalContent, /does not automatically refund/);
