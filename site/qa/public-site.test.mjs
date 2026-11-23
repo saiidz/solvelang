@@ -237,7 +237,7 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
   assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
   assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
-  assert.ok(section.includes("Start with 300 free Standard minutes: they are added automatically when you connect GitHub \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
+  assert.ok(section.includes("Start with 300 free Standard minutes: they are added when you connect GitHub and claim them in your account \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
   assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
   assert.ok(section.includes("Every minute carries Job Protection \u2014 billed only for jobs a SolveLang machine actually ran, exactly once."), "proof line");
   assert.ok(section.includes('href="/services/"'), "section links to services");
