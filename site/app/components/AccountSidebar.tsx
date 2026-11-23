@@ -28,11 +28,10 @@ import { normalizePath } from "./site-navigation";
 // the entry matching the current route is highlighted.
 //
 // Entry targets:
-// - "Runner minutes" opens the Live Center. The board selects its
-//   Minutes view from internal tab state only (LiveCenterBoard keeps
-//   `tab` in useState; there is no query/hash addressing), so the
-//   Minutes view is not deep-linkable and this entry links to the
-//   Live Center itself.
+// - "Runner minutes" deep-links to the Live Center's Minutes view
+//   (/account/live-center/#minutes). The board resolves its active
+//   tab from the URL hash (on mount and on hashchange), so the hash
+//   opens the Minutes view directly.
 // - "Sign-in & security" deep-links to the security group on the API
 //   account (manage) page; a sibling stack adds that anchor id.
 const SIGN_IN_SECURITY_HASH = "#sign-in-security";
@@ -69,9 +68,9 @@ const ACCOUNT_ENTRIES: SidebarEntry[] = [
   {
     id: "runner-minutes",
     label: "Runner minutes",
-    href: "/account/live-center/",
-    // Shares the Live Center target: the Minutes view is chosen inside
-    // the board, not by URL, so it has no separate active state.
+    href: "/account/live-center/#minutes",
+    // Deep-links to the board's Minutes view by hash; the entry has
+    // no separate active state of its own.
     isActive: () => false,
   },
   {
