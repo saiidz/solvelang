@@ -9,6 +9,7 @@ import {
   formatRelativeTime,
   gateStateLabel,
   groupPullRequestsByStage,
+  liveCenterTabFromHash,
   normalizeLiveCenterBoard,
   normalizeLiveCenterMinutes,
   paginateList,
@@ -578,4 +579,44 @@ test("normalizeLiveCenterBoard keeps the fleet unavailable without the block", (
     const view = normalizeLiveCenterBoard(raw);
     assert.deepEqual(view.fleet, { available: false, total: null, online: 0, busy: 0, runners: [] });
   }
+});
+
+test("liveCenterTabFromHash resolves the Minutes deep link and every tab id", () => {
+  assert.equal(liveCenterTabFromHash("#minutes"), "minutes");
+  assert.equal(liveCenterTabFromHash("#overview"), "overview");
+  assert.equal(liveCenterTabFromHash("#prs"), "prs");
+  assert.equal(liveCenterTabFromHash("#queue"), "queue");
+  assert.equal(liveCenterTabFromHash("#inbox"), "inbox");
+  assert.equal(liveCenterTabFromHash("minutes"), "minutes");
+});
+
+test("liveCenterTabFromHash falls back to overview for absent or unknown hashes", () => {
+  assert.equal(liveCenterTabFromHash(""), "overview");
+  assert.equal(liveCenterTabFromHash("#"), "overview");
+  assert.equal(liveCenterTabFromHash("#bogus"), "overview");
+  assert.equal(liveCenterTabFromHash("#sign-in-security"), "overview");
+  assert.equal(liveCenterTabFromHash(null), "overview");
+  assert.equal(liveCenterTabFromHash(undefined), "overview");
+});
+
+test("the sidebar Runner minutes entry deep-links to the Minutes view", () => {
+  const sidebar = readFileSync("app/components/AccountSidebar.tsx", "utf8");
+  const entry = sidebar.indexOf('id: "runner-minutes"');
+  assert.ok(entry >= 0, "the runner-minutes entry exists");
+  const block = sidebar.slice(entry, entry + 300);
+  assert.ok(
+    block.includes('href: "/account/live-center/#minutes"'),
+    "the Runner minutes entry href is /account/live-center/#minutes",
+  );
+});
+
+test("the board resolves its tab from the URL hash on mount and on hashchange", () => {
+  const board = readFileSync("app/account/live-center/LiveCenterBoard.tsx", "utf8");
+  assert.ok(board.includes("liveCenterTabFromHash"), "the board uses the core hash resolver");
+  assert.ok(
+    board.includes("liveCenterTabFromHash(window.location.hash)"),
+    "the board resolves the tab from window.location.hash",
+  );
+  assert.ok(board.includes('addEventListener("hashchange"'), "the board listens for hashchange");
+  assert.ok(board.includes('removeEventListener("hashchange"'), "the board removes the hashchange listener");
 });
