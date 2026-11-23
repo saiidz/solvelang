@@ -1,6 +1,7 @@
 # SolveLang MCP Server
 
 [![mcptry](https://mcptry.com/badge/io.github.saiidz/solvelang)](https://mcptry.com/servers/io.github.saiidz/solvelang)
+[![saiidz/solvelang MCP server](https://glama.ai/mcp/servers/saiidz/solvelang/badges/score.svg)](https://glama.ai/mcp/connectors/io.github.saiidz/solvelang)
 
 ## Current verification — 2026-09-20
 
