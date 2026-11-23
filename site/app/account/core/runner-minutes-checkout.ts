@@ -44,7 +44,15 @@ export const RUNNER_MINUTES_HIGH_POWER_PACKS: ReadonlyArray<RunnerMinutesPack> =
 // flat $0.50 per minute at every pack size.
 export const RUNNER_MINUTES_PREMIUM_PACKS: ReadonlyArray<RunnerMinutesPack> = [
   { key: "premium-5000", pool: "premium", label: "5,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 5_000, gbMonths: null, totalDollars: 2500, anchor: true },
+  { key: "premium-10000", pool: "premium", label: "10,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 10_000, gbMonths: null, totalDollars: 5000, anchor: true },
   { key: "premium-25000", pool: "premium", label: "25,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 25_000, gbMonths: null, totalDollars: 12500, anchor: true },
+  { key: "premium-30000", pool: "premium", label: "30,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 30_000, gbMonths: null, totalDollars: 15000, anchor: true },
+  { key: "premium-40000", pool: "premium", label: "40,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 40_000, gbMonths: null, totalDollars: 20000, anchor: true },
+  { key: "premium-50000", pool: "premium", label: "50,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 50_000, gbMonths: null, totalDollars: 25000, anchor: true },
+  { key: "premium-60000", pool: "premium", label: "60,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 60_000, gbMonths: null, totalDollars: 30000, anchor: true },
+  { key: "premium-70000", pool: "premium", label: "70,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 70_000, gbMonths: null, totalDollars: 35000, anchor: true },
+  { key: "premium-80000", pool: "premium", label: "80,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 80_000, gbMonths: null, totalDollars: 40000, anchor: true },
+  { key: "premium-90000", pool: "premium", label: "90,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 90_000, gbMonths: null, totalDollars: 45000, anchor: true },
   { key: "premium-100000", pool: "premium", label: "100,000 minutes", detail: "$0.50 per minute · 96-core machines", minutes: 100_000, gbMonths: null, totalDollars: 50000, anchor: true },
 ];
 

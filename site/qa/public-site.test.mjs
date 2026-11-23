@@ -1642,7 +1642,7 @@ test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, 
   assert.match(services, /<h4 className="text-lg font-bold">Premium minutes<\/h4>/, "services shelf has the Premium card");
   assert.match(services, /\$0\.50 per minute, 96-vCPU-class machines\./, "services shelf states the premium price and class");
   assert.match(services, /premiumPacks\.map/, "schema offers are generated from the visible Premium table");
-  assert.ok(services.includes("Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 25,000 minutes for $12,500, and 100,000 minutes for $50,000."), "services FAQ prices the premium packs exactly");
+  assert.ok(services.includes("Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 10,000 minutes for $5,000, 25,000 minutes for $12,500, 30,000 minutes for $15,000, 40,000 minutes for $20,000, 50,000 minutes for $25,000, 60,000 minutes for $30,000, 70,000 minutes for $35,000, 80,000 minutes for $40,000, 90,000 minutes for $45,000, and 100,000 minutes for $50,000."), "services FAQ prices the premium packs exactly");
   assert.ok(services.includes("runs-on: [self-hosted, solvelang-runners-premium]"), "services shows the premium runs-on label");
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
   assert.match(checkout, /Premium minutes — 96-core machines for the heaviest suites/, "checkout has the Premium pack group");
@@ -1652,7 +1652,7 @@ test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, 
   assert.ok(home.includes("solvelang-runners-premium"), "account home names the Premium PR label");
   assert.match(home, /Premium: \{minutes\.premium\.minutes\.toLocaleString/, "account card renders the premium balance row when held");
   const llms = read("public/llms.txt");
-  assert.ok(llms.includes("- Runner minutes, Premium pool (96-vCPU-class Linux machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500 · 25,000 minutes for $12,500 · 100,000 minutes for $50,000."), "llms pricing facts carry the premium line exactly");
+  assert.ok(llms.includes("- Runner minutes, Premium pool (96-vCPU-class Linux machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500 · 10,000 minutes for $5,000 · 25,000 minutes for $12,500 · 30,000 minutes for $15,000 · 40,000 minutes for $20,000 · 50,000 minutes for $25,000 · 60,000 minutes for $30,000 · 70,000 minutes for $35,000 · 80,000 minutes for $40,000 · 90,000 minutes for $45,000 · 100,000 minutes for $50,000."), "llms pricing facts carry the premium line exactly");
   assert.ok(llms.includes("solvelang-runners-premium runs the pull request's jobs on the Premium pool, drawing from the Premium balance"), "llms names the premium PR label");
 });
 
