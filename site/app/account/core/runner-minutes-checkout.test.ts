@@ -46,7 +46,7 @@ test("pack resolution defaults safely and honors real keys", () => {
   assert.equal(resolveRunnerMinutesPack("bogus").key, "standard-5000");
   assert.equal(resolveRunnerMinutesPack("high-power-5000").totalDollars, 275);
   assert.equal(resolveRunnerMinutesPack("speed-lane-cache-10").pool, "cache");
-  assert.equal(RUNNER_MINUTES_ALL_PACKS.length, 17);
+  assert.equal(RUNNER_MINUTES_ALL_PACKS.length, 25);
 });
 
 test("the flow copy encodes confirm-before-spin-up", () => {
@@ -66,7 +66,15 @@ test("premium packs match the service catalog: flat $0.50/min, owner-priced", ()
     RUNNER_MINUTES_PREMIUM_PACKS.map((p) => [p.key, p.minutes, p.totalDollars]),
     [
       ["premium-5000", 5_000, 2500],
+      ["premium-10000", 10_000, 5000],
       ["premium-25000", 25_000, 12500],
+      ["premium-30000", 30_000, 15000],
+      ["premium-40000", 40_000, 20000],
+      ["premium-50000", 50_000, 25000],
+      ["premium-60000", 60_000, 30000],
+      ["premium-70000", 70_000, 35000],
+      ["premium-80000", 80_000, 40000],
+      ["premium-90000", 90_000, 45000],
       ["premium-100000", 100_000, 50000],
     ],
   );

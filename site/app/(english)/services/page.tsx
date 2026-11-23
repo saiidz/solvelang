@@ -29,7 +29,15 @@ const highPowerPacks = [
 
 const premiumPacks = [
   { minutes: "5,000", price: "$2,500" },
+  { minutes: "10,000", price: "$5,000" },
   { minutes: "25,000", price: "$12,500" },
+  { minutes: "30,000", price: "$15,000" },
+  { minutes: "40,000", price: "$20,000" },
+  { minutes: "50,000", price: "$25,000" },
+  { minutes: "60,000", price: "$30,000" },
+  { minutes: "70,000", price: "$35,000" },
+  { minutes: "80,000", price: "$40,000" },
+  { minutes: "90,000", price: "$45,000" },
   { minutes: "100,000", price: "$50,000" },
 ] as const;
 
@@ -96,7 +104,7 @@ const servicesFaqJsonLd = {
       name: "What do Premium runner minutes cost?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 25,000 minutes for $12,500, and 100,000 minutes for $50,000.",
+        text: "Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 10,000 minutes for $5,000, 25,000 minutes for $12,500, 30,000 minutes for $15,000, 40,000 minutes for $20,000, 50,000 minutes for $25,000, 60,000 minutes for $30,000, 70,000 minutes for $35,000, 80,000 minutes for $40,000, 90,000 minutes for $45,000, and 100,000 minutes for $50,000.",
       },
     },
     {
