@@ -26,6 +26,19 @@ import {
   type RunnerMinutesStartMode,
   type RunnerMinutesStatus,
 } from "@/app/account/core/runner-minutes-account";
+import {
+  TRIAL_CLAIM_ACTION_LABEL,
+  TRIAL_CLAIM_ALTERNATIVES,
+  TRIAL_CLAIM_BODY,
+  TRIAL_CLAIM_HEADING,
+  TRIAL_CLAIM_HELD_LINE,
+  TRIAL_CLAIM_MANUAL_REVIEW_LABEL,
+  TRIAL_CLAIM_PATH,
+  collectTrialSignals,
+  trialClaimScreen,
+  type TrialClaimOutcome,
+  type TrialClaimView,
+} from "@/app/account/core/trial-claim";
 
 // The account home: one page that points at everything in the
 // account — the API account (keys, plan, credits), the Live Center,
@@ -73,6 +86,9 @@ export function AccountHome() {
   const [decidingApprovalId, setDecidingApprovalId] = useState<string | null>(null);
   const [minutesBusy, setMinutesBusy] = useState(false);
   const [minutesError, setMinutesError] = useState("");
+  const [claimView, setClaimView] = useState<TrialClaimView | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimError, setClaimError] = useState("");
 
   function applyMinutesView(view: RunnerMinutesAccountView) {
     setMinutes(view.balances);
@@ -120,6 +136,16 @@ export function AccountHome() {
         // which shows the balance before any purchase.
         if (!active) return;
         setBalanceState("unavailable");
+      }
+      try {
+        const claim = await customerApi<TrialClaimView>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, { method: "GET" });
+        if (!active) return;
+        setClaimView(claim);
+      } catch {
+        // The claim card is additive: a service without the claim
+        // route (or an unreachable one) simply shows no card.
+        if (!active) return;
+        setClaimView(null);
       }
     }
 
@@ -169,6 +195,33 @@ export function AccountHome() {
       setMinutesError(caught instanceof Error ? caught.message : "Your decision could not be recorded.");
     } finally {
       setDecidingApprovalId(null);
+    }
+  }
+
+  async function rereadClaim() {
+    const claim = await customerApi<TrialClaimView>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, { method: "GET" });
+    setClaimView(claim);
+  }
+
+  async function submitClaim(manualReview: boolean) {
+    if (!dashboard || claimBusy) return;
+    setClaimBusy(true);
+    setClaimError("");
+    try {
+      const body = manualReview ? { manualReview: true } : { signals: await collectTrialSignals() };
+      await customerApi<TrialClaimOutcome>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+        body: JSON.stringify(body),
+      });
+      // Re-read the claim state and the balance, and render what
+      // the service reports — never a blind local flip.
+      await rereadClaim();
+      await rereadMinutes();
+    } catch (caught) {
+      setClaimError(caught instanceof Error ? caught.message : "Your claim could not be submitted.");
+    } finally {
+      setClaimBusy(false);
     }
   }
 
@@ -262,6 +315,51 @@ export function AccountHome() {
               Open Live Center
             </Link>
           </section>
+
+          {trialClaimScreen(claimView) ? (
+            <section className={cardClass}>
+              <p className={cardEyebrowClass}>Free trial</p>
+              {trialClaimScreen(claimView) === "claim" ? (
+                <>
+                  <h2 className="mt-3 text-2xl font-bold">{TRIAL_CLAIM_HEADING}</h2>
+                  <p className="mt-4 leading-7 text-slate-300">{TRIAL_CLAIM_BODY}</p>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={claimBusy}
+                      onClick={() => void submitClaim(false)}
+                      className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-60"
+                    >
+                      {TRIAL_CLAIM_ACTION_LABEL}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={claimBusy}
+                      onClick={() => void submitClaim(true)}
+                      className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+                    >
+                      {TRIAL_CLAIM_MANUAL_REVIEW_LABEL}
+                    </button>
+                  </div>
+                  <p className="mt-4 text-sm text-slate-400">{TRIAL_CLAIM_ALTERNATIVES}</p>
+                  <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
+                    Buy a minutes pack
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-3 text-2xl font-bold">Your free trial claim is in review</h2>
+                  <p className="mt-4 leading-7 text-slate-300">{TRIAL_CLAIM_HELD_LINE}</p>
+                  <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
+                    Buy a minutes pack
+                  </Link>
+                </>
+              )}
+              {claimError ? (
+                <p role="alert" className="mt-3 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{claimError}</p>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className={cardClass}>
             <p className={cardEyebrowClass}>Runner Minutes</p>
