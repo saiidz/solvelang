@@ -9,6 +9,7 @@ import {
   normalizeRemoteAuthMode,
   normalizeRemoteBearerToken,
   normalizeRemoteRateLimit,
+  normalizeRemoteTestToken,
   remoteBearerHeaderMatches,
 } from "../src/remote.js";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../src/solve-graph.js";
 
 const TOKEN = "solvelang_remote_test_token_0123456789abcdef";
+const TEST_TOKEN = "solvelang_remote_healthcheck_token_0123456789abcdef";
 
 async function withServer(run: (baseUrl: string) => Promise<void>) {
   const server = createRemoteSolveLangHttpServer({ bearerToken: TOKEN });
@@ -406,5 +408,40 @@ test("remote MCP protocol round-trip over real HTTP: initialize, tools/list, too
       impactBody.entries.map((entry: { node: { id: string } }) => entry.node.id),
       [store.id, api.id, apiTest.id],
     );
+  });
+});
+
+test("remote test token normalization is optional and bounded like the primary token", () => {
+  assert.equal(normalizeRemoteTestToken(undefined), undefined);
+  assert.equal(normalizeRemoteTestToken(""), undefined);
+  assert.equal(normalizeRemoteTestToken("   "), undefined);
+  assert.equal(normalizeRemoteTestToken(`  ${TEST_TOKEN}  `), TEST_TOKEN);
+  assert.throws(() => normalizeRemoteTestToken("short"), /32-1024/);
+  assert.throws(() => normalizeRemoteTestToken(`${TEST_TOKEN} with-space`), /whitespace/);
+});
+
+test("remote HTTP boundary accepts the optional test token and fails closed without it", async () => {
+  // A 415 answer proves authentication passed and the content-type
+  // boundary answered; a 401 proves authentication refused the request.
+  const probe = async (baseUrl: string, authorization: string | undefined) => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        ...(authorization ? { authorization } : {}),
+        "content-type": "text/plain",
+      },
+      body: "{}",
+    });
+    return response.status;
+  };
+  await withConfiguredServer({ bearerToken: TOKEN, testToken: TEST_TOKEN }, async (baseUrl) => {
+    assert.equal(await probe(baseUrl, `Bearer ${TOKEN}`), 415);
+    assert.equal(await probe(baseUrl, `Bearer ${TEST_TOKEN}`), 415);
+    assert.equal(await probe(baseUrl, undefined), 401);
+    assert.equal(await probe(baseUrl, "Bearer <redacted>"), 401);
+  });
+  await withConfiguredServer({ bearerToken: TOKEN }, async (baseUrl) => {
+    assert.equal(await probe(baseUrl, `Bearer ${TOKEN}`), 415);
+    assert.equal(await probe(baseUrl, `Bearer ${TEST_TOKEN}`), 401);
   });
 });
