@@ -1410,3 +1410,41 @@ export function normalizeLiveCenterMinutes(raw: unknown): LiveCenterMinutesView 
     buyPath: asText(root.buyPath) || LIVE_CENTER_MINUTES_BUY_PATH,
   };
 }
+
+// Board tab addressing. The board keeps its active tab in internal
+// state, but the account sidebar's "Runner minutes" entry deep-links
+// to the Minutes view as /account/live-center/#minutes, so the board
+// resolves its active tab from the URL hash: on mount and on every
+// hashchange. A hash naming a tab id selects that tab; an absent or
+// unknown hash selects the Overview tab, the board's default.
+export type LiveCenterTabId =
+  | "overview"
+  | "prs"
+  | "queue"
+  | "runs"
+  | "runners"
+  | "stats"
+  | "config"
+  | "inbox"
+  | "minutes";
+
+export const LIVE_CENTER_TAB_IDS: readonly LiveCenterTabId[] = [
+  "overview",
+  "prs",
+  "queue",
+  "runs",
+  "runners",
+  "stats",
+  "config",
+  "inbox",
+  "minutes",
+];
+
+export const LIVE_CENTER_DEFAULT_TAB: LiveCenterTabId = "overview";
+
+export function liveCenterTabFromHash(hash: string | null | undefined): LiveCenterTabId {
+  const name = typeof hash === "string" ? hash.replace(/^#/, "").trim() : "";
+  return (LIVE_CENTER_TAB_IDS as readonly string[]).includes(name)
+    ? (name as LiveCenterTabId)
+    : LIVE_CENTER_DEFAULT_TAB;
+}
