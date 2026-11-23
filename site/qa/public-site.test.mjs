@@ -902,7 +902,7 @@ test("account sidebar carries both approved groups in order with exact plain-lin
     "/account/",
     "/account/api-keys/",
     "/account/live-center/",
-    "/account/live-center/",
+    "/account/live-center/#minutes",
     "/account/api-keys/#sign-in-security",
     "/studio/",
     "/check/",
@@ -930,9 +930,9 @@ test("account sidebar carries both approved groups in order with exact plain-lin
   // Plain single lines only: no sub-caption field, no sub rendering,
   // and no Buy minutes entry in the sidebar at all.
   assert.doesNotMatch(sidebar, /sub: "|entry\.sub|buy-minutes|label: "Buy minutes"/);
-  // Runner minutes is not deep-linkable: the Live Center board keeps
-  // its tab in internal state, so the entry links to the Live Center.
-  assert.match(sidebar, /Minutes view is not deep-linkable|not deep-linkable/);
+  // Runner minutes deep-links to the board's Minutes view by hash;
+  // the board resolves its active tab from the URL hash.
+  assert.match(sidebar, /deep-links to the Live Center's Minutes view/);
   const board = read("app/account/live-center/LiveCenterBoard.tsx");
   assert.match(board, /const \[tab, setTab\] = useState<TabId>\("overview"\)/);
   assert.doesNotMatch(board, /searchParams|URLSearchParams/);
@@ -1015,7 +1015,7 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
     "/account/",
     "/account/api-keys/",
     "/account/live-center/",
-    "/account/live-center/",
+    "/account/live-center/#minutes",
     "/account/api-keys/#sign-in-security",
     "/studio/",
     "/check/",
