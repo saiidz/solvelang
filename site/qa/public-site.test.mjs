@@ -1642,6 +1642,17 @@ test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, 
   assert.match(services, /<h4 className="text-lg font-bold">Premium minutes<\/h4>/, "services shelf has the Premium card");
   assert.match(services, /\$0\.50 per minute, 96-vCPU-class machines\./, "services shelf states the premium price and class");
   assert.match(services, /premiumPacks\.map/, "schema offers are generated from the visible Premium table");
+  assert.ok(services.includes('{ minutes: "5,000", price: "$2,500" }'), "services shelf lists the 5,000-minute premium pack at $2,500");
+  assert.ok(services.includes('{ minutes: "10,000", price: "$5,000" }'), "services shelf lists the 10,000-minute premium pack at $5,000");
+  assert.ok(services.includes('{ minutes: "25,000", price: "$12,500" }'), "services shelf lists the 25,000-minute premium pack at $12,500");
+  assert.ok(services.includes('{ minutes: "30,000", price: "$15,000" }'), "services shelf lists the 30,000-minute premium pack at $15,000");
+  assert.ok(services.includes('{ minutes: "40,000", price: "$20,000" }'), "services shelf lists the 40,000-minute premium pack at $20,000");
+  assert.ok(services.includes('{ minutes: "50,000", price: "$25,000" }'), "services shelf lists the 50,000-minute premium pack at $25,000");
+  assert.ok(services.includes('{ minutes: "60,000", price: "$30,000" }'), "services shelf lists the 60,000-minute premium pack at $30,000");
+  assert.ok(services.includes('{ minutes: "70,000", price: "$35,000" }'), "services shelf lists the 70,000-minute premium pack at $35,000");
+  assert.ok(services.includes('{ minutes: "80,000", price: "$40,000" }'), "services shelf lists the 80,000-minute premium pack at $40,000");
+  assert.ok(services.includes('{ minutes: "90,000", price: "$45,000" }'), "services shelf lists the 90,000-minute premium pack at $45,000");
+  assert.ok(services.includes('{ minutes: "100,000", price: "$50,000" }'), "services shelf lists the 100,000-minute premium pack at $50,000");
   assert.ok(services.includes("Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 10,000 minutes for $5,000, 25,000 minutes for $12,500, 30,000 minutes for $15,000, 40,000 minutes for $20,000, 50,000 minutes for $25,000, 60,000 minutes for $30,000, 70,000 minutes for $35,000, 80,000 minutes for $40,000, 90,000 minutes for $45,000, and 100,000 minutes for $50,000."), "services FAQ prices the premium packs exactly");
   assert.ok(services.includes("runs-on: [self-hosted, solvelang-runners-premium]"), "services shows the premium runs-on label");
   const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");

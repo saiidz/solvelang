@@ -84,5 +84,12 @@ test("premium packs match the service catalog: flat $0.50/min, owner-priced", ()
     assert.equal(pack.minutes === null ? null : pack.totalDollars / pack.minutes, 0.5, `${pack.key} is exactly $0.50/min`);
   }
   assert.equal(resolveRunnerMinutesPack("premium-25000").totalDollars, 12500);
+  assert.equal(resolveRunnerMinutesPack("premium-10000").totalDollars, 5000);
+  assert.equal(resolveRunnerMinutesPack("premium-30000").totalDollars, 15000);
+  assert.equal(resolveRunnerMinutesPack("premium-50000").totalDollars, 25000);
+  assert.equal(resolveRunnerMinutesPack("premium-90000").totalDollars, 45000);
+  assert.equal(RUNNER_MINUTES_PREMIUM_PACKS.length, 11);
+  const premiumMinutes = RUNNER_MINUTES_PREMIUM_PACKS.map((p) => p.minutes ?? 0);
+  assert.deepEqual(premiumMinutes, [...premiumMinutes].sort((a, b) => a - b), "premium packs climb by minutes");
   assert.equal(RUNNER_MINUTES_LABELS.premium, "runs-on: [self-hosted, solvelang-runners-premium]");
 });
