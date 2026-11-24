@@ -239,6 +239,10 @@ test("live center service forwards clean pagination params and drops dirty ones"
   const service = createLiveCenterService({
     config: PILOT_CONFIG,
     fetchImpl: async (url) => { seen.push(url); return jsonResponse(BOARD); },
+    // TTL 0: every call revalidates upstream, so each URL the service
+    // builds is observable here (dirty-param calls and the no-param
+    // call build the same URL and would otherwise share a cache hit).
+    boardCacheTtlMs: 0,
   });
   await service.getBoard({ page: "2", perPage: "25" });
   assert.match(seen[0], /&page=2&perPage=25$/);
@@ -604,4 +608,87 @@ test("owner admin action route: owner passes through, non-owner refused, data ne
   assert.equal(refused.statusCode, 403);
   assert.equal(JSON.parse(refused.body).code, "owner_panel_unavailable");
   assert.equal(calls.length, 1);
+});
+
+// --- board cache + stale-on-error ------------------------------------------
+
+const BOARD_SNAPSHOT = {
+  ...BOARD,
+  generatedAt: "2026-11-23T18:04:00.000Z",
+};
+
+test("board reads are cached for the TTL — repeat reads do not re-fetch", async () => {
+  let t = 1_000_000;
+  let fetches = 0;
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => { fetches += 1; return jsonResponse(BOARD_SNAPSHOT); },
+    now: () => t,
+    boardCacheTtlMs: 60_000,
+  });
+  const first = await service.getBoard();
+  t += 59_999;
+  const second = await service.getBoard();
+  assert.equal(fetches, 1);
+  assert.deepEqual(first, BOARD_SNAPSHOT);
+  assert.deepEqual(second, BOARD_SNAPSHOT);
+  assert.equal("stale" in second, false);
+});
+
+test("after the TTL the board revalidates and the fresh payload replaces the cache", async () => {
+  let t = 1_000_000;
+  let fetches = 0;
+  const fresher = { ...BOARD_SNAPSHOT, generatedAt: "2026-11-23T18:06:00.000Z" };
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => { fetches += 1; return jsonResponse(fetches === 1 ? BOARD_SNAPSHOT : fresher); },
+    now: () => t,
+    boardCacheTtlMs: 60_000,
+  });
+  await service.getBoard();
+  t += 60_000;
+  const revalidated = await service.getBoard();
+  assert.equal(fetches, 2);
+  assert.deepEqual(revalidated, fresher);
+  assert.equal("stale" in revalidated, false);
+});
+
+test("when revalidation fails the last good board is served stale, generatedAt untouched", async () => {
+  let t = 1_000_000;
+  let fail = false;
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => {
+      if (fail) throw new Error("connection refused");
+      return jsonResponse(BOARD_SNAPSHOT);
+    },
+    now: () => t,
+    boardCacheTtlMs: 60_000,
+  });
+  await service.getBoard();
+  t += 3_600_000;
+  fail = true;
+  const stale = await service.getBoard();
+  assert.deepEqual(stale, { ...BOARD_SNAPSHOT, stale: true });
+  assert.equal(stale.generatedAt, "2026-11-23T18:04:00.000Z");
+  // The cached snapshot itself is never stamped — a later fresh read
+  // returns the new payload without the marker.
+  fail = false;
+  const recovered = await service.getBoard();
+  assert.equal("stale" in recovered, false);
+});
+
+test("board cache is keyed by the full request — different pagination fetches separately", async () => {
+  let fetches = 0;
+  const service = createLiveCenterService({
+    config: PILOT_CONFIG,
+    fetchImpl: async () => { fetches += 1; return jsonResponse(BOARD_SNAPSHOT); },
+    now: () => 1_000_000,
+    boardCacheTtlMs: 60_000,
+  });
+  await service.getBoard();
+  await service.getBoard({ page: 2, perPage: 25 });
+  await service.getBoard();
+  await service.getBoard({ page: 2, perPage: 25 });
+  assert.equal(fetches, 2);
 });

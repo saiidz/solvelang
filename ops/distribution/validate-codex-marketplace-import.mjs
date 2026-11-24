@@ -76,7 +76,7 @@ assert.deepEqual(mcpManifest, {
   mcpServers: {
     solvelang: {
       command: "npx",
-      args: ["--yes", `@solvelang/mcp-server@${expectedDistributionVersion}`],
+      args: ["-y", "--package", `@solvelang/mcp-server@${expectedDistributionVersion}`, "solvelang-mcp"],
     },
   },
 }, "workspace plugin MCP pin must match the current release state");

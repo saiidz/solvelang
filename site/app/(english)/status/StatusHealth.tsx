@@ -72,9 +72,8 @@ export function StatusDashboard() {
 }
 
 export function StatusSummary() {
-  const { overall } = useLiveStatus();
   return <div className="mt-8 flex flex-wrap items-center gap-4 rounded-xl border border-line-strong bg-panel p-5 text-ink" aria-live="polite">
-    <div><p className="text-xs font-semibold uppercase tracking-widest text-accent">Current public status</p><p className="mt-2 text-sm">{labels[overall]}</p></div>
+    <div><p className="text-xs font-semibold uppercase tracking-widest text-accent">Current public status</p><p className="mt-2 text-sm">Public status probes and component boundaries are listed on the status page</p></div>
     <Link href="/status/" className="ml-auto text-sm font-semibold text-accent underline underline-offset-4 hover:text-ink">View system status →</Link>
   </div>;
 }

@@ -65,12 +65,29 @@ function positiveIntParam(value) {
   return Number.isSafeInteger(num) && num >= 1 ? String(num) : null;
 }
 
-export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
+// Board cache lifetime. The site refreshes the board once a minute,
+// so a one-minute cache absorbs the refresh cadence: repeat reads
+// inside the window never reach the pilot at all. Past the window the
+// proxy re-reads upstream — and if that read fails, it serves the
+// last good board instead of an error (see getBoard below).
+export const DEFAULT_BOARD_CACHE_TTL_MS = 60_000;
+
+export function createLiveCenterService({
+  config,
+  fetchImpl = fetch,
+  now = Date.now,
+  boardCacheTtlMs = DEFAULT_BOARD_CACHE_TTL_MS,
+} = {}) {
   if (typeof fetchImpl !== "function") throw new Error("A fetch implementation is required.");
   const enabled = Boolean(config?.enabled);
   const minutesEnabled = Boolean(
     config?.minutesEnabled && config?.minutesBaseUrl && config?.minutesAdminToken,
   );
+  // Last good board per upstream URL (the URL binds tenant, repo,
+  // installation and pagination, so one board's snapshot can never be
+  // served for another). Per-process memory only, like the pilot's
+  // own board cache: a cold process simply has nothing cached yet.
+  const boardCache = new Map();
 
   async function upstreamJson(url, adminToken, { method = "GET", body } = {}) {
     let upstream;
@@ -132,7 +149,31 @@ export function createLiveCenterService({ config, fetchImpl = fetch } = {}) {
       if (page) query.set("page", page);
       if (perPage) query.set("perPage", perPage);
       const url = `${baseUrl}/tenants/${encodeURIComponent(config.tenant)}/board?${query.toString()}`;
-      return upstreamJson(url, config.adminToken);
+      const cached = boardCache.get(url);
+      if (cached && now() - cached.at < boardCacheTtlMs) {
+        return cached.payload;
+      }
+      try {
+        const payload = await upstreamJson(url, config.adminToken);
+        boardCache.set(url, { at: now(), payload });
+        return payload;
+      } catch (error) {
+        // Stale-on-error: one uncached board build fans out to
+        // ~2,000 GitHub calls on the pilot's shared installation
+        // token, whose hourly limit is exhausted in waves while the
+        // merge train is busy — the board then 502s for every
+        // signed-in customer until the limit window resets. A
+        // monitoring board a few minutes old beats an error page:
+        // serve the last good snapshot, stamped `stale`, with its
+        // original generatedAt untouched — the page already renders
+        // that stamp ("this board is from ..."), so the age of what
+        // the customer sees stays truthful. With nothing cached the
+        // failure stands: the caller gets the honest 502.
+        if (cached) {
+          return { ...cached.payload, stale: true };
+        }
+        throw error;
+      }
     },
 
     async getMinutes(session) {

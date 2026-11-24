@@ -123,10 +123,12 @@ try {
     const stagedMcpManifestPath = path.join(stagedPluginRoot, ".mcp.json");
     const stagedMcpManifest = await readJson(stagedMcpManifestPath);
     assert.deepEqual(stagedMcpManifest.mcpServers?.solvelang?.args, [
-      "--yes",
+      "-y",
+      "--package",
       `@solvelang/mcp-server@${candidate.publishedVersion}`,
+      "solvelang-mcp",
     ], "checked-in plugin must initially pin the published MCP package");
-    stagedMcpManifest.mcpServers.solvelang.args[1] = `@solvelang/mcp-server@${candidate.candidateVersion}`;
+    stagedMcpManifest.mcpServers.solvelang.args[2] = `@solvelang/mcp-server@${candidate.candidateVersion}`;
     await writeJson(stagedMcpManifestPath, stagedMcpManifest);
 
     const stagedClaudeMarketplacePath = path.join(stagedRoot, ".claude-plugin", "marketplace.json");
@@ -189,7 +191,7 @@ try {
     "Claude marketplace must remain aligned to the public directory bundle",
   );
   assert.equal(
-    finalMcp.mcpServers?.solvelang?.args?.[1],
+    finalMcp.mcpServers?.solvelang?.args?.[2],
     `@solvelang/mcp-server@${candidate.candidateVersion}`,
     "canonical qualified npx pin must target the candidate version",
   );

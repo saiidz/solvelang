@@ -9,12 +9,36 @@ import {
   normalizeApiBase,
 } from "@/app/account/core/customer-api";
 import {
+  RUNNER_MINUTES_APPROVE_LINE,
+  RUNNER_MINUTES_DECLINE_LINE,
   RUNNER_MINUTES_PAUSED_LINE,
+  RUNNER_MINUTES_START_MODE_PATH,
+  runnerMinutesApprovalPath,
+  runnerMinutesPendingApprovals,
+  runnerMinutesPoolLabel,
+  runnerMinutesQueuedLabel,
+  runnerMinutesStartMode,
+  runnerMinutesStartModeLabel,
   runnerMinutesStatus,
   runnerMinutesToggleLabel,
   runnerMinutesTogglePath,
+  type RunnerMinutesPendingApproval,
+  type RunnerMinutesStartMode,
   type RunnerMinutesStatus,
 } from "@/app/account/core/runner-minutes-account";
+import {
+  TRIAL_CLAIM_ACTION_LABEL,
+  TRIAL_CLAIM_ALTERNATIVES,
+  TRIAL_CLAIM_BODY,
+  TRIAL_CLAIM_HEADING,
+  TRIAL_CLAIM_HELD_LINE,
+  TRIAL_CLAIM_MANUAL_REVIEW_LABEL,
+  TRIAL_CLAIM_PATH,
+  collectTrialSignals,
+  trialClaimScreen,
+  type TrialClaimOutcome,
+  type TrialClaimView,
+} from "@/app/account/core/trial-claim";
 
 // The account home: one page that points at everything in the
 // account — the API account (keys, plan, credits), the Live Center,
@@ -32,9 +56,12 @@ const RUNNERS_API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_RUNNER_MINUTES
 
 type RunnerMinutesAccountView = {
   status?: RunnerMinutesStatus;
+  startMode?: RunnerMinutesStartMode;
+  pendingApprovals?: RunnerMinutesPendingApproval[];
   balances: {
     standard: { minutes: number };
     highPower: { minutes: number };
+    premium?: { minutes: number };
     cache: { gbMonths: number };
   };
 };
@@ -54,8 +81,21 @@ export function AccountHome() {
   const [balanceState, setBalanceState] = useState<BalanceState>("loading");
   const [minutes, setMinutes] = useState<RunnerMinutesAccountView["balances"] | null>(null);
   const [minutesStatus, setMinutesStatus] = useState<RunnerMinutesStatus>("active");
+  const [minutesStartMode, setMinutesStartMode] = useState<RunnerMinutesStartMode>("auto");
+  const [pendingApprovals, setPendingApprovals] = useState<RunnerMinutesPendingApproval[]>([]);
+  const [decidingApprovalId, setDecidingApprovalId] = useState<string | null>(null);
   const [minutesBusy, setMinutesBusy] = useState(false);
   const [minutesError, setMinutesError] = useState("");
+  const [claimView, setClaimView] = useState<TrialClaimView | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimError, setClaimError] = useState("");
+
+  function applyMinutesView(view: RunnerMinutesAccountView) {
+    setMinutes(view.balances);
+    setMinutesStatus(runnerMinutesStatus(view));
+    setMinutesStartMode(runnerMinutesStartMode(view));
+    setPendingApprovals(runnerMinutesPendingApprovals(view));
+  }
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -88,8 +128,7 @@ export function AccountHome() {
       try {
         const view = await customerApi<RunnerMinutesAccountView>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
         if (!active) return;
-        setMinutes(view.balances);
-        setMinutesStatus(runnerMinutesStatus(view));
+        applyMinutesView(view);
         setBalanceState("ready");
       } catch {
         // The balance is never guessed: if the service cannot be
@@ -98,6 +137,16 @@ export function AccountHome() {
         if (!active) return;
         setBalanceState("unavailable");
       }
+      try {
+        const claim = await customerApi<TrialClaimView>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, { method: "GET" });
+        if (!active) return;
+        setClaimView(claim);
+      } catch {
+        // The claim card is additive: a service without the claim
+        // route (or an unreachable one) simply shows no card.
+        if (!active) return;
+        setClaimView(null);
+      }
     }
 
     void prepare();
@@ -105,6 +154,76 @@ export function AccountHome() {
       active = false;
     };
   }, []);
+
+  async function rereadMinutes() {
+    const view = await customerApi<RunnerMinutesAccountView>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
+    applyMinutesView(view);
+  }
+
+  async function chooseStartMode(mode: RunnerMinutesStartMode) {
+    if (!dashboard || minutesBusy || mode === minutesStartMode) return;
+    setMinutesBusy(true);
+    setMinutesError("");
+    try {
+      await customerApi<Record<string, never>>(
+        RUNNERS_API_BASE,
+        RUNNER_MINUTES_START_MODE_PATH,
+        { method: "POST", csrfToken: dashboard.csrfToken, body: JSON.stringify({ startMode: mode }) },
+      );
+      // Re-read the account and render the state the service
+      // reports — never a blind local flip.
+      await rereadMinutes();
+    } catch (caught) {
+      setMinutesError(caught instanceof Error ? caught.message : "Your start mode could not be changed.");
+    } finally {
+      setMinutesBusy(false);
+    }
+  }
+
+  async function decideApproval(approvalId: string, decision: "approve" | "decline") {
+    if (!dashboard || decidingApprovalId) return;
+    setDecidingApprovalId(approvalId);
+    setMinutesError("");
+    try {
+      await customerApi<Record<string, never>>(
+        RUNNERS_API_BASE,
+        runnerMinutesApprovalPath(approvalId, decision),
+        { method: "POST", csrfToken: dashboard.csrfToken, body: JSON.stringify({}) },
+      );
+      await rereadMinutes();
+    } catch (caught) {
+      setMinutesError(caught instanceof Error ? caught.message : "Your decision could not be recorded.");
+    } finally {
+      setDecidingApprovalId(null);
+    }
+  }
+
+  async function rereadClaim() {
+    const claim = await customerApi<TrialClaimView>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, { method: "GET" });
+    setClaimView(claim);
+  }
+
+  async function submitClaim(manualReview: boolean) {
+    if (!dashboard || claimBusy) return;
+    setClaimBusy(true);
+    setClaimError("");
+    try {
+      const body = manualReview ? { manualReview: true } : { signals: await collectTrialSignals() };
+      await customerApi<TrialClaimOutcome>(RUNNERS_API_BASE, TRIAL_CLAIM_PATH, {
+        method: "POST",
+        csrfToken: dashboard.csrfToken,
+        body: JSON.stringify(body),
+      });
+      // Re-read the claim state and the balance, and render what
+      // the service reports — never a blind local flip.
+      await rereadClaim();
+      await rereadMinutes();
+    } catch (caught) {
+      setClaimError(caught instanceof Error ? caught.message : "Your claim could not be submitted.");
+    } finally {
+      setClaimBusy(false);
+    }
+  }
 
   async function toggleMinutes() {
     if (!dashboard || minutesBusy) return;
@@ -118,9 +237,7 @@ export function AccountHome() {
       );
       // Re-read the account and render the state the service reports —
       // never a blind local flip.
-      const view = await customerApi<RunnerMinutesAccountView>(RUNNERS_API_BASE, "/customer/runner-minutes/account", { method: "GET" });
-      setMinutes(view.balances);
-      setMinutesStatus(runnerMinutesStatus(view));
+      await rereadMinutes();
     } catch (caught) {
       setMinutesError(caught instanceof Error ? caught.message : "Your minutes setting could not be changed.");
     } finally {
@@ -169,7 +286,7 @@ export function AccountHome() {
     );
   }
 
-  const totalMinutes = minutes ? minutes.standard.minutes + minutes.highPower.minutes : 0;
+  const totalMinutes = minutes ? minutes.standard.minutes + minutes.highPower.minutes + (minutes.premium?.minutes ?? 0) : 0;
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-12 text-white">
@@ -199,6 +316,51 @@ export function AccountHome() {
             </Link>
           </section>
 
+          {trialClaimScreen(claimView) ? (
+            <section className={cardClass}>
+              <p className={cardEyebrowClass}>Free trial</p>
+              {trialClaimScreen(claimView) === "claim" ? (
+                <>
+                  <h2 className="mt-3 text-2xl font-bold">{TRIAL_CLAIM_HEADING}</h2>
+                  <p className="mt-4 leading-7 text-slate-300">{TRIAL_CLAIM_BODY}</p>
+                  <div className="mt-6 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={claimBusy}
+                      onClick={() => void submitClaim(false)}
+                      className="rounded-xl bg-cyan-300 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-60"
+                    >
+                      {TRIAL_CLAIM_ACTION_LABEL}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={claimBusy}
+                      onClick={() => void submitClaim(true)}
+                      className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+                    >
+                      {TRIAL_CLAIM_MANUAL_REVIEW_LABEL}
+                    </button>
+                  </div>
+                  <p className="mt-4 text-sm text-slate-400">{TRIAL_CLAIM_ALTERNATIVES}</p>
+                  <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
+                    Buy a minutes pack
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-3 text-2xl font-bold">Your free trial claim is in review</h2>
+                  <p className="mt-4 leading-7 text-slate-300">{TRIAL_CLAIM_HELD_LINE}</p>
+                  <Link href="/account/runner-minutes-checkout/" className={cardLinkClass}>
+                    Buy a minutes pack
+                  </Link>
+                </>
+              )}
+              {claimError ? (
+                <p role="alert" className="mt-3 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{claimError}</p>
+              ) : null}
+            </section>
+          ) : null}
+
           <section className={cardClass}>
             <p className={cardEyebrowClass}>Runner Minutes</p>
             <h2 className="mt-3 text-2xl font-bold">Runner minutes</h2>
@@ -208,6 +370,9 @@ export function AccountHome() {
                 <p className="mt-2 text-sm text-slate-400">
                   Standard: {minutes.standard.minutes.toLocaleString("en-US")} minutes · High-power: {minutes.highPower.minutes.toLocaleString("en-US")} minutes
                 </p>
+                {minutes.premium && minutes.premium.minutes > 0 ? (
+                  <p className="mt-1 text-sm text-slate-400">Premium: {minutes.premium.minutes.toLocaleString("en-US")} minutes</p>
+                ) : null}
                 {minutes.cache.gbMonths > 0 ? (
                   <p className="mt-1 text-sm text-slate-400">Speed lane cache: {minutes.cache.gbMonths} GB-months</p>
                 ) : null}
@@ -238,12 +403,74 @@ export function AccountHome() {
                 {minutesError ? (
                   <p role="alert" className="mt-3 rounded-xl bg-red-400/10 p-3 text-sm text-red-200">{minutesError}</p>
                 ) : null}
+                <div className="mt-5 border-t border-white/10 pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm font-semibold">Start mode: {runnerMinutesStartModeLabel(minutesStartMode)}</p>
+                    <div className="flex gap-2">
+                      {(["auto", "approve"] as RunnerMinutesStartMode[]).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          disabled={minutesBusy || mode === minutesStartMode}
+                          onClick={() => void chooseStartMode(mode)}
+                          className={
+                            mode === minutesStartMode
+                              ? "rounded-xl bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                              : "rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+                          }
+                        >
+                          {runnerMinutesStartModeLabel(mode)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {minutesStartMode === "approve" ? (
+                    <p className="mt-2 text-sm text-slate-400">{RUNNER_MINUTES_APPROVE_LINE}</p>
+                  ) : null}
+                </div>
+                {minutesStartMode === "approve" && pendingApprovals.length > 0 ? (
+                  <div className="mt-5 border-t border-white/10 pt-5">
+                    <p className="text-sm font-semibold">Waiting for your approval ({pendingApprovals.length})</p>
+                    <p className="mt-2 text-sm text-slate-400">{RUNNER_MINUTES_DECLINE_LINE}</p>
+                    <ul className="mt-3 space-y-3">
+                      {pendingApprovals.map((approval) => (
+                        <li key={approval.id} className="rounded-xl border border-white/10 p-3">
+                          <p className="text-sm font-semibold">{approval.repo}</p>
+                          <p className="mt-1 text-sm text-slate-300">
+                            {approval.workflowName ?? "Workflow"} · {approval.jobName ?? "job"} · {runnerMinutesPoolLabel(approval.pool)} pool
+                          </p>
+                          <p className="mt-1 text-sm text-slate-400">Queued {runnerMinutesQueuedLabel(approval.queuedAt)}</p>
+                          <div className="mt-3 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={decidingApprovalId !== null}
+                              onClick={() => void decideApproval(approval.id, "approve")}
+                              className="rounded-xl bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-60"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={decidingApprovalId !== null}
+                              onClick={() => void decideApproval(approval.id, "decline")}
+                              className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <div className="mt-6 border-t border-white/10 pt-5">
               <p className="text-sm font-semibold">Choose the pool per pull request</p>
               <p className="mt-2 text-sm leading-6 text-slate-300">
-                Label a pull request <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-high-power</code> and
+                Label a pull request <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-premium</code> and
+                its jobs run on the Premium pool, drawing from your Premium minutes. Label it{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-high-power</code> and
                 its jobs run on the High-Power pool, drawing from your High-Power minutes. Label it{" "}
                 <code className="rounded bg-white/10 px-1.5 py-0.5 text-[13px] text-white">solvelang-runners-standard</code> and its jobs stay on the
                 Standard pool, drawing from your Standard minutes.

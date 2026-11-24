@@ -1,5 +1,5 @@
 {
-  "termsVersion": "2026-10-27-v4",
+  "termsVersion": "2026-11-22-v5",
   "operator": "UPCOMINGSOUNDS S.R.L., Str. Nerva Traian nr. 27-33, Birou 6, Scara B, Etaj 1, Sector 3, Bucharest, Romania",
   "supportEmail": "hello@solve-lang.com",
   "terms": [
@@ -7,7 +7,7 @@
       "Acceptance, eligibility, and operator",
       [
         "These Terms of Use (Terms) govern use of SolveLang. By using SolveLang or purchasing a Workflow Preflight report, you agree to these Terms. You must be at least 16 years old and able to enter into a binding agreement, or use the service with permission from a parent, guardian, or authorized organization representative.",
-        "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). Registered office: Str. Nerva Traian nr. 27-33, Birou 6, Scara B, Etaj 1, Sector 3, Bucharest, Romania. Trade Registry number J2026027621002. Fiscal code (CUI) 54564122. European unique identifier (EUID) ROONRC.J2026027621002. The Operator is not registered for VAT in Romania. Contact the Operator at hello@solve-lang.com or +1 786-420-3128. These Terms are effective as of version 2026-10-27-v4.",
+        "SolveLang is operated by UPCOMINGSOUNDS S.R.L., Romania (Operator). Registered office: Str. Nerva Traian nr. 27-33, Birou 6, Scara B, Etaj 1, Sector 3, Bucharest, Romania. Trade Registry number J2026027621002. Fiscal code (CUI) 54564122. European unique identifier (EUID) ROONRC.J2026027621002. The Operator is not registered for VAT in Romania. Contact the Operator at hello@solve-lang.com or +1 786-420-3128. These Terms are effective as of version 2026-11-22-v5.",
         "These Terms are available in English and Romanian. For consumers in Romania, the Romanian version prevails. The separate Workflow Preflight one-time checkout remains gated pending its own delivery and confirmation checks. Current API subscription availability is described on the API Pricing page."
       ]
     ],
@@ -85,7 +85,7 @@
       "Tokens, credits, entitlements, and requests",
       [
         "Any token, credit, entitlement, or request allowance has no cash value and is non-transferable unless expressly stated otherwise. Capacity may be consumed when processing begins and consumed capacity cannot be returned. API subscription allowances are limited to the plan and current entitlement gates described on the API Pricing page.",
-        "One trial per person/legal entity, regardless of accounts, installations, or repositories used. Trials are non-transferable and a transferred repository carries its trial history with it. We may revoke unused trial minutes and suspend eligibility where trials are farmed."
+        "One trial per person/legal entity, regardless of accounts, installations, or repositories used. Trials are non-transferable and a transferred repository carries its trial history with it. We may revoke unused trial minutes and suspend eligibility where trials are farmed. Trial activation requires claiming the trial in a signed-in SolveLang account, and we may run device and network checks, as described in the Privacy Policy, to enforce the one-trial rule."
       ]
     ],
     [

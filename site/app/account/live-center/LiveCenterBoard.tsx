@@ -26,9 +26,11 @@ import {
   type LiveCenterBoardView,
   type LiveCenterMinutesView,
   type LiveCenterBoardFilter,
+  type LiveCenterTabId,
   filterLiveCenterPullRequests,
   formatRelativeTime,
   formatRelativeTimeWords,
+  liveCenterTabFromHash,
   normalizeLiveCenterBoard,
   normalizeLiveCenterMinutes,
   paginateList,
@@ -51,7 +53,7 @@ const API_BASE = normalizeApiBase(process.env.NEXT_PUBLIC_API_ACCESS_BASE_URL);
 const REFRESH_MS = 60_000;
 
 type Phase = "loading" | "ready" | "not-configured" | "signed-out" | "error";
-type TabId = "overview" | "prs" | "queue" | "runs" | "runners" | "stats" | "config" | "inbox" | "minutes";
+type TabId = LiveCenterTabId;
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -685,6 +687,18 @@ export function LiveCenterBoard() {
     pausedRef.current = paused;
     frozenRef.current = frozen;
   }, [paused, frozen]);
+
+  // The sidebar's "Runner minutes" entry deep-links here as
+  // /account/live-center/#minutes: resolve the active tab from the
+  // URL hash on mount and whenever the hash changes (a hash-only
+  // navigation while already on this page fires hashchange, not a
+  // remount). An absent or unknown hash keeps the Overview default.
+  useEffect(() => {
+    const syncTabFromHash = () => setTab(liveCenterTabFromHash(window.location.hash));
+    syncTabFromHash();
+    window.addEventListener("hashchange", syncTabFromHash);
+    return () => window.removeEventListener("hashchange", syncTabFromHash);
+  }, []);
 
   function handleLoadError(caught: unknown) {
     if (caught instanceof CustomerApiError && caught.status === 503 && caught.code === "mgov_not_configured") {
