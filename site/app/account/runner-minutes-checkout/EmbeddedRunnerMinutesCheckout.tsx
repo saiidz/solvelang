@@ -21,6 +21,7 @@ import {
   RUNNER_MINUTES_TERMS,
   resolveRunnerMinutesPack,
 } from "@/app/account/core/runner-minutes-checkout";
+import { RUNNER_MINUTES_AUTO_RELOAD_BODY } from "@/app/account/core/runner-minutes-auto-reload";
 import {
   RUNNER_MINUTES_PAUSED_LINE,
   runnerMinutesStatus,
@@ -395,6 +396,8 @@ export function EmbeddedRunnerMinutesCheckout() {
                   </div>
                   <p className="mt-2 text-sm leading-6 text-muted">The Speed lane runs your jobs on high-power machines with a guaranteed start — no waiting for spare capacity — and keeps this cache beside them, so dependency and build caches load at local speed.</p>
                 </fieldset>
+
+                <p className="mt-6 text-sm leading-6 text-muted">{RUNNER_MINUTES_AUTO_RELOAD_BODY}</p>
 
                 {!CHECKOUT_CONFIGURED ? (
                   <>
