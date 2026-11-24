@@ -74,6 +74,8 @@ const expectedFiles = [
   "package/dist/src/solve-graph-unreachable-candidates.js",
   "package/dist/src/solve-graph.d.ts",
   "package/dist/src/solve-graph.js",
+  "package/dist/src/team.d.ts",
+  "package/dist/src/team.js",
   "package/dist/src/workspace.d.ts",
   "package/dist/src/workspace.js",
   "package/package.json",
