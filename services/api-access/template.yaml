@@ -663,16 +663,12 @@ Resources:
           TEAM_CONTEXT_SYNC_SECRET: !Ref TeamContextSyncSecret
           TEAM_CONTEXT_MCP_BASE_URL: !Ref TeamContextMcpBaseUrl
           TEAM_CONTEXT_MCP_BILLING_TOKEN: !Ref TeamContextMcpBillingToken
-          AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
-          AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
           MGOV_PILOT_OWNER: !Ref MgovPilotOwner
           MGOV_PILOT_REPO: !Ref MgovPilotRepo
           MGOV_PILOT_INSTALLATION_ID: !Ref MgovPilotInstallationId
-          RUNNERS_LEDGER_BASE_URL: !Ref RunnersLedgerBaseUrl
-          RUNNERS_LEDGER_ADMIN_TOKEN: !Ref RunnersLedgerAdminToken
       Events:
         TeamContextTeamsList:
           Type: HttpApi
