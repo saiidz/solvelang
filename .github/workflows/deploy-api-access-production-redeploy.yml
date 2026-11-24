@@ -51,6 +51,8 @@ jobs:
       STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID }}
       STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID }}
       STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: ${{ vars.STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID }}
+      STRIPE_TEAM_CONTEXT_PRICE_ID: ${{ vars.STRIPE_TEAM_CONTEXT_PRICE_ID }}
+      TEAM_CONTEXT_MCP_BASE_URL: ${{ vars.TEAM_CONTEXT_MCP_BASE_URL }}
       MGOV_PILOT_BASE_URL: ${{ vars.MGOV_PILOT_BASE_URL }}
       MGOV_PILOT_TENANT: ${{ vars.MGOV_PILOT_TENANT }}
       MGOV_PILOT_OWNER: ${{ vars.MGOV_PILOT_OWNER }}
@@ -58,6 +60,8 @@ jobs:
       MGOV_PILOT_INSTALLATION_ID: ${{ vars.MGOV_PILOT_INSTALLATION_ID }}
       RUNNERS_LEDGER_BASE_URL: ${{ vars.RUNNERS_LEDGER_BASE_URL }}
       MGOV_ADMIN_TOKEN: ${{ secrets.MGOV_ADMIN_TOKEN }}
+      TEAM_CONTEXT_SYNC_SECRET: ${{ secrets.TEAM_CONTEXT_SYNC_SECRET }}
+      TEAM_CONTEXT_MCP_BILLING_TOKEN: ${{ secrets.TEAM_CONTEXT_MCP_BILLING_TOKEN }}
       RUNNERS_LEDGER_ADMIN_TOKEN: ${{ secrets.RUNNERS_LEDGER_ADMIN_TOKEN }}
       PRODUCT_BINDING_SECRET: ${{ secrets.PRODUCT_BINDING_SECRET }}
       AG_UI_PILOT_ENABLED: ${{ vars.AG_UI_PILOT_ENABLED }}
@@ -106,6 +110,10 @@ jobs:
           [[ "$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID" == "price_1UZGDH4HWc7PvaDY5j7uMC3s" ]]
           [[ "$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID" == "price_1UZGDN4HWc7PvaDYD9evdkxz" ]]
           [[ "$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID" == "price_1UZGDN4HWc7PvaDYK42zx1LY" ]]
+          [[ "$STRIPE_TEAM_CONTEXT_PRICE_ID" == "price_1UfNfH4HWc7PvaDYymqk6lre" ]]
+          [[ "$TEAM_CONTEXT_MCP_BASE_URL" == "https://mcp.solve-lang.com" ]]
+          (( ${#TEAM_CONTEXT_SYNC_SECRET} >= 32 ))
+          (( ${#TEAM_CONTEXT_MCP_BILLING_TOKEN} >= 32 ))
           [[ "$MGOV_PILOT_BASE_URL" == "https://2l346svz17.execute-api.us-east-2.amazonaws.com" ]]
           [[ "$MGOV_PILOT_TENANT" == "saiidz-pilot" ]]
           [[ "$MGOV_PILOT_OWNER" == "saiidz" ]]
@@ -455,6 +463,10 @@ jobs:
             StripeMgovRegularAnnualPriceId="$STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID"
             StripeMgovPlusMonthlyPriceId="$STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID"
             StripeMgovPlusAnnualPriceId="$STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID"
+            StripeTeamContextPriceId="$STRIPE_TEAM_CONTEXT_PRICE_ID"
+            TeamContextSyncSecret="$TEAM_CONTEXT_SYNC_SECRET"
+            TeamContextMcpBaseUrl="$TEAM_CONTEXT_MCP_BASE_URL"
+            TeamContextMcpBillingToken="$TEAM_CONTEXT_MCP_BILLING_TOKEN"
             MgovPilotBaseUrl="$MGOV_PILOT_BASE_URL"
             MgovAdminToken="$MGOV_ADMIN_TOKEN"
             MgovPilotTenant="$MGOV_PILOT_TENANT"
