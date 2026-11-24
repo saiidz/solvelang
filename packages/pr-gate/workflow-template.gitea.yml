@@ -1,0 +1,195 @@
+# SolveLang PR Gate — consumer workflow template for Gitea Actions.
+#
+# Copy this file into your repository as .gitea/workflows/pr-gate.yml and
+# replace <PINNED_SHA> with the full commit SHA of saiidz/solvelang that
+# contains the version of the kit you want to run (pin a commit, never a
+# floating branch). Put a pr-gate.policy.json at your repository root (see
+# packages/pr-gate/README.md in saiidz/solvelang for the format), or set
+# PR_GATE_POLICY to "" to run report-only with no policy.
+#
+# How this differs from the GitHub template (workflow-template.yml), and
+# why. Gitea Actions is "designed to be compatible with GitHub Actions"
+# with documented differences
+# (https://docs.gitea.com/usage/actions/comparison):
+#
+#   - The kit is cloned at the pinned SHA and its CLI is run directly,
+#     instead of a composite-action `uses:` step, so the run does not
+#     depend on downloading GitHub actions for the gate itself. If your
+#     instance cannot reach github.com, mirror saiidz/solvelang and
+#     point PR_GATE_KIT_URL at the mirror.
+#   - The sticky comment is posted through the Gitea REST API (the
+#     issues comments endpoints — on Gitea a PR comment is an issue
+#     comment), not actions/github-script.
+#   - The gate signal is a commit status posted to the PR head commit
+#     (POST /repos/{owner}/{repo}/statuses/{sha}, context "pr-gate").
+#     Gitea has no Checks API; branch protection gates on status
+#     contexts, so add the "pr-gate" context to your protected branch's
+#     required status checks to make the gate block merges.
+#   - PR facts (labels, base ref, head SHA) are read from the Gitea API,
+#     not from the event payload.
+#   - The job token is GITEA_TOKEN, available as
+#     ${{ secrets.GITEA_TOKEN }}
+#     (https://docs.gitea.com/usage/actions/token-permissions). Gitea's
+#     permission scopes differ from GitHub's: GitHub-only scopes such as
+#     `statuses` and `checks` do not exist. Creating a commit status
+#     requires write access to the repository's code unit, which is why
+#     the permissions block below asks for contents: write; fork pull
+#     requests are clamped to read-only by Gitea itself, so on fork PRs
+#     the comment/status steps cannot write and the report is still
+#     produced in the job log and the .pr-gate-out artifact directory.
+
+name: PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+env:
+  # report-only: the status stays green and the report is advisory.
+  # enforce: the status (and the job) fail when a policy rule fails.
+  PR_GATE_MODE: report-only
+  PR_GATE_POLICY: pr-gate.policy.json
+  PR_GATE_KIT_URL: https://github.com/saiidz/solvelang.git
+  PR_GATE_KIT_SHA: <PINNED_SHA>
+
+jobs:
+  pr-gate:
+    name: pr-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Read PR facts from the Gitea API
+        id: facts
+        env:
+          PR_GATE_API_URL: ${{ github.api_url }}
+          PR_GATE_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          PR_GATE_REPO: ${{ github.repository }}
+          PR_GATE_PR: ${{ github.event.pull_request.number }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          (async () => {
+            const api = process.env.PR_GATE_API_URL.replace(/\/+$/, '');
+            const [owner, repo] = process.env.PR_GATE_REPO.split('/');
+            const response = await fetch(`${api}/repos/${owner}/${repo}/pulls/${process.env.PR_GATE_PR}`, {
+              headers: { authorization: `token ${process.env.PR_GATE_TOKEN}`, accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error(`PR read failed: HTTP ${response.status}`);
+            const pr = await response.json();
+            const labels = (pr.labels || []).map((label) => label.name).join(',');
+            const out = [
+              `labels=${labels}`,
+              `base-ref=${pr.base.ref}`,
+              `head-sha=${pr.head.sha}`,
+            ].join('\n') + '\n';
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, out);
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
+
+      - name: Install and build the PR Gate kit
+        run: |
+          KIT_DIR="${RUNNER_TEMP:-$(mktemp -d)}/pr-gate-kit"
+          echo "PR_GATE_KIT_DIR=$KIT_DIR" >> "$GITHUB_ENV"
+          git init -q "$KIT_DIR"
+          git -C "$KIT_DIR" remote add origin "$PR_GATE_KIT_URL"
+          git -C "$KIT_DIR" fetch -q --depth 1 origin "$PR_GATE_KIT_SHA"
+          git -C "$KIT_DIR" checkout -q FETCH_HEAD
+          cd "$KIT_DIR/packages/pr-gate"
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+
+      - name: Run the PR Gate
+        id: gate
+        env:
+          BASE_REF: ${{ steps.facts.outputs.base-ref }}
+          LABELS: ${{ steps.facts.outputs.labels }}
+        run: |
+          set +e
+          CHANGED="$(git diff --name-only "origin/${BASE_REF}...HEAD" | paste -sd, -)"
+          ARGS=(--root "$GITHUB_WORKSPACE" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
+          if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
+          if [ -n "$LABELS" ]; then ARGS+=(--labels "$LABELS"); fi
+          node "$PR_GATE_KIT_DIR/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+          CODE=$?
+          echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "report-path=.pr-gate-out/report.md" >> "$GITHUB_OUTPUT"
+          # Operational errors fail in every mode; policy failures fail only in enforce mode.
+          if [ "$CODE" -eq 2 ]; then exit 2; fi
+          if [ "$CODE" -eq 1 ] && [ "$PR_GATE_MODE" = "enforce" ]; then exit 1; fi
+          exit 0
+
+      - name: Post or update the sticky PR comment
+        if: always()
+        env:
+          PR_GATE_API_URL: ${{ github.api_url }}
+          PR_GATE_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          PR_GATE_REPO: ${{ github.repository }}
+          PR_GATE_PR: ${{ github.event.pull_request.number }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          (async () => {
+            const marker = '<!-- pr-gate:report -->';
+            let body;
+            try {
+              body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+            } catch {
+              body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the workflow run for details.';
+            }
+            const api = process.env.PR_GATE_API_URL.replace(/\/+$/, '');
+            const [owner, repo] = process.env.PR_GATE_REPO.split('/');
+            const headers = { authorization: `token ${process.env.PR_GATE_TOKEN}`, accept: 'application/json', 'content-type': 'application/json' };
+            const comments = [];
+            for (let page = 1; ; page += 1) {
+              const response = await fetch(`${api}/repos/${owner}/${repo}/issues/${process.env.PR_GATE_PR}/comments?page=${page}&limit=50`, { headers });
+              if (!response.ok) throw new Error(`Comment list failed: HTTP ${response.status}`);
+              const batch = await response.json();
+              comments.push(...batch);
+              if (batch.length < 50) break;
+            }
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            const url = existing
+              ? `${api}/repos/${owner}/${repo}/issues/comments/${existing.id}`
+              : `${api}/repos/${owner}/${repo}/issues/${process.env.PR_GATE_PR}/comments`;
+            const response = await fetch(url, { method: existing ? 'PATCH' : 'POST', headers, body: JSON.stringify({ body }) });
+            if (!response.ok) throw new Error(`Comment write failed: HTTP ${response.status}`);
+            console.log(existing ? `Updated sticky comment ${existing.id}.` : 'Created sticky comment.');
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
+
+      - name: Post the gate commit status
+        if: always()
+        env:
+          PR_GATE_API_URL: ${{ github.api_url }}
+          PR_GATE_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          PR_GATE_REPO: ${{ github.repository }}
+          GATE_CODE: ${{ steps.gate.outputs.exit-code }}
+          HEAD_SHA: ${{ steps.facts.outputs.head-sha }}
+        run: |
+          if [ "$GATE_CODE" = "2" ]; then
+            STATE="error"; DESC="PR Gate run failed operationally — see the PR comment"
+          elif [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+            STATE="failure"; DESC="PR Gate policy failed (enforce mode)"
+          elif [ "$GATE_CODE" = "1" ]; then
+            STATE="success"; DESC="PR Gate policy failed — advisory only (report-only mode)"
+          else
+            STATE="success"; DESC="PR Gate passed"
+          fi
+          curl -sS -X POST "$PR_GATE_API_URL/repos/$PR_GATE_REPO/statuses/$HEAD_SHA" \
+            -H "Authorization: token $PR_GATE_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"state\": \"$STATE\", \"context\": \"pr-gate\", \"description\": \"$DESC\", \"target_url\": \"\"}"
