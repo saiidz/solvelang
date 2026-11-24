@@ -27,6 +27,20 @@ const highPowerPacks = [
   { minutes: "10,000", price: "$400" },
 ] as const;
 
+const premiumPacks = [
+  { minutes: "5,000", price: "$2,500" },
+  { minutes: "10,000", price: "$5,000" },
+  { minutes: "25,000", price: "$12,500" },
+  { minutes: "30,000", price: "$15,000" },
+  { minutes: "40,000", price: "$20,000" },
+  { minutes: "50,000", price: "$25,000" },
+  { minutes: "60,000", price: "$30,000" },
+  { minutes: "70,000", price: "$35,000" },
+  { minutes: "80,000", price: "$40,000" },
+  { minutes: "90,000", price: "$45,000" },
+  { minutes: "100,000", price: "$50,000" },
+] as const;
+
 const runnerMinutesJsonLd = {
   "@context": "https://schema.org",
   "@type": "Product",
@@ -53,6 +67,14 @@ const runnerMinutesJsonLd = {
       availability: "https://schema.org/InStock",
       url: "https://www.solve-lang.com/services/",
     })),
+    ...premiumPacks.map((pack) => ({
+      "@type": "Offer",
+      name: `${pack.minutes} Premium runner minutes`,
+      price: pack.price.replace("$", "").replace(",", ""),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+      url: "https://www.solve-lang.com/services/",
+    })),
   ],
 };
 
@@ -75,6 +97,14 @@ const servicesFaqJsonLd = {
       acceptedAnswer: {
         "@type": "Answer",
         text: "Standard packs (2-vCPU-class machines, $0.004 per minute): 5,000 minutes for $20, 25,000 minutes for $100, and 100,000 minutes for $400. Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What do Premium runner minutes cost?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 10,000 minutes for $5,000, 25,000 minutes for $12,500, 30,000 minutes for $15,000, 40,000 minutes for $20,000, 50,000 minutes for $25,000, 60,000 minutes for $30,000, 70,000 minutes for $35,000, 80,000 minutes for $40,000, 90,000 minutes for $45,000, and 100,000 minutes for $50,000.",
       },
     },
     {
@@ -139,8 +169,15 @@ export default function ServicesPage() {
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body">Prepaid GitHub Actions runner minutes. Buy a pack once — minutes never auto-renew — connect GitHub a single time, and queued jobs in your repositories run on SolveLang-provisioned Linux machines automatically. Every job runs on a fresh machine created for that job alone and destroyed when the job ends.</p>
 
-          <h3 className="mt-8 text-xl font-bold">Zero-step onboarding</h3>
-          <p className="mt-3 max-w-4xl leading-7 text-body">Sign in, install the SolveLang GitHub App, pick your repositories, and accept the permissions. That is the whole setup: from then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand.</p>
+          <h3 className="mt-8 text-xl font-bold">How onboarding works</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Four steps, once:</p>
+          <ol className="mt-3 list-decimal space-y-2 pl-5 leading-7 text-body">
+            <li><strong className="text-ink">Sign in</strong> and open Runner Minutes in your account.</li>
+            <li><strong className="text-ink">Install the SolveLang GitHub App</strong> on your account or organization, pick the repositories it may serve, and accept the permissions.</li>
+            <li><strong className="text-ink">Buy a minutes pack</strong> on SolveLang&apos;s own checkout page — jobs draw against that balance, metered per second.</li>
+            <li><strong className="text-ink">Point your workflows at SolveLang</strong> — set <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">runs-on: [self-hosted, solvelang-runners-standard]</code> (or the High-Power label) in the workflows you want served.</li>
+          </ol>
+          <p className="mt-3 max-w-4xl leading-7 text-body">From then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand. Repositories you add to the installation later are picked up automatically.</p>
 
           <h3 className="mt-8 text-xl font-bold">How metering works</h3>
           <ul className="mt-3 list-disc space-y-2 pl-5 leading-7 text-body">
@@ -151,9 +188,9 @@ export default function ServicesPage() {
             <li>Linux runners for private repositories.</li>
           </ul>
 
-          <h3 className="mt-8 text-xl font-bold">Two pools, chosen by label</h3>
-          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them. Faster processing is never free — it always has one of two prices: work that starts on guaranteed On-demand capacity consumes minutes at 2×, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices below. Standard work on Spot capacity draws at the plain 1× rate.</p>
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+          <h3 className="mt-8 text-xl font-bold">Three pools, chosen by label</h3>
+          <p className="mt-3 max-w-4xl leading-7 text-body">Jobs pick their pool by the runs-on label in your workflow file. Standard runs on 2-vCPU-class machines. High-Power — the Speed lane — runs on 16-vCPU-class machines with a guaranteed start and a colocated cache beside them. Premium runs on 96-vCPU-class machines for the heaviest suites. Faster processing is never free — it always has one of two prices: work that starts on guaranteed On-demand capacity consumes minutes at 2×, and work that runs on the premium High-Power machines draws from the separate High-Power balance, bought at the High-Power prices below. Premium work draws from its own separate Premium balance at the Premium prices below. Standard work on Spot capacity draws at the plain 1× rate.</p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="font-semibold text-body">Standard</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-standard]</pre>
@@ -166,10 +203,14 @@ export default function ServicesPage() {
               <p className="font-semibold text-body">Speed lane</p>
               <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-high-power, solvelang-runners-speed]</pre>
             </div>
+            <div>
+              <p className="font-semibold text-body">Premium</p>
+              <pre className="mt-2 whitespace-pre-wrap break-all rounded-xl bg-canvas p-3 text-xs text-accent">runs-on: [self-hosted, solvelang-runners-premium]</pre>
+            </div>
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Label routing:</strong> label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang</code> and that pull request&apos;s jobs route to SolveLang runners instead of your own fleet. Routing is set up once in your workflow file — jobs from labeled pull requests request the SolveLang labels above — and after that, routing a pull request is just adding the label.</p>
 
-          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the two pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for High-Power stays on High-Power.</p>
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pool choice per pull request:</strong> the pool names also work as pull request labels. Label a pull request <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-premium</code> and its jobs run on the Premium pool, drawing from your Premium balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-high-power</code> and its jobs run on the High-Power pool, drawing from your High-Power balance; label it <code className="rounded bg-canvas px-1.5 py-0.5 text-sm text-accent">solvelang-runners-standard</code> and its jobs stay on the Standard pool, drawing from your Standard balance. The label applies per pull request — jobs already running are not moved, and a job whose workflow file already asks for a stronger pool stays on that pool.</p>
 
           <h3 className="mt-8 text-xl font-bold">The shelf</h3>
           <p className="mt-3 max-w-4xl leading-7 text-body">Runner-minutes prices include tax: the price shown for a pack is the full amount charged for it today. Buying happens only on SolveLang&apos;s own checkout page — we never send you to an external checkout.</p>
@@ -197,6 +238,20 @@ export default function ServicesPage() {
                 </thead>
                 <tbody>
                   {highPowerPacks.map((pack) => (
+                    <tr key={pack.minutes} className="border-b border-line last:border-0"><td className="py-2 font-semibold">{pack.minutes}</td><td className="py-2">{pack.price}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-2xl border border-line bg-canvas p-6">
+              <h4 className="text-lg font-bold">Premium minutes</h4>
+              <p className="mt-1 text-sm text-muted">$0.50 per minute, 96-vCPU-class machines.</p>
+              <table className="mt-4 w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-muted"><th className="py-2 font-semibold">Minutes</th><th className="py-2 font-semibold">Price</th></tr>
+                </thead>
+                <tbody>
+                  {premiumPacks.map((pack) => (
                     <tr key={pack.minutes} className="border-b border-line last:border-0"><td className="py-2 font-semibold">{pack.minutes}</td><td className="py-2">{pack.price}</td></tr>
                   ))}
                 </tbody>
@@ -265,6 +320,29 @@ export default function ServicesPage() {
             <Link href="/process-solution/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">How Process Solution works</Link>
             <a href="mailto:hello@solve-lang.com" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">Ask about the pilot</a>
           </div>
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="status-matrix-heading">
+          <h2 id="status-matrix-heading" className="text-3xl font-bold">What is live, what is published, what is pilot</h2>
+          <p className="mt-4 max-w-4xl leading-7 text-body">SolveLang has several surfaces, and they do not all stand in the same place. This table is the single reference for what each one is today — what works, where its boundary sits, and what it takes to use it. If anything elsewhere on this site reads differently, this table is the one to believe, and the date on each row is when it was last checked against the live service.</p>
+          <div className="overflow-x-auto">
+            <table className="mt-4 w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-muted"><th className="py-2 pr-4 font-semibold">Offering</th><th className="py-2 pr-4 font-semibold">Status</th><th className="py-2 pr-4 font-semibold">What works / boundary</th><th className="py-2 pr-4 font-semibold">Self-serve?</th><th className="py-2 pr-4 font-semibold">Account needed?</th><th className="py-2 font-semibold">Last verified</th></tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Rust CLI (<code>solvec</code>) &amp; the <code>.solve</code> runtime</td><td className="py-3 pr-4">Pre-1.0 — active development</td><td className="py-3 pr-4 leading-6 text-body">The canonical local runtime and policy boundary for <code>.solve</code> workflows. Not a stable 1.0 contract, and not a general automation-platform replacement.</td><td className="py-3 pr-4">Yes — build from source</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Workflow Studio &amp; the <code>/run/</code> browser preview</td><td className="py-3 pr-4">Available — local-first</td><td className="py-3 pr-4 leading-6 text-body">Model a workflow, inspect its risks, and run scenarios in the browser; projects save locally first. <code>/run/</code> executes a pinned WebAssembly build of the runtime (build <code>565fbc1c</code>) in your browser, never on a server — your code never leaves the browser, and the only thing recorded is an anonymous count that a run happened.</td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No — an account is only needed to save projects</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Repository Audit, Solve Graph &amp; Server Audit</td><td className="py-3 pr-4">Available — read-only</td><td className="py-3 pr-4 leading-6 text-body">Bounded static analysis and impact explanation over a repository or a server. It does not execute repository code and does not change anything it examines.</td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — local package</td><td className="py-3 pr-4">Published — v0.3.0</td><td className="py-3 pr-4 leading-6 text-body">Read-only tools for MCP clients such as Codex and Claude Code, bounded to the workspace you name: 29 tools in the published package. Newer work on the repository&apos;s main branch (31 tools, including the two context-index tools) is <strong>not</strong> in the npm package until the next release ships it. Install with the explicit command — the package ships two executables, so npx has to be told which one: <code>npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp</code></td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — hosted endpoint</td><td className="py-3 pr-4">Live — read-only</td><td className="py-3 pr-4 leading-6 text-body"><code>https://mcp.solve-lang.com</code> — the same read-only analysis over raw JSON you send in the request: 10 tools, no server-side workspace, a 4 MiB request ceiling, and a rate limit of 60 requests per minute per source address. A bearer token is required.</td><td className="py-3 pr-4">By request</td><td className="py-3 pr-4">Token required — tokens are issued by SolveLang; write to hello@solve-lang.com for access</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Runner Minutes &amp; Speed Lane Cache</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Prepaid GitHub Actions runner minutes on fresh Linux machines created for each job and destroyed after it, metered per second with a 10-second minimum, never auto-renewing, expiring 12 months after purchase. Standard (2-vCPU class): 5,000 minutes $20 · 25,000 $100 · 100,000 $400. High-Power (16-vCPU class): 1,000 minutes $80 up to 10,000 $400. Start with 300 free Standard minutes when you connect GitHub — no card required, valid 30 days. Optional Speed Lane Cache: 10 GB for $2/month. Guaranteed on-demand starts draw minutes at 2× — faster is never free.</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">API access plans</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Monthly weighted-credit plans for the SolveLang API and repository-audit integrations. One base credit covers up to 5,000 input tokens and 1,000 output tokens. Developer $49/month (1,000 credits) · Pro $199/month (10,000 credits) · Business $699/month (50,000 credits).</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Process Solution (merge governance)</td><td className="py-3 pr-4">Pilot</td><td className="py-3 pr-4 leading-6 text-body">Combined-tree batch checks, merge decisions, and audit logs for pull-request queues — running on the operator&apos;s own queues today. There is no public price and no self-serve signup yet.</td><td className="py-3 pr-4">No</td><td className="py-3 pr-4">— (pilot)</td><td className="py-3">November 22, 2026</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-6 leading-7 text-body">SolveLang is operated by <strong>UPCOMINGSOUNDS S.R.L.</strong>, Bucharest, Romania. Support: <a href="mailto:hello@solve-lang.com" className="font-semibold text-accent underline underline-offset-4 hover:text-ink">hello@solve-lang.com</a>.</p>
         </section>
 
         <p className="mt-10 text-center text-sm leading-6 text-muted">UPCOMINGSOUNDS S.R.L. is the operator and merchant for paid services; Stripe processes payments. Purchases happen only on SolveLang&apos;s own pages.</p>

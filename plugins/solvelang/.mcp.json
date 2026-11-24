@@ -3,8 +3,10 @@
     "solvelang": {
       "command": "npx",
       "args": [
-        "--yes",
-        "@solvelang/mcp-server@0.3.0"
+        "-y",
+        "--package",
+        "@solvelang/mcp-server@0.3.0",
+        "solvelang-mcp"
       ]
     }
   }

@@ -134,7 +134,7 @@ export function SiteHeader() {
             </summary>
             <div className="absolute right-0 top-full mt-3 max-h-[calc(100dvh-6rem)] w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-chrome-line bg-chrome p-2 shadow-xl">
               {sessionState === "loading" ? (
-                <p className="px-4 py-3 text-sm font-semibold text-chrome-muted">Checking account status…</p>
+                <p className="px-4 py-3 text-sm font-semibold text-chrome-muted">Account</p>
               ) : signedIn ? (
                 <>
                   <div className="border-b border-chrome-line px-4 pb-3">

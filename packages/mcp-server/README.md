@@ -1,6 +1,7 @@
 # SolveLang MCP Server
 
 [![mcptry](https://mcptry.com/badge/io.github.saiidz/solvelang)](https://mcptry.com/servers/io.github.saiidz/solvelang)
+[![saiidz/solvelang MCP server](https://glama.ai/mcp/servers/saiidz/solvelang/badges/score.svg)](https://glama.ai/mcp/connectors/io.github.saiidz/solvelang)
 
 ## Current verification — 2026-09-20
 
@@ -27,8 +28,10 @@ Node.js 20 or newer is required. For the published v0.3.0 line:
 
 ```bash
 SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
-  npx --yes @solvelang/mcp-server@0.3.0
+  npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp
 ```
+
+The package ships two executables, so npx needs the explicit --package form above — the bare `npx @solvelang/mcp-server` form cannot choose one and fails.
 
 Call `solvelang_capabilities` / MCP list-tools to inspect the exact tools exposed by the installed version. Do not infer current-main tools from this README when using an older published package.
 
@@ -114,7 +117,7 @@ To summarize separately authorized previously collected agent records:
 cat approved-agent-run-records.json | npm run eval:context:agent-records
 ```
 
-The summarizer itself makes no provider/network call and uses no credentials. After #920, baseline/context record pairs must use the same outcome-evaluation basis and required-evidence denominator in addition to the same fixture/provider/model/agent/record class.
+The summarizer itself makes no provider/network call and uses no credentials. Baseline/context record pairs must use the same outcome-evaluation basis and required-evidence denominator in addition to the same fixture/provider/model/agent/record class.
 
 Repository evaluation does **not** establish a public token-savings percentage, improved agent success/latency, provider cache savings or competitor superiority.
 

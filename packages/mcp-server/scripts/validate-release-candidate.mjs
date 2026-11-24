@@ -68,8 +68,11 @@ assert.equal(
 );
 semverTuple(claudeDirectoryPlugin.version);
 
-const pin = mcpManifest.mcpServers?.solvelang?.args?.[1];
-assert.equal(pin, `@solvelang/mcp-server@${expectedDistributionVersion}`, "canonical plugin MCP pin drifted from the release state");
+assert.deepEqual(
+  mcpManifest.mcpServers?.solvelang?.args,
+  ["-y", "--package", `@solvelang/mcp-server@${expectedDistributionVersion}`, "solvelang-mcp"],
+  "canonical plugin MCP pin drifted from the release state",
+);
 
 // Preserve the fail-closed publishing boundary in every repository state. A release-ready
 // branch prepares exact artifacts but still does not create publication authority.

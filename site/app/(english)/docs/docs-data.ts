@@ -82,7 +82,7 @@ export const guides: readonly GuideEntry[] = [
           {
             code: [
               "SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \\",
-              "  npx --yes @solvelang/mcp-server@0.3.0",
+              "  npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp",
             ],
           },
         ],
@@ -96,7 +96,7 @@ export const guides: readonly GuideEntry[] = [
             code: [
               "claude mcp add --transport stdio \\",
               "  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \\",
-              "  solvelang -- npx --yes @solvelang/mcp-server@0.3.0",
+              "  solvelang -- npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp",
             ],
           },
           {
@@ -104,7 +104,7 @@ export const guides: readonly GuideEntry[] = [
             code: [
               "[mcp_servers.solvelang]",
               "command = \"npx\"",
-              "args = [\"--yes\", \"@solvelang/mcp-server@0.3.0\"]",
+              "args = [\"-y\", \"--package\", \"@solvelang/mcp-server@0.3.0\", \"solvelang-mcp\"]",
               "",
               "[mcp_servers.solvelang.env]",
               "SOLVELANG_WORKSPACE_ROOT = \"/absolute/path/to/workspace\"",
@@ -131,7 +131,7 @@ export const guides: readonly GuideEntry[] = [
       "All file discovery and reading stays inside `SOLVELANG_WORKSPACE_ROOT`, and likely sensitive paths are denied by the context runtime policy.",
       "`.solve` validation is the one tool that needs more than Node: it runs your local `solvec`, found on `PATH` or via `SOLVELANG_SOLVEC`.",
       "The published 0.3.0 package distributes the tagged release source. Later changes on the repository's main branch are not in the npm package until a separate distribution ships them.",
-      "Managed-workspace marketplace installation and a public Plugin Directory listing remain unverified — the npx path above is the supported route today.",
+      "Managed-workspace marketplace installation and a public Plugin Directory listing remain unverified — the pinned package command above is the supported route today.",
     ],
     links: [
       { href: "/mcp-setup/", label: "MCP setup reference — the plugin path, manual configuration, and running from current source" },

@@ -24,6 +24,8 @@ export const REMOTE_OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-chall
 
 export const REMOTE_MCP_RATE_LIMIT = Object.freeze({ limit: 60, windowMs: 60_000 });
 
+export const REMOTE_MCP_TEST_TOKEN_ENV = "MCP_REMOTE_TEST_TOKEN" as const;
+
 export type RemoteRateLimit = Readonly<{ limit: number; windowMs: number }>;
 
 export function normalizeRemoteRateLimit(value: Partial<RemoteRateLimit> | undefined): RemoteRateLimit {
@@ -376,6 +378,17 @@ export function normalizeRemoteBearerToken(value: string): string {
   return token;
 }
 
+// Optional second bearer token (for directory health checkers, e.g.
+// Glama). It authenticates the exact same read-only surface as the
+// primary token and is revocable independently: unset it and the server
+// fails closed to the primary token only. An unset or empty value
+// disables it; a non-empty value must satisfy the same bounds as the
+// primary token.
+export function normalizeRemoteTestToken(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  return normalizeRemoteBearerToken(value);
+}
+
 export function remoteBearerHeaderMatches(header: string | undefined, expectedToken: string): boolean {
   if (typeof header !== "string" || !header.startsWith("Bearer ")) return false;
   const supplied = header.slice("Bearer ".length);
@@ -419,6 +432,7 @@ function sendJson(res: ServerResponse, statusCode: number, value: unknown, extra
 
 export type RemoteHttpServerOptions = Readonly<{
   bearerToken?: string;
+  testToken?: string;
   authMode?: RemoteAuthMode;
   mcpPath?: string;
   openaiChallengeToken?: string;
@@ -428,6 +442,7 @@ export type RemoteHttpServerOptions = Readonly<{
 export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions): HttpServer {
   const authMode = options.authMode ?? "bearer";
   const bearerToken = authMode === "bearer" ? normalizeRemoteBearerToken(options.bearerToken ?? "") : undefined;
+  const testToken = authMode === "bearer" ? normalizeRemoteTestToken(options.testToken) : undefined;
   const openaiChallengeToken = normalizeOpenAiAppsChallengeToken(options.openaiChallengeToken);
   const rateLimit: RemoteRateLimit | null = options.rateLimit === false ? null : normalizeRemoteRateLimit(options.rateLimit);
   const rateLimiter = rateLimit ? createRemoteRateLimiter(rateLimit) : null;
@@ -467,7 +482,11 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
           return;
         }
       }
-      if (authMode === "bearer" && !remoteBearerHeaderMatches(req.headers.authorization, bearerToken!)) {
+      if (
+        authMode === "bearer" &&
+        !remoteBearerHeaderMatches(req.headers.authorization, bearerToken!) &&
+        !(testToken !== undefined && remoteBearerHeaderMatches(req.headers.authorization, testToken))
+      ) {
         sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
         return;
       }
@@ -504,6 +523,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
 
 export type StartRemoteSolveLangServerOptions = Readonly<{
   bearerToken?: string;
+  testToken?: string;
   authMode?: RemoteAuthMode;
   host?: string;
   port?: number;
@@ -533,6 +553,7 @@ function remoteRateLimitFromEnvironment(): Partial<RemoteRateLimit> | undefined 
 export async function startRemoteSolveLangServer(options: StartRemoteSolveLangServerOptions = {}): Promise<HttpServer> {
   const authMode = options.authMode ?? normalizeRemoteAuthMode(process.env.SOLVELANG_REMOTE_AUTH_MODE);
   const bearerToken = options.bearerToken ?? process.env.SOLVELANG_REMOTE_BEARER_TOKEN;
+  const testToken = options.testToken ?? process.env[REMOTE_MCP_TEST_TOKEN_ENV];
   const openaiChallengeToken = options.openaiChallengeToken ?? process.env.SOLVELANG_OPENAI_APPS_CHALLENGE_TOKEN;
   const host = options.host ?? process.env.SOLVELANG_REMOTE_HOST ?? "127.0.0.1";
   const configuredPort = options.port ?? Number(process.env.PORT ?? process.env.SOLVELANG_REMOTE_PORT ?? "8787");
@@ -541,7 +562,7 @@ export async function startRemoteSolveLangServer(options: StartRemoteSolveLangSe
   }
   const mcpPath = options.mcpPath ?? process.env.SOLVELANG_REMOTE_PATH ?? REMOTE_MCP_DEFAULT_PATH;
   const rateLimit = options.rateLimit ?? remoteRateLimitFromEnvironment();
-  const server = createRemoteSolveLangHttpServer({ bearerToken, authMode, mcpPath, openaiChallengeToken, rateLimit });
+  const server = createRemoteSolveLangHttpServer({ bearerToken, testToken, authMode, mcpPath, openaiChallengeToken, rateLimit });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
       server.off("listening", onListening);

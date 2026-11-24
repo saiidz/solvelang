@@ -237,7 +237,7 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
   assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
   assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
-  assert.ok(section.includes("Start with 300 free Standard minutes: they are added automatically when you connect GitHub \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
+  assert.ok(section.includes("Start with 300 free Standard minutes: they are added when you connect GitHub and claim them in your account \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
   assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
   assert.ok(section.includes("Every minute carries Job Protection \u2014 billed only for jobs a SolveLang machine actually ran, exactly once."), "proof line");
   assert.ok(section.includes('href="/services/"'), "section links to services");
@@ -369,7 +369,7 @@ test("process solution hero pairs the headline with the queue animation", () => 
 test("services page publishes the full service list with live and pilot labels", () => {
   const page = read("app/(english)/services/page.tsx");
   assert.match(page, /Runner Minutes/);
-  assert.match(page, /Zero-step onboarding/);
+  assert.match(page, /How onboarding works/);
   assert.match(page, /Label routing/);
   for (const price of ["$20", "$100", "$400", "$80", "$140", "$192", "$236", "$275", "$306", "$336", "$360", "$382.50"]) {
     assert.ok(page.includes(price), `services page lists the ${price} shelf price`);
@@ -390,6 +390,27 @@ test("services page publishes the full service list with live and pilot labels",
   assert.match(page, /Pilot status:/);
   assert.match(page, /no public price and no self-serve signup/);
   assert.match(page, /\/process-solution\//);
+});
+
+test("services page onboarding section states the four real steps and the full promise", () => {
+  const page = read("app/(english)/services/page.tsx");
+  assert.match(page, /How onboarding works/);
+  assert.match(page, /Four steps, once:/);
+  assert.match(page, /Sign in<\/strong> and open Runner Minutes in your account\./);
+  assert.match(page, /Install the SolveLang GitHub App<\/strong> on your account or organization, pick the repositories it may serve, and accept the permissions\./);
+  assert.match(page, /Buy a minutes pack<\/strong> on SolveLang&apos;s own checkout page — jobs draw against that balance, metered per second\./);
+  assert.match(page, /Point your workflows at SolveLang<\/strong> — set/);
+  assert.ok(page.includes("runs-on: [self-hosted, solvelang-runners-standard]"), "onboarding states the Standard runs-on label step");
+  assert.match(page, /\(or the High-Power label\) in the workflows you want served\./);
+  assert.match(page, /From then on, queued jobs in the connected repositories are detected, run, metered, and settled against your balance with nothing left for you to start by hand\./);
+  assert.match(page, /Repositories you add to the installation later are picked up automatically\./);
+  const order = ["Sign in</strong>", "Install the SolveLang GitHub App</strong>", "Buy a minutes pack</strong>", "Point your workflows at SolveLang</strong>", "Repositories you add to the installation later"];
+  const indices = order.map((s) => page.indexOf(s));
+  assert.ok(indices.every((i) => i >= 0), "all four steps and the closing promise are present");
+  assert.ok(indices.every((v, i) => i === 0 || v > indices[i - 1]), "the four steps appear in order before the closing promise");
+  assert.doesNotMatch(page, /Zero-step onboarding/);
+  assert.doesNotMatch(page, /That is the whole setup/);
+  assert.doesNotMatch(page, /Sign in, install the SolveLang GitHub App, pick your repositories/);
 });
 
 test("services page publishes runner-minutes Product and FAQ schema built from its own shelf", () => {
@@ -595,10 +616,13 @@ test("account home runner minutes card carries the same pause and start control"
   // Toggling posts through the shared endpoint helper with the
   // account CSRF token, then re-reads the account and renders the
   // reported state — the same discipline as the checkout control.
+  // The re-read applies the reported view through applyMinutesView,
+  // which resolves the status through the shared resolver (the
+  // whole-file assertion above).
   const toggle = home.slice(home.indexOf("async function toggleMinutes()"), home.indexOf('if (screen === "loading")'));
   assert.match(toggle, /runnerMinutesTogglePath\(minutesStatus\)/);
   assert.match(toggle, /method: "POST", csrfToken: dashboard\.csrfToken/);
-  assert.match(toggle, /setMinutesStatus\(runnerMinutesStatus\(view\)\)/);
+  assert.match(toggle, /await rereadMinutes\(\)/);
   assert.match(toggle, /setMinutesError\(caught instanceof Error \? caught\.message/);
   // The control renders only once the balance read has reported, so
   // the card never offers a toggle on a guessed state.
@@ -878,7 +902,7 @@ test("account sidebar carries both approved groups in order with exact plain-lin
     "/account/",
     "/account/api-keys/",
     "/account/live-center/",
-    "/account/live-center/",
+    "/account/live-center/#minutes",
     "/account/api-keys/#sign-in-security",
     "/studio/",
     "/check/",
@@ -906,9 +930,9 @@ test("account sidebar carries both approved groups in order with exact plain-lin
   // Plain single lines only: no sub-caption field, no sub rendering,
   // and no Buy minutes entry in the sidebar at all.
   assert.doesNotMatch(sidebar, /sub: "|entry\.sub|buy-minutes|label: "Buy minutes"/);
-  // Runner minutes is not deep-linkable: the Live Center board keeps
-  // its tab in internal state, so the entry links to the Live Center.
-  assert.match(sidebar, /Minutes view is not deep-linkable|not deep-linkable/);
+  // Runner minutes deep-links to the board's Minutes view by hash;
+  // the board resolves its active tab from the URL hash.
+  assert.match(sidebar, /deep-links to the Live Center's Minutes view/);
   const board = read("app/account/live-center/LiveCenterBoard.tsx");
   assert.match(board, /const \[tab, setTab\] = useState<TabId>\("overview"\)/);
   assert.doesNotMatch(board, /searchParams|URLSearchParams/);
@@ -991,7 +1015,7 @@ test("tool pages stack carries the same sidebar with both plain-line groups and 
     "/account/",
     "/account/api-keys/",
     "/account/live-center/",
-    "/account/live-center/",
+    "/account/live-center/#minutes",
     "/account/api-keys/#sign-in-security",
     "/studio/",
     "/check/",
@@ -1521,7 +1545,7 @@ test("documentation hub documents each guide with problem-first titles and pinne
   );
   const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
   const localText = JSON.stringify(local);
-  assert.ok(localText.includes("npx --yes @solvelang/mcp-server@0.3.0"), "local setup guide states the published npx command");
+  assert.ok(localText.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"), "local setup guide states the published npx command");
   assert.ok(localText.includes("SOLVELANG_WORKSPACE_ROOT"), "local setup guide states the workspace root variable");
   assert.ok(localText.includes("29 read-only tools"), "local setup guide states the published tool count");
   assert.ok(localText.includes("Node.js 20 or newer"), "local setup guide states the Node requirement");
@@ -1609,4 +1633,132 @@ test("romanian legal segment has its own root layout and unchanged page content"
   for (const heading of ["Termeni de utilizare SolveLang", "Politica de rambursare", "Retragerea din contract", "Confidențialitate Workflow Preflight"]) {
     assert.ok(legal.includes(heading), `romanianLegal keeps the heading: ${heading}`);
   }
+});
+
+test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, account card, llms facts", () => {
+  const services = read("app/(english)/services/page.tsx");
+  assert.match(services, /Three pools, chosen by label/, "services pools section covers three pools");
+  assert.match(services, /Premium runs on 96-vCPU-class machines/, "services names the premium machine class");
+  assert.match(services, /<h4 className="text-lg font-bold">Premium minutes<\/h4>/, "services shelf has the Premium card");
+  assert.match(services, /\$0\.50 per minute, 96-vCPU-class machines\./, "services shelf states the premium price and class");
+  assert.match(services, /premiumPacks\.map/, "schema offers are generated from the visible Premium table");
+  assert.ok(services.includes('{ minutes: "5,000", price: "$2,500" }'), "services shelf lists the 5,000-minute premium pack at $2,500");
+  assert.ok(services.includes('{ minutes: "10,000", price: "$5,000" }'), "services shelf lists the 10,000-minute premium pack at $5,000");
+  assert.ok(services.includes('{ minutes: "25,000", price: "$12,500" }'), "services shelf lists the 25,000-minute premium pack at $12,500");
+  assert.ok(services.includes('{ minutes: "30,000", price: "$15,000" }'), "services shelf lists the 30,000-minute premium pack at $15,000");
+  assert.ok(services.includes('{ minutes: "40,000", price: "$20,000" }'), "services shelf lists the 40,000-minute premium pack at $20,000");
+  assert.ok(services.includes('{ minutes: "50,000", price: "$25,000" }'), "services shelf lists the 50,000-minute premium pack at $25,000");
+  assert.ok(services.includes('{ minutes: "60,000", price: "$30,000" }'), "services shelf lists the 60,000-minute premium pack at $30,000");
+  assert.ok(services.includes('{ minutes: "70,000", price: "$35,000" }'), "services shelf lists the 70,000-minute premium pack at $35,000");
+  assert.ok(services.includes('{ minutes: "80,000", price: "$40,000" }'), "services shelf lists the 80,000-minute premium pack at $40,000");
+  assert.ok(services.includes('{ minutes: "90,000", price: "$45,000" }'), "services shelf lists the 90,000-minute premium pack at $45,000");
+  assert.ok(services.includes('{ minutes: "100,000", price: "$50,000" }'), "services shelf lists the 100,000-minute premium pack at $50,000");
+  assert.ok(services.includes("Premium packs (96-vCPU-class machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500, 10,000 minutes for $5,000, 25,000 minutes for $12,500, 30,000 minutes for $15,000, 40,000 minutes for $20,000, 50,000 minutes for $25,000, 60,000 minutes for $30,000, 70,000 minutes for $35,000, 80,000 minutes for $40,000, 90,000 minutes for $45,000, and 100,000 minutes for $50,000."), "services FAQ prices the premium packs exactly");
+  assert.ok(services.includes("runs-on: [self-hosted, solvelang-runners-premium]"), "services shows the premium runs-on label");
+  const checkout = read("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx");
+  assert.match(checkout, /Premium minutes — 96-core machines for the heaviest suites/, "checkout has the Premium pack group");
+  assert.match(checkout, /RUNNER_MINUTES_PREMIUM_PACKS\.map/, "checkout renders the premium packs from the catalog");
+  assert.ok(checkout.includes("solvelang-runners-premium"), "checkout names the Premium PR label");
+  const home = read("app/account/home/AccountHome.tsx");
+  assert.ok(home.includes("solvelang-runners-premium"), "account home names the Premium PR label");
+  assert.match(home, /Premium: \{minutes\.premium\.minutes\.toLocaleString/, "account card renders the premium balance row when held");
+  const llms = read("public/llms.txt");
+  assert.ok(llms.includes("- Runner minutes, Premium pool (96-vCPU-class Linux machines, $0.50 per minute at every pack size): 5,000 minutes for $2,500 · 10,000 minutes for $5,000 · 25,000 minutes for $12,500 · 30,000 minutes for $15,000 · 40,000 minutes for $20,000 · 50,000 minutes for $25,000 · 60,000 minutes for $30,000 · 70,000 minutes for $35,000 · 80,000 minutes for $40,000 · 90,000 minutes for $45,000 · 100,000 minutes for $50,000."), "llms pricing facts carry the premium line exactly");
+  assert.ok(llms.includes("solvelang-runners-premium runs the pull request's jobs on the Premium pool, drawing from the Premium balance"), "llms names the premium PR label");
+});
+
+test("Step 1: MCP install surfaces state the working --package command verbatim", () => {
+  const working = "npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp";
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.ok(landing.includes(`<pre><code>${working}</code></pre>`), "homepage card states the working command");
+  assert.doesNotMatch(landing, /npx --yes @solvelang\/mcp-server/);
+  const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
+  const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
+  const localText = JSON.stringify(local);
+  assert.ok(localText.includes(working), "local setup guide states the working command");
+  assert.ok(localText.includes("--package"), "local setup guide Codex form uses the --package args");
+  assert.ok(
+    localText.includes("the pinned package command above is the supported route today"),
+    "local setup guide states the supported-route sentence",
+  );
+  assert.doesNotMatch(localText, /npx --yes @solvelang\/mcp-server@0\.3\.0/);
+  assert.doesNotMatch(localText, /the npx path above is the supported route today/);
+  const setup = read("app/(english)/mcp-setup/page.tsx");
+  assert.ok(
+    setup.includes('args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]'),
+    "mcp setup states the working Codex args",
+  );
+  assert.ok(setup.includes(`solvelang -- ${working}`), "mcp setup states the working Claude registration");
+  assert.ok(setup.includes("required-evidence denominator.</p>"), "mcp setup summarizer sentence is cleaned");
+  assert.doesNotMatch(setup, /after #920/);
+  assert.doesNotMatch(setup, /npx --yes @solvelang\/mcp-server@0\.3\.0/);
+});
+
+test("Step 1: homepage and solve-context copy carries no internal issue references", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  assert.ok(
+    landing.includes("Real provider token and performance comparisons will be published only when the independent evaluation supports them."),
+    "homepage Solve Context sentence is cleaned",
+  );
+  assert.ok(
+    landing.includes("Solve Context provider-token, latency, and quality comparisons will be published only when the independent evaluation supports them."),
+    "homepage benchmark-band sentence is cleaned",
+  );
+  assert.ok(
+    landing.includes("Studio passed six authenticated acceptance checks and a bounded production save/reload, isolation, and local-first smoke."),
+    "homepage Studio sentence is kept",
+  );
+  assert.doesNotMatch(landing, /#898/);
+  assert.doesNotMatch(landing, /acceptance-origin cleanup/);
+  const statusHealth = read("app/(english)/status/StatusHealth.tsx");
+  assert.ok(
+    statusHealth.includes("Public status probes and component boundaries are listed on the status page"),
+    "homepage status summary states the neutral line",
+  );
+  assert.ok(
+    statusHealth.includes('not_monitored: "Current health not fully verified"'),
+    "the /status/ not-monitored label is unchanged (S9)",
+  );
+  const solveContext = read("app/(english)/solve-context/page.tsx");
+  assert.ok(solveContext.includes("<p>Independent evaluation: in progress</p>"), "solve-context status block is cleaned");
+  assert.ok(
+    solveContext.includes("<p>Repository status reconciled on 2026-09-15.</p>"),
+    "solve-context keeps the reconciliation date without the issue reference",
+  );
+  assert.ok(solveContext.includes("<li>Pair-integrity rules requiring"), "solve-context pair-integrity sentence is cleaned");
+  assert.doesNotMatch(solveContext, /Tracking epic/);
+  assert.doesNotMatch(solveContext, /#920/);
+});
+
+test("Step 1: /services/ carries the Live/Main/Pilot status matrix verbatim", () => {
+  const services = read("app/(english)/services/page.tsx");
+  const start = services.indexOf('aria-labelledby="status-matrix-heading"');
+  assert.ok(start > 0, "matrix section exists on /services/");
+  const matrix = services.slice(start, services.indexOf("</section>", start));
+  assert.ok(matrix.includes("What is live, what is published, what is pilot"), "matrix heading");
+  assert.ok(matrix.includes("This table is the single reference for what each one is today"), "matrix intro");
+  assert.ok(matrix.includes("Pre-1.0 — active development"), "CLI row status");
+  assert.ok(matrix.includes("(build <code>565fbc1c</code>)"), "/run/ row names the pinned WASM build");
+  assert.ok(matrix.includes("29 tools in the published package"), "local MCP row tool count");
+  assert.ok(
+    matrix.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"),
+    "local MCP row carries the working install command",
+  );
+  assert.ok(matrix.includes("10 tools, no server-side workspace"), "hosted MCP row boundary");
+  assert.ok(matrix.includes("Start with 300 free Standard minutes when you connect GitHub"), "runner minutes row trial line");
+  assert.ok(matrix.includes("faster is never free"), "runner minutes row speed line");
+  assert.ok(matrix.includes("Developer $49/month (1,000 credits)"), "API plans row");
+  assert.ok(matrix.includes("There is no public price and no self-serve signup yet."), "pilot row boundary");
+  assert.ok(matrix.includes("November 22, 2026"), "matrix verification date");
+  assert.doesNotMatch(matrix, /Premium/);
+  assert.doesNotMatch(matrix, /44%|24\.8%|token comparison/i);
+});
+
+test("Step 1 S8: the header loading state is a neutral Account label", () => {
+  const header = read("app/components/SiteHeader.tsx");
+  assert.doesNotMatch(header, /Checking account status/);
+  assert.ok(
+    header.includes('sessionState === "loading" ? (\n                <p className="px-4 py-3 text-sm font-semibold text-chrome-muted">Account</p>'),
+    "the loading branch renders the neutral Account label",
+  );
 });
