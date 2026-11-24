@@ -77,6 +77,7 @@ export function createApiAccessHandler({
   publicStatusReader = async () => unverifiedPublicStatus(),
   runTelemetry = null,
   agentTalkback = null,
+  repoSecurityScan = null,
   statusProbes = {},
   logger = console,
 }) {
@@ -258,6 +259,23 @@ export function createApiAccessHandler({
       if (path.endsWith("/agent/mcp")) {
         if (!agentTalkback) throw new ApiAccessError(503, "agent_talkback_disabled", "Agent talk-back is not enabled.");
         const outcome = await agentTalkback.handle({
+          method,
+          bodyText: bodyText(event),
+          source: event?.requestContext?.http?.sourceIp ?? "unknown",
+        });
+        return response(outcome.statusCode, outcome.body);
+      }
+
+      // Public repo security scan doorway: a free read-only scan
+      // over public GitHub API facts (see repo-security-scan.js).
+      // The module is self-contained public-facts code - it
+      // reaches no account, tenant, ledger, Stripe, or GitHub App
+      // state - and it carries its own kill switch; a missing
+      // module answers the same disabled refusal as the flag
+      // being off.
+      if (path.endsWith("/public/repo-security-scan")) {
+        if (!repoSecurityScan) throw new ApiAccessError(503, "security_scan_disabled", "The repo security scan is not enabled.");
+        const outcome = await repoSecurityScan.handle({
           method,
           bodyText: bodyText(event),
           source: event?.requestContext?.http?.sourceIp ?? "unknown",
