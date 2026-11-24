@@ -68,6 +68,8 @@ jobs:
       AGENT_TALKBACK_ENABLED: ${{ vars.AGENT_TALKBACK_ENABLED }}
       AGENT_ACTIONS_ENABLED: ${{ vars.AGENT_ACTIONS_ENABLED }}
       AGENT_OPS_ENABLED: ${{ vars.AGENT_OPS_ENABLED }}
+      SECURITY_SCAN_ENABLED: ${{ vars.SECURITY_SCAN_ENABLED }}
+      CI_BILL_CHECK_ENABLED: ${{ vars.CI_BILL_CHECK_ENABLED }}
       API_KEY_PEPPER: ${{ secrets.API_KEY_PEPPER }}
       API_ACCESS_ADMIN_SECRET: ${{ secrets.API_ACCESS_ADMIN_SECRET }}
       CUSTOMER_AUTH_PEPPER: ${{ secrets.CUSTOMER_AUTH_PEPPER }}
@@ -488,6 +490,8 @@ jobs:
           [[ -z "$AGENT_TALKBACK_ENABLED" ]] || parameters+=(AgentTalkbackEnabled="$AGENT_TALKBACK_ENABLED")
           [[ -z "$AGENT_ACTIONS_ENABLED" ]] || parameters+=(AgentActionsEnabled="$AGENT_ACTIONS_ENABLED")
           [[ -z "$AGENT_OPS_ENABLED" ]] || parameters+=(AgentOpsEnabled="$AGENT_OPS_ENABLED")
+          [[ -z "$SECURITY_SCAN_ENABLED" ]] || parameters+=(SecurityScanEnabled="$SECURITY_SCAN_ENABLED")
+          [[ -z "$CI_BILL_CHECK_ENABLED" ]] || parameters+=(CiBillCheckEnabled="$CI_BILL_CHECK_ENABLED")
           sam deploy \
             --stack-name "$STACK_NAME" \
             --s3-bucket "$SAM_ARTIFACT_BUCKET" \

@@ -4,7 +4,7 @@ import test from "node:test";
 
 // Team Context Index billing wiring, held to the same contract shape
 // as the runners-ledger seam: the SAM parameters default blank (each
-// surface dark until deliberately wired), the env reaches all four
+// surface dark until deliberately wired), the env reaches all five
 // functions that run src/handler.handler, config.js parses the same
 // env names, and handler.js constructs the checkout and the billing
 // bridge from them. The redeploy-workflow half of the contract is
@@ -28,7 +28,7 @@ test("template declares the team context parameters with blank defaults", async 
   assert.match(source, / {2}TeamContextMcpBillingToken:\n {4}Type: String\n {4}NoEcho: true\n {4}Default: ""/);
 });
 
-test("all four handler functions receive the team context env", async () => {
+test("all five handler functions receive the team context env", async () => {
   const source = await text(templateUrl);
   for (const [envName, ref] of [
     ["STRIPE_TEAM_CONTEXT_PRICE_ID", "StripeTeamContextPriceId"],
@@ -37,7 +37,7 @@ test("all four handler functions receive the team context env", async () => {
     ["TEAM_CONTEXT_MCP_BILLING_TOKEN", "TeamContextMcpBillingToken"],
   ]) {
     const refs = source.match(new RegExp(`${envName}: !Ref ${ref}`, "g")) ?? [];
-    assert.equal(refs.length, 4, `${envName} reaches ApiAccessFunction, GitHubFunction, AgentActionsFunction and TeamContextFunction`);
+    assert.equal(refs.length, 5, `${envName} reaches ApiAccessFunction, GitHubFunction, AgentActionsFunction, TeamContextFunction and PublicToolsFunction`);
   }
 });
 
