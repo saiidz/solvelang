@@ -7,7 +7,10 @@ import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
-import { TeamError, TeamStore, memberView, teamStoreFromEnvironment, teamView } from "./team.js";
+import { TeamError, TeamStore, countActiveSeats, memberView, teamStoreFromEnvironment, teamView } from "./team.js";
+import type { TeamRecord } from "./team.js";
+import { createTeamBillingSync } from "./team-billing.js";
+import type { TeamBillingSync } from "./team-billing.js";
 import {
   MAX_SOLVE_GRAPH_BYTES,
   executeSolveGraphTool,
@@ -434,6 +437,8 @@ function sendJson(res: ServerResponse, statusCode: number, value: unknown, extra
 export type RemoteHttpServerOptions = Readonly<{
   bearerToken?: string;
   testToken?: string;
+  billingToken?: string;
+  teamBillingSync?: TeamBillingSync;
   teamStore?: TeamStore;
   authMode?: RemoteAuthMode;
   mcpPath?: string;
@@ -445,6 +450,8 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
   const authMode = options.authMode ?? "bearer";
   const bearerToken = authMode === "bearer" ? normalizeRemoteBearerToken(options.bearerToken ?? "") : undefined;
   const testToken = authMode === "bearer" ? normalizeRemoteTestToken(options.testToken) : undefined;
+  const billingToken = authMode === "bearer" ? normalizeRemoteTestToken(options.billingToken) : undefined;
+  const teamBillingSync = options.teamBillingSync;
   const openaiChallengeToken = normalizeOpenAiAppsChallengeToken(options.openaiChallengeToken);
   const rateLimit: RemoteRateLimit | null = options.rateLimit === false ? null : normalizeRemoteRateLimit(options.rateLimit);
   const rateLimiter = rateLimit ? createRemoteRateLimiter(rateLimit) : null;
@@ -465,6 +472,53 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
       remoteBearerHeaderMatches(req.headers.authorization, bearerToken!) ||
       (testToken !== undefined && remoteBearerHeaderMatches(req.headers.authorization, testToken))
     );
+  }
+
+  function isBillingReader(req: IncomingMessage): boolean {
+    return billingToken !== undefined && remoteBearerHeaderMatches(req.headers.authorization, billingToken);
+  }
+
+  async function notifyTeamSeats(team: TeamRecord): Promise<void> {
+    // Seat sync is best-effort by contract: the sync client swallows
+    // every failure, so a billing outage can never fail a membership
+    // change that already succeeded.
+    if (teamBillingSync) await teamBillingSync.notifySeatsChanged(team, team.members);
+  }
+
+  async function handleBillingRoute(req: IncomingMessage, res: ServerResponse, pathname: string, searchParams: URLSearchParams): Promise<void> {
+    // Server-to-server seat reads for Team Context Index billing. The
+    // billing token is the ONLY credential these routes accept: the
+    // master token, the test token, and team member tokens do not
+    // authorize billing reads.
+    if (!teamStore || !billingToken) { sendJson(res, 503, { error: "billing_unavailable" }); return; }
+    if (!isBillingReader(req)) { sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" }); return; }
+    if (req.method !== "GET") { sendJson(res, 405, { error: "method_not_allowed" }, { Allow: "GET" }); return; }
+    try {
+      if (pathname === "/billing/teams") {
+        const ownerEmail = searchParams.get("ownerEmail");
+        if (!ownerEmail) { sendJson(res, 400, { error: "invalid_request" }); return; }
+        const teams = await teamStore.listTeamsByOwner(ownerEmail);
+        sendJson(res, 200, { teams: teams.map((team) => ({ id: team.id, name: team.name, activeSeats: countActiveSeats(team.members) })) });
+        return;
+      }
+      const match = pathname.match(/^\/billing\/teams\/([^/]+)$/);
+      if (match) {
+        const team = await teamStore.getTeam(decodeURIComponent(match[1])).catch((error: unknown) => {
+          if (error instanceof TeamError && error.code === "not_found") return undefined;
+          throw error;
+        });
+        if (!team) { sendJson(res, 404, { error: "team_not_found" }); return; }
+        sendJson(res, 200, { id: team.id, name: team.name, ownerEmail: team.ownerEmail, activeSeats: countActiveSeats(team.members) });
+        return;
+      }
+      sendJson(res, 404, { error: "not_found" });
+    } catch (error) {
+      if (error instanceof TeamError) {
+        sendJson(res, teamErrorStatus(error.code), { error: error.code, message: error.message });
+        return;
+      }
+      sendJson(res, 400, { error: "invalid_request" });
+    }
   }
 
   async function readTeamJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -518,6 +572,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
       if (pathname === "/teams/accept" && req.method === "POST") {
         const body = await readTeamJsonBody(req);
         const accepted = await teamStore.acceptInvite(body.inviteToken, body.email);
+        await notifyTeamSeats(accepted.team);
         sendJson(res, 200, { team: teamView(accepted.team), member: memberView(accepted.member), memberToken: accepted.memberToken });
         return;
       }
@@ -551,6 +606,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
         if (!isTeamOwner && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
         const body = await readTeamJsonBody(req);
         const revoked = await teamStore.revokeMember(team.id, body.email);
+        await notifyTeamSeats(team);
         sendJson(res, 200, { teamId: team.id, member: memberView(revoked) });
         return;
       }
@@ -596,6 +652,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
       const isTeamOwner = principal !== undefined && principal.team.id === team.id && principal.member.role === "owner";
       if (!isTeamOwner && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
       const revoked = await teamStore.revokeMember(team.id, email);
+      await notifyTeamSeats(team);
       sendJson(res, 200, { teamId: team.id, member: memberView(revoked) });
     } catch (error) {
       if (error instanceof TeamError) { sendJson(res, teamErrorStatus(error.code), { error: error.code, message: error.message }); return; }
@@ -605,7 +662,8 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
 
   return createNodeHttpServer((req, res) => {
     void (async () => {
-      const pathname = new URL(req.url ?? "/", "http://solvelang.invalid").pathname;
+      const requestUrl = new URL(req.url ?? "/", "http://solvelang.invalid");
+      const pathname = requestUrl.pathname;
       if (pathname === REMOTE_MCP_HEALTH_PATH && req.method === "GET") {
         sendJson(res, 200, { status: "ok", service: "solvelang-mcp", mode: "remote-read-only" });
         return;
@@ -617,6 +675,10 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
           "X-Content-Type-Options": "nosniff",
         });
         res.end(openaiChallengeToken);
+        return;
+      }
+      if (pathname === "/billing/teams" || pathname.startsWith("/billing/teams/")) {
+        await handleBillingRoute(req, res, pathname, requestUrl.searchParams);
         return;
       }
       if (pathname === "/teams" || pathname.startsWith("/teams/")) {
@@ -683,6 +745,8 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
 export type StartRemoteSolveLangServerOptions = Readonly<{
   bearerToken?: string;
   testToken?: string;
+  billingToken?: string;
+  teamBillingSync?: TeamBillingSync;
   teamStore?: TeamStore;
   authMode?: RemoteAuthMode;
   host?: string;
@@ -714,6 +778,11 @@ export async function startRemoteSolveLangServer(options: StartRemoteSolveLangSe
   const authMode = options.authMode ?? normalizeRemoteAuthMode(process.env.SOLVELANG_REMOTE_AUTH_MODE);
   const bearerToken = options.bearerToken ?? process.env.SOLVELANG_REMOTE_BEARER_TOKEN;
   const testToken = options.testToken ?? process.env[REMOTE_MCP_TEST_TOKEN_ENV];
+  const billingToken = options.billingToken ?? process.env.MCP_REMOTE_BILLING_TOKEN;
+  const teamBillingSync = options.teamBillingSync ?? createTeamBillingSync({
+    url: process.env.SOLVELANG_TEAM_BILLING_SYNC_URL,
+    secret: process.env.SOLVELANG_TEAM_BILLING_SYNC_SECRET,
+  });
   const openaiChallengeToken = options.openaiChallengeToken ?? process.env.SOLVELANG_OPENAI_APPS_CHALLENGE_TOKEN;
   const host = options.host ?? process.env.SOLVELANG_REMOTE_HOST ?? "127.0.0.1";
   const configuredPort = options.port ?? Number(process.env.PORT ?? process.env.SOLVELANG_REMOTE_PORT ?? "8787");
@@ -723,7 +792,7 @@ export async function startRemoteSolveLangServer(options: StartRemoteSolveLangSe
   const mcpPath = options.mcpPath ?? process.env.SOLVELANG_REMOTE_PATH ?? REMOTE_MCP_DEFAULT_PATH;
   const rateLimit = options.rateLimit ?? remoteRateLimitFromEnvironment();
   const teamStore = options.teamStore ?? (authMode === "bearer" ? await teamStoreFromEnvironment() : undefined);
-  const server = createRemoteSolveLangHttpServer({ bearerToken, testToken, authMode, mcpPath, openaiChallengeToken, rateLimit, teamStore });
+  const server = createRemoteSolveLangHttpServer({ bearerToken, testToken, billingToken, teamBillingSync, authMode, mcpPath, openaiChallengeToken, rateLimit, teamStore });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
       server.off("listening", onListening);
