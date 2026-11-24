@@ -77,6 +77,7 @@ export function createApiAccessHandler({
   publicStatusReader = async () => unverifiedPublicStatus(),
   runTelemetry = null,
   agentTalkback = null,
+  ciBillCheck = null,
   repoSecurityScan = null,
   statusProbes = {},
   logger = console,
@@ -259,6 +260,23 @@ export function createApiAccessHandler({
       if (path.endsWith("/agent/mcp")) {
         if (!agentTalkback) throw new ApiAccessError(503, "agent_talkback_disabled", "Agent talk-back is not enabled.");
         const outcome = await agentTalkback.handle({
+          method,
+          bodyText: bodyText(event),
+          source: event?.requestContext?.http?.sourceIp ?? "unknown",
+        });
+        return response(outcome.statusCode, outcome.body);
+      }
+
+      // Public CI bill check doorway: a free read-only comparison
+      // of real workflow-run job seconds under per-minute vs
+      // per-second billing (see ci-bill-check.js). The module is
+      // self-contained public-facts code - it reaches no account,
+      // tenant, ledger, Stripe, or GitHub App state - and it
+      // carries its own kill switch; a missing module answers the
+      // same disabled refusal as the flag being off.
+      if (path.endsWith("/public/ci-bill-check")) {
+        if (!ciBillCheck) throw new ApiAccessError(503, "ci_bill_check_disabled", "The CI bill check is not enabled.");
+        const outcome = await ciBillCheck.handle({
           method,
           bodyText: bodyText(event),
           source: event?.requestContext?.http?.sourceIp ?? "unknown",
