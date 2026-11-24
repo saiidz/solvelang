@@ -123,8 +123,15 @@ jobs:
           ARGS=(--root "$GITHUB_WORKSPACE" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
           if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
           if [ -n "$LABELS" ]; then ARGS+=(--labels "$LABELS"); fi
-          node "$PR_GATE_KIT_DIR/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+          node "$PR_GATE_KIT_DIR/packages/pr-gate/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
           CODE=$?
+          # A crashed CLI also exits 1; without a result file there is no
+          # verdict, so treat a missing result.json as operational (exit 2),
+          # never as a policy failure.
+          if [ ! -f .pr-gate-out/result.json ]; then
+            echo "PR Gate produced no result.json (exit $CODE) - operational error."
+            exit 2
+          fi
           echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
           echo "report-path=.pr-gate-out/report.md" >> "$GITHUB_OUTPUT"
           # Operational errors fail in every mode; policy failures fail only in enforce mode.
