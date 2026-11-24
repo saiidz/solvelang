@@ -167,12 +167,51 @@ function gitOutput(root: string, args: string[]): string | undefined {
 }
 
 // Mirrors resolveRepoName / resolveRevision in packages/pr-gate/src/cli.ts.
+//
+// Provenance is host-aware: a github.com remote keeps the historical
+// "owner/repository" label, a remote on any other host labels as
+// "host/owner/repository" with the full remote path preserved (GitLab
+// subgroups, Azure DevOps project paths, self-hosted forges), and a
+// checkout with no usable remote keeps the local fallback.
 function resolveRepoName(root: string, explicit: string | undefined): string {
   if (explicit) return explicit;
   const remote = gitOutput(root, ["remote", "get-url", "origin"]);
-  const match = remote?.match(/github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/);
-  if (match) return `${match[1]}/${match[2]}`;
-  return "local/context-index";
+  const label = remote ? repositoryLabelForRemote(remote) : undefined;
+  return label ?? "local/context-index";
+}
+
+function repositoryLabelForRemote(remote: string): string | undefined {
+  const value = remote.trim().replace(/\/+$/, "").replace(/\.git$/i, "");
+  if (!value) return undefined;
+  // Radicle remotes are a bare repository id (rad://z…) with no path.
+  const radicle = value.match(/^rad:\/\/(.+)$/i);
+  if (radicle) return `radicle/${radicle[1]}`;
+  let host: string | undefined;
+  let remotePath: string | undefined;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    try {
+      const url = new URL(value);
+      host = url.hostname.toLowerCase();
+      remotePath = url.pathname.replace(/^\/+/, "");
+    } catch {
+      return undefined;
+    }
+  } else {
+    const scpLike = value.match(/^(?:[^@/:]+@)?([^/:]+):(.+)$/);
+    if (!scpLike) return undefined;
+    host = scpLike[1].toLowerCase();
+    remotePath = scpLike[2];
+  }
+  const segments = remotePath.split("/").filter(Boolean);
+  if (segments.length < 2) return undefined;
+  if (host === "github.com") {
+    // GitHub labels stay exactly owner/repository — nothing else changes.
+    return segments.length === 2 ? segments.join("/") : undefined;
+  }
+  // A host prefix is only emitted for a dotted host (or localhost) so the
+  // label always satisfies the ingestion validator's host form.
+  if (!host.includes(".") && host !== "localhost") return undefined;
+  return `${host}/${segments.join("/")}`;
 }
 
 function resolveRevision(root: string, explicit: string | undefined, fileHashes: Map<string, string>): string {
