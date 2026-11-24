@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { ApiAccessError } from "./service.js";
 import { getApiPlan } from "./plans.js";
 import { MERGE_GOVERNANCE_PRODUCT } from "./merge-governance-plans.js";
+import { TEAM_CONTEXT_PRODUCT } from "./team-context-plans.js";
 
 const SUPPORTED_SUBSCRIPTION_EVENTS = new Set([
   "customer.subscription.created",
@@ -195,6 +196,13 @@ export function createSubscriptionLifecycleService({
       // Governance service, not the API subscription lifecycle.
       if (metadata.product === MERGE_GOVERNANCE_PRODUCT) {
         return { handled: false, duplicate: false, ignored: "merge-governance" };
+      }
+      // Team Context Index subscriptions are likewise a different
+      // product on the same Stripe account: their per-seat price is
+      // not an API plan, so acknowledge and skip them the same way.
+      // Seat fulfillment lives in the team billing bridge, not here.
+      if (metadata.product === TEAM_CONTEXT_PRODUCT) {
+        return { handled: false, duplicate: false, ignored: "team-context-index" };
       }
       const accountId = cleanId(metadata.accountId, "Account ID");
       const email = cleanEmail(metadata.email);

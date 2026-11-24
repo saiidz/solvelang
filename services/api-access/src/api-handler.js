@@ -61,6 +61,9 @@ export function createApiAccessHandler({
   subscriptionCheckout,
   elementsCheckout,
   mergeGovernanceCheckout,
+  teamContextCheckout,
+  teamContextBilling,
+  teamContextSyncSecret,
   mergeGovernanceConnect = null,
   liveCenter,
   agUiPilotEnabled = false,
@@ -503,6 +506,39 @@ export function createApiAccessHandler({
           promotionCode: body.promotionCode,
         }));
       }
+      if (method === "GET" && path.endsWith("/customer/team-context/teams")) {
+        const session = await customerSession(event);
+        if (!teamContextBilling) throw new ApiAccessError(503, "team_context_billing_disabled", "Team Context Index billing is not enabled.");
+        return response(200, await teamContextBilling.listOwnerTeams({ email: session.email }));
+      }
+      if (method === "POST" && path.endsWith("/customer/subscriptions/team-context/elements-checkout")) {
+        const session = await customerSession(event, true);
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!teamContextCheckout) throw new ApiAccessError(503, "team_context_checkout_disabled", "Team Context Index checkout is not enabled.");
+        if (!teamContextBilling) throw new ApiAccessError(503, "team_context_billing_disabled", "Team Context Index billing is not enabled.");
+        const body = parseJson(event);
+        // The seat count and the ownership fact come from the MCP
+        // service's own records, never from the request: the caller
+        // names a team, and only its signed-in owner can subscribe
+        // for it, at its current active-seat count.
+        const team = await teamContextBilling.getTeamSeats({ teamId: body.teamId });
+        if (team.ownerEmail !== String(session.email).toLowerCase()) {
+          throw new ApiAccessError(403, "team_context_forbidden", "Only the team owner can subscribe for this team.");
+        }
+        const account = await service.getSubscriptionAccount(session.accountId);
+        return response(201, await teamContextCheckout.createTeamContextCheckout({
+          accountId: session.accountId,
+          email: session.email,
+          plan: "team-seat-monthly",
+          teamId: team.id,
+          quantity: team.activeSeats,
+          requestId: body.requestId,
+          customerId: account?.stripeCustomerId,
+          promotionCode: body.promotionCode,
+          ...(body.billingAddress !== undefined ? { billingAddress: body.billingAddress } : {}),
+          ...(body.taxId !== undefined ? { taxId: body.taxId } : {}),
+        }));
+      }
       if (method === "POST" && path.endsWith("/customer/subscriptions/merge-governance/elements-checkout")) {
         const session = await customerSession(event, true);
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
@@ -611,6 +647,20 @@ export function createApiAccessHandler({
         return response(201, await subscriptionPortal.createPortal({ accountId: session.accountId }));
       }
 
+      if (method === "POST" && path.endsWith("/team-context/seat-sync")) {
+        // Seat sync is called by the hosted MCP service, which holds
+        // only this route's own shared secret - never the master
+        // admin secret - so the route sits outside the admin block
+        // and checks its own credential.
+        if (!teamContextSyncSecret) throw new ApiAccessError(503, "team_context_sync_disabled", "Team Context Index seat sync is not enabled.");
+        if (!secureEqual(header(event, "x-team-context-sync-secret"), teamContextSyncSecret)) {
+          throw new ApiAccessError(403, "team_context_sync_denied", "Seat sync access was denied.");
+        }
+        if (!teamContextBilling) throw new ApiAccessError(503, "team_context_billing_disabled", "Team Context Index billing is not enabled.");
+        const body = parseJson(event);
+        return response(200, await teamContextBilling.syncTeamSeats({ teamId: body.teamId, activeSeats: body.activeSeats }));
+      }
+
       requireAdmin(event);
       if (method === "GET" && path.endsWith("/admin/status")) {
         return response(200, {
@@ -636,6 +686,11 @@ export function createApiAccessHandler({
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
         if (!mergeGovernanceCheckout) throw new ApiAccessError(503, "merge_governance_checkout_disabled", "Merge Governance checkout is not enabled.");
         return response(201, await mergeGovernanceCheckout.createMergeGovernanceCheckout(body));
+      }
+      if (method === "POST" && path.endsWith("/internal/subscriptions/team-context/elements-checkout")) {
+        if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
+        if (!teamContextCheckout) throw new ApiAccessError(503, "team_context_checkout_disabled", "Team Context Index checkout is not enabled.");
+        return response(201, await teamContextCheckout.createTeamContextCheckout(body));
       }
       if (method === "POST" && path.endsWith("/internal/subscriptions/provision")) {
         if (!subscriptionBillingEnabled) throw new ApiAccessError(503, "subscription_billing_disabled", "API subscription billing is not enabled.");
