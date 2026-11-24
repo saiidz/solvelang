@@ -19,6 +19,7 @@ import { createApiAccessHandler } from "./api-handler.js";
 import { createDynamoPublicStatusStore } from "./public-status-store.js";
 import { createDynamoRunTelemetryStore } from "./run-telemetry-store.js";
 import { createAgentTalkback } from "./agent-talkback.js";
+import { createCiBillCheck } from "./ci-bill-check.js";
 import { createRepoSecurityScan } from "./repo-security-scan.js";
 import { createDynamoAgentActionsStore } from "./agent-actions-store.js";
 import { createAgentActionsService } from "./agent-actions-service.js";
@@ -354,6 +355,12 @@ if (environment.customerAccountsEnabled && environment.customerAuthTable) {
 // doorway, never a half-wired one.
 const agentTalkback = createAgentTalkback({ enabled: environment.agentTalkbackEnabled });
 
+// Public CI bill check: constructed unconditionally - the
+// module itself answers 503 ci_bill_check_disabled unless the
+// flag parsed in config.js is exactly "true", so a dark doorway
+// is a refused doorway, never a half-wired one.
+const ciBillCheck = createCiBillCheck({ enabled: environment.ciBillCheckEnabled });
+
 // Public repo security scan: constructed unconditionally - the
 // module itself answers 503 security_scan_disabled unless the
 // flag parsed in config.js is exactly "true", so a dark doorway
@@ -390,6 +397,7 @@ const application = createApiAccessHandler({
   publicStatusReader: () => publicStatusStore.readSnapshot(),
   runTelemetry,
   agentTalkback,
+  ciBillCheck,
   repoSecurityScan,
   statusProbes,
 });
