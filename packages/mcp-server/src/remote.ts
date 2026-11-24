@@ -7,6 +7,7 @@ import { analyzeN8nText, MAX_N8N_BYTES, MAX_N8N_NODES } from "./n8n.js";
 import { explainSolveGraphImpact } from "./solve-graph-impact-explanation.js";
 import { searchSolveGraphNodesRanked } from "./solve-graph-ranked-search.js";
 import { findSolveGraphShortestPath } from "./solve-graph-shortest-path.js";
+import { TeamError, TeamStore, memberView, teamStoreFromEnvironment, teamView } from "./team.js";
 import {
   MAX_SOLVE_GRAPH_BYTES,
   executeSolveGraphTool,
@@ -433,6 +434,7 @@ function sendJson(res: ServerResponse, statusCode: number, value: unknown, extra
 export type RemoteHttpServerOptions = Readonly<{
   bearerToken?: string;
   testToken?: string;
+  teamStore?: TeamStore;
   authMode?: RemoteAuthMode;
   mcpPath?: string;
   openaiChallengeToken?: string;
@@ -451,6 +453,156 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
     throw new Error("Remote MCP path must be a safe absolute URL path.");
   }
 
+  const teamStore = options.teamStore;
+
+  function bearerValue(req: IncomingMessage): string | undefined {
+    const header = req.headers.authorization;
+    return typeof header === "string" && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+  }
+
+  function isSingleUser(req: IncomingMessage): boolean {
+    return authMode === "bearer" && (
+      remoteBearerHeaderMatches(req.headers.authorization, bearerToken!) ||
+      (testToken !== undefined && remoteBearerHeaderMatches(req.headers.authorization, testToken))
+    );
+  }
+
+  async function readTeamJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+    const contentType = req.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
+    if (contentType !== "application/json") throw Object.assign(new Error("Team requests require application/json."), { statusCode: 415 });
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of req) {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      total += bytes.length;
+      if (total > REMOTE_MCP_MAX_REQUEST_BYTES) throw Object.assign(new Error("Team request exceeds the bounded request size."), { statusCode: 413 });
+      chunks.push(bytes);
+    }
+    if (total === 0) throw Object.assign(new Error("Team request body is required."), { statusCode: 400 });
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      throw Object.assign(new Error("Team request body must be valid JSON."), { statusCode: 400 });
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw Object.assign(new Error("Team request body must be a JSON object."), { statusCode: 400 });
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  function teamErrorStatus(code: TeamError["code"]): number {
+    return code === "validation" ? 400 : code === "unauthorized" ? 401 : code === "forbidden" ? 403 : code === "not_found" ? 404 : 409;
+  }
+
+  async function handleTeamRoute(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+    if (rateLimiter) {
+      const verdict = rateLimiter.check(req.socket.remoteAddress);
+      if (!verdict.allowed) {
+        sendJson(res, 429, { error: "rate_limited" }, { "Retry-After": String(verdict.retryAfterSeconds) });
+        return;
+      }
+    }
+    if (!teamStore) {
+      sendJson(res, 503, { error: "team_store_unavailable" });
+      return;
+    }
+    try {
+      if (pathname === "/teams" && req.method === "POST") {
+        if (!isSingleUser(req)) { sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" }); return; }
+        const body = await readTeamJsonBody(req);
+        const created = await teamStore.createTeam({ name: body.name, ownerEmail: body.ownerEmail, contextIndex: body.contextIndex });
+        sendJson(res, 201, { team: teamView(created.team), owner: memberView(created.owner), ownerToken: created.ownerToken });
+        return;
+      }
+      if (pathname === "/teams/accept" && req.method === "POST") {
+        const body = await readTeamJsonBody(req);
+        const accepted = await teamStore.acceptInvite(body.inviteToken, body.email);
+        sendJson(res, 200, { team: teamView(accepted.team), member: memberView(accepted.member), memberToken: accepted.memberToken });
+        return;
+      }
+      const match = pathname.match(/^\/teams\/([^/]+)(?:\/(invites|members|revoke|context-index))?$/);
+      if (!match) { sendJson(res, 404, { error: "not_found" }); return; }
+      const teamId = decodeURIComponent(match[1]);
+      const sub = match[2];
+      const team = await teamStore.getTeam(teamId).catch((error: unknown) => {
+        if (error instanceof TeamError && error.code === "not_found") return undefined;
+        throw error;
+      });
+      if (!team) { sendJson(res, 404, { error: "not_found" }); return; }
+      const principal = await teamStore.authenticate(bearerValue(req));
+      const isTeamMember = principal !== undefined && principal.team.id === team.id;
+      const isTeamOwner = isTeamMember && principal.member.role === "owner";
+
+      if (sub === "invites" && req.method === "POST") {
+        if (!isTeamOwner && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
+        const body = await readTeamJsonBody(req);
+        const created = await teamStore.createInvite(team.id, body.email);
+        sendJson(res, 201, { teamId: team.id, invite: { email: created.invite.email, status: created.invite.status, invitePrefix: created.invite.invitePrefix, createdAt: created.invite.createdAt }, inviteToken: created.inviteToken });
+        return;
+      }
+      if (sub === "members" && req.method === "GET") {
+        if (!isTeamMember && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
+        const members = await teamStore.listMembers(team.id);
+        sendJson(res, 200, { teamId: team.id, members: members.map(memberView) });
+        return;
+      }
+      if (sub === "revoke" && req.method === "POST") {
+        if (!isTeamOwner && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
+        const body = await readTeamJsonBody(req);
+        const revoked = await teamStore.revokeMember(team.id, body.email);
+        sendJson(res, 200, { teamId: team.id, member: memberView(revoked) });
+        return;
+      }
+      if (sub === "context-index" && req.method === "GET") {
+        if (!isTeamMember) { sendJson(res, 403, { error: "forbidden" }); return; }
+        sendJson(res, 200, { teamId: team.id, contextIndex: team.contextIndex ?? null });
+        return;
+      }
+      if (sub === "context-index" && req.method === "PUT") {
+        if (!isTeamOwner) { sendJson(res, 403, { error: "forbidden" }); return; }
+        const body = await readTeamJsonBody(req);
+        const updated = await teamStore.setContextIndex(team.id, body.contextIndex);
+        sendJson(res, 200, { teamId: updated.id, contextIndex: updated.contextIndex ?? null });
+        return;
+      }
+      sendJson(res, 404, { error: "not_found" });
+    } catch (error) {
+      if (error instanceof TeamError) {
+        sendJson(res, teamErrorStatus(error.code), { error: error.code, message: error.message });
+        return;
+      }
+      const statusCode = typeof error === "object" && error !== null && "statusCode" in error ? Number((error as { statusCode: unknown }).statusCode) : 400;
+      sendJson(res, Number.isInteger(statusCode) ? statusCode : 400, { error: "invalid_request" });
+    }
+  }
+
+  async function handleMemberDelete(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<void> {
+    if (rateLimiter) {
+      const verdict = rateLimiter.check(req.socket.remoteAddress);
+      if (!verdict.allowed) {
+        sendJson(res, 429, { error: "rate_limited" }, { "Retry-After": String(verdict.retryAfterSeconds) });
+        return;
+      }
+    }
+    if (!teamStore) { sendJson(res, 503, { error: "team_store_unavailable" }); return; }
+    const match = pathname.match(/^\/teams\/([^/]+)\/members\/([^/]+)$/);
+    if (!match) { sendJson(res, 404, { error: "not_found" }); return; }
+    try {
+      const teamId = decodeURIComponent(match[1]);
+      const email = decodeURIComponent(match[2]);
+      const team = await teamStore.getTeam(teamId);
+      const principal = await teamStore.authenticate(bearerValue(req));
+      const isTeamOwner = principal !== undefined && principal.team.id === team.id && principal.member.role === "owner";
+      if (!isTeamOwner && !isSingleUser(req)) { sendJson(res, 403, { error: "forbidden" }); return; }
+      const revoked = await teamStore.revokeMember(team.id, email);
+      sendJson(res, 200, { teamId: team.id, member: memberView(revoked) });
+    } catch (error) {
+      if (error instanceof TeamError) { sendJson(res, teamErrorStatus(error.code), { error: error.code, message: error.message }); return; }
+      sendJson(res, 400, { error: "invalid_request" });
+    }
+  }
+
   return createNodeHttpServer((req, res) => {
     void (async () => {
       const pathname = new URL(req.url ?? "/", "http://solvelang.invalid").pathname;
@@ -465,6 +617,14 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
           "X-Content-Type-Options": "nosniff",
         });
         res.end(openaiChallengeToken);
+        return;
+      }
+      if (pathname === "/teams" || pathname.startsWith("/teams/")) {
+        if (req.method === "DELETE" && /^\/teams\/[^/]+\/members\/[^/]+$/.test(pathname)) {
+          await handleMemberDelete(req, res, pathname);
+        } else {
+          await handleTeamRoute(req, res, pathname);
+        }
         return;
       }
       if (pathname !== mcpPath) {
@@ -482,13 +642,12 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
           return;
         }
       }
-      if (
-        authMode === "bearer" &&
-        !remoteBearerHeaderMatches(req.headers.authorization, bearerToken!) &&
-        !(testToken !== undefined && remoteBearerHeaderMatches(req.headers.authorization, testToken))
-      ) {
-        sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
-        return;
+      if (authMode === "bearer" && !isSingleUser(req)) {
+        const teamPrincipal = teamStore ? await teamStore.authenticate(bearerValue(req)) : undefined;
+        if (!teamPrincipal) {
+          sendJson(res, 401, { error: "unauthorized" }, { "WWW-Authenticate": "Bearer" });
+          return;
+        }
       }
 
       let body: unknown;
@@ -524,6 +683,7 @@ export function createRemoteSolveLangHttpServer(options: RemoteHttpServerOptions
 export type StartRemoteSolveLangServerOptions = Readonly<{
   bearerToken?: string;
   testToken?: string;
+  teamStore?: TeamStore;
   authMode?: RemoteAuthMode;
   host?: string;
   port?: number;
@@ -562,7 +722,8 @@ export async function startRemoteSolveLangServer(options: StartRemoteSolveLangSe
   }
   const mcpPath = options.mcpPath ?? process.env.SOLVELANG_REMOTE_PATH ?? REMOTE_MCP_DEFAULT_PATH;
   const rateLimit = options.rateLimit ?? remoteRateLimitFromEnvironment();
-  const server = createRemoteSolveLangHttpServer({ bearerToken, testToken, authMode, mcpPath, openaiChallengeToken, rateLimit });
+  const teamStore = options.teamStore ?? (authMode === "bearer" ? await teamStoreFromEnvironment() : undefined);
+  const server = createRemoteSolveLangHttpServer({ bearerToken, testToken, authMode, mcpPath, openaiChallengeToken, rateLimit, teamStore });
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
       server.off("listening", onListening);
