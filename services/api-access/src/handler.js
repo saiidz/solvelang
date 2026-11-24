@@ -34,6 +34,9 @@ import { createDynamoApiAccessStore } from "./dynamo-store.js";
 import { createEmbeddedSubscriptionCheckoutService } from "./embedded-subscription-checkout.js";
 import { createElementsSubscriptionCheckoutService } from "./elements-subscription-checkout.js";
 import { createMergeGovernanceCheckoutService } from "./merge-governance-checkout.js";
+import { createTeamContextCheckoutService } from "./team-context-checkout.js";
+import { createTeamContextBillingService } from "./team-context-billing.js";
+import { createDynamoTeamContextStore } from "./team-context-store.js";
 import { createMergeGovernanceConnectService } from "./merge-governance-connect.js";
 import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
@@ -269,6 +272,8 @@ let stripeGateway;
 let subscriptionCheckout;
 let elementsCheckout;
 let mergeGovernanceCheckout;
+let teamContextCheckout;
+let teamContextBilling;
 let subscriptionPortal;
 let subscriptionLifecycle;
 let subscriptionManagementApplication;
@@ -279,6 +284,18 @@ if (environment.subscriptionBillingEnabled) {
   subscriptionCheckout = createEmbeddedSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, siteOrigin: environment.siteOrigin, enabled: true });
   elementsCheckout = createElementsSubscriptionCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.priceIds, enabled: true });
   mergeGovernanceCheckout = createMergeGovernanceCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceIds: environment.mergeGovernancePriceIds, enabled: true });
+  // Team Context Index billing rides the same billing block: the
+  // checkout needs only the seat price pointer, while the seat-read /
+  // seat-sync bridge additionally needs the MCP billing pair (base
+  // URL + token). Each pointer group fails closed on its own surface,
+  // exactly like the Merge Governance pilot pointers.
+  if (environment.customerAuthTable) {
+    const teamContextStore = createDynamoTeamContextStore(documentClient, environment.customerAuthTable);
+    teamContextCheckout = createTeamContextCheckoutService({ gateway: stripeGateway, apiAccessService: guardedService, priceId: environment.teamContext.priceId, teamContextStore, enabled: true });
+    if (environment.teamContext.mcpBaseUrl && environment.teamContext.mcpBillingToken) {
+      teamContextBilling = createTeamContextBillingService({ mcpBaseUrl: environment.teamContext.mcpBaseUrl, mcpBillingToken: environment.teamContext.mcpBillingToken, gateway: stripeGateway, teamContextStore });
+    }
+  }
   subscriptionPortal = createSubscriptionPortalService({ apiAccessService: guardedService, siteOrigin: environment.siteOrigin, enabled: true });
   subscriptionLifecycle = createSubscriptionLifecycleService({ apiAccessService: service, eventStore: createDynamoSubscriptionEventStore(documentClient, environment.subscriptionEventsTable), gateway: stripeGateway, priceIds: environment.priceIds });
   statusProbes.billing = async () => { await stripe.balance.retrieve(); return true; };
@@ -350,6 +367,9 @@ const application = createApiAccessHandler({
   subscriptionCheckout,
   elementsCheckout,
   mergeGovernanceCheckout,
+  teamContextCheckout,
+  teamContextBilling,
+  teamContextSyncSecret: environment.teamContext.syncSecret,
   mergeGovernanceConnect,
   productConnectLink,
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
