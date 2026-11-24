@@ -132,8 +132,15 @@ jobs:
             echo "PR Gate produced no result.json (exit $CODE) - operational error."
             exit 2
           fi
-          VERDICT=$(node -e "try{const r=JSON.parse(require(fs).readFileSync(.pr-gate-out/result.json,utf8));const e=r.policy&&r.policy.evaluation;process.stdout.write(e?(e.passed?pass:fail):)}catch{process.stdout.write()}")
-          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          try {
+            const r = JSON.parse(require('fs').readFileSync('.pr-gate-out/result.json', 'utf8'));
+            const e = r.policy && r.policy.evaluation;
+            console.log('verdict=' + (e ? (e.passed ? 'pass' : 'fail') : ''));
+          } catch {
+            console.log('verdict=');
+          }
+          NODE
           echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
           echo "report-path=.pr-gate-out/report.md" >> "$GITHUB_OUTPUT"
           # Operational errors fail in every mode; policy failures fail only in enforce mode.
