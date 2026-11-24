@@ -132,6 +132,8 @@ jobs:
             echo "PR Gate produced no result.json (exit $CODE) - operational error."
             exit 2
           fi
+          VERDICT=$(node -e "try{const r=JSON.parse(require(fs).readFileSync(.pr-gate-out/result.json,utf8));const e=r.policy&&r.policy.evaluation;process.stdout.write(e?(e.passed?pass:fail):)}catch{process.stdout.write()}")
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
           echo "report-path=.pr-gate-out/report.md" >> "$GITHUB_OUTPUT"
           # Operational errors fail in every mode; policy failures fail only in enforce mode.
@@ -185,13 +187,16 @@ jobs:
           PR_GATE_TOKEN: ${{ secrets.GITEA_TOKEN }}
           PR_GATE_REPO: ${{ github.repository }}
           GATE_CODE: ${{ steps.gate.outputs.exit-code }}
+          GATE_VERDICT: ${{ steps.gate.outputs.verdict }}
           HEAD_SHA: ${{ steps.facts.outputs.head-sha }}
         run: |
-          if [ "$GATE_CODE" = "2" ]; then
+          # Map the verdict recorded in result.json, not the CLI exit code:
+          # in report-only mode the CLI exits 0 even on a policy FAIL.
+          if [ "$GATE_CODE" = "2" ] || [ -z "$GATE_VERDICT" ]; then
             STATE="error"; DESC="PR Gate run failed operationally — see the PR comment"
-          elif [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+          elif [ "$GATE_VERDICT" = "fail" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
             STATE="failure"; DESC="PR Gate policy failed (enforce mode)"
-          elif [ "$GATE_CODE" = "1" ]; then
+          elif [ "$GATE_VERDICT" = "fail" ]; then
             STATE="success"; DESC="PR Gate policy failed — advisory only (report-only mode)"
           else
             STATE="success"; DESC="PR Gate passed"
