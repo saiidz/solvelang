@@ -71,6 +71,23 @@ function mergeGovernanceService(environment) {
   return { mergeGovernanceService: { baseUrl, adminToken, enabled: Boolean(baseUrl && adminToken) } };
 }
 
+function teamContext(environment) {
+  // Team Context Index billing pointers stay optional at parse time,
+  // exactly like the Merge Governance prices and pilot pointers above:
+  // each surface fails closed on its own when its pointer is absent
+  // (checkout without a price ID, seat reads without the MCP pair,
+  // seat sync without the shared secret), never the whole API.
+  const rawBase = typeof environment.TEAM_CONTEXT_MCP_BASE_URL === "string" ? environment.TEAM_CONTEXT_MCP_BASE_URL.trim().replace(/\/+$/, "") : "";
+  return {
+    teamContext: {
+      priceId: environment.STRIPE_TEAM_CONTEXT_PRICE_ID || undefined,
+      syncSecret: environment.TEAM_CONTEXT_SYNC_SECRET || undefined,
+      mcpBaseUrl: rawBase || undefined,
+      mcpBillingToken: environment.TEAM_CONTEXT_MCP_BILLING_TOKEN || undefined,
+    },
+  };
+}
+
 function customerAccess(environment) {
   const enabled = environment.API_CUSTOMER_ACCOUNTS_ENABLED === "true";
   return { customerAccountsEnabled: enabled, customerAuthTable: enabled ? required(environment, "API_CUSTOMER_AUTH_TABLE") : undefined };
@@ -224,7 +241,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...agentActions(environment), ...agentOps(environment), ...mergeGovernanceService(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...agentActions(environment), ...agentOps(environment), ...mergeGovernanceService(environment), ...teamContext(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,

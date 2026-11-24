@@ -161,6 +161,24 @@ Parameters:
   StripeMgovPlusAnnualPriceId:
     Type: String
     Default: ""
+  StripeTeamContextPriceId:
+    Type: String
+    Default: ""
+    Description: Team Context Index per-seat monthly price ID; blank leaves the team checkout dark.
+  TeamContextSyncSecret:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Shared secret the hosted MCP service presents on the team seat-sync route; blank leaves seat sync dark.
+  TeamContextMcpBaseUrl:
+    Type: String
+    Default: ""
+    Description: Hosted MCP base URL for Team Context Index seat reads; blank (with the billing token blank) leaves seat reads dark.
+  TeamContextMcpBillingToken:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: Billing read token presented to the hosted MCP service for Team Context Index seat reads.
   MgovPilotBaseUrl:
     Type: String
     Default: ""
@@ -527,6 +545,10 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          STRIPE_TEAM_CONTEXT_PRICE_ID: !Ref StripeTeamContextPriceId
+          TEAM_CONTEXT_SYNC_SECRET: !Ref TeamContextSyncSecret
+          TEAM_CONTEXT_MCP_BASE_URL: !Ref TeamContextMcpBaseUrl
+          TEAM_CONTEXT_MCP_BILLING_TOKEN: !Ref TeamContextMcpBillingToken
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
           AGENT_OPS_ENABLED: !Ref AgentOpsEnabled
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
@@ -626,6 +648,10 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          STRIPE_TEAM_CONTEXT_PRICE_ID: !Ref StripeTeamContextPriceId
+          TEAM_CONTEXT_SYNC_SECRET: !Ref TeamContextSyncSecret
+          TEAM_CONTEXT_MCP_BASE_URL: !Ref TeamContextMcpBaseUrl
+          TEAM_CONTEXT_MCP_BILLING_TOKEN: !Ref TeamContextMcpBillingToken
           AG_UI_PILOT_ENABLED: !Ref AgUiPilotEnabled
           AGENT_TALKBACK_ENABLED: !Ref AgentTalkbackEnabled
           AGENT_ACTIONS_ENABLED: !Ref AgentActionsEnabled
@@ -1016,6 +1042,10 @@ Resources:
           STRIPE_MGOV_REGULAR_ANNUAL_PRICE_ID: !Ref StripeMgovRegularAnnualPriceId
           STRIPE_MGOV_PLUS_MONTHLY_PRICE_ID: !Ref StripeMgovPlusMonthlyPriceId
           STRIPE_MGOV_PLUS_ANNUAL_PRICE_ID: !Ref StripeMgovPlusAnnualPriceId
+          STRIPE_TEAM_CONTEXT_PRICE_ID: !Ref StripeTeamContextPriceId
+          TEAM_CONTEXT_SYNC_SECRET: !Ref TeamContextSyncSecret
+          TEAM_CONTEXT_MCP_BASE_URL: !Ref TeamContextMcpBaseUrl
+          TEAM_CONTEXT_MCP_BILLING_TOKEN: !Ref TeamContextMcpBillingToken
           MGOV_PILOT_BASE_URL: !Ref MgovPilotBaseUrl
           MGOV_ADMIN_TOKEN: !Ref MgovAdminToken
           MGOV_PILOT_TENANT: !Ref MgovPilotTenant
