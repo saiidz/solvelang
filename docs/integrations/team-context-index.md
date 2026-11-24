@@ -12,8 +12,9 @@ email, a member list, pending invites, and one **shared context index**
 — the context-index document for the team's connected repo/workspace
 scope. The team owner invites members **by account email**. Each member
 who accepts receives **their own team token** and shares the team's
-index. There are no price fields and no checkout wiring: a team is an
-access record, not a billing surface.
+index. A team is an access record first: it works exactly the same
+whether or not it has a subscription. Billing, where the owner chooses
+it, is per seat — see **Billing** below.
 
 ## Tokens
 
@@ -55,6 +56,39 @@ and `/mcp` is unaffected.
   The team owner cannot be revoked.
 - An invite can be accepted once, only by the invited account email.
 
+## Billing
+
+Seat price (owner decision, Nov 24, 2026): **$8 per seat per month**,
+sold through the SolveLang account's embedded checkout — never an
+external hosted payment page. A **seat** is one member record: the
+team owner counts as a seat, and billing counts **active members
+only** — revoked members persist as records (audit) but are never
+billed, and a member who is revoked and later re-invited counts once.
+
+- The account page (`/account/team-context/`) lists the signed-in
+  owner's teams with their active-seat counts and monthly totals and
+  carries the Subscribe flow. The checkout's seat quantity and the
+  ownership check come from this server's records (via the billing
+  read routes below), never from the request.
+- When membership changes — an invite is accepted or a member is
+  revoked — this server reports the new active-seat count to the API
+  access service, which moves the subscription quantity to match.
+  The quantity change applies immediately; Stripe's prorations settle
+  on the next invoice. Sync is best-effort and failure-isolated: a
+  billing outage never fails a membership change.
+- There is **no paywall**: nothing in the team surface checks for a
+  subscription. Teams without one keep working exactly as before.
+
+| Route | Auth | Effect |
+| --- | --- | --- |
+| `GET /billing/teams?ownerEmail=` | billing token only | The owner's teams with active-seat counts |
+| `GET /billing/teams/:id` | billing token only | One team's name, owner email, and active-seat count |
+
+The billing token authorizes **only** these reads: the master token,
+the test token, and team member tokens all get `401` there. When no
+billing token is configured the routes answer
+`503 {"error":"billing_unavailable"}`.
+
 ## Configuration
 
 Teams are off unless a store is configured (fail-closed):
@@ -65,3 +99,10 @@ Teams are off unless a store is configured (fail-closed):
   atomic (temp file + rename, mode `0600`).
 - `SOLVELANG_REMOTE_TEAMS=memory` — in-memory store for tests/dev only;
   records die with the process.
+- `MCP_REMOTE_BILLING_TOKEN` — the billing read token above; unset
+  keeps the billing routes dark.
+- `SOLVELANG_TEAM_BILLING_SYNC_URL` + `SOLVELANG_TEAM_BILLING_SYNC_SECRET`
+  — the seat-sync pair; both or neither. The URL is the API access
+  service's `POST /team-context/seat-sync` route and the secret is the
+  shared secret that route checks (its own credential, never the
+  master admin secret).
