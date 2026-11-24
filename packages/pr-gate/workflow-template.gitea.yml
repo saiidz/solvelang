@@ -123,8 +123,17 @@ jobs:
           ARGS=(--root "$GITHUB_WORKSPACE" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
           if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
           if [ -n "$LABELS" ]; then ARGS+=(--labels "$LABELS"); fi
-          node "$PR_GATE_KIT_DIR/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+          node "$PR_GATE_KIT_DIR/packages/pr-gate/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
           CODE=$?
+          # A crashed CLI also exits 1; without a result file there is no
+          # verdict, so treat a missing result.json as operational (exit 2),
+          # never as a policy failure.
+          if [ ! -f .pr-gate-out/result.json ]; then
+            echo "PR Gate produced no result.json (exit $CODE) - operational error."
+            exit 2
+          fi
+          VERDICT=$(node -e "try{const r=JSON.parse(require(fs).readFileSync(.pr-gate-out/result.json,utf8));const e=r.policy&&r.policy.evaluation;process.stdout.write(e?(e.passed?pass:fail):)}catch{process.stdout.write()}")
+          echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
           echo "exit-code=$CODE" >> "$GITHUB_OUTPUT"
           echo "report-path=.pr-gate-out/report.md" >> "$GITHUB_OUTPUT"
           # Operational errors fail in every mode; policy failures fail only in enforce mode.
@@ -178,13 +187,16 @@ jobs:
           PR_GATE_TOKEN: ${{ secrets.GITEA_TOKEN }}
           PR_GATE_REPO: ${{ github.repository }}
           GATE_CODE: ${{ steps.gate.outputs.exit-code }}
+          GATE_VERDICT: ${{ steps.gate.outputs.verdict }}
           HEAD_SHA: ${{ steps.facts.outputs.head-sha }}
         run: |
-          if [ "$GATE_CODE" = "2" ]; then
+          # Map the verdict recorded in result.json, not the CLI exit code:
+          # in report-only mode the CLI exits 0 even on a policy FAIL.
+          if [ "$GATE_CODE" = "2" ] || [ -z "$GATE_VERDICT" ]; then
             STATE="error"; DESC="PR Gate run failed operationally — see the PR comment"
-          elif [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+          elif [ "$GATE_VERDICT" = "fail" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
             STATE="failure"; DESC="PR Gate policy failed (enforce mode)"
-          elif [ "$GATE_CODE" = "1" ]; then
+          elif [ "$GATE_VERDICT" = "fail" ]; then
             STATE="success"; DESC="PR Gate policy failed — advisory only (report-only mode)"
           else
             STATE="success"; DESC="PR Gate passed"
