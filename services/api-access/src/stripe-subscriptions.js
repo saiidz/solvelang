@@ -148,7 +148,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
       return match?.id ?? null;
     },
 
-    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId, quantity = 1, product, automaticTax = false, taxDetails }) {
+    async createIncompleteSubscription({ accountId, requestId, email, plan, priceId, customerId, promotionCodeId, quantity = 1, product, automaticTax = false, taxDetails, subscriptionMetadata }) {
       let customer = customerId;
       if (!customer) {
         const createdCustomer = await stripe.customers.create(
@@ -170,7 +170,7 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
           payment_settings: { save_default_payment_method: "on_subscription" },
           ...(automaticTax ? { automatic_tax: { enabled: true } } : {}),
           ...(promotionCodeId ? { discounts: [{ promotion_code: promotionCodeId }] } : {}),
-          metadata: { accountId, email, plan, requestId, ...(product ? { product } : {}) },
+          metadata: { accountId, email, plan, requestId, ...(product ? { product } : {}), ...(subscriptionMetadata ? { ...subscriptionMetadata } : {}) },
           expand: ["latest_invoice.payment_intent"],
         }, { idempotencyKey: `api-subscription-elements-${requestId}` });
       const invoice = subscription?.latest_invoice;
@@ -324,6 +324,33 @@ export function createStripeSubscriptionGateway(stripe, webhookSecret) {
         cancel_at_period_end: false,
       });
       return { applied: true, pending: false, subscription: finalized };
+    },
+
+    // Seat-count sync for per-seat products (Team Context Index): the
+    // quantity change applies to the subscription immediately and
+    // Stripe records prorations for it, which are charged or credited
+    // on the NEXT invoice - the same proration posture as a plan
+    // downgrade in changeSubscriptionPlan above. A canceled
+    // subscription is left alone; anything but exactly one item is a
+    // shape this gateway never manages, so it refuses.
+    async updateSubscriptionQuantity({ subscriptionId, quantity }) {
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const items = subscription?.items?.data ?? [];
+      if (items.length !== 1 || typeof items[0]?.id !== "string") {
+        throw new Error("Stripe subscription must contain exactly one managed item.");
+      }
+      const current = Number.isSafeInteger(items[0].quantity) && items[0].quantity > 0 ? items[0].quantity : 1;
+      if (subscription.status === "canceled") {
+        return { applied: false, reason: "canceled", status: subscription.status, quantity: current };
+      }
+      if (current === quantity) {
+        return { applied: false, reason: "unchanged", status: subscription.status, quantity: current };
+      }
+      const updated = await stripe.subscriptions.update(subscriptionId, {
+        items: [{ id: items[0].id, quantity }],
+        proration_behavior: "create_prorations",
+      });
+      return { applied: true, status: updated?.status ?? subscription.status, quantity };
     },
 
     constructWebhookEvent(rawBody, signature) {
