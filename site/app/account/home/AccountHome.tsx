@@ -489,6 +489,15 @@ export function AccountHome() {
           {dashboard ? <AutoReloadCard csrfToken={dashboard.csrfToken} /> : null}
 
           <section className={cardClass}>
+            <p className={cardEyebrowClass}>Team Context Index</p>
+            <h2 className="mt-3 text-2xl font-bold">Team seats</h2>
+            <p className="mt-4 text-slate-300">Your teams on the hosted MCP service share one context index, billed per seat at  per seat per month — active members only, and the seat count follows your membership automatically.</p>
+            <Link href="/account/team-context/" className={cardLinkClass}>
+              Manage team billing
+            </Link>
+          </section>
+
+          <section className={cardClass}>
             <p className={cardEyebrowClass}>Agent access</p>
             <h2 className="mt-3 text-2xl font-bold">Agents acting for you</h2>
             <p className="mt-4 text-slate-300">Delegated tokens for your AI agents, the purchases they prepare for your approval, top-up mandates with hard caps, and the full activity log.</p>
