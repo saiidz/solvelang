@@ -189,3 +189,24 @@ test("homepage follows the approved product order and preserves maturity boundar
   assert.match(landing, /\/withdraw\//);
   assert.match(landing, /anpc-sal-pictogram\.png/);
 });
+
+test("compatibility page states the platform truth without overclaiming", () => {
+  assert.match(routes, /segment: "compatibility"[^\n]+sitemap: true/);
+  const page = read("app/(english)/compatibility/page.tsx");
+  assert.match(page, /canonical: "https:\/\/www\.solve-lang\.com\/compatibility\/"/);
+  for (const host of ["GitHub", "GitLab", "Bitbucket", "Azure DevOps", "Codeberg", "Forgejo", "Gitea", "SourceHut", "OneDev", "Radicle"]) {
+    assert.ok(page.includes(host), `compatibility page must name ${host}`);
+  }
+  // The context products are the ones scoped to every host.
+  assert.match(page, /Every host listed below/);
+  assert.match(page, /Hosted MCP endpoint and Team Index/);
+  // Runner minutes and governance are stated as GitHub today, in progress
+  // for more platforms, with no dates and no promises.
+  assert.match(page, /Runner minutes and the Process Solution merge-governance engine currently run on\s+GitHub/);
+  assert.match(page, /Extending both to more platforms is in progress/);
+  assert.match(page, /no dates\s+and no promises/);
+  // …and they are never paired with any other platform as supported today.
+  const otherPlatforms = "(?:GitLab|Bitbucket|Azure DevOps|Codeberg|Forgejo|Gitea|SourceHut|OneDev|Radicle)";
+  assert.doesNotMatch(page, new RegExp(`Runner minutes[\\s\\S]{0,120}${otherPlatforms}`, "i"));
+  assert.doesNotMatch(page, new RegExp(`governance[\\s\\S]{0,120}${otherPlatforms}`, "i"));
+});
