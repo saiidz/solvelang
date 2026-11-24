@@ -159,6 +159,18 @@ function tokenPrefix(token: string): string {
   return token.slice(0, 15);
 }
 
+// Billing counts ACTIVE members only, by distinct account email: a
+// member who was revoked and later re-invited has two records (one
+// revoked, one active) and still counts as exactly one seat. Revoked
+// records persist for audit and are never billed.
+export function countActiveSeats(members: readonly TeamMemberRecord[]): number {
+  const emails = new Set<string>();
+  for (const member of members) {
+    if (member.status === "active") emails.add(member.email);
+  }
+  return emails.size;
+}
+
 interface TeamStoreData {
   teams: TeamRecord[];
 }
@@ -236,6 +248,11 @@ export class TeamStore {
     return this.findTeam(teamId);
   }
 
+  async listTeamsByOwner(ownerEmailInput: unknown): Promise<TeamRecord[]> {
+    const ownerEmail = normalizeTeamEmail(ownerEmailInput);
+    return this.data.teams.filter((team) => team.ownerEmail === ownerEmail);
+  }
+
   async createInvite(teamId: string, emailInput: unknown): Promise<{ inviteToken: string; invite: TeamInviteRecord }> {
     const team = this.findTeam(teamId);
     const email = normalizeTeamEmail(emailInput);
@@ -295,7 +312,12 @@ export class TeamStore {
   async revokeMember(teamId: string, emailInput: unknown): Promise<TeamMemberRecord> {
     const team = this.findTeam(teamId);
     const email = normalizeTeamEmail(emailInput);
-    const member = team.members.find((entry) => entry.email === email);
+    // A revoked member who is re-invited and accepts again leaves two
+    // records for one email; the ACTIVE record is the membership, so
+    // it is the one a revoke acts on. With only revoked records the
+    // first record still produces the already-revoked conflict below.
+    const member = team.members.find((entry) => entry.email === email && entry.status === "active")
+      ?? team.members.find((entry) => entry.email === email);
     if (!member) throw new TeamError("not_found", "That account email is not a member of this team.");
     if (member.role === "owner") throw new TeamError("forbidden", "The team owner cannot be revoked.");
     if (member.status === "revoked") throw new TeamError("conflict", "That member has already been revoked.");
