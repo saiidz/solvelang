@@ -124,10 +124,24 @@ function normalizeArchiveName(input: string): string {
   return name;
 }
 
+const repositoryNameSegment = /^[A-Za-z0-9_.~-]+$/;
+const repositoryHostSegment = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
 function validateGitHubRepositoryName(input: string): string {
   const value = normalizeDisplayName(input, "GitHub repository name");
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)) throw new Error("GitHub repository name must use owner/repository form.");
-  return value;
+  const segments = value.split("/");
+  // Historical form: owner/repository.
+  if (segments.length === 2 && segments.every((segment) => repositoryNameSegment.test(segment))) return value;
+  // Host-aware form: host/owner/repository[/...] for snapshots whose origin
+  // lives on another git host (gitlab.com/group/repo, a self-hosted Gitea,
+  // dev.azure.com/org/project/_git/repo). The host must be a dotted host
+  // name or localhost, so a plain multi-segment path is never misread.
+  if (
+    segments.length >= 3
+    && (segments[0] === "localhost" || repositoryHostSegment.test(segments[0]))
+    && segments.slice(1).every((segment) => repositoryNameSegment.test(segment))
+  ) return value;
+  throw new Error("GitHub repository name must use owner/repository form.");
 }
 
 function validateGitCommit(input: string): string {
