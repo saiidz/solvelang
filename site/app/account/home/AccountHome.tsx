@@ -26,6 +26,7 @@ import {
   type RunnerMinutesStartMode,
   type RunnerMinutesStatus,
 } from "@/app/account/core/runner-minutes-account";
+import { AutoReloadCard } from "@/app/account/home/AutoReloadCard";
 import {
   TRIAL_CLAIM_ACTION_LABEL,
   TRIAL_CLAIM_ALTERNATIVES,
@@ -484,6 +485,8 @@ export function AccountHome() {
               Buy a minutes pack
             </Link>
           </section>
+
+          {dashboard ? <AutoReloadCard csrfToken={dashboard.csrfToken} /> : null}
 
           <section className={cardClass}>
             <p className={cardEyebrowClass}>Agent access</p>
