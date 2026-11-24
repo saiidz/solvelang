@@ -41,6 +41,11 @@ export const RUNNER_MINUTES_AUTO_RELOAD_CARD_REQUIRED_LINE =
 export const RUNNER_MINUTES_AUTO_RELOAD_NO_CARD_LINE =
   "No saved card yet — auto-reload can only top up from a saved card.";
 
+// The budget row's reached line, verbatim: plain words for what
+// happened and when auto-reload resumes.
+export const RUNNER_MINUTES_AUTO_RELOAD_BUDGET_REACHED_LINE =
+  "Monthly auto-reload budget reached — auto-reload resumes on the 1st.";
+
 export type RunnerMinutesAutoReloadPool = "standard" | "high-power" | "premium";
 
 export const RUNNER_MINUTES_AUTO_RELOAD_POOLS: ReadonlyArray<RunnerMinutesAutoReloadPool> = [
@@ -90,6 +95,9 @@ export type RunnerMinutesAutoReloadView = {
   standard?: RunnerMinutesAutoReloadPoolView;
   "high-power"?: RunnerMinutesAutoReloadPoolView;
   premium?: RunnerMinutesAutoReloadPoolView;
+  budgetCents?: number | null;
+  spentThisMonthCents?: number;
+  budgetReached?: boolean;
   savedPaymentMethod?: RunnerMinutesSavedPaymentMethod | null;
 };
 
@@ -138,6 +146,72 @@ export function runnerMinutesAutoReloadPools(
     if (direct && !byPool.has(pool)) byPool.set(pool, direct);
   }
   return RUNNER_MINUTES_AUTO_RELOAD_POOLS.map((pool) => ({ pool, ...normalizePoolView(byPool.get(pool)) }));
+}
+
+export type RunnerMinutesAutoReloadBudget = {
+  budgetCents: number | null;
+  spentThisMonthCents: number;
+  budgetReached: boolean;
+};
+
+// The account's monthly auto-reload budget as the service reports
+// it: the cap in cents (null for no cap), the month's landed
+// auto-reload spend in cents, and whether the cap is reached. The
+// reached state is derived from the two numbers with the service's
+// own rule (spend at or over the cap), so a service that omits its
+// flag still renders the same state.
+export function runnerMinutesAutoReloadBudget(
+  view: RunnerMinutesAutoReloadView,
+): RunnerMinutesAutoReloadBudget {
+  const budgetCents =
+    typeof view.budgetCents === "number" && Number.isInteger(view.budgetCents) && view.budgetCents > 0
+      ? view.budgetCents
+      : null;
+  const spentThisMonthCents =
+    typeof view.spentThisMonthCents === "number" &&
+    Number.isFinite(view.spentThisMonthCents) &&
+    view.spentThisMonthCents > 0
+      ? Math.round(view.spentThisMonthCents)
+      : 0;
+  return {
+    budgetCents,
+    spentThisMonthCents,
+    budgetReached: budgetCents !== null && spentThisMonthCents >= budgetCents,
+  };
+}
+
+// Cents as the dollars the budget row speaks in: whole dollars
+// without a cents part, otherwise two places ("$20", "$20.50").
+export function runnerMinutesAutoReloadMoneyLabel(cents: number): string {
+  const dollars = cents / 100;
+  return `$${dollars.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(dollars) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// "$X of $Y this month" while a cap is set; null with no cap (the
+// row then has no spend line to show).
+export function runnerMinutesAutoReloadBudgetSpendLine(
+  budget: RunnerMinutesAutoReloadBudget,
+): string | null {
+  if (budget.budgetCents === null) return null;
+  return `${runnerMinutesAutoReloadMoneyLabel(budget.spentThisMonthCents)} of ${runnerMinutesAutoReloadMoneyLabel(budget.budgetCents)} this month`;
+}
+
+// The budget input, parsed: an empty field clears the cap (null);
+// otherwise a positive dollar amount, converted to whole cents.
+// Anything else is not ok and changes nothing.
+export function runnerMinutesAutoReloadBudgetCentsFromInput(
+  text: string,
+): { ok: true; budgetCents: number | null } | { ok: false } {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: true, budgetCents: null };
+  const dollars = Number(trimmed);
+  if (!Number.isFinite(dollars) || dollars <= 0) return { ok: false };
+  const budgetCents = Math.round(dollars * 100);
+  if (budgetCents < 1) return { ok: false };
+  return { ok: true, budgetCents };
 }
 
 export function runnerMinutesSavedPaymentMethod(
@@ -199,6 +273,9 @@ export function runnerMinutesAutoReloadLastLine(settings: RunnerMinutesAutoReloa
   }
   if (settings.lastStatus === "succeeded" || settings.lastStatus === "success") {
     return `Last auto-reload succeeded${at}.`;
+  }
+  if (settings.lastStatus === "budget_reached") {
+    return RUNNER_MINUTES_AUTO_RELOAD_BUDGET_REACHED_LINE;
   }
   if (settings.lastStatus) {
     return `Last auto-reload: ${settings.lastStatus}${at}.`;

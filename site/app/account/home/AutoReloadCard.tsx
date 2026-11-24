@@ -5,11 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import { customerApi, normalizeApiBase } from "@/app/account/core/customer-api";
 import {
   RUNNER_MINUTES_AUTO_RELOAD_BODY,
+  RUNNER_MINUTES_AUTO_RELOAD_BUDGET_REACHED_LINE,
   RUNNER_MINUTES_AUTO_RELOAD_CARD_REQUIRED_LINE,
   RUNNER_MINUTES_AUTO_RELOAD_NO_CARD_LINE,
   RUNNER_MINUTES_AUTO_RELOAD_PATH,
   RUNNER_MINUTES_AUTO_RELOAD_TITLE,
   RUNNER_MINUTES_SAVE_CARD_PATH,
+  runnerMinutesAutoReloadBudget,
+  runnerMinutesAutoReloadBudgetCentsFromInput,
+  runnerMinutesAutoReloadBudgetSpendLine,
   runnerMinutesAutoReloadLastLine,
   runnerMinutesAutoReloadMinutesLabel,
   runnerMinutesAutoReloadNeedsPaymentMethod,
@@ -18,6 +22,7 @@ import {
   runnerMinutesAutoReloadPools,
   runnerMinutesSavedCardLabel,
   runnerMinutesSavedPaymentMethod,
+  type RunnerMinutesAutoReloadBudget,
   type RunnerMinutesAutoReloadPoolSettings,
   type RunnerMinutesAutoReloadView,
   type RunnerMinutesSavedPaymentMethod,
@@ -51,10 +56,27 @@ export function AutoReloadCard({ csrfToken }: { csrfToken: string }) {
   const [busyPool, setBusyPool] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [cardRequired, setCardRequired] = useState(false);
+  const [budget, setBudget] = useState<RunnerMinutesAutoReloadBudget>({
+    budgetCents: null,
+    spentThisMonthCents: 0,
+    budgetReached: false,
+  });
+  const [budgetInput, setBudgetInput] = useState("");
+  const [busyBudget, setBusyBudget] = useState(false);
+  const budgetHydratedRef = useRef(false);
 
   function applyView(view: RunnerMinutesAutoReloadView) {
     setPools(runnerMinutesAutoReloadPools(view));
     setSavedMethod(runnerMinutesSavedPaymentMethod(view));
+    const nextBudget = runnerMinutesAutoReloadBudget(view);
+    setBudget(nextBudget);
+    // The input is seeded once, from the first view: later re-reads
+    // (a pool save, say) must not clobber a budget the customer is
+    // halfway through typing. A budget save re-seeds it explicitly.
+    if (!budgetHydratedRef.current) {
+      budgetHydratedRef.current = true;
+      setBudgetInput(nextBudget.budgetCents === null ? "" : String(nextBudget.budgetCents / 100));
+    }
   }
 
   useEffect(() => {
@@ -112,7 +134,36 @@ export function AutoReloadCard({ csrfToken }: { csrfToken: string }) {
     }
   }
 
+  async function saveBudget() {
+    if (busyBudget || busyPool) return;
+    const parsed = runnerMinutesAutoReloadBudgetCentsFromInput(budgetInput);
+    if (!parsed.ok) {
+      setError("Enter the monthly budget in dollars — for example 50 — or clear the field for no cap.");
+      return;
+    }
+    setBusyBudget(true);
+    setError("");
+    setCardRequired(false);
+    try {
+      await customerApi<Record<string, never>>(RUNNERS_API_BASE, RUNNER_MINUTES_AUTO_RELOAD_PATH, {
+        method: "POST",
+        csrfToken,
+        body: JSON.stringify({ budgetCents: parsed.budgetCents }),
+      });
+      // Re-read the settings and render the state the service
+      // reports — never a blind local flip.
+      await reread();
+      setBudgetInput(parsed.budgetCents === null ? "" : String(parsed.budgetCents / 100));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Your auto-reload budget could not be changed.");
+    } finally {
+      setBusyBudget(false);
+    }
+  }
+
   if (loadState !== "ready") return null;
+
+  const budgetSpendLine = runnerMinutesAutoReloadBudgetSpendLine(budget);
 
   return (
     <section className={cardClass}>
@@ -190,6 +241,38 @@ export function AutoReloadCard({ csrfToken }: { csrfToken: string }) {
             </div>
           );
         })}
+      </div>
+
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <p className="text-sm font-semibold">Monthly budget</p>
+        <p className="mt-2 text-sm text-slate-400">
+          The most auto-reload may charge your saved card in a month, across every pool. Leave the field empty for no cap.
+        </p>
+        <label className="mt-3 block text-sm text-slate-400">
+          Budget (USD)
+          <input
+            value={budgetInput}
+            inputMode="decimal"
+            placeholder="No cap"
+            disabled={busyBudget || busyPool !== null}
+            onChange={(event) => setBudgetInput(event.target.value)}
+            className="mt-2 w-full rounded-xl border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-60"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={busyBudget || busyPool !== null}
+          onClick={() => void saveBudget()}
+          className="mt-3 rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold hover:bg-white/5 disabled:opacity-60"
+        >
+          Save budget
+        </button>
+        {budgetSpendLine ? <p className="mt-3 text-sm text-slate-400">{budgetSpendLine}</p> : null}
+        {budget.budgetReached ? (
+          <p className="mt-3 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-200">
+            {RUNNER_MINUTES_AUTO_RELOAD_BUDGET_REACHED_LINE}
+          </p>
+        ) : null}
       </div>
 
       {cardRequired ? (
