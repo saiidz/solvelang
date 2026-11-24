@@ -1,11 +1,21 @@
 # SolveLang
 
+[![CI](https://github.com/saiidz/solvelang/actions/workflows/ci.yml/badge.svg)](https://github.com/saiidz/solvelang/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/@solvelang/mcp-server)](https://www.npmjs.com/package/@solvelang/mcp-server) [![saiidz/solvelang MCP server](https://glama.ai/mcp/servers/saiidz/solvelang/badges/score.svg)](https://glama.ai/mcp/connectors/io.github.saiidz/solvelang)
+
+![SolveLang running in the browser: a two-file workspace executes locally and prints its deterministic output](docs/demo/solvelang-run.gif)
+
+> **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
+
+Start the SolveLang MCP server — Solve Context tools for your AI coding agent — straight from npm, no install:
+
+```bash
+npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp
+```
+
 ## Current verification — 2026-09-20
 
 MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
 Older checkpoints below are historical.
-
-> **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**
 
 SolveLang is an early-stage language and tooling project for describing business workflows in a form that humans can read, engineers can review, and organizations can audit. The repository also contains local-first audit/graph tooling, Codex/Claude MCP integration, and the separate **Solve Context** context-selection product layer.
 
