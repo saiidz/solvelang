@@ -68,6 +68,8 @@
     "dist/src/remote-cli.d.ts",
     "dist/src/remote-cli.js",
     "dist/src/remote.d.ts",
+    "dist/src/team-billing.d.ts",
+    "dist/src/team-billing.js",
     "dist/src/team.d.ts",
     "dist/src/team.js",
     "dist/src/remote.js",
