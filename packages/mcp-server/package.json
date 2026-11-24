@@ -68,6 +68,8 @@
     "dist/src/remote-cli.d.ts",
     "dist/src/remote-cli.js",
     "dist/src/remote.d.ts",
+    "dist/src/team.d.ts",
+    "dist/src/team.js",
     "dist/src/remote.js",
     "dist/src/solve-graph-affected-validations.d.ts",
     "dist/src/solve-graph-affected-validations.js",
