@@ -163,3 +163,96 @@ override precedence), and end-to-end runs against a fixture repository
 built at test time: a leaf change with a known impact chain
 (`leaf <- mid <- top <- top.test`), a protected-path violation, a
 ceiling violation, and override-label passes in both modes.
+
+## Gitea / Forgejo: receipt collector + gate wrappers
+
+The PR Gate core and the Change Impact Receipt builder are
+platform-neutral; only their GitHub packaging was GitHub-shaped. This
+kit also ships the Gitea/Forgejo packaging. Gitea and Forgejo share one
+REST API family (`/api/v1`), so one collector and one wrapper design
+cover both forges; the per-platform differences are in the workflow
+templates, where each platform's own documentation puts them.
+
+### Receipt collector (`solvelang-forge-receipt`)
+
+Reads one pull request from a self-hosted Gitea or Forgejo instance and
+emits a Change Impact Receipt **input** object — the exact JSON shape
+the Change Impact Receipts page (`site/app/change-impact-receipt`)
+consumes. Paste the output into that page (or feed it to
+`buildChangeImpactReceipt`) to get the receipt: findings labeled
+verified / failed / unverified, the standard grading block, no risk
+scores. The page itself is unchanged.
+
+```bash
+cd packages/pr-gate
+npm ci
+npm run build
+FORGE_TOKEN=<operator token> node dist/packages/pr-gate/src/forge-receipt.js \
+  --base-url https://git.example.com \
+  --owner octo --repo demo --pr 7 \
+  --platform gitea \
+  --gate-result .pr-gate-out/result.json \
+  --out receipt-input.json
+```
+
+- `--platform` is `gitea` (default) or `forgejo`; it only names the API
+  in the receipt's provenance — the endpoints are the same.
+- The token is supplied by the operator at runtime (`--token`, or
+  `FORGE_TOKEN` / `GITEA_TOKEN` / `FORGEJO_TOKEN`) and is never stored,
+  logged, or written to the output.
+- The collector reads the PR, its files, its submitted reviews, its
+  commit list, and the combined commit status of the head SHA (the
+  latest status per context becomes the receipt's check-run list). If
+  any of those reads fail, the collector exits `2` (operational error)
+  rather than emitting a partial input the builder would over-claim
+  from. The compare read is the one exception: if it cannot answer,
+  `compare` is `null` and the builder labels base drift unverified.
+- Platform vocabulary is mapped, never invented: `REQUEST_CHANGES`
+  becomes `CHANGES_REQUESTED`; unsubmitted reviews (`PENDING`,
+  `REQUEST_REVIEW`) are dropped; commit-status `error` maps to the
+  receipt's `failure` conclusion, `warning` to `neutral`, `pending` to
+  a still-running check run with no conclusion; a boolean `mergeable`
+  becomes `unstable`/`dirty`, an absent one `unknown`.
+- `--gate-result` embeds a PR Gate `result.json`
+  (`solvelang.pr-gate.result.v1`) as the receipt's PR Gate route. With
+  no result supplied, the route is recorded as not run — which the
+  builder labels failed, never silently dropped.
+
+Exit codes mirror the PR Gate CLI: `0` = input emitted, `2` =
+operational error.
+
+### Gate workflow templates
+
+- `workflow-template.gitea.yml` — copy to `.gitea/workflows/pr-gate.yml`.
+- `workflow-template.forgejo.yml` — copy to
+  `.forgejo/workflows/pr-gate.yml`.
+
+Both run the same core CLI in report-only mode by default
+(`PR_GATE_MODE`), post/update ONE sticky comment (marker
+`<!-- pr-gate:report -->`) through the platform's issues-comments API,
+and post a commit status with context `pr-gate` to the PR head. Add the
+`pr-gate` context to branch protection's required status checks to make
+the gate block merges. Platform differences, per each forge's own
+documentation:
+
+- Gitea Actions is "designed to be compatible with GitHub Actions" with
+  documented differences
+  (https://docs.gitea.com/usage/actions/comparison). The job token is
+  `GITEA_TOKEN`, available as `${{ secrets.GITEA_TOKEN }}`, with Gitea's
+  own permission scopes — GitHub-only scopes such as `statuses` and
+  `checks` do not exist, and creating a commit status requires write
+  access to the repository's code unit
+  (https://docs.gitea.com/usage/actions/token-permissions).
+- Forgejo Actions is "designed to be familiar to users of GitHub
+  Actions, but it is not designed to be compatible"
+  (https://forgejo.org/docs/latest/user/actions/github-actions/): the
+  `permissions` job key is ignored (so the Forgejo template has no
+  permissions block), some `github` context keys are missing (so both
+  templates read PR facts from the API, not the event payload), and the
+  automatic token and API endpoint arrive as the `FORGEJO_TOKEN` and
+  `FORGEJO_API_URL` environment variables
+  (https://forgejo.org/docs/latest/user/actions/reference/).
+- Neither template uses a composite-action step for the kit: the
+  workflow clones `saiidz/solvelang` at the pinned SHA and runs the CLI
+  directly, so self-hosted instances can point `PR_GATE_KIT_URL` at a
+  mirror.
