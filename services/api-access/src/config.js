@@ -189,6 +189,16 @@ function agentTalkback(environment) {
   return { agentTalkbackEnabled: environment.AGENT_TALKBACK_ENABLED === "true" };
 }
 
+function securityScan(environment) {
+  // The public repo security scan (free read-only doorway, see
+  // repo-security-scan.js) stays dark unless its flag is exactly
+  // "true" - the same fail-closed optional-feature discipline as
+  // the flags above. The flag is also the kill switch: flipping
+  // it off refuses the scan route on the next configuration
+  // update or deploy.
+  return { securityScanEnabled: environment.SECURITY_SCAN_ENABLED === "true" };
+}
+
 function agentActions(environment) {
   // The Level 3 agent-actions gate (delegated tokens + the
   // authenticated /agent/actions endpoint, see
@@ -241,7 +251,7 @@ export function parseApiAccessEnvironment(environment = process.env) {
   if (automation.supportAutomationEnabled && !customer.customerAccountsEnabled) throw new Error("Support automation requires customer accounts to be enabled.");
   const siteOrigin = required(environment, "SITE_ORIGIN");
   return {
-    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...agentActions(environment), ...agentOps(environment), ...mergeGovernanceService(environment), ...teamContext(environment), ...liveCenter(environment),
+    ...shared(environment), ...usage(environment), ...billing(environment), ...customer, ...adminCrm(environment), ...automation, ...githubApp(environment), ...productConnect(environment), ...agUiPilot(environment), ...agentTalkback(environment), ...securityScan(environment), ...agentActions(environment), ...agentOps(environment), ...mergeGovernanceService(environment), ...teamContext(environment), ...liveCenter(environment),
     adminSecret: required(environment, "API_ACCESS_ADMIN_SECRET", 32), siteOrigin,
     studioAcceptanceOrigin: parseStudioAcceptanceOrigin(environment.STUDIO_ACCEPTANCE_ORIGIN, siteOrigin),
     turnstileSecretKey: environment.API_TURNSTILE_SECRET_KEY || undefined,
