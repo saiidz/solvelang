@@ -3,16 +3,16 @@
 [![mcptry](https://mcptry.com/badge/io.github.saiidz/solvelang)](https://mcptry.com/servers/io.github.saiidz/solvelang)
 [![saiidz/solvelang MCP server](https://glama.ai/mcp/servers/saiidz/solvelang/badges/score.svg)](https://glama.ai/mcp/connectors/io.github.saiidz/solvelang)
 
-## Current verification — 2026-09-20
+## Current verification — 2026-11-24
 
-MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+MCP v0.4.0 is published on npm and GitHub; main protection is enforced.
 Older checkpoints below are historical.
 
 Local-first, read-only workflow, Solve Graph and Solve Context analysis for MCP clients such as Codex and Claude Code.
 
 ## Distribution status
 
-MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
+MCP `@solvelang/mcp-server@0.4.0` is published on npm and GitHub, verified on 2026-11-24. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 That means:
 
@@ -24,14 +24,16 @@ That means:
 
 ## Published package usage
 
-Node.js 20 or newer is required. For the published v0.3.0 line:
+Node.js 20 or newer is required. For the published v0.4.0 line:
 
 ```bash
 SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/project \
-  npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp
+  npx --yes @solvelang/mcp-server@0.4.0
 ```
 
-The package ships two executables, so npx needs the explicit --package form above — the bare `npx @solvelang/mcp-server` form cannot choose one and fails.
+The package ships a single executable (solvelang-mcp), so the bare npx form above works — no --package form is needed. (v0.3.0 shipped multiple executables and required the explicit --package form; that requirement ended with 0.4.0.)
+
+The local stdio server exposes 31 tools across the workflow/n8n, Solve Graph and Solve Context families below, including the two Solve Context index tools. The hosted remote endpoint is a separate surface (10 read-only tools, plus team context-index sharing for SolveLang teams) — see the Hosted remote boundary section.
 
 Call `solvelang_capabilities` / MCP list-tools to inspect the exact tools exposed by the installed version. Do not infer current-main tools from this README when using an older published package.
 
@@ -172,24 +174,24 @@ See:
 
 ## Hosted remote boundary
 
-The repository includes a deliberately read-only Streamable HTTP transport (`solvelang-mcp-remote`, `src/remote.ts`): the same raw-JSON-only analysis surface described in `docs/integrations/remote-mcp.md`, behind bearer authentication, a 4 MiB request ceiling, and a built-in per-address rate limiter (default 60 requests per 60 seconds, enforced before authentication and MCP parsing). Protocol-level tests and a real-client proof (an MCP SDK client completing a context-pack-driven impact task) pin the behavior, and a reviewed production deployment shape lives in `deploy/`.
+The repository includes a deliberately read-only Streamable HTTP transport (`src/remote.ts`, started via `node dist/src/remote-cli.js`): the same raw-JSON-only analysis surface described in `docs/integrations/remote-mcp.md`, behind bearer authentication, a 4 MiB request ceiling, and a built-in per-address rate limiter (default 60 requests per 60 seconds, enforced before authentication and MCP parsing). Protocol-level tests and a real-client proof (an MCP SDK client completing a context-pack-driven impact task) pin the behavior, and a reviewed production deployment shape lives in `deploy/`.
 
 **The endpoint is LIVE** (deployed 2026-11-20 on the owner's explicit production approval): `https://mcp.solve-lang.com` serves the 10 read-only remote tools behind bearer authentication, as a container on the production host behind TLS, with the built-in rate limit (60 requests per 60 seconds per source) active and the production token held on the host only. Verify at any time: `GET https://mcp.solve-lang.com/healthz` returns `{"status":"ok","service":"solvelang-mcp","mode":"remote-read-only"}`. Still outstanding as production hardening: edge rate limiting in front of the origin and monitoring. The hosted relay for the multi-agent bus is also live, at `https://relay.solve-lang.com` (see the Hosted relay section above).
 
 ## Multi-agent bus
 
-The package also ships the SolveLang multi-agent bus (`solvelang-bus`, `src/bus-cli.ts`, with `src/bus-daemon.ts`, `src/bus-client.ts`, `src/bus-envelope.ts`): a local-first coordination layer for agents sharing a workspace — presence, push signals, and atomic work claims with leases, so contention surfaces at claim time instead of merge time. It layers over the handoff documents above rather than replacing them: the bus carries signals, documents carry truth, and killing the daemon degrades clients to pure document handoffs with no state loss. Messages extend the handoff envelope (content-hash `sch_` ids, at-least-once delivery with idempotent consumers) and can carry Phase 4 Ed25519 signatures in the reserved `sig` field, verified against the same `solvelang.key-registry` v1 registry as signed gates; without a registry the daemon runs in the explicitly named local-open mode (localhost only, no sender authenticity). Full design, lifecycle, and honest limits: `docs/integrations/multi-agent-bus.md`.
+The package also ships the SolveLang multi-agent bus (`src/bus-cli.ts`, with `src/bus-daemon.ts`, `src/bus-client.ts`, `src/bus-envelope.ts`): a local-first coordination layer for agents sharing a workspace — presence, push signals, and atomic work claims with leases, so contention surfaces at claim time instead of merge time. It layers over the handoff documents above rather than replacing them: the bus carries signals, documents carry truth, and killing the daemon degrades clients to pure document handoffs with no state loss. Messages extend the handoff envelope (content-hash `sch_` ids, at-least-once delivery with idempotent consumers) and can carry Phase 4 Ed25519 signatures in the reserved `sig` field, verified against the same `solvelang.key-registry` v1 registry as signed gates; without a registry the daemon runs in the explicitly named local-open mode (localhost only, no sender authenticity). Full design, lifecycle, and honest limits: `docs/integrations/multi-agent-bus.md`.
 
-The bus is a separate bin and module set. It adds no MCP tools and does not change the read-only tool contract of `solvelang-mcp` or `solvelang-mcp-remote`.
+The bus is a separate entrypoint and module set (started with `node dist/src/bus-cli.js` or the repository's npm scripts; 0.4.0 exposes exactly one npm bin, solvelang-mcp). It adds no MCP tools and does not change the read-only tool contract of `solvelang-mcp` or `solvelang-mcp-remote`.
 
 ### Hosted relay (live)
 
-The bus's hosted counterpart also ships in this package (`solvelang-mcp-relay`, `src/relay-cli.ts`, with `src/relay.ts`): the same bus envelope, claim leases, and Phase 4 signature verification, carried over authenticated HTTPS between workspaces on different machines — bearer tokens bind one (workspace, agent) pair each, workspaces are fully isolated, and a message that fails authenticity is refused, never relayed. It is a separate bin and adds no MCP tools.
+The bus's hosted counterpart also ships in this package (`src/relay-cli.ts`, with `src/relay.ts`): the same bus envelope, claim leases, and Phase 4 signature verification, carried over authenticated HTTPS between workspaces on different machines — bearer tokens bind one (workspace, agent) pair each, workspaces are fully isolated, and a message that fails authenticity is refused, never relayed. It is a separate entrypoint and adds no MCP tools.
 
 **The relay is deployed and live at `https://relay.solve-lang.com`** (Phase 6, Nov 20, 2026): a dedicated container on the SolveLang production host beside the remote MCP endpoint, deployed from the reviewed shape in `deploy/` (`Dockerfile.relay`, `docker-compose.relay.yml`) under the owner's explicit production approval, and verified end-to-end from outside the host with two independent clients (claim contention denied at claim time, signed signal delivery, presence, unsigned/revoked/bad-signature refusals, workspace isolation, rate-limit 429, and a stop/restart kill-switch cycle degrading to document handoffs). Full protocol, hosting shape, and honest limits: `docs/integrations/hosted-relay.md`.
 
 ## Releases
 
-MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
+MCP `@solvelang/mcp-server@0.4.0` is published on npm and GitHub, verified on 2026-11-24. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 Trusted Publishing/protected release controls remain the required publication path. Do not republish the old version number, add an npm access token, or create a release/publication outside the approved process.
