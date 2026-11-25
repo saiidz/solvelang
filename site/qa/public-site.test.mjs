@@ -439,6 +439,22 @@ test("process solution page is labeled live with no public price", () => {
   assert.match(page, /no public price and no self-serve signup yet/);
 });
 
+test("process solution and services carry the approved Live status line verbatim", () => {
+  const approved = "Live status:</strong> Process Solution is live. The full governed cycle \u2014 plan, combined tree, battery, land \u2014 is proven end-to-end in production, with the landed tree verified identical to the tested tree and every decision written to the audit log. There is no public price and no self-serve signup yet.";
+  const ps = read("app/(english)/process-solution/page.tsx");
+  const sv = read("app/(english)/services/page.tsx");
+  assert.ok(ps.includes(approved), "process solution page carries the approved Live line");
+  assert.ok(sv.includes(approved), "services page carries the approved Live line");
+  assert.doesNotMatch(ps, /Pilot status:|is in pilot/);
+  assert.doesNotMatch(sv, /Pilot status:|is in pilot/);
+  assert.ok(sv.includes("Process Solution (merge governance)</td><td className=\"py-3 pr-4\">Live</td>"), "matrix row is Live");
+  assert.ok(sv.includes("\u2014 (live)</td><td className=\"py-3\">November 25, 2026</td>"), "matrix row verified November 25, 2026");
+  assert.ok(sv.includes("Published \u2014 v0.4.0"), "matrix MCP row is v0.4.0");
+  assert.ok(sv.includes("npx --yes @solvelang/mcp-server@0.4.0"), "matrix MCP row carries the bare 0.4.0 command");
+  const data = read("app/(english)/process-solution/process-solution-data.ts");
+  assert.ok(data.includes("Proven on the live queue"), "CI chips label the live queue");
+});
+
 test("api pricing page carries the runner minutes shelf summary", () => {
   const page = read("app/(english)/api-pricing/page.tsx");
   assert.match(page, /Runner minutes · Live/);
