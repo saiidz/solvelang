@@ -13,7 +13,7 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: 'npx',
-      args: ['-y', '--package', '@solvelang/mcp-server@0.3.0', 'solvelang-mcp'],
+      args: ['-y', '--package', '@solvelang/mcp-server@0.4.0', 'solvelang-mcp'],
       env: {
         ...(config.workspaceRoot && { SOLVELANG_WORKSPACE_ROOT: config.workspaceRoot })
       }
