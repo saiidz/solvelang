@@ -9,12 +9,12 @@
 Start the SolveLang MCP server — Solve Context tools for your AI coding agent — straight from npm, no install:
 
 ```bash
-npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp
+npx --yes @solvelang/mcp-server@0.4.0
 ```
 
 ## Current verification — 2026-09-20
 
-MCP v0.3.0 is published on npm and GitHub; main protection is enforced.
+MCP v0.4.0 is published on npm and GitHub; main protection is enforced.
 Older checkpoints below are historical.
 
 SolveLang is an early-stage language and tooling project for describing business workflows in a form that humans can read, engineers can review, and organizations can audit. The repository also contains local-first audit/graph tooling, Codex/Claude MCP integration, and the separate **Solve Context** context-selection product layer.
@@ -176,7 +176,7 @@ cargo build --release
 
 ### Distribution truth
 
-MCP `@solvelang/mcp-server@0.3.0` is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
+MCP `@solvelang/mcp-server@0.4.0` is published on npm and GitHub, verified on 2026-11-24. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.
 
 ### Use current repository source
 
@@ -483,7 +483,7 @@ Yes. The Rust CLI executes the supported language locally, and a bounded browser
 
 ### What is Solve Context?
 
-Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements; the tagged MCP v0.3.0 package is published on npm and GitHub.
+Solve Context is a separate local-first product layer for Claude Code/Codex context planning, exact context packs, retrieval, handoff and correctness-first compaction. It is implemented in repository source but not yet proven with complete real-agent/provider measurements; the tagged MCP v0.4.0 package is published on npm and GitHub.
 
 ### Does Solve Context save tokens?
 
@@ -491,7 +491,7 @@ The repository has synthetic and pinned-source byte/evidence regressions, not a 
 
 ### Is the published MCP v0.2.0 the same as current `main`?
 
-No. v0.2.0 is historical. The published v0.3.0 MCP package includes its tagged release source; later main changes require separate distribution.
+No. v0.2.0 is historical. The published v0.4.0 MCP package includes its tagged release source; later main changes require separate distribution.
 
 ### Is Workflow Intelligence Studio AI-powered?
 

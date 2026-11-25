@@ -11,7 +11,7 @@ It packages one shared read-only MCP configuration and workflow-review skill for
 
 ## Distribution truth
 
-The checked-in plugin launches the published `@solvelang/mcp-server@0.3.0` package through `npx`. The package, Codex manifest, Claude manifest, and shared MCP pin are version-aligned at v0.3.0.
+The checked-in plugin launches the published `@solvelang/mcp-server@0.4.0` package through `npx`. The package, Codex manifest, Claude manifest, and shared MCP pin are version-aligned at v0.4.0.
 
 For public OpenAI directory publication, the local `npx` transport is not sufficient by itself. The public listing must submit the separately deployed HTTPS remote MCP endpoint through OpenAI's **With MCP** review flow. The local bundle remains useful for Codex/Claude local development and package qualification.
 
