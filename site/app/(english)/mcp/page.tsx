@@ -58,6 +58,10 @@ export default function McpPage() {
           <Link className="text-accent underline" href="/support/">Support</Link>
           <a className="text-accent underline" href="https://github.com/saiidz/solvelang">Source code</a>
         </div>
+
+        <div className="mt-8">
+          <a href="https://serverdex.io/server/io-github-saiidz-solvelang?utm_source=badge"><img src="https://serverdex.io/brand/badge.svg" alt="SolveLang — listed on Serverdex" width="123" height="40" loading="lazy" /></a>
+        </div>
       </article>
     </main>
   );
