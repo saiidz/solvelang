@@ -28,7 +28,7 @@ function publicFetch(seen = [], failure = false, posthogOverall = "operational")
     const path = target.pathname;
     if (target.hostname === "www.posthogstatus.com") return new Response(JSON.stringify({ overall_status: posthogOverall, generated_at: "2026-09-27T12:00:00.000Z" }), { headers: { "content-type": "application/json" } });
     if (target.hostname === "e123.execute-api.us-east-2.amazonaws.com") return new Response(JSON.stringify({ status: "ok", service: "solvelang-merge-governance" }), { headers: { "content-type": "application/json" } });
-    if (target.hostname === "runner-minutes.example.com") return new Response(JSON.stringify({ status: "ok", service: "solvelang-runners" }), { headers: { "content-type": "application/json" } });
+    if (target.hostname === "runner-minutes.example.com") return new Response(JSON.stringify({ status: "ok", service: "solvelang-runner-minutes" }), { headers: { "content-type": "application/json" } });
     if (target.hostname === "github.com") return new Response("<svg>passing</svg>", { headers: { "content-type": "image/svg+xml" } });
     if (path === "/health" || path === "/public/status/account" || path === "/public/status/billing") return new Response(JSON.stringify({ status: "ok", service: "solvelang-api-access", privateToken: "secret-never-returned" }), { headers: { "content-type": "application/json" } });
     return new Response(`<html>${markers.get(path)} secret-never-returned</html>`, { headers: { "content-type": "text/html" } });
@@ -310,7 +310,7 @@ test("collector validates the optional health URLs when they are configured", ()
 test("SAM wiring passes the execution and runner-minutes health URLs to the collector only", () => {
   const template = readFileSync(new URL("../template.yaml", import.meta.url), "utf8");
   assert.match(template, /PublicStatusExecutionHealthUrl:\n    Type: String\n    Default: https:\/\/2l346svz17\.execute-api\.us-east-2\.amazonaws\.com\/health/);
-  assert.match(template, /PublicStatusRunnerMinutesHealthUrl:\n    Type: String\n    Default: ""/);
+  assert.match(template, /PublicStatusRunnerMinutesHealthUrl:\n    Type: String\n    Default: https:\/\/runners\.solve-lang\.com\/health/);
   const collector = template.split("  PublicStatusCollectorFunction:")[1].split("  ApiKeyAuthorizerFunction:")[0];
   assert.match(collector, /PUBLIC_STATUS_EXECUTION_HEALTH_URL: !Ref PublicStatusExecutionHealthUrl/);
   assert.match(collector, /PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL: !Ref PublicStatusRunnerMinutesHealthUrl/);

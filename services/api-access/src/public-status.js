@@ -17,7 +17,11 @@ const POSTHOG_STATUS_URL = "https://www.posthogstatus.com/api/status";
 // PostHog's public status API (verified live 2026-11-11: status.posthog.com
 // redirects to an HTML page; the JSON API is served from posthogstatus.com)
 // reports a single overall_status. Only the values below are read as health;
-// anything else, unparseable, or unreachable stays not_monitored.
+// anything else, unparseable, or unreachable stays not_monitored. The status
+// document lists every component and outgrew the whole-body probe cap
+// (195,270 bytes measured 2026-11-25 against the 131,072-byte cap), while
+// overall_status sits at the front of the document, so this probe reads
+// only the bounded prefix that carries the field (see boundedOverallStatus).
 const posthogStates = new Map([
   ["operational", "operational"],
   ["degraded_performance", "degraded"],
@@ -65,6 +69,28 @@ async function boundedText(response) {
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
+// Reads only the prefix of a response body that carries PostHog's
+// overall_status field, then stops. The whole-body cap still bounds the
+// read; a body whose field never appears inside it yields null.
+async function boundedOverallStatus(response) {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_BODY_BYTES) return null;
+      chunks.push(value);
+      const match = /"overall_status"\s*:\s*"([a-z_]+)"/.exec(new TextDecoder().decode(Buffer.concat(chunks)));
+      if (match) return match[1];
+    }
+  } finally { await reader.cancel().catch(() => {}); }
+  return null;
+}
+
 async function probe(url, kind, marker, fetchImpl, now, timeoutMs, expectedService = "solvelang-api-access") {
   const controller = new AbortController();
   let timer;
@@ -91,16 +117,15 @@ async function probePostHogStatus(fetchImpl, now, timeoutMs) {
   const controller = new AbortController();
   let timer;
   try {
-    const body = await Promise.race([
+    const overall = await Promise.race([
       (async () => {
         const response = await fetchImpl(new URL(POSTHOG_STATUS_URL), { method: "GET", redirect: "error", signal: controller.signal, headers: { accept: "application/json" } });
-        if (response.status !== 200 || !response.headers.get("content-type")?.includes("application/json")) return "";
-        return boundedText(response);
+        if (response.status !== 200 || !response.headers.get("content-type")?.includes("application/json")) return null;
+        return boundedOverallStatus(response);
       })(),
       new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("timeout")); }, timeoutMs); }),
     ]);
-    let state = "not_monitored";
-    try { state = posthogStates.get(JSON.parse(body)?.overall_status) ?? "not_monitored"; } catch { state = "not_monitored"; }
+    const state = posthogStates.get(overall) ?? "not_monitored";
     return { state, checkedAt: new Date(now()).toISOString(), validForMs: STATUS_VALID_FOR_MS };
   } catch {
     return unmonitored(now);
@@ -143,7 +168,7 @@ export function createPublicStatusCollector({ siteOrigin, apiHealthUrl, executio
       probe(new URL(CI_BADGE_URL), "svg", "passing", fetchImpl, now, timeoutMs).then((observation) => ["ci-deployment", observation]),
       (execution ? probe(execution, "json", "", fetchImpl, now, timeoutMs, "solvelang-merge-governance") : Promise.resolve(unmonitored(now))).then((observation) => ["provider-execution", observation]),
       probePostHogStatus(fetchImpl, now, timeoutMs).then((observation) => ["posthog", observation]),
-      (runnerMinutes ? probe(runnerMinutes, "json", "", fetchImpl, now, timeoutMs, "solvelang-runners") : Promise.resolve(unmonitored(now))).then((observation) => ["runner-minutes", observation]),
+      (runnerMinutes ? probe(runnerMinutes, "json", "", fetchImpl, now, timeoutMs, "solvelang-runner-minutes") : Promise.resolve(unmonitored(now))).then((observation) => ["runner-minutes", observation]),
     ]);
     return { collectedAt: new Date(startedAt).toISOString(), observations: Object.fromEntries(entries) };
   };
