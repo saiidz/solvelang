@@ -366,7 +366,7 @@ test("process solution hero pairs the headline with the queue animation", () => 
   assert.match(page, /Become a design partner/);
   assert.match(page, /hello@solve-lang\.com/);
 });
-test("services page publishes the full service list with live and pilot labels", () => {
+test("services page publishes the full service list with live labels", () => {
   const page = read("app/(english)/services/page.tsx");
   assert.match(page, /Runner Minutes/);
   assert.match(page, /How onboarding works/);
@@ -387,7 +387,7 @@ test("services page publishes the full service list with live and pilot labels",
   assert.ok(page.includes("$49") && page.includes("$199") && page.includes("$699"));
   assert.match(page, /\/api-pricing\//);
   assert.match(page, /Merge governance/);
-  assert.match(page, /Pilot status:/);
+  assert.match(page, /Live status:/);
   assert.match(page, /no public price and no self-serve signup/);
   assert.match(page, /\/process-solution\//);
 });
@@ -432,11 +432,27 @@ test("services route is registered for the sitemap and linked in primary navigat
   assert.ok(primaryLinks.some((link) => link.href === "/services/"), "primary navigation links to /services/");
 });
 
-test("process solution page is labeled a pilot with no public price", () => {
+test("process solution page is labeled live with no public price", () => {
   const page = read("app/(english)/process-solution/page.tsx");
-  assert.match(page, />Pilot</);
-  assert.match(page, /Pilot status:/);
+  assert.match(page, />Live</);
+  assert.match(page, /Live status:/);
   assert.match(page, /no public price and no self-serve signup yet/);
+});
+
+test("process solution and services carry the approved Live status line verbatim", () => {
+  const approved = "Live status:</strong> Process Solution is live. The full governed cycle \u2014 plan, combined tree, battery, land \u2014 is proven end-to-end in production, with the landed tree verified identical to the tested tree and every decision written to the audit log. There is no public price and no self-serve signup yet.";
+  const ps = read("app/(english)/process-solution/page.tsx");
+  const sv = read("app/(english)/services/page.tsx");
+  assert.ok(ps.includes(approved), "process solution page carries the approved Live line");
+  assert.ok(sv.includes(approved), "services page carries the approved Live line");
+  assert.doesNotMatch(ps, /Pilot status:|is in pilot/);
+  assert.doesNotMatch(sv, /Pilot status:|is in pilot/);
+  assert.ok(sv.includes("Process Solution (merge governance)</td><td className=\"py-3 pr-4\">Live</td>"), "matrix row is Live");
+  assert.ok(sv.includes("\u2014 (live)</td><td className=\"py-3\">November 25, 2026</td>"), "matrix row verified November 25, 2026");
+  assert.ok(sv.includes("Published \u2014 v0.4.0"), "matrix MCP row is v0.4.0");
+  assert.ok(sv.includes("npx --yes @solvelang/mcp-server@0.4.0"), "matrix MCP row carries the bare 0.4.0 command");
+  const data = read("app/(english)/process-solution/process-solution-data.ts");
+  assert.ok(data.includes("Proven on the live queue"), "CI chips label the live queue");
 });
 
 test("api pricing page carries the runner minutes shelf summary", () => {
@@ -1739,16 +1755,16 @@ test("Step 1: /services/ carries the Live/Main/Pilot status matrix verbatim", ()
   assert.ok(matrix.includes("This table is the single reference for what each one is today"), "matrix intro");
   assert.ok(matrix.includes("Pre-1.0 — active development"), "CLI row status");
   assert.ok(matrix.includes("(build <code>565fbc1c</code>)"), "/run/ row names the pinned WASM build");
-  assert.ok(matrix.includes("29 tools in the published package"), "local MCP row tool count");
+  assert.ok(matrix.includes("31 tools in the published package"), "local MCP row tool count");
   assert.ok(
-    matrix.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"),
+    matrix.includes("npx --yes @solvelang/mcp-server@0.4.0"),
     "local MCP row carries the working install command",
   );
   assert.ok(matrix.includes("10 tools, no server-side workspace"), "hosted MCP row boundary");
   assert.ok(matrix.includes("Start with 300 free Standard minutes when you connect GitHub"), "runner minutes row trial line");
   assert.ok(matrix.includes("faster is never free"), "runner minutes row speed line");
   assert.ok(matrix.includes("Developer $49/month (1,000 credits)"), "API plans row");
-  assert.ok(matrix.includes("There is no public price and no self-serve signup yet."), "pilot row boundary");
+  assert.ok(matrix.includes("There is no public price and no self-serve signup yet."), "process solution row boundary");
   assert.ok(matrix.includes("November 22, 2026"), "matrix verification date");
   assert.doesNotMatch(matrix, /Premium/);
   assert.doesNotMatch(matrix, /44%|24\.8%|token comparison/i);

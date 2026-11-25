@@ -4,7 +4,7 @@ import { JsonLd } from "../../components/JsonLd";
 
 export const metadata: Metadata = {
   title: "Services",
-  description: "SolveLang services: Runner Minutes for GitHub Actions, the SolveLang language and toolchain, API access plans, and merge governance (pilot).",
+  description: "SolveLang services: Runner Minutes for GitHub Actions, the SolveLang language and toolchain, API access plans, and merge governance (live).",
   alternates: { canonical: "https://www.solve-lang.com/services/" },
 };
 
@@ -146,10 +146,6 @@ function LiveBadge() {
   return <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent">Live</span>;
 }
 
-function PilotBadge() {
-  return <span className="rounded-full border border-warning bg-warning-soft px-3 py-1 text-xs font-bold uppercase tracking-wider text-warning">Pilot</span>;
-}
-
 export default function ServicesPage() {
   return (
     <main className="min-h-screen bg-canvas px-6 py-16 text-ink">
@@ -158,8 +154,8 @@ export default function ServicesPage() {
       <div className="mx-auto max-w-6xl">
         <header className="mx-auto max-w-3xl py-12 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">SolveLang services</p>
-          <h1 className="mt-5 text-5xl font-bold tracking-tight md:text-6xl">What you can buy today — and what is still a pilot.</h1>
-          <p className="mt-6 text-lg leading-8 text-body">Four services. Three are live and purchasable on this site today. The fourth is a pilot and is labeled as one, with no public price and no self-serve signup.</p>
+          <h1 className="mt-5 text-5xl font-bold tracking-tight md:text-6xl">What you can buy today — and what is live but not for sale.</h1>
+          <p className="mt-6 text-lg leading-8 text-body">Four services. Three are live and purchasable on this site today. The fourth is live and is labeled as one, with no public price and no self-serve signup.</p>
         </header>
 
         <section className="rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="runner-minutes-heading">
@@ -312,13 +308,13 @@ export default function ServicesPage() {
         <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="merge-governance-heading">
           <div className="flex flex-wrap items-center gap-4">
             <h2 id="merge-governance-heading" className="text-3xl font-bold">Merge governance — Process Solution</h2>
-            <PilotBadge />
+            <LiveBadge />
           </div>
           <p className="mt-4 max-w-4xl leading-7 text-body">Process Solution is governed merge automation for busy GitHub repositories. It builds the exact tree that will land — base plus batch together — runs one capped battery of your existing checks on that combined tree, and lands the tree only on FULL GREEN. Every merge and every block writes its reason to a decision audit log, and a scoreboard proves the savings on your own queue. Your code never leaves your infrastructure: the control plane works from webhooks, pull-request metadata, and test results — never a checkout.</p>
-          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Pilot status:</strong> Process Solution is in pilot with a small number of design-partner teams. There is no public price and no self-serve signup yet.</p>
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Live status:</strong> Process Solution is live. The full governed cycle — plan, combined tree, battery, land — is proven end-to-end in production, with the landed tree verified identical to the tested tree and every decision written to the audit log. There is no public price and no self-serve signup yet.</p>
           <div className="mt-8 flex flex-wrap gap-4">
             <Link href="/process-solution/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">How Process Solution works</Link>
-            <a href="mailto:hello@solve-lang.com" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">Ask about the pilot</a>
+            <a href="mailto:hello@solve-lang.com" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">Ask about Process Solution</a>
           </div>
         </section>
 
@@ -334,11 +330,11 @@ export default function ServicesPage() {
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Rust CLI (<code>solvec</code>) &amp; the <code>.solve</code> runtime</td><td className="py-3 pr-4">Pre-1.0 — active development</td><td className="py-3 pr-4 leading-6 text-body">The canonical local runtime and policy boundary for <code>.solve</code> workflows. Not a stable 1.0 contract, and not a general automation-platform replacement.</td><td className="py-3 pr-4">Yes — build from source</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Workflow Studio &amp; the <code>/run/</code> browser preview</td><td className="py-3 pr-4">Available — local-first</td><td className="py-3 pr-4 leading-6 text-body">Model a workflow, inspect its risks, and run scenarios in the browser; projects save locally first. <code>/run/</code> executes a pinned WebAssembly build of the runtime (build <code>565fbc1c</code>) in your browser, never on a server — your code never leaves the browser, and the only thing recorded is an anonymous count that a run happened.</td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No — an account is only needed to save projects</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Repository Audit, Solve Graph &amp; Server Audit</td><td className="py-3 pr-4">Available — read-only</td><td className="py-3 pr-4 leading-6 text-body">Bounded static analysis and impact explanation over a repository or a server. It does not execute repository code and does not change anything it examines.</td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
-                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — local package</td><td className="py-3 pr-4">Published — v0.3.0</td><td className="py-3 pr-4 leading-6 text-body">Read-only tools for MCP clients such as Codex and Claude Code, bounded to the workspace you name: 29 tools in the published package. Newer work on the repository&apos;s main branch (31 tools, including the two context-index tools) is <strong>not</strong> in the npm package until the next release ships it. Install with the explicit command — the package ships two executables, so npx has to be told which one: <code>npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp</code></td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — local package</td><td className="py-3 pr-4">Published — v0.4.0</td><td className="py-3 pr-4 leading-6 text-body">Read-only tools for MCP clients such as Codex and Claude Code, bounded to the workspace you name: 31 tools in the published package, including the two context-index tools. Install with the bare command — the package ships a single executable: <code>npx --yes @solvelang/mcp-server@0.4.0</code></td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 25, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — hosted endpoint</td><td className="py-3 pr-4">Live — read-only</td><td className="py-3 pr-4 leading-6 text-body"><code>https://mcp.solve-lang.com</code> — the same read-only analysis over raw JSON you send in the request: 10 tools, no server-side workspace, a 4 MiB request ceiling, and a rate limit of 60 requests per minute per source address. A bearer token is required.</td><td className="py-3 pr-4">By request</td><td className="py-3 pr-4">Token required — tokens are issued by SolveLang; write to hello@solve-lang.com for access</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Runner Minutes &amp; Speed Lane Cache</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Prepaid GitHub Actions runner minutes on fresh Linux machines created for each job and destroyed after it, metered per second with a 10-second minimum, never auto-renewing, expiring 12 months after purchase. Standard (2-vCPU class): 5,000 minutes $20 · 25,000 $100 · 100,000 $400. High-Power (16-vCPU class): 1,000 minutes $80 up to 10,000 $400. Start with 300 free Standard minutes when you connect GitHub — no card required, valid 30 days. Optional Speed Lane Cache: 10 GB for $2/month. Guaranteed on-demand starts draw minutes at 2× — faster is never free.</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">API access plans</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Monthly weighted-credit plans for the SolveLang API and repository-audit integrations. One base credit covers up to 5,000 input tokens and 1,000 output tokens. Developer $49/month (1,000 credits) · Pro $199/month (10,000 credits) · Business $699/month (50,000 credits).</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
-                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Process Solution (merge governance)</td><td className="py-3 pr-4">Pilot</td><td className="py-3 pr-4 leading-6 text-body">Combined-tree batch checks, merge decisions, and audit logs for pull-request queues — running on the operator&apos;s own queues today. There is no public price and no self-serve signup yet.</td><td className="py-3 pr-4">No</td><td className="py-3 pr-4">— (pilot)</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Process Solution (merge governance)</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Combined-tree batch checks, merge decisions, and audit logs for pull-request queues — running on the operator&apos;s own queues today. There is no public price and no self-serve signup yet.</td><td className="py-3 pr-4">No</td><td className="py-3 pr-4">— (live)</td><td className="py-3">November 25, 2026</td></tr>
               </tbody>
             </table>
           </div>
