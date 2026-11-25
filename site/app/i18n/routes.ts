@@ -31,6 +31,7 @@ export const publicRoutes = [
   { segment: "check", classification: "english-only-technical", sitemap: true },
   { segment: "status", classification: "english-only-technical", sitemap: true },
   { segment: "process-solution", classification: "english-only-technical", sitemap: true },
+  { segment: "compatibility", classification: "english-only-technical", sitemap: true },
   { segment: "solutions", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/route-work-to-solvelang", classification: "english-only-technical", sitemap: true },
   { segment: "solutions/how-minutes-work", classification: "english-only-technical", sitemap: true },
