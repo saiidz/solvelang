@@ -40,8 +40,8 @@ Parameters:
     Description: Public health URL of the managed-execution service (merge-governance pilot) probed by the public status collector; blank leaves that component unmonitored.
   PublicStatusRunnerMinutesHealthUrl:
     Type: String
-    Default: ""
-    Description: Public health URL of the runner-minutes service probed by the public status collector; blank until that service is deployed, and its status component reports unmonitored meanwhile.
+    Default: https://runners.solve-lang.com/health
+    Description: Public health URL of the runner-minutes service probed by the public status collector; blank leaves that component unmonitored.
   StudioAcceptanceOrigin:
     Type: String
     Default: ""
