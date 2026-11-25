@@ -15,6 +15,12 @@ services:
     image: solvelang-mcp-remote:0.3.0
     container_name: solvelang-mcp-remote
     restart: unless-stopped
+    # Latency guard (Nov 24, 2026): the shared production host runs many
+    # workloads; without a CPU weight this idle-but-latency-critical
+    # endpoint starves under contention (measured: healthz 14-30 ms direct
+    # vs ~2 s public at load ~60 on 2 vCPU). 8192 = 8x the default weight;
+    # it only matters under contention and caps nothing.
+    cpu_shares: 8192
     env_file:
       - ./remote.env
     environment:
