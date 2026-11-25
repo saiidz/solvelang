@@ -1,0 +1,338 @@
+# SolveLang PR Gate — consumer pipeline template for Azure DevOps.
+#
+# Copy this file into your repository as azure-pipelines.yml (or merge
+# the steps into your existing PR pipeline) and replace <PINNED_SHA>
+# with the full commit SHA of saiidz/solvelang that contains the
+# version of the kit you want to run (pin a commit, never a floating
+# branch). Put a pr-gate.policy.json at your repository root (see
+# packages/pr-gate/README.md in saiidz/solvelang for the format), or
+# set PR_GATE_POLICY to "" to run report-only with no policy.
+#
+# How this differs from the GitHub template (workflow-template.yml)
+# and the GitLab template (workflow-template.gitlab-ci.yml), and why.
+# Azure Pipelines is its own system — its own agent, its own YAML, its
+# own API — so the packaging is Azure-shaped:
+#
+#   - The pipeline runs for pull requests (the pr: trigger below) on
+#     the project's own agents. There is no composite-action step:
+#     like the GitLab template, the kit is cloned at the pinned SHA
+#     and its CLI is run directly. If your organization cannot reach
+#     github.com, mirror saiidz/solvelang and point PR_GATE_KIT_URL
+#     at the mirror.
+#   - PR facts (labels, head SHA, changed files) are read from the
+#     Azure DevOps REST API (api-version 7.1): the PR object, its
+#     iterations, and the LATEST iteration's change list — the
+#     per-file record Azure computed for the PR against its common
+#     commit — not from an event payload or from git refs. A PR
+#     validation build checks out the PR's merge commit, so the
+#     changed-file list cannot come from the checkout; it comes from
+#     the API, fork PRs included.
+#   - The sticky comment is a PR comment THREAD, posted through the
+#     threads API (POST .../pullRequests/{id}/threads, updated with
+#     PATCH .../threads/{threadId}/comments/{commentId}), carrying
+#     the same <!-- pr-gate:report --> marker as every other
+#     platform's wrapper.
+#   - The gate signal is a PR STATUS posted to the pull request
+#     itself (POST .../pullRequests/{id}/statuses) with context
+#     genre "solvelang", name "pr-gate" — Azure statuses attach to
+#     the PR (the server associates them with the current iteration),
+#     not to a commit, so there is no commit-status equivalent to aim
+#     at. The status states are Azure's: succeeded / failed / error.
+#   - What CAN block a merge — stated exactly, because the strength
+#     depends on branch policy configuration, not on this template:
+#       * A posted status blocks completion ONLY when a branch
+#         policy of type "Status checks" requires that exact
+#         genre/name ("solvelang/pr-gate") with Policy requirement
+#         set to Required. Without that policy the status is a
+#         displayed signal: visible on the PR, blocking nothing.
+#         (The policy also has reset conditions and an applicability
+#         choice — apply by default, or only after the first status
+#         posts — so read the policy, not the status, as the gate.)
+#       * Build validation is the enforcement route available to
+#         every project: name THIS pipeline in a build validation
+#         branch policy set to Required and run with
+#         PR_GATE_MODE=enforce — a policy failure fails the job, and
+#         the failed validation build blocks completion.
+#       * In the default report-only mode with no branch policy,
+#         nothing blocks: the thread and the status are advisory,
+#         exactly as labeled.
+#   - Token: the API calls use PR_GATE_TOKEN when the pipeline
+#     defines it as a secret variable (a personal access token, sent
+#     as HTTP Basic — Microsoft's PAT route; it needs Code read/write
+#     rights on the repository), and fall back to the build's own
+#     OAuth token (System.AccessToken, sent as Bearer) whose identity
+#     — the project's build service account — needs the repository
+#     permission "Contribute to pull requests" to post threads and
+#     statuses. (Secret variables reach a step only through an
+#     explicit env mapping — the steps below map PR_GATE_TOKEN — and
+#     an unset PR_GATE_TOKEN expands to a placeholder the scripts
+#     ignore, falling back to the OAuth token.) Thread and status
+#     posts are best-effort: if the
+#     identity cannot write, the job prints a warning and the report
+#     still lands in the job log and the published pr-gate-out
+#     artifact; the job's exit code is governed by the gate verdict
+#     and PR_GATE_MODE only.
+#   - Azure steps are separate shells (unlike the GitLab template's
+#     single script list), so run state is carried in files:
+#     .pr-gate-facts.json from the facts step and .pr-gate-gate-code
+#     from the run step. The reporting steps run with
+#     condition: always() so an operational failure is still reported
+#     as an "error" status, and the final step applies the governed
+#     exit code. The job needs Node.js 20+ and git on PATH; the
+#     hosted ubuntu-latest image below covers both.
+
+trigger: none
+
+pr:
+  branches:
+    include:
+      - '*'
+
+variables:
+  # report-only: the job stays green on a policy failure and the
+  # report is advisory. enforce: a policy failure fails the job.
+  PR_GATE_MODE: 'report-only'
+  PR_GATE_POLICY: 'pr-gate.policy.json'
+  PR_GATE_KIT_URL: 'https://github.com/saiidz/solvelang.git'
+  PR_GATE_KIT_SHA: '<PINNED_SHA>'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - bash: |
+      # Read PR facts (labels, head SHA, changed files) from the
+      # Azure DevOps API — the PR's own iteration records, not git
+      # refs. A failed read is recorded by the ABSENCE of
+      # .pr-gate-facts.json: later steps treat it as an operational
+      # error (gate code 2), and this step still succeeds so the
+      # reporting steps run.
+      PR_GATE_COLLECTION="$(System.TeamFoundationCollectionUri)" PR_GATE_PROJECT="$(System.TeamProject)" PR_GATE_REPO_ID="$(Build.Repository.ID)" PR_GATE_PR_ID="$(System.PullRequest.PullRequestId)" PR_GATE_FALLBACK_HEAD="$(System.PullRequest.SourceCommitId)" node <<'NODE' || echo "WARNING: PR facts could not be read; the gate will be reported as an operational error."
+      const fs = require('fs');
+      (async () => {
+        const collection = process.env.PR_GATE_COLLECTION.replace(/\/+$/, '');
+        const base = `${collection}/${encodeURIComponent(process.env.PR_GATE_PROJECT)}/_apis/git/repositories/${encodeURIComponent(process.env.PR_GATE_REPO_ID)}`;
+        const headers = { accept: 'application/json' };
+        const pat = process.env.PR_GATE_TOKEN || '';
+        if (pat && !pat.startsWith('$(')) {
+          headers.authorization = 'Basic ' + Buffer.from(':' + pat, 'utf8').toString('base64');
+        } else if (process.env.SYSTEM_ACCESSTOKEN) {
+          headers.authorization = 'Bearer ' + process.env.SYSTEM_ACCESSTOKEN;
+        }
+        const get = async (route) => {
+          const response = await fetch(`${base}${route}${route.includes('?') ? '&' : '?'}api-version=7.1`, { headers });
+          if (!response.ok) throw new Error(`GET ${route} failed: HTTP ${response.status}`);
+          return response.json();
+        };
+        const pr = await get(`/pullRequests/${process.env.PR_GATE_PR_ID}`);
+        const labels = (pr.labels || []).map((label) => label.name).filter(Boolean);
+        const iterations = (await get(`/pullRequests/${process.env.PR_GATE_PR_ID}/iterations`)).value || [];
+        if (iterations.length === 0) throw new Error('the PR has no iterations to read facts from');
+        const latest = iterations.reduce((a, b) => (b.id > a.id ? b : a));
+        const headSha = (latest.sourceRefCommit && latest.sourceRefCommit.commitId) || process.env.PR_GATE_FALLBACK_HEAD || '';
+        const changed = [];
+        for (let skip = 0, top = 200; ; ) {
+          const page = await get(`/pullRequests/${process.env.PR_GATE_PR_ID}/iterations/${latest.id}/changes?$top=${top}&$skip=${skip}`);
+          for (const entry of page.changeEntries || []) {
+            const item = entry.item || {};
+            if (item.isFolder === true || item.gitObjectType === 'tree') continue;
+            const raw = item.path || entry.sourceServerItem || entry.originalPath || '';
+            if (raw) changed.push(raw.replace(/^\/+/, ''));
+          }
+          if (!page.nextSkip || page.nextSkip <= skip || (page.changeEntries || []).length === 0) break;
+          skip = page.nextSkip;
+          if (page.nextTop > 0) top = page.nextTop;
+        }
+        fs.writeFileSync('.pr-gate-facts.json', JSON.stringify({ labels, headSha, changed }));
+        console.log(`PR facts: ${labels.length} label(s), ${changed.length} changed file(s), head ${headSha}`);
+      })().catch((error) => { console.error(error); process.exit(1); });
+      NODE
+    displayName: 'PR Gate: read PR facts from the Azure DevOps API'
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      PR_GATE_TOKEN: $(PR_GATE_TOKEN)
+
+  - bash: |
+      # Install and build the PR Gate kit at the pinned SHA. Skipped
+      # when the facts read failed (no facts, no gate run).
+      if [ ! -f .pr-gate-facts.json ]; then
+        echo "No PR facts (the facts read failed) - skipping the kit build."
+        exit 0
+      fi
+      PR_GATE_KIT_DIR="${TMPDIR:-/tmp}/pr-gate-kit"
+      git init -q "$PR_GATE_KIT_DIR"
+      git -C "$PR_GATE_KIT_DIR" remote add origin "$PR_GATE_KIT_URL"
+      git -C "$PR_GATE_KIT_DIR" fetch -q --depth 1 origin "$PR_GATE_KIT_SHA"
+      git -C "$PR_GATE_KIT_DIR" checkout -q FETCH_HEAD
+      cd "$PR_GATE_KIT_DIR/packages/pr-gate"
+      npm ci --ignore-scripts --no-audit --no-fund
+      npm run build
+    displayName: 'PR Gate: build the kit at the pinned SHA'
+
+  - bash: |
+      # Run the PR Gate. The step itself never fails the job: the
+      # governed code is recorded in .pr-gate-gate-code and applied
+      # by the final step, after the report has been posted.
+      if [ ! -f .pr-gate-facts.json ]; then
+        echo "No PR facts (the facts read failed) - operational error."
+        echo "2" > .pr-gate-gate-code
+        exit 0
+      fi
+      LABELS="$(node -e "console.log((require('./.pr-gate-facts.json').labels || []).join(','))")"
+      CHANGED="$(node -e "console.log((require('./.pr-gate-facts.json').changed || []).join(','))")"
+      PR_GATE_KIT_DIR="${TMPDIR:-/tmp}/pr-gate-kit"
+      set +e
+      ARGS=(--root "$BUILD_SOURCESDIRECTORY" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
+      if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
+      if [ -n "$LABELS" ]; then ARGS+=(--labels "$LABELS"); fi
+      node "$PR_GATE_KIT_DIR/packages/pr-gate/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+      GATE_CODE=$?
+      set -e
+      # A crashed CLI also exits 1; without a result file there is no
+      # verdict, so treat a missing result.json as operational
+      # (exit 2), never as a policy failure.
+      if [ ! -f .pr-gate-out/result.json ]; then
+        echo "PR Gate produced no result.json (exit $GATE_CODE) - operational error."
+        GATE_CODE=2
+      fi
+      echo "$GATE_CODE" > .pr-gate-gate-code
+      echo "Gate exit $GATE_CODE."
+    displayName: 'PR Gate: run the gate'
+
+  - bash: |
+      # Post or update the sticky PR thread (best-effort: see
+      # header). The thread's first comment carries the marker; the
+      # update path PATCHes that comment in place.
+      PR_GATE_COLLECTION="$(System.TeamFoundationCollectionUri)" PR_GATE_PROJECT="$(System.TeamProject)" PR_GATE_REPO_ID="$(Build.Repository.ID)" PR_GATE_PR_ID="$(System.PullRequest.PullRequestId)" node <<'NODE' || echo "WARNING: the sticky PR thread could not be posted; the report is in the pr-gate-out artifact."
+      const fs = require('fs');
+      (async () => {
+        const marker = '<!-- pr-gate:report -->';
+        let body;
+        try {
+          body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+        } catch {
+          body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the pipeline for details.';
+        }
+        if (!body.includes(marker)) body = marker + '\n\n' + body;
+        const collection = process.env.PR_GATE_COLLECTION.replace(/\/+$/, '');
+        const base = `${collection}/${encodeURIComponent(process.env.PR_GATE_PROJECT)}/_apis/git/repositories/${encodeURIComponent(process.env.PR_GATE_REPO_ID)}/pullRequests/${process.env.PR_GATE_PR_ID}`;
+        const headers = { accept: 'application/json', 'content-type': 'application/json' };
+        const pat = process.env.PR_GATE_TOKEN || '';
+        if (pat && !pat.startsWith('$(')) {
+          headers.authorization = 'Basic ' + Buffer.from(':' + pat, 'utf8').toString('base64');
+        } else if (process.env.SYSTEM_ACCESSTOKEN) {
+          headers.authorization = 'Bearer ' + process.env.SYSTEM_ACCESSTOKEN;
+        }
+        const listResponse = await fetch(`${base}/threads?api-version=7.1`, { headers });
+        if (!listResponse.ok) throw new Error(`Thread list failed: HTTP ${listResponse.status}`);
+        const threads = (await listResponse.json()).value || [];
+        let target;
+        for (const thread of threads) {
+          if (thread.isDeleted) continue;
+          const first = (thread.comments || []).find((comment) => comment.parentCommentId === 0 && !comment.isDeleted);
+          if (first && typeof first.content === 'string' && first.content.includes(marker)) {
+            target = { threadId: thread.id, commentId: first.id };
+            break;
+          }
+        }
+        if (target) {
+          const response = await fetch(`${base}/threads/${target.threadId}/comments/${target.commentId}?api-version=7.1`, {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ content: body }),
+          });
+          if (!response.ok) throw new Error(`Thread comment update failed: HTTP ${response.status}`);
+          console.log(`Updated sticky thread ${target.threadId}.`);
+        } else {
+          const response = await fetch(`${base}/threads?api-version=7.1`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ comments: [{ parentCommentId: 0, content: body, commentType: 1 }], status: 1 }),
+          });
+          if (!response.ok) throw new Error(`Thread create failed: HTTP ${response.status}`);
+          console.log('Created sticky thread.');
+        }
+      })().catch((error) => { console.error(error); process.exit(1); });
+      NODE
+    displayName: 'PR Gate: post the report as a PR thread'
+    condition: always()
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      PR_GATE_TOKEN: $(PR_GATE_TOKEN)
+
+  - bash: |
+      # Post the gate PR status (best-effort: see header). The status
+      # maps the verdict recorded in result.json, not the CLI exit
+      # code: in report-only mode the CLI exits 0 even on a policy
+      # FAIL, and the status says so.
+      GATE_CODE="$(cat .pr-gate-gate-code 2>/dev/null || echo 2)"
+      GATE_VERDICT="$(node <<'NODE'
+      try {
+        const r = JSON.parse(require('fs').readFileSync('.pr-gate-out/result.json', 'utf8'));
+        const e = r.policy && r.policy.evaluation;
+        console.log(e ? (e.passed ? 'pass' : 'fail') : '');
+      } catch {
+        console.log('');
+      }
+      NODE
+      )"
+      if [ "$GATE_CODE" = "2" ] || [ -z "$GATE_VERDICT" ]; then
+        STATE="error"; DESC="PR Gate run failed operationally - see the PR thread"
+      elif [ "$GATE_VERDICT" = "fail" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+        STATE="failed"; DESC="PR Gate policy failed (enforce mode)"
+      elif [ "$GATE_VERDICT" = "fail" ]; then
+        STATE="succeeded"; DESC="PR Gate policy failed - advisory only (report-only mode)"
+      else
+        STATE="succeeded"; DESC="PR Gate passed"
+      fi
+      echo "Posting PR status: $STATE - $DESC"
+      PR_GATE_STATE="$STATE" PR_GATE_DESC="$DESC" PR_GATE_TARGET="$(System.TeamFoundationCollectionUri)$(System.TeamProject)/_build/results?buildId=$(Build.BuildId)&view=results" PR_GATE_COLLECTION="$(System.TeamFoundationCollectionUri)" PR_GATE_PROJECT="$(System.TeamProject)" PR_GATE_REPO_ID="$(Build.Repository.ID)" PR_GATE_PR_ID="$(System.PullRequest.PullRequestId)" node <<'NODE' || echo "WARNING: the PR status could not be posted."
+      (async () => {
+        const collection = process.env.PR_GATE_COLLECTION.replace(/\/+$/, '');
+        const base = `${collection}/${encodeURIComponent(process.env.PR_GATE_PROJECT)}/_apis/git/repositories/${encodeURIComponent(process.env.PR_GATE_REPO_ID)}/pullRequests/${process.env.PR_GATE_PR_ID}`;
+        const headers = { accept: 'application/json', 'content-type': 'application/json' };
+        const pat = process.env.PR_GATE_TOKEN || '';
+        if (pat && !pat.startsWith('$(')) {
+          headers.authorization = 'Basic ' + Buffer.from(':' + pat, 'utf8').toString('base64');
+        } else if (process.env.SYSTEM_ACCESSTOKEN) {
+          headers.authorization = 'Bearer ' + process.env.SYSTEM_ACCESSTOKEN;
+        }
+        const response = await fetch(`${base}/statuses?api-version=7.1`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            state: process.env.PR_GATE_STATE,
+            description: process.env.PR_GATE_DESC,
+            targetUrl: process.env.PR_GATE_TARGET,
+            context: { genre: 'solvelang', name: 'pr-gate' },
+          }),
+        });
+        if (!response.ok) throw new Error(`Status post failed: HTTP ${response.status}`);
+        console.log('Posted the PR status.');
+      })().catch((error) => { console.error(error); process.exit(1); });
+      NODE
+    displayName: 'PR Gate: post the gate PR status'
+    condition: always()
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+      PR_GATE_TOKEN: $(PR_GATE_TOKEN)
+
+  - publish: .pr-gate-out
+    artifact: pr-gate-out
+    displayName: 'PR Gate: publish the report artifact'
+    condition: always()
+    continueOnError: true
+
+  - bash: |
+      # The job's exit code is governed by the gate only: operational
+      # errors fail in every mode; policy failures fail only in
+      # enforce mode.
+      GATE_CODE="$(cat .pr-gate-gate-code 2>/dev/null || echo 2)"
+      if [ "$GATE_CODE" = "2" ]; then exit 2; fi
+      if [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then exit 1; fi
+      exit 0
+    displayName: 'PR Gate: apply the gate exit code'
+    condition: always()
