@@ -23,7 +23,7 @@ It is not another Zapier, no-code builder, or managed automation platform. Its p
 
 ## Services
 
-SolveLang is the open-source language and toolchain in this repository. SolveLang the service sells four things; three are live today, and the fourth is a pilot and is labeled as one. The full list also lives on the site: [Services](https://www.solve-lang.com/services/). Problem-by-problem guides live in the [Solutions documentation](https://www.solve-lang.com/solutions/).
+SolveLang is the open-source language and toolchain in this repository. SolveLang the service sells four things; three are live today, and the fourth is live and is labeled as one. The full list also lives on the site: [Services](https://www.solve-lang.com/services/). Problem-by-problem guides live in the [Solutions documentation](https://www.solve-lang.com/solutions/).
 
 ### Runner Minutes — live
 
@@ -60,9 +60,9 @@ The SolveLang language and the `solvec` CLI (below), the [browser workspace](htt
 
 Monthly weighted-credit API plans: Developer $49/month (1,000 credits, 2 API keys), Pro $199/month (10,000 credits, 3 keys), Business $699/month (50,000 credits, 5 keys). Full comparison: [API pricing](https://www.solve-lang.com/api-pricing/).
 
-### Merge governance (Process Solution) — pilot
+### Merge governance (Process Solution) — live
 
-Governed merge automation for busy repositories: it builds the exact tree that will land, tests the combined tree once, and lands it only on FULL GREEN, with a written reason for every merge and block. Process Solution is in **pilot** with a small number of design-partner teams — there is no public price and no self-serve signup yet. How it works: [Process Solution](https://www.solve-lang.com/process-solution/). The service is described here only; its source is not in this repository.
+Governed merge automation for busy repositories: it builds the exact tree that will land, tests the combined tree once, and lands it only on FULL GREEN, with a written reason for every merge and block. Process Solution is **live** — the full governed cycle (plan, combined tree, battery, land) is proven end-to-end in production, with the landed tree verified identical to the tested tree and every decision written to the audit log. There is no public price and no self-serve signup yet. How it works: [Process Solution](https://www.solve-lang.com/process-solution/). The service is described here only; its source is not in this repository.
 
 ## Why SolveLang exists
 
