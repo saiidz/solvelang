@@ -39,3 +39,23 @@ test("root README keeps the reconciliation date without internal PR references",
   assert.ok(!readme.includes("#913\u2013#920"), "the #913-#920 range must not return");
   assert.ok(!readme.includes("qualification in #941"), "the #941 reference must not return");
 });
+
+test("root README states the Process Solution status as live, never pilot", async () => {
+  const readme = await readFile(
+    resolveFromHere("../../../../README.md", "../../../README.md"),
+    "utf8",
+  );
+  assert.ok(
+    readme.includes("three are live today, and the fourth is live and is labeled as one."),
+    "README services summary states the fourth service is live",
+  );
+  assert.ok(
+    readme.includes("### Merge governance (Process Solution) \u2014 live"),
+    "README merge-governance heading is labeled live",
+  );
+  assert.ok(
+    readme.includes("Process Solution is **live** \u2014 the full governed cycle (plan, combined tree, battery, land) is proven end-to-end in production"),
+    "README states the proven live status",
+  );
+  assert.doesNotMatch(readme, /fourth is a pilot|Process Solution\) \u2014 pilot|in \*\*pilot\*\*/);
+});
