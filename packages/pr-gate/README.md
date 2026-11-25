@@ -580,3 +580,184 @@ template**
 - In the default report-only mode with no branch policy, nothing
   blocks: the thread and the status are advisory, exactly as
   labeled.
+
+## Bitbucket Cloud: receipt collector + gate wrapper
+
+The same platform-neutral core also ships Bitbucket Cloud packaging:
+a receipt collector for pull requests and a Bitbucket Pipelines
+wrapper for the gate. Bitbucket Cloud's REST API (2.0) is a
+different API family from the forges', GitLab's, and Azure's, so the
+collector is a sibling (`solvelang-bitbucket-receipt`), not a flag
+on the other ones; the emitted receipt input is the same contract.
+Bitbucket Data Center is a different product with a different API
+and is not covered here.
+
+### Receipt collector (`solvelang-bitbucket-receipt`)
+
+Reads one pull request from a Bitbucket Cloud repository and emits
+a Change Impact Receipt **input** object — the exact JSON shape the
+Change Impact Receipts page (`site/app/change-impact-receipt`)
+consumes. Paste the output into that page (or feed it to
+`buildChangeImpactReceipt`) to get the receipt: findings labeled
+verified / failed / unverified, the standard grading block, no risk
+scores. The page itself is unchanged.
+
+```bash
+cd packages/pr-gate
+npm ci
+npm run build
+BITBUCKET_TOKEN=<access-token> node dist/packages/pr-gate/src/bitbucket-receipt.js \
+  --workspace my-workspace --repository widget-repo --pr 42 \
+  --gate-result .pr-gate-out/result.json \
+  --out receipt-input.json
+```
+
+- `--workspace` and `--repository` are the workspace and repository
+  slugs from the PR's URL; `--pr` is the pull request id.
+- The credential is supplied by the operator at runtime and is
+  never stored, logged, or written to the output: `--token` takes
+  an access token (repository, workspace, or project) or an OAuth
+  token, sent as a bearer token (falls back to `BITBUCKET_TOKEN`),
+  and `--username` with `--api-token` takes an Atlassian API token,
+  sent as HTTP Basic with the account email (fall back to
+  `BITBUCKET_USERNAME` / `BITBUCKET_API_TOKEN`; the bearer token
+  takes precedence when both are supplied). Public repositories
+  read without one.
+- The collector reads the PR, its diffstat, its commit list, its
+  build-status list, the current head of its destination branch,
+  and the two include/exclude commit listings behind the compare.
+  Every field name and enum was verified against Atlassian's REST
+  API documentation
+  (https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/)
+  and first-hand against a public repository; the mappings that
+  matter:
+  - The change list is the PR's own diffstat. Each entry carries a
+    status (`added` / `modified` / `removed` / `renamed`) and
+    Bitbucket's own per-file counts (`lines_added` /
+    `lines_removed`), recorded as returned — never estimated. (The
+    Azure collector records `0/0` because Azure's API carries no
+    counts; Bitbucket's does.) The endpoint redirects to the
+    repository diffstat; the read follows the redirect and pages
+    via the standard `next` links. A removed file's path comes
+    from its `old` side.
+  - Bitbucket Cloud computes **no combined-tree preview** for a
+    pull request — there is no merge queue in Cloud and no endpoint
+    shows the tree a merge would produce — so nothing here claims
+    what a merge would produce; the gate evaluates the PR head
+    as-is, and the diffstat is the source read against the
+    destination as Bitbucket tracks it.
+  - There is **no mergeability verdict to read**: the PR object
+    carries no mergeable/conflict field, and GET on the merge
+    endpoint answers 405 (merging is POST-only). Merge checks are
+    branch-restriction settings evaluated by Bitbucket's UI, not
+    data on the PR record. `mergeable` is therefore `null` and the
+    state `unknown` for every PR — no mergeability claim is made.
+  - Reviews are the PR's participants and their recorded verdicts:
+    the `approved` flag (state `approved`) maps to `APPROVED`, and
+    state `changes_requested` maps to `CHANGES_REQUESTED`;
+    participants with no verdict are dropped. Both roles
+    (`REVIEWER` and `PARTICIPANT`) are mapped, because Bitbucket
+    records verdicts on the participant list and its own approvals
+    merge check counts participant approvals (the check itself
+    excludes the author's own approval; the receipt records
+    verdicts as recorded and evaluates no check). The separate
+    `reviewers` list names who was asked and carries no verdicts.
+  - CI evidence is the PR's build-status list — the build statuses
+    Bitbucket attaches to the pull request (the statuses of its
+    latest commit), read through
+    https://developer.atlassian.com/cloud/bitbucket/rest/api-group-commit-statuses/.
+    Statuses are keyed and a repost overwrites, so the list is
+    already the newest word per key. States map: `SUCCESSFUL` →
+    success, `FAILED` → failure, `INPROGRESS` → in progress,
+    `STOPPED` → cancelled. The name is the status's display name,
+    falling back to its key.
+  - The PR object abbreviates commit hashes, so the full head SHA
+    is the first entry of the PR's commits list (newest first),
+    falling back to `source.commit` as returned; the full current
+    destination head is read from the branch ref
+    (`GET /refs/branches/{branch}` → `target.hash`). If the branch
+    cannot be read (for example it was deleted after the PR
+    closed), the base falls back to the PR's `destination.commit`
+    exactly as returned (abbreviated) and the compare is skipped —
+    drift against the current base is then not established.
+  - The compare has no endpoint with counts: `aheadBy` /
+    `behindBy` are the lengths of the commit listings read with
+    `include` / `exclude` (head against current base, and the
+    reverse), each paged in full. If either listing cannot answer,
+    `compare` is `null` and the builder labels base drift
+    unverified.
+  - The PR object carries `task_count` and `comment_count`; the
+    receipt contract has no field for them, so they are not
+    carried. (`task_count` is the count the "No unresolved pull
+    request tasks" merge check reads.)
+- If any required read fails (PR, diffstat, commits, statuses),
+  the collector exits `2` (operational error) rather than emitting
+  a partial input the builder would over-claim from.
+- `--gate-result` embeds a PR Gate `result.json`
+  (`solvelang.pr-gate.result.v1`) as the receipt's PR Gate route.
+  With no result supplied, the route is recorded as not run — which
+  the builder labels failed, never silently dropped.
+
+Exit codes mirror the PR Gate CLI: `0` = input emitted, `2` =
+operational error.
+
+### Gate pipeline template
+
+- `workflow-template.bitbucket-pipelines.yml` — copy to
+  `bitbucket-pipelines.yml` (or merge the step into your existing
+  `bitbucket-pipelines.yml`).
+
+The pipeline runs for pull requests on the workspace's own runners
+or Bitbucket's cloud, reads the PR facts (head SHA, changed files)
+from the API — the PR's diffstat, since a pull-request pipeline
+checks out a merge commit, not the head — runs the same core CLI in
+report-only mode by default (`PR_GATE_MODE`), posts/updates ONE
+sticky PR comment (marker `<!-- pr-gate:report -->`) through the
+comments API, and posts a build status on the head commit through
+the commit statuses API with the fixed key `solvelang-pr-gate`, the
+name "SolveLang PR Gate", and `refname` set to the source branch —
+the field Atlassian documents for associating a commit status with
+a pull request. Posting the same key again overwrites the previous
+status, so the newest post is the record. The status is mapped from
+the verdict recorded in `result.json`, never from the CLI exit
+code: in report-only mode the CLI exits 0 even on a policy FAIL,
+and the status says so ("advisory only"). Bitbucket's states are
+`SUCCESSFUL` / `FAILED` / `INPROGRESS` / `STOPPED` — there is no
+error state, so an operational failure posts `FAILED` with a
+description that says it was operational. Bitbucket pull requests
+have no labels, so the gate runs with no `--labels` and label-based
+policy rules see an empty label set. Comment and status posts are
+best-effort — Bitbucket Pipelines gives a step no ambient
+credential for the repository API, so without `PR_GATE_TOKEN` (an
+access token with Repositories: Write and Pull requests: Write,
+defined as a secured repository variable) the posts are skipped
+with a warning and the report still lands in the job log and the
+`.pr-gate-out` artifacts; the step's exit code is governed by the
+gate verdict and `PR_GATE_MODE` only.
+
+**What blocks a merge on Bitbucket Cloud — stated exactly, because
+the strength lives in the workspace plan and branch settings, not
+in this template**
+(https://support.atlassian.com/bitbucket-cloud/docs/suggest-or-require-checks-before-a-merge/):
+
+- The build status this template posts is one of the build
+  statuses on the PR's last commit, and Bitbucket's built-in merge
+  check **Minimum number of successful builds for the last commit
+  with no failed builds and no in progress builds** counts exactly
+  those statuses: a `FAILED` status under our key leaves that check
+  unresolved, and a `SUCCESSFUL` one counts toward the minimum.
+  Custom merge checks (Forge apps) can also evaluate pull
+  requests; this template installs none.
+- On the Free and Standard plans, unresolved merge checks only
+  warn — the merge still proceeds. Blocking requires Bitbucket
+  Cloud **Premium** and the branch setting
+  **Prevent a merge with unresolved merge checks**. Read the plan
+  and the branch settings,
+  not the status, as the gate.
+- Cloud has no per-key required-builds gate (named build keys that
+  must pass are a Bitbucket Data Center feature): no Cloud setting
+  makes this one key, by name, a merge requirement — the builds
+  merge check counts the commit's statuses as a set.
+- In the default report-only mode with no merge checks configured,
+  nothing blocks: the comment and the status are advisory, exactly
+  as labeled.

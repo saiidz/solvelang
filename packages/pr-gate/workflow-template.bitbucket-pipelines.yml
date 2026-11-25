@@ -1,0 +1,336 @@
+# SolveLang PR Gate — consumer pipeline template for Bitbucket Cloud.
+#
+# Copy this file into your repository as bitbucket-pipelines.yml (or
+# merge the pr-gate step into your existing bitbucket-pipelines.yml)
+# and replace <PINNED_SHA> with the full commit SHA of
+# saiidz/solvelang that contains the version of the kit you want to
+# run (pin a commit, never a floating branch). Put a
+# pr-gate.policy.json at your repository root (see
+# packages/pr-gate/README.md in saiidz/solvelang for the format), or
+# set PR_GATE_POLICY to "" to run report-only with no policy.
+# PR_GATE_MODE, PR_GATE_POLICY, PR_GATE_KIT_URL, PR_GATE_KIT_SHA and
+# PR_GATE_TOKEN are read from repository variables when defined
+# (Repository settings → Repository variables); the script applies
+# the defaults below for any that are unset.
+#
+# How this differs from the GitHub template (workflow-template.yml),
+# the GitLab template (workflow-template.gitlab-ci.yml), and the
+# Azure template (workflow-template.azure-pipelines.yml), and why.
+# Bitbucket Pipelines is its own system — its own runner, its own
+# YAML, its own API — so the packaging is Bitbucket-shaped:
+#
+#   - The step runs in pull-request pipelines (the pipelines:
+#     pull-requests: definition below) on the workspace's own
+#     runners or Bitbucket's cloud. There is no composite-action
+#     step: like the GitLab and Azure templates, the kit is cloned
+#     at the pinned SHA and its CLI is run directly. If your
+#     workspace cannot reach github.com, mirror saiidz/solvelang and
+#     point PR_GATE_KIT_URL at the mirror.
+#   - PR facts (head SHA, changed files) are read from the
+#     Bitbucket Cloud REST API (2.0): the PR object and its
+#     diffstat — the per-file record Bitbucket computed for the PR —
+#     not from an event payload or from git refs. A pull-request
+#     pipeline checks out a MERGE COMMIT of the source branch into
+#     the destination, so the checked-out commit ($BITBUCKET_COMMIT)
+#     is not the PR head and the changed-file list cannot come from
+#     the checkout; it comes from the API, fork PRs included. The
+#     full head SHA is the first entry of the PR's commits list (the
+#     PR object abbreviates commit hashes).
+#   - Bitbucket pull requests have NO LABELS. The PR Gate CLI takes
+#     labels as an input; on Bitbucket there is nothing to pass, so
+#     the gate runs with no --labels and label-based policy rules
+#     simply see an empty label set. This is a platform divergence,
+#     stated here rather than papered over with a substitute signal.
+#   - The sticky comment is a PR comment, posted through the
+#     comments API (POST .../pullrequests/{id}/comments, updated
+#     with PUT .../pullrequests/{id}/comments/{commentId}, body
+#     { content: { raw } }), carrying the same
+#     <!-- pr-gate:report --> marker as every other platform's
+#     wrapper.
+#   - The gate signal is a BUILD STATUS posted to the PR's head
+#     commit (POST .../commit/{commit}/statuses/build) with the
+#     fixed key "solvelang-pr-gate", the name "SolveLang PR Gate",
+#     and refname set to the PR's source branch — the field
+#     Atlassian documents for associating a commit status with a
+#     pull request. Bitbucket has no per-PR status object (Azure)
+#     and no checks API (GitHub): a keyed commit build status is the
+#     signal the platform offers. Posting the same key again
+#     overwrites the previous status, so the newest post is the
+#     record. Bitbucket's states are SUCCESSFUL / FAILED /
+#     INPROGRESS / STOPPED — there is no error state, so an
+#     operational failure posts FAILED with a description that says
+#     it was operational (a divergence from the Azure template,
+#     whose platform has an error state).
+#   - What CAN block a merge — stated exactly, because the strength
+#     depends on workspace plan and branch settings, not on this
+#     template (see "Suggest or require checks before a merge",
+#     https://support.atlassian.com/bitbucket-cloud/docs/suggest-or-require-checks-before-a-merge/):
+#       * The build status this template posts is one of the build
+#         statuses on the PR's last commit, and Bitbucket's built-in
+#         merge check "Minimum number of successful builds for the
+#         last commit with no failed builds and no in progress
+#         builds" counts exactly those statuses: a FAILED status
+#         under our key leaves that check unresolved, and a
+#         SUCCESSFUL one counts toward the minimum. Custom merge
+#         checks (Forge apps) can also evaluate pull requests; this
+#         template installs none.
+#       * On the Free and Standard plans, unresolved merge checks
+#         only WARN — the merge still proceeds. Blocking requires
+#         Bitbucket Cloud Premium and the branch setting
+#         "Prevent a merge with unresolved merge checks". Read the
+#         plan and the branch settings, not the status, as the gate.
+#       * Cloud has no per-key required-builds gate (named build
+#         keys that must pass are a Bitbucket Data Center feature):
+#         no Cloud setting makes this one key, by name, a merge
+#         requirement — the builds merge check counts the commit's
+#         statuses as a set.
+#       * The pipeline step itself is not a merge gate either:
+#         PR_GATE_MODE=enforce fails the step on a policy failure,
+#         and the FAILED build status that failure posts is what the
+#         merge checks above see.
+#       * In the default report-only mode with no merge checks
+#         configured, nothing blocks: the comment and the status are
+#         advisory, exactly as labeled.
+#   - Token: Bitbucket Pipelines gives a step NO ambient credential
+#     for the repository API — there is no equivalent of GitLab's
+#     CI_JOB_TOKEN or Azure's System.AccessToken (a divergence from
+#     both templates). The API calls use PR_GATE_TOKEN when the
+#     repository defines it as a secured variable: an access token
+#     (repository, workspace, or project) with Repositories: Write
+#     and Pull requests: Write, sent as a bearer token. Without it,
+#     the comment and status posts are skipped with a warning and
+#     the report still lands in the job log and the .pr-gate-out
+#     artifacts; the step's exit code is governed by the gate
+#     verdict and PR_GATE_MODE only. (The facts read also uses the
+#     token; public repositories read without one, and for a private
+#     repository without a token the facts read fails and the gate
+#     is reported as an operational error.)
+#   - The step's script blocks run in one shell (like the GitLab
+#     template's job), so variables set in an early block are still
+#     set in later ones. The step needs Node.js 20+ and git on PATH;
+#     the node:22 image below covers both.
+
+image: node:22
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: SolveLang PR Gate
+          script:
+            - |
+              # Defaults for anything the repository variables do not
+              # define. report-only: the step stays green on a policy
+              # failure and the report is advisory. enforce: a policy
+              # failure fails the step.
+              PR_GATE_MODE="${PR_GATE_MODE:-report-only}"
+              PR_GATE_POLICY="${PR_GATE_POLICY:-pr-gate.policy.json}"
+              PR_GATE_KIT_URL="${PR_GATE_KIT_URL:-https://github.com/saiidz/solvelang.git}"
+              PR_GATE_KIT_SHA="${PR_GATE_KIT_SHA:-<PINNED_SHA>}"
+              PR_GATE_API="https://api.bitbucket.org/2.0"
+              PR_GATE_REPO_API="$PR_GATE_API/repositories/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO_SLUG"
+            - |
+              # Read PR facts (head SHA, changed files) from the
+              # Bitbucket API — the PR's own records, not git refs.
+              # A failed read is recorded by the ABSENCE of
+              # .pr-gate-facts.json: later blocks treat it as an
+              # operational error (gate code 2), and this block still
+              # succeeds so the reporting blocks run.
+              PR_GATE_API="$PR_GATE_API" PR_GATE_REPO_API="$PR_GATE_REPO_API" node <<'NODE' || echo "WARNING: PR facts could not be read; the gate will be reported as an operational error."
+              const fs = require('fs');
+              (async () => {
+                const headers = { accept: 'application/json' };
+                if (process.env.PR_GATE_TOKEN) headers.authorization = 'Bearer ' + process.env.PR_GATE_TOKEN;
+                const get = async (url) => {
+                  const response = await fetch(url, { headers });
+                  if (!response.ok) throw new Error(`GET ${url} failed: HTTP ${response.status}`);
+                  return response.json();
+                };
+                const getAll = async (firstUrl) => {
+                  const items = [];
+                  let url = firstUrl;
+                  while (url) {
+                    const body = await get(url);
+                    if (!Array.isArray(body.values)) throw new Error(`GET ${url} did not return a values list`);
+                    items.push(...body.values);
+                    url = typeof body.next === 'string' && body.next !== '' ? body.next : null;
+                  }
+                  return items;
+                };
+                const base = process.env.PR_GATE_REPO_API;
+                const prId = process.env.BITBUCKET_PR_ID;
+                const pr = await get(`${base}/pullrequests/${prId}`);
+                const sourceBranch = (pr.source && pr.source.branch && pr.source.branch.name) || process.env.BITBUCKET_BRANCH || '';
+                // The PR object abbreviates the head hash; the full
+                // hash is the first entry of the PR's commits list.
+                let headSha = (pr.source && pr.source.commit && pr.source.commit.hash) || '';
+                const commits = await getAll(`${base}/pullrequests/${prId}/commits?pagelen=100`);
+                if (commits.length > 0 && commits[0].hash) headSha = commits[0].hash;
+                if (!headSha) throw new Error('the PR records carried no head SHA');
+                const diffstat = await getAll(`${base}/pullrequests/${prId}/diffstat?pagelen=100`);
+                const changed = [];
+                for (const entry of diffstat) {
+                  const p = (entry.new && entry.new.path) || (entry.old && entry.old.path) || '';
+                  if (p) changed.push(p);
+                }
+                fs.writeFileSync('.pr-gate-facts.json', JSON.stringify({ headSha, sourceBranch, changed }));
+                console.log(`PR facts: ${changed.length} changed file(s), head ${headSha}`);
+              })().catch((error) => { console.error(error); process.exit(1); });
+              NODE
+            - |
+              # Install and build the PR Gate kit at the pinned SHA.
+              # Skipped when the facts read failed (no facts, no gate
+              # run).
+              if [ ! -f .pr-gate-facts.json ]; then
+                echo "No PR facts (the facts read failed) - skipping the kit build."
+              else
+                PR_GATE_KIT_DIR="${TMPDIR:-/tmp}/pr-gate-kit"
+                git init -q "$PR_GATE_KIT_DIR"
+                git -C "$PR_GATE_KIT_DIR" remote add origin "$PR_GATE_KIT_URL"
+                git -C "$PR_GATE_KIT_DIR" fetch -q --depth 1 origin "$PR_GATE_KIT_SHA"
+                git -C "$PR_GATE_KIT_DIR" checkout -q FETCH_HEAD
+                cd "$PR_GATE_KIT_DIR/packages/pr-gate"
+                npm ci --ignore-scripts --no-audit --no-fund
+                npm run build
+                cd "$BITBUCKET_CLONE_DIR"
+              fi
+            - |
+              # Run the PR Gate. The block itself never fails the
+              # step: the governed code is recorded in GATE_CODE and
+              # applied by the final block, after the report has been
+              # posted. (No --labels: Bitbucket pull requests have no
+              # labels — see the header.)
+              if [ ! -f .pr-gate-facts.json ]; then
+                echo "No PR facts (the facts read failed) - operational error."
+                GATE_CODE=2
+              else
+                CHANGED="$(node -e "console.log((require('./.pr-gate-facts.json').changed || []).join(','))")"
+                PR_GATE_KIT_DIR="${TMPDIR:-/tmp}/pr-gate-kit"
+                set +e
+                ARGS=(--root "$BITBUCKET_CLONE_DIR" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
+                if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
+                node "$PR_GATE_KIT_DIR/packages/pr-gate/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+                GATE_CODE=$?
+                set -e
+                # A crashed CLI also exits 1; without a result file
+                # there is no verdict, so treat a missing result.json
+                # as operational (exit 2), never as a policy failure.
+                if [ ! -f .pr-gate-out/result.json ]; then
+                  echo "PR Gate produced no result.json (exit $GATE_CODE) - operational error."
+                  GATE_CODE=2
+                fi
+              fi
+              GATE_VERDICT="$(node <<'NODE'
+              try {
+                const r = JSON.parse(require('fs').readFileSync('.pr-gate-out/result.json', 'utf8'));
+                const e = r.policy && r.policy.evaluation;
+                console.log(e ? (e.passed ? 'pass' : 'fail') : '');
+              } catch {
+                console.log('');
+              }
+              NODE
+              )"
+              echo "Gate exit ${GATE_CODE:-2}, verdict '${GATE_VERDICT:-none}'."
+            - |
+              # Post or update the sticky PR comment (best-effort:
+              # see header). The comment body carries the marker;
+              # the update path PUTs that comment in place. Without
+              # PR_GATE_TOKEN the post is skipped with a warning
+              # (Bitbucket Pipelines provides no ambient API
+              # credential — see the header); the script decides, so
+              # the heredoc stays at the block's base indentation.
+              PR_GATE_REPO_API="$PR_GATE_REPO_API" node <<'NODE' || echo "WARNING: the sticky PR comment could not be posted; the report is in the .pr-gate-out artifacts."
+              const fs = require('fs');
+              (async () => {
+                if (!process.env.PR_GATE_TOKEN) {
+                  console.log('WARNING: PR_GATE_TOKEN is not set; the sticky PR comment is skipped (Bitbucket Pipelines provides no ambient API credential).');
+                  return;
+                }
+                const marker = '<!-- pr-gate:report -->';
+                let body;
+                try {
+                  body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+                } catch {
+                  body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the pipeline for details.';
+                }
+                if (!body.includes(marker)) body = marker + '\n\n' + body;
+                const base = `${process.env.PR_GATE_REPO_API}/pullrequests/${process.env.BITBUCKET_PR_ID}/comments`;
+                const headers = { accept: 'application/json', 'content-type': 'application/json', authorization: 'Bearer ' + process.env.PR_GATE_TOKEN };
+                const comments = [];
+                let url = `${base}?pagelen=100`;
+                while (url) {
+                  const response = await fetch(url, { headers });
+                  if (!response.ok) throw new Error(`Comment list failed: HTTP ${response.status}`);
+                  const page = await response.json();
+                  comments.push(...(page.values || []));
+                  url = typeof page.next === 'string' && page.next !== '' ? page.next : null;
+                }
+                const existing = comments.find((comment) => !comment.deleted && comment.content && typeof comment.content.raw === 'string' && comment.content.raw.includes(marker));
+                const response = await fetch(existing ? `${base}/${existing.id}` : base, {
+                  method: existing ? 'PUT' : 'POST',
+                  headers,
+                  body: JSON.stringify({ content: { raw: body } }),
+                });
+                if (!response.ok) throw new Error(`Comment write failed: HTTP ${response.status}`);
+                console.log(existing ? `Updated sticky comment ${existing.id}.` : 'Created sticky comment.');
+              })().catch((error) => { console.error(error); process.exit(1); });
+              NODE
+            - |
+              # Post the gate build status on the PR head commit
+              # (best-effort: see header). The status maps the
+              # verdict recorded in result.json, not the CLI exit
+              # code: in report-only mode the CLI exits 0 even on a
+              # policy FAIL, and the status says so. Bitbucket has
+              # no error state, so an operational failure posts
+              # FAILED with an operational description.
+              if [ "${GATE_CODE:-2}" = "2" ] || [ -z "$GATE_VERDICT" ]; then
+                STATE="FAILED"; DESC="PR Gate run failed operationally - see the PR comment"
+              elif [ "$GATE_VERDICT" = "fail" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+                STATE="FAILED"; DESC="PR Gate policy failed (enforce mode)"
+              elif [ "$GATE_VERDICT" = "fail" ]; then
+                STATE="SUCCESSFUL"; DESC="PR Gate policy failed - advisory only (report-only mode)"
+              else
+                STATE="SUCCESSFUL"; DESC="PR Gate passed"
+              fi
+              echo "Posting build status: $STATE - $DESC"
+              HEAD_SHA=""
+              SOURCE_BRANCH=""
+              if [ -f .pr-gate-facts.json ]; then
+                HEAD_SHA="$(node -e "console.log(require('./.pr-gate-facts.json').headSha || '')")"
+                SOURCE_BRANCH="$(node -e "console.log(require('./.pr-gate-facts.json').sourceBranch || '')")"
+              fi
+              PR_GATE_STATE="$STATE" PR_GATE_DESC="$DESC" PR_GATE_TARGET="https://bitbucket.org/$BITBUCKET_WORKSPACE/$BITBUCKET_REPO_SLUG/pipelines/results/$BITBUCKET_BUILD_NUMBER" PR_GATE_REPO_API="$PR_GATE_REPO_API" PR_GATE_HEAD_SHA="$HEAD_SHA" PR_GATE_SOURCE_BRANCH="$SOURCE_BRANCH" node <<'NODE' || echo "WARNING: the build status could not be posted."
+              (async () => {
+                if (!process.env.PR_GATE_TOKEN) {
+                  console.log('WARNING: PR_GATE_TOKEN is not set; the build status is skipped (Bitbucket Pipelines provides no ambient API credential).');
+                  return;
+                }
+                if (!process.env.PR_GATE_HEAD_SHA) {
+                  console.log('WARNING: no PR facts (no head commit to post to); the build status is skipped.');
+                  return;
+                }
+                const response = await fetch(`${process.env.PR_GATE_REPO_API}/commit/${process.env.PR_GATE_HEAD_SHA}/statuses/build`, {
+                  method: 'POST',
+                  headers: { accept: 'application/json', 'content-type': 'application/json', authorization: 'Bearer ' + process.env.PR_GATE_TOKEN },
+                  body: JSON.stringify({
+                    key: 'solvelang-pr-gate',
+                    state: process.env.PR_GATE_STATE,
+                    name: 'SolveLang PR Gate',
+                    description: process.env.PR_GATE_DESC,
+                    url: process.env.PR_GATE_TARGET,
+                    refname: process.env.PR_GATE_SOURCE_BRANCH,
+                  }),
+                });
+                if (!response.ok) throw new Error(`Build status post failed: HTTP ${response.status}`);
+                console.log('Posted the build status.');
+              })().catch((error) => { console.error(error); process.exit(1); });
+              NODE
+            - |
+              # The step's exit code is governed by the gate only:
+              # operational errors fail in every mode; policy
+              # failures fail only in enforce mode.
+              if [ "${GATE_CODE:-2}" = "2" ]; then exit 2; fi
+              if [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then exit 1; fi
+              exit 0
+          artifacts:
+            - .pr-gate-out/**
