@@ -362,3 +362,13 @@ test("runner-minutes probe rejects the stale pre-rename service name", async () 
   const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, runnerMinutesHealthUrl: runnerMinutesHealth, fetchImpl: staleNameFetch, now: () => at });
   assert.equal((await collect(at)).observations["runner-minutes"].state, "not_monitored");
 });
+
+test("collector handler falls back to the canonical runner-minutes health URL when the env is unset", () => {
+  // Wiring pin for the #1514 follow-up: the production stack's stored
+  // PublicStatusRunnerMinutesHealthUrl value predates the template
+  // Default (blank at stack creation) and SAM retains stored values on
+  // update, so the env arrives empty and the handler must still probe
+  // the real service. An explicitly set env stays first in the chain.
+  const handler = readFileSync(new URL("../src/public-status-collector-handler.js", import.meta.url), "utf8");
+  assert.match(handler, /PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL \|\| "https:\/\/runners\.solve-lang\.com\/health"/);
+});
