@@ -1778,3 +1778,16 @@ test("Step 1 S8: the header loading state is a neutral Account label", () => {
     "the loading branch renders the neutral Account label",
   );
 });
+
+test("Sweep batch 2: MCP pages state the published v0.4.0 facts and no stale current version", () => {
+  const setupPage = read("app/(english)/mcp-setup/page.tsx");
+  const contextPage = read("app/(english)/solve-context/page.tsx");
+  const docsData = read("app/(english)/docs/docs-data.ts");
+  assert.ok(setupPage.includes("Current verification \u2014 2026-11-24"), "setup page verification date is current");
+  assert.ok(setupPage.includes("Published v0.4.0 plugin path"), "setup page plugin path is v0.4.0");
+  assert.ok(setupPage.includes("the published package distributes the tagged release source, and later main changes require separate distribution."), "setup page states the distribution truth");
+  assert.ok(contextPage.includes("distributed in the tagged MCP v0.4.0 package"), "solve-context states the v0.4.0 package");
+  assert.ok(docsData.includes("The published 0.4.0 package distributes the tagged release source."), "docs guide states the 0.4.0 distribution");
+  assert.doesNotMatch(setupPage, /v0\.3\.0 is published|Published v0\.3\.0|pinned v0\.3\.0/);
+  assert.doesNotMatch(contextPage, /MCP v0\.3\.0/);
+});
