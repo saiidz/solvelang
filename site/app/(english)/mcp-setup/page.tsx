@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "MCP Setup",
-  description: "Set up the SolveLang MCP server for Codex and Claude Code: the published v0.3.0 plugin path, manual configuration, and running from current repository source.",
+  description: "Set up the SolveLang MCP server for Codex and Claude Code: the published v0.4.0 plugin path, manual configuration, and running from current repository source.",
   alternates: { canonical: "https://www.solve-lang.com/mcp-setup/" },
 };
 
@@ -26,21 +26,21 @@ export default function McpSetupPage() {
 
         <div className="mt-10 space-y-10">
           <section aria-labelledby="current-verification">
-            <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-09-20</h2>
+            <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-11-24</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
-              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
-              <p>SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP server. <strong>Distribution truth matters:</strong> the repository currently contains substantially newer MCP/Solve Context code than the latest published MCP release.</p>
+              <p>MCP v0.4.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
+              <p>SolveLang maintains a shared Codex/Claude plugin path around the local-first MCP server. <strong>Distribution truth matters:</strong> the published package distributes the tagged release source, and later main changes require separate distribution.</p>
             </div>
           </section>
 
           <section aria-labelledby="published-vs-source">
             <h2 id="published-vs-source" className="text-2xl font-semibold tracking-tight">Published package vs current repository source</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
-              <p>MCP <code className={code}>@solvelang/mcp-server@0.3.0</code> is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
-              <p>Current <code className={code}>main</code> includes later Repository Audit/Solve Graph and Solve Context work through the v0.3.0 release train. Do <strong>not</strong> claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.</p>
+              <p>MCP <code className={code}>@solvelang/mcp-server@0.4.0</code> is published on npm and GitHub, verified on 2026-11-24. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
+              <p>Current <code className={code}>main</code> includes later Repository Audit/Solve Graph and Solve Context work through the v0.4.0 release train. Do <strong>not</strong> claim that public v0.2.0 consumers automatically receive those newer tools merely because repository CI passes.</p>
               <p>Use one of these two modes deliberately:</p>
               <ol className="list-decimal space-y-2 pl-6">
-                <li><strong>Published line:</strong> use the pinned v0.3.0 plugin/package instructions below for the verified npm release.</li>
+                <li><strong>Published line:</strong> use the pinned v0.4.0 plugin/package instructions below for the verified npm release.</li>
                 <li><strong>Current repository source:</strong> build <code className={code}>packages/mcp-server</code> from a source checkout and run <code className={code}>dist/src/index.js</code> directly.</li>
               </ol>
               <p>External publication/install verification is required before claiming current repository behavior is available through a public package/plugin path.</p>
@@ -55,7 +55,7 @@ export default function McpSetupPage() {
           </section>
 
           <section aria-labelledby="published-plugin-path">
-            <h2 id="published-plugin-path" className="text-2xl font-semibold tracking-tight">Published v0.3.0 plugin path</h2>
+            <h2 id="published-plugin-path" className="text-2xl font-semibold tracking-tight">Published v0.4.0 plugin path</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The maintained plugin root is <code className={code}>plugins/solvelang/</code> and contains Codex and Claude manifests, one shared MCP configuration and the SolveLang workflow-review skill. Legacy examples under <code className={code}>plugins/codex/</code> and <code className={code}>plugins/claude/</code> remain useful for manual configuration.</p>
             </div>
@@ -70,7 +70,7 @@ codex plugin add solvelang@solvelang`}</code></pre>
                   <p>Manual MCP configuration for the published line:</p>
                   <pre className={pre}><code>{`[mcp_servers.solvelang]
 command = "npx"
-args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]
+args = ["--yes", "@solvelang/mcp-server@0.4.0"]
 
 [mcp_servers.solvelang.env]
 SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
@@ -87,7 +87,7 @@ SOLVELANG_WORKSPACE_ROOT = "/absolute/path/to/workspace"
 /plugin install solvelang@solvelang`}</code></pre>
                   <p>Reload plugins or begin a new Claude Code session after installation.</p>
                   <p>Manual published-line registration:</p>
-                  <pre className={pre}><code>{`claude mcp add --transport stdio \\\n  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \\\n  solvelang -- npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp`}</code></pre>
+                  <pre className={pre}><code>{`claude mcp add --transport stdio \\\n  --env SOLVELANG_WORKSPACE_ROOT=/absolute/path/to/workspace \\\n  solvelang -- npx --yes @solvelang/mcp-server@0.4.0`}</code></pre>
                 </div>
               </section>
             </div>
@@ -176,7 +176,7 @@ npm run test:packed`}</code></pre>
           <section aria-labelledby="release-projection">
             <h2 id="release-projection" className="text-2xl font-semibold tracking-tight">Release projection</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
-              <p>The next distribution milestone is verified managed-workspace installation and public Plugin Directory listing for MCP v0.3.0. Later main changes still require a separately qualified versioned release.</p>
+              <p>The next distribution milestone is verified managed-workspace installation and public Plugin Directory listing for MCP v0.4.0. Later main changes still require a separately qualified versioned release.</p>
             </div>
           </section>
         </div>
