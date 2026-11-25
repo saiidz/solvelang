@@ -256,3 +256,149 @@ documentation:
   workflow clones `saiidz/solvelang` at the pinned SHA and runs the CLI
   directly, so self-hosted instances can point `PR_GATE_KIT_URL` at a
   mirror.
+
+## GitLab: receipt collector + gate wrapper
+
+The same platform-neutral core also ships GitLab packaging: a receipt
+collector for merge requests and a GitLab CI wrapper for the gate.
+GitLab's REST API v4 is a different API family from the forges', so
+the collector is a sibling (`solvelang-gitlab-receipt`), not a flag on
+the forge one; the emitted receipt input is the same contract.
+
+### Receipt collector (`solvelang-gitlab-receipt`)
+
+Reads one merge request from a GitLab instance (gitlab.com by
+default, or any self-hosted base URL) and emits a Change Impact
+Receipt **input** object — the exact JSON shape the Change Impact
+Receipts page (`site/app/change-impact-receipt`) consumes. Paste the
+output into that page (or feed it to `buildChangeImpactReceipt`) to
+get the receipt: findings labeled verified / failed / unverified, the
+standard grading block, no risk scores. The page itself is unchanged.
+
+```bash
+cd packages/pr-gate
+npm ci
+npm run build
+GITLAB_TOKEN=glpat-... node dist/packages/pr-gate/src/gitlab-receipt.js \
+  --project gitlab-org/cli --mr 4511 \
+  --gate-result .pr-gate-out/result.json \
+  --out receipt-input.json
+```
+
+- `--project` is the namespaced project path (`group/repo`, nested
+  groups allowed) or a numeric project id; `--mr` is the merge
+  request IID (the number in the MR URL); `--base-url` defaults to
+  `https://gitlab.com` and is set for self-hosted GitLab.
+- The token is supplied by the operator at runtime (`--token`, or
+  `GITLAB_TOKEN`) and is never stored, logged, or written to the
+  output. Public projects read without one.
+- The collector reads the MR, its diffs, its commit list, its
+  approval state, the jobs of its head pipeline, the current head of
+  its target branch, and a two-way compare of head against that base.
+  Every field name and status was verified against GitLab's API
+  documentation (https://docs.gitlab.com/api/merge_requests/) and
+  live gitlab.com reads; the mappings that matter:
+  - CI evidence is the head pipeline's job list. A fork MR's pipeline
+    runs in the fork project, so jobs are read from
+    `head_pipeline.project_id` — reading them from the target project
+    404s. Bridge (downstream pipeline) jobs are not claimed. No head
+    pipeline means no CI evidence exists for the head, which the
+    builder reports as read.
+  - Reviews are GitLab's submitted-review record: the approvals
+    endpoint's `approved_by` list, in order, each mapped to
+    `APPROVED` (https://docs.gitlab.com/api/merge_request_approvals/).
+    That endpoint is available on all tiers; Community Edition
+    returns a reduced field set that still includes `approved_by`.
+    GitLab has no per-reviewer changes-requested review object in
+    this API, so none is invented.
+  - Mergeability comes from `detailed_merge_status`
+    (`merge_status` is deprecated since GitLab 15.6). A conflict is
+    `dirty`; `mergeable` is `unstable` (mergeable per the API, with
+    CI and review state reported separately); GitLab's still-checking
+    values (`checking`, `unchecked`, `preparing`,
+    `approvals_syncing`, `commits_status`) are `unknown`; GitLab's
+    named-gate values (`ci_must_pass`, `not_approved`,
+    `discussions_not_resolved`, `need_rebase`, and the rest) keep
+    GitLab's own word as the state string with mergeable true — the
+    branches merge, a named gate blocks. Mergeability is only ever
+    claimed for open MRs: a merged MR still reports
+    `merge_status: can_be_merged` (observed live), so closed/merged
+    MRs record mergeable `null` / `unknown`.
+  - Job statuses map to the receipt's check-run vocabulary:
+    `success`/`failed`/`canceled`/`skipped` are completed results,
+    `running` is in progress, and `created`/`pending`/`preparing`/
+    `waiting_for_resource`/`scheduled`/`manual` carry no conclusion
+    (a manual job has not run; a human must start it).
+  - The MR's `changes_count` is a **string** (`"3"`, capped at
+    `"1000+"`), so the changed-file count comes from the `/diffs`
+    list actually read. The API carries no per-file line counts, so
+    additions/deletions are counted from the diff text GitLab
+    returns (`+`/`-` lines, excluding the `+++`/`---` headers). A
+    file whose diff GitLab withholds (`too_large` or `collapsed`)
+    contributes 0/0: the receipt's numbers are the counts of the
+    diffs actually read, and this limitation is stated, not hidden.
+  - The compare runs on SHAs — current target-branch head against
+    the MR head, both directions — which is what makes it work for
+    fork MRs. If the compare cannot answer (or reports
+    `compare_timeout`), `compare` is `null` and the builder labels
+    base drift unverified. If the target branch itself cannot be
+    read (for example it was deleted after a merge), the base falls
+    back to the MR's `diff_refs.base_sha` — the base the diff was
+    computed against — and the compare is skipped for the same
+    reason.
+- If any required read fails (MR, diffs, commits, approvals, head
+  pipeline jobs), the collector exits `2` (operational error) rather
+  than emitting a partial input the builder would over-claim from.
+- `--gate-result` embeds a PR Gate `result.json`
+  (`solvelang.pr-gate.result.v1`) as the receipt's PR Gate route.
+  With no result supplied, the route is recorded as not run — which
+  the builder labels failed, never silently dropped.
+
+Exit codes mirror the PR Gate CLI: `0` = input emitted, `2` =
+operational error.
+
+### Gate CI template
+
+- `workflow-template.gitlab-ci.yml` — copy to `.gitlab-ci.yml` (or
+  merge the `pr-gate` job into your existing one).
+
+The job runs in merge-request pipelines on the project's own GitLab
+Runner, reads the MR facts (labels, head SHA, changed files) from the
+API, runs the same core CLI in report-only mode by default
+(`PR_GATE_MODE`), posts/updates ONE sticky MR note (marker
+`<!-- pr-gate:report -->`) through the notes API
+(https://docs.gitlab.com/api/notes/), and posts a commit status named
+`pr-gate` to the MR head commit
+(https://docs.gitlab.com/api/commits/). The status is mapped from the
+verdict recorded in `result.json`, never from the CLI exit code: in
+report-only mode the CLI exits 0 even on a policy FAIL, and the
+status says so ("advisory only"). Note and status posts are
+best-effort — if the token cannot write (for example a fork pipeline
+whose job token is scoped to the fork), the job warns and the report
+still lands in the job log and the `.pr-gate-out` artifacts; the
+job's exit code is governed by the gate verdict and `PR_GATE_MODE`
+only. API calls use `PR_GATE_TOKEN` (a project/group access token or
+personal access token with the `api` scope, set as a CI/CD variable)
+when defined, and fall back to `CI_JOB_TOKEN`.
+
+**What blocks a merge on GitLab — stated by tier, because the
+strength differs and the difference matters:**
+
+- The commit status this template posts (Commit Status API,
+  `POST /projects/:id/statuses/:sha`) is available on **all tiers**
+  (Free, Premium, Ultimate). A commit status is a signal displayed
+  on the commit and the MR; on its own it does **not** block a
+  merge.
+- **External status checks** — GitLab's dedicated check object that
+  can be required to pass before a merge is allowed — are an
+  **Ultimate-tier feature** (External Status Checks API:
+  https://docs.gitlab.com/api/status_checks/, tier: Ultimate). This
+  template does not register one. Below Ultimate there is no check
+  object to require.
+- On any tier, the enforcement route this template supports is the
+  pipeline itself: run with `PR_GATE_MODE=enforce` (a policy failure
+  fails the job, so the MR pipeline fails) **and** enable the
+  project's "Pipelines must succeed" merge setting. The failed
+  pipeline then blocks the merge. In the default report-only mode
+  nothing blocks: the note and the status are advisory, exactly as
+  labeled.

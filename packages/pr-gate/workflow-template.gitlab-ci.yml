@@ -1,0 +1,209 @@
+# SolveLang PR Gate — consumer CI template for GitLab.
+#
+# Copy this file into your repository as .gitlab-ci.yml (or merge the
+# pr-gate job into your existing .gitlab-ci.yml) and replace
+# <PINNED_SHA> with the full commit SHA of saiidz/solvelang that
+# contains the version of the kit you want to run (pin a commit, never
+# a floating branch). Put a pr-gate.policy.json at your repository
+# root (see packages/pr-gate/README.md in saiidz/solvelang for the
+# format), or set PR_GATE_POLICY to "" to run report-only with no
+# policy.
+#
+# How this differs from the GitHub template (workflow-template.yml),
+# and why. GitLab CI is its own system — its own runner, its own
+# .gitlab-ci.yml, its own API — so the packaging is GitLab-shaped:
+#
+#   - The job runs in merge-request pipelines
+#     (CI_PIPELINE_SOURCE == "merge_request_event") on the project's
+#     own GitLab Runner; there is no composite-action step. The kit is
+#     cloned at the pinned SHA and its CLI is run directly. If your
+#     instance cannot reach github.com, mirror saiidz/solvelang and
+#     point PR_GATE_KIT_URL at the mirror.
+#   - PR facts (labels, head SHA, changed files) are read from the
+#     GitLab API v4 (GET /projects/:id/merge_requests/:iid and its
+#     /diffs list), not from an event payload or from git refs — so
+#     the changed-file list is the MR's own list, fork MRs included.
+#     For fork merge requests the MR lives in the target project
+#     (CI_MERGE_REQUEST_PROJECT_ID); the head commit lives in the
+#     pipeline's project, and the status is posted there.
+#   - The sticky comment is an MR note, posted through the notes API
+#     (POST /projects/:id/merge_requests/:iid/notes, updated with PUT
+#     .../notes/:note_id), carrying the same <!-- pr-gate:report -->
+#     marker as every other platform's wrapper.
+#   - The gate signal is a commit status posted to the MR head commit
+#     (POST /projects/:id/statuses/:sha, name "pr-gate"). The Commit
+#     Status API is available on every GitLab tier. A commit status
+#     is a signal, not a block: on its own it does not stop a merge.
+#   - What CAN block a merge, by tier (see the GitLab section of
+#     packages/pr-gate/README.md for the full statement):
+#       * Any tier: run this job in the MR pipeline with
+#         PR_GATE_MODE=enforce and enable the project's "Pipelines
+#         must succeed" merge setting — a policy failure fails the
+#         job, the failed pipeline then blocks the merge.
+#       * Ultimate only: external status checks, GitLab's dedicated
+#         merge-blocking check object (External Status Checks API),
+#         are an Ultimate-tier feature. This template does not
+#         register one; below Ultimate there is no check object to
+#         require, only the pipeline route above.
+#   - Token: the API calls use PR_GATE_TOKEN when the project defines
+#     it as a CI/CD variable (a project or group access token, or a
+#     personal access token, with the api scope — the supported
+#     route), and fall back to the job's CI_JOB_TOKEN. Note and
+#     status posts are best-effort: if the token cannot write (for
+#     example a fork pipeline whose job token is scoped to the fork),
+#     the job prints a warning and the report still lands in the job
+#     log and the .pr-gate-out artifacts; the job's exit code is
+#     governed by the gate verdict and PR_GATE_MODE only.
+#   - The job needs Node.js 20+ and git on PATH. The image below
+#     covers Docker executors; shell executors use the host's tools.
+#     All script blocks below run in one shell, so variables set in
+#     an early block are still set in later ones.
+
+variables:
+  # report-only: the job stays green on a policy failure and the
+  # report is advisory. enforce: a policy failure fails the job.
+  PR_GATE_MODE: "report-only"
+  PR_GATE_POLICY: "pr-gate.policy.json"
+  PR_GATE_KIT_URL: "https://github.com/saiidz/solvelang.git"
+  PR_GATE_KIT_SHA: "<PINNED_SHA>"
+
+pr-gate:
+  stage: test
+  image: node:22
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - |
+      API="${CI_API_V4_URL%/}"
+      TOKEN="${PR_GATE_TOKEN:-$CI_JOB_TOKEN}"
+      MR_PROJECT_ID="${CI_MERGE_REQUEST_PROJECT_ID:-$CI_PROJECT_ID}"
+    - |
+      # Read PR facts (labels, head SHA, changed files) from the
+      # GitLab API — the MR's own records, not git refs.
+      PR_GATE_API="$API" PR_GATE_TOKEN_USED="$TOKEN" PR_GATE_MR_PROJECT="$MR_PROJECT_ID" node <<'NODE'
+      const fs = require('fs');
+      (async () => {
+        const api = process.env.PR_GATE_API;
+        const headers = { 'PRIVATE-TOKEN': process.env.PR_GATE_TOKEN_USED, accept: 'application/json' };
+        const base = `${api}/projects/${process.env.PR_GATE_MR_PROJECT}/merge_requests/${process.env.CI_MERGE_REQUEST_IID}`;
+        const response = await fetch(base, { headers });
+        if (!response.ok) throw new Error(`MR read failed: HTTP ${response.status}`);
+        const mr = await response.json();
+        const changed = [];
+        for (let page = 1; ; page += 1) {
+          const diffsResponse = await fetch(`${base}/diffs?per_page=100&page=${page}`, { headers });
+          if (!diffsResponse.ok) throw new Error(`MR diffs read failed: HTTP ${diffsResponse.status}`);
+          const batch = await diffsResponse.json();
+          for (const diff of batch) changed.push(diff.new_path || diff.old_path);
+          if (batch.length < 100) break;
+        }
+        fs.writeFileSync('.pr-gate-facts.json', JSON.stringify({ labels: mr.labels || [], headSha: mr.sha || '', changed }));
+        console.log(`PR facts: ${(mr.labels || []).length} label(s), ${changed.length} changed file(s), head ${mr.sha}`);
+      })().catch((error) => { console.error(error); process.exit(1); });
+      NODE
+      LABELS="$(node -e "console.log((require('./.pr-gate-facts.json').labels || []).join(','))")"
+      HEAD_SHA="$(node -e "console.log(require('./.pr-gate-facts.json').headSha || '')")"
+      CHANGED="$(node -e "console.log((require('./.pr-gate-facts.json').changed || []).join(','))")"
+    - |
+      # Install and build the PR Gate kit at the pinned SHA.
+      PR_GATE_KIT_DIR="${TMPDIR:-/tmp}/pr-gate-kit"
+      git init -q "$PR_GATE_KIT_DIR"
+      git -C "$PR_GATE_KIT_DIR" remote add origin "$PR_GATE_KIT_URL"
+      git -C "$PR_GATE_KIT_DIR" fetch -q --depth 1 origin "$PR_GATE_KIT_SHA"
+      git -C "$PR_GATE_KIT_DIR" checkout -q FETCH_HEAD
+      cd "$PR_GATE_KIT_DIR/packages/pr-gate"
+      npm ci --ignore-scripts --no-audit --no-fund
+      npm run build
+      cd "$CI_PROJECT_DIR"
+    - |
+      # Run the PR Gate.
+      set +e
+      ARGS=(--root "$CI_PROJECT_DIR" --changed "$CHANGED" --mode "$PR_GATE_MODE" --out .pr-gate-out)
+      if [ -n "$PR_GATE_POLICY" ]; then ARGS+=(--policy "$PR_GATE_POLICY"); fi
+      if [ -n "$LABELS" ]; then ARGS+=(--labels "$LABELS"); fi
+      node "$PR_GATE_KIT_DIR/packages/pr-gate/dist/packages/pr-gate/src/cli.js" "${ARGS[@]}"
+      GATE_CODE=$?
+      set -e
+      # A crashed CLI also exits 1; without a result file there is no
+      # verdict, so treat a missing result.json as operational
+      # (exit 2), never as a policy failure.
+      if [ ! -f .pr-gate-out/result.json ]; then
+        echo "PR Gate produced no result.json (exit $GATE_CODE) - operational error."
+        GATE_CODE=2
+      fi
+      GATE_VERDICT="$(node <<'NODE'
+      try {
+        const r = JSON.parse(require('fs').readFileSync('.pr-gate-out/result.json', 'utf8'));
+        const e = r.policy && r.policy.evaluation;
+        console.log(e ? (e.passed ? 'pass' : 'fail') : '');
+      } catch {
+        console.log('');
+      }
+      NODE
+      )"
+      echo "Gate exit $GATE_CODE, verdict '${GATE_VERDICT:-none}'."
+    - |
+      # Post or update the sticky MR note (best-effort: see header).
+      PR_GATE_API="$API" PR_GATE_TOKEN_USED="$TOKEN" PR_GATE_MR_PROJECT="$MR_PROJECT_ID" node <<'NODE' || echo "WARNING: the sticky MR note could not be posted; the report is in the .pr-gate-out artifacts."
+      const fs = require('fs');
+      (async () => {
+        const marker = '<!-- pr-gate:report -->';
+        let body;
+        try {
+          body = fs.readFileSync('.pr-gate-out/report.md', 'utf8');
+        } catch {
+          body = marker + '\n\n## SolveLang PR Gate\n\nThe PR Gate run failed before it could produce a report. See the pipeline for details.';
+        }
+        if (!body.includes(marker)) body = marker + '\n\n' + body;
+        const api = process.env.PR_GATE_API;
+        const headers = { 'PRIVATE-TOKEN': process.env.PR_GATE_TOKEN_USED, accept: 'application/json', 'content-type': 'application/json' };
+        const base = `${api}/projects/${process.env.PR_GATE_MR_PROJECT}/merge_requests/${process.env.CI_MERGE_REQUEST_IID}/notes`;
+        const notes = [];
+        for (let page = 1; ; page += 1) {
+          const response = await fetch(`${base}?per_page=100&page=${page}`, { headers });
+          if (!response.ok) throw new Error(`Note list failed: HTTP ${response.status}`);
+          const batch = await response.json();
+          notes.push(...batch);
+          if (batch.length < 100) break;
+        }
+        const existing = notes.find((note) => !note.system && note.body && note.body.includes(marker));
+        const response = await fetch(existing ? `${base}/${existing.id}` : base, {
+          method: existing ? 'PUT' : 'POST',
+          headers,
+          body: JSON.stringify({ body }),
+        });
+        if (!response.ok) throw new Error(`Note write failed: HTTP ${response.status}`);
+        console.log(existing ? `Updated sticky note ${existing.id}.` : 'Created sticky note.');
+      })().catch((error) => { console.error(error); process.exit(1); });
+      NODE
+    - |
+      # Post the gate commit status (best-effort: see header). The
+      # status maps the verdict recorded in result.json, not the CLI
+      # exit code: in report-only mode the CLI exits 0 even on a
+      # policy FAIL.
+      if [ "$GATE_CODE" = "2" ] || [ -z "$GATE_VERDICT" ]; then
+        STATE="failed"; DESC="PR Gate run failed operationally - see the MR note"
+      elif [ "$GATE_VERDICT" = "fail" ] && [ "$PR_GATE_MODE" = "enforce" ]; then
+        STATE="failed"; DESC="PR Gate policy failed (enforce mode)"
+      elif [ "$GATE_VERDICT" = "fail" ]; then
+        STATE="success"; DESC="PR Gate policy failed - advisory only (report-only mode)"
+      else
+        STATE="success"; DESC="PR Gate passed"
+      fi
+      curl -sS -X POST "$API/projects/$CI_PROJECT_ID/statuses/$HEAD_SHA" \
+        -H "PRIVATE-TOKEN: $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"state\": \"$STATE\", \"name\": \"pr-gate\", \"description\": \"$DESC\", \"target_url\": \"$CI_PIPELINE_URL\"}" \
+        || echo "WARNING: the commit status could not be posted."
+    - |
+      # The job's exit code is governed by the gate only: operational
+      # errors fail in every mode; policy failures fail only in
+      # enforce mode.
+      if [ "$GATE_CODE" = "2" ]; then exit 2; fi
+      if [ "$GATE_CODE" = "1" ] && [ "$PR_GATE_MODE" = "enforce" ]; then exit 1; fi
+      exit 0
+  artifacts:
+    when: always
+    paths:
+      - .pr-gate-out/
+    expire_in: 1 week
