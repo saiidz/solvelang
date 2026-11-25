@@ -317,3 +317,48 @@ test("SAM wiring passes the execution and runner-minutes health URLs to the coll
   const request = template.split("  ApiAccessFunction:")[1].split("  PublicStatusCollectorFunction:")[0];
   assert.doesNotMatch(request, /PUBLIC_STATUS_EXECUTION_HEALTH_URL|PUBLIC_STATUS_RUNNER_MINUTES_HEALTH_URL/);
 });
+
+function chunkedJson(body, slice = 16 * 1024) {
+  const bytes = new TextEncoder().encode(body);
+  const stream = new ReadableStream({
+    start(controller) {
+      for (let i = 0; i < bytes.length; i += slice) controller.enqueue(bytes.slice(i, i + slice));
+      controller.close();
+    },
+  });
+  return new Response(stream, { headers: { "content-type": "application/json" } });
+}
+
+test("posthog probe reads overall_status from the front of an oversized status document", async () => {
+  // Regression pin (2026-11-25): PostHog's real status document measures
+  // 195,270 bytes, over the 131,072-byte whole-body probe cap, with
+  // overall_status at the front; every sweep reported not_monitored.
+  const oversizedFetch = async (url, options) => {
+    if (new URL(url).hostname === "www.posthogstatus.com") {
+      return chunkedJson(JSON.stringify({ generated_at: "2026-11-25T00:00:00.000Z", overall_status: "operational", components: "x".repeat(200_000) }));
+    }
+    return publicFetch([])(url, options);
+  };
+  const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: oversizedFetch, now: () => at });
+  assert.equal((await collect(at)).observations.posthog.state, "operational");
+
+  // A document whose field sits beyond the bounded prefix stays honestly
+  // not_monitored \u2014 the cap still bounds the read.
+  const buriedFetch = async (url, options) => {
+    if (new URL(url).hostname === "www.posthogstatus.com") {
+      return chunkedJson(JSON.stringify({ components: "x".repeat(200_000), overall_status: "operational" }));
+    }
+    return publicFetch([])(url, options);
+  };
+  const buried = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, fetchImpl: buriedFetch, now: () => at });
+  assert.equal((await buried(at)).observations.posthog.state, "not_monitored");
+});
+
+test("runner-minutes probe rejects the stale pre-rename service name", async () => {
+  const staleNameFetch = async (url, options) => {
+    if (new URL(url).hostname === "runner-minutes.example.com") return new Response(JSON.stringify({ status: "ok", service: "solvelang-runners" }), { headers: { "content-type": "application/json" } });
+    return publicFetch([])(url, options);
+  };
+  const collect = createPublicStatusCollector({ siteOrigin: origin, apiHealthUrl: apiHealth, runnerMinutesHealthUrl: runnerMinutesHealth, fetchImpl: staleNameFetch, now: () => at });
+  assert.equal((await collect(at)).observations["runner-minutes"].state, "not_monitored");
+});
