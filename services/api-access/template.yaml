@@ -1221,6 +1221,7 @@ Resources:
           API_CUSTOMER_AUTH_EMAIL_REPLY_TO: !Ref CustomerAuthEmailReplyTo
           SITE_ORIGIN: !Ref SiteOrigin
           PUBLIC_STATUS_TABLE: !Ref PublicStatusTable
+          RUN_TELEMETRY_TABLE: !Ref RunTelemetryTable
           STUDIO_ACCEPTANCE_ORIGIN: !Ref StudioAcceptanceOrigin
           API_TURNSTILE_SECRET_KEY: !Ref TurnstileSecretKey
           API_ACCOUNTS_TABLE: !Ref ApiAccountsTable
