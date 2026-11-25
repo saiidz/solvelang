@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   PRODUCT_APP_INSTALL_URL,
+  boundAuditSelection,
   connectAuditPath,
+  connectBindingsPath,
   connectRepositoriesPath,
   parseInstallationId,
   parseRepoSlug,
@@ -46,4 +48,22 @@ test("proxy paths carry the identifiers the api-access routes require", () => {
     connectAuditPath(123, "acme", "alpha"),
     "/customer/connect/audit?installationId=123&owner=acme&repo=alpha",
   );
+});
+
+test("the discovery read is the session bindings route", () => {
+  assert.equal(connectBindingsPath(), "/customer/github/bindings");
+});
+
+test("bound repositories shape into audit selections without typing", () => {
+  assert.deepEqual(
+    boundAuditSelection({ fullName: "saiidz/upcomingsounds-private", installationId: 182088702 }),
+    { installationId: 182088702, owner: "saiidz", repo: "upcomingsounds-private" },
+  );
+  // A bindings entry without its installation cannot be audited
+  // from the list — the panel falls back to the manual entry.
+  assert.equal(boundAuditSelection({ fullName: "acme/alpha", installationId: null }), null);
+  assert.equal(boundAuditSelection({ fullName: "acme/alpha", installationId: 0 }), null);
+  assert.equal(boundAuditSelection({ fullName: "acme/alpha", installationId: -3 }), null);
+  assert.equal(boundAuditSelection({ fullName: "not-a-slug", installationId: 42 }), null);
+  assert.equal(boundAuditSelection({ fullName: "acme/alpha/extra", installationId: 42 }), null);
 });
