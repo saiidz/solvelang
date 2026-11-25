@@ -1791,3 +1791,9 @@ test("Sweep batch 2: MCP pages state the published v0.4.0 facts and no stale cur
   assert.doesNotMatch(setupPage, /v0\.3\.0 is published|Published v0\.3\.0|pinned v0\.3\.0/);
   assert.doesNotMatch(contextPage, /MCP v0\.3\.0/);
 });
+
+test("Status page: runner-minutes note carries no stale pre-deployment clause", () => {
+  const statusData = read("app/(english)/status/status-data.ts");
+  assert.ok(statusData.includes("Live probe: the runner-minutes service answers its public health check. The probe does not run a job or verify balances."), "runner-minutes note states the live probe truth");
+  assert.doesNotMatch(statusData, /until that service is deployed/);
+});
