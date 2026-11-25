@@ -1797,3 +1797,13 @@ test("Status page: runner-minutes note carries no stale pre-deployment clause", 
   assert.ok(statusData.includes("Live probe: the runner-minutes service answers its public health check. The probe does not run a job or verify balances."), "runner-minutes note states the live probe truth");
   assert.doesNotMatch(statusData, /until that service is deployed/);
 });
+
+
+test("MCP page: Serverdex badge present with the exact href, src, and alt", () => {
+  const mcpPage = read("app/(english)/mcp/page.tsx");
+  assert.ok(mcpPage.includes('href="https://serverdex.io/server/io-github-saiidz-solvelang?utm_source=badge"'), "mcp page links to the Serverdex listing with the badge source parameter");
+  assert.ok(mcpPage.includes('src="https://serverdex.io/brand/badge.svg"'), "mcp page carries the Serverdex badge image");
+  assert.ok(mcpPage.includes('alt="SolveLang — listed on Serverdex"'), "mcp page badge carries the Serverdex alt text");
+  assert.ok(mcpPage.includes('width="123"'), "mcp page badge carries the specified width");
+  assert.ok(mcpPage.includes('height="40"'), "mcp page badge carries the specified height");
+});
