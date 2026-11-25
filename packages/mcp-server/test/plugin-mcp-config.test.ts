@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 
 // Step 1 G3 (QA): pin the shared plugin MCP configuration verbatim.
 // plugins/solvelang/.mcp.json is the configuration both the Claude Code and
-// Codex plugins execute. The published @solvelang/mcp-server@0.3.0 package
-// ships two executables, so the bare `npx --yes @solvelang/mcp-server@0.3.0`
+// Codex plugins execute. The published @solvelang/mcp-server@0.4.0 package
+// ships two executables, so the bare `npx --yes @solvelang/mcp-server@0.4.0`
 // form cannot choose one and fails ("could not determine executable to run").
 // The config must carry the explicit --package form, pinned here exactly.
 
@@ -32,11 +32,11 @@ test("plugin .mcp.json pins the explicit --package npx form verbatim", async () 
   assert.deepEqual(manifest.mcpServers.solvelang.args, [
     "-y",
     "--package",
-    "@solvelang/mcp-server@0.3.0",
+    "@solvelang/mcp-server@0.4.0",
     "solvelang-mcp",
   ]);
   const rendered = `npx ${manifest.mcpServers.solvelang.args.join(" ")}`;
-  assert.equal(rendered, "npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp");
+  assert.equal(rendered, "npx -y --package @solvelang/mcp-server@0.4.0 solvelang-mcp");
   assert.ok(!raw.includes('"--yes"'), "the failing bare-package args must not return");
   assert.ok(
     !raw.includes("solvelang-mcp-remote"),
