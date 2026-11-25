@@ -82,10 +82,10 @@ async function boundedOverallStatus(response) {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > MAX_BODY_BYTES) return null;
       chunks.push(value);
       const match = /"overall_status"\s*:\s*"([a-z_]+)"/.exec(new TextDecoder().decode(Buffer.concat(chunks)));
       if (match) return match[1];
+      if (bytes > MAX_BODY_BYTES) return null;
     }
   } finally { await reader.cancel().catch(() => {}); }
   return null;
