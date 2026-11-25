@@ -90,7 +90,7 @@ export function SecurityScanApp() {
             spellCheck={false}
           />
           <label className="mt-4 block text-sm font-medium text-ink" htmlFor="scan-prgate">PR Gate result (optional)</label>
-          <p className="mt-1 text-sm leading-6 text-muted">If you ran the SolveLang PR Gate in report-only mode on a change (GitHub Action or CLI), paste its result.json here and its policy verdicts join the report, labeled from the kit's own records.</p>
+          <p className="mt-1 text-sm leading-6 text-muted">If you ran the SolveLang PR Gate in report-only mode on a change (GitHub Action or CLI), paste its result.json here and its policy verdicts join the report, labeled from the kit&apos;s own records.</p>
           <textarea
             id="scan-prgate"
             className="mt-2 h-40 w-full rounded-2xl border border-line bg-canvas p-4 font-mono text-xs leading-5 text-ink"
