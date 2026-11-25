@@ -88,9 +88,6 @@ assert.equal(manifest.private, false, "package must explicitly opt out of npm pr
 assert.equal(manifest.publishConfig?.access, "public", "scoped package must explicitly publish with public access");
 assert.deepEqual(manifest.bin, {
   "solvelang-mcp": "dist/src/index.js",
-  "solvelang-mcp-remote": "dist/src/remote-cli.js",
-  "solvelang-bus": "dist/src/bus-cli.js",
-  "solvelang-mcp-relay": "dist/src/relay-cli.js",
 });
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "solvelang-packed-"));
@@ -127,9 +124,6 @@ try {
   ));
   assert.deepEqual(installedPackage.bin, {
     "solvelang-mcp": "dist/src/index.js",
-    "solvelang-mcp-remote": "dist/src/remote-cli.js",
-    "solvelang-bus": "dist/src/bus-cli.js",
-    "solvelang-mcp-relay": "dist/src/relay-cli.js",
   });
 
   const installedRuntimeRoot = path.join(consumerRoot, "node_modules", "@solvelang", "mcp-server", "dist", "src");
@@ -249,7 +243,7 @@ try {
 
   let remoteFailure;
   try {
-    await execFileAsync("npx", ["--no-install", "solvelang-mcp-remote"], {
+    await execFileAsync("node", [path.join(installedRuntimeRoot, "remote-cli.js")], {
       cwd: consumerRoot,
       env: npmEnvironment,
       timeout: 10_000,
