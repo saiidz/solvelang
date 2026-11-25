@@ -107,7 +107,7 @@ export const compatExplainer: string =
 
 export const ciChipGroups: CiChipGroup[] = [
   {
-    label: "Proven on the pilot queue",
+    label: "Proven on the live queue",
     tier: "proven",
     chips: ["GitHub Actions"],
   },
