@@ -4,11 +4,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-// README top block (QA for the browser-run capture PR): pin the badge block,
-// the capture line, the tagline lift, the unchanged verification note, and the
-// working MCP one-liner at the top of the ROOT README. The bare
-// `npx --yes @solvelang/mcp-server@0.3.0` form fails against the published
-// two-executable package; only the explicit --package form may appear.
+// README top block (QA for the browser-run capture PR), re-pinned for the
+// 0.4.0 release: pin the badge block, the capture line, the tagline lift,
+// the verification note, and the working MCP one-liner at the top of the
+// ROOT README. The 0.4.0 package ships a single executable, so the bare
+// `npx --yes @solvelang/mcp-server@0.4.0` form is the working one-liner.
 
 function resolveFromHere(...urls: string[]): URL {
   for (const url of urls) {
@@ -24,7 +24,7 @@ const CAPTURE_LINE =
   "![SolveLang running in the browser: a two-file workspace executes locally and prints its deterministic output](docs/demo/solvelang-run.gif)";
 const TAGLINE =
   "> **A readable, explainable workflow language and local-first analysis toolkit for AI-assisted business and coding workflows.**";
-const WORKING = "npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp";
+const WORKING = "npx --yes @solvelang/mcp-server@0.4.0";
 const FAILING = "npx --yes @solvelang/mcp-server@0.3.0";
 
 async function rootReadme(): Promise<string> {
@@ -45,8 +45,8 @@ test("tagline leads; the dated verification note follows it unchanged", async ()
   assert.ok(taglineAt >= 0, "tagline present");
   assert.ok(noteAt > taglineAt, "verification note moved below the tagline");
   assert.ok(
-    readme.includes("MCP v0.3.0 is published on npm and GitHub; main protection is enforced."),
-    "verification note line 1 unchanged",
+    readme.includes("MCP v0.4.0 is published on npm and GitHub; main protection is enforced."),
+    "verification note line 1 tracks the current release",
   );
   assert.ok(readme.includes("Older checkpoints below are historical."), "verification note line 2 unchanged");
 });
@@ -55,9 +55,9 @@ test("working MCP one-liner sits near the top; the failing bare form is absent",
   const readme = await rootReadme();
   const cmdAt = readme.indexOf(WORKING);
   const noteAt = readme.indexOf("## Current verification \u2014 2026-09-20");
-  assert.ok(cmdAt >= 0, "working --package command present");
+  assert.ok(cmdAt >= 0, "working bare npx command present");
   assert.ok(cmdAt < noteAt, "one-liner sits above the verification note, near the top");
-  assert.ok(!readme.includes(FAILING), "the failing bare npx form must not appear");
+  assert.ok(!readme.includes(FAILING), "the stale 0.3.0 bare npx form must not appear");
 });
 
 test("the capture asset is a real GIF of sane size", async () => {
