@@ -402,3 +402,181 @@ strength differs and the difference matters:**
   pipeline then blocks the merge. In the default report-only mode
   nothing blocks: the note and the status are advisory, exactly as
   labeled.
+
+## Azure DevOps: receipt collector + gate wrapper
+
+The same platform-neutral core also ships Azure DevOps packaging: a
+receipt collector for pull requests and an Azure Pipelines wrapper
+for the gate. Azure's REST API (api-version 7.1) is a different API
+family from both the forges' and GitLab's, so the collector is a
+sibling (`solvelang-azure-receipt`), not a flag on the other ones;
+the emitted receipt input is the same contract.
+
+### Receipt collector (`solvelang-azure-receipt`)
+
+Reads one pull request from an Azure DevOps organization (Azure
+DevOps Services, or an Azure DevOps Server collection URL) and emits
+a Change Impact Receipt **input** object — the exact JSON shape the
+Change Impact Receipts page (`site/app/change-impact-receipt`)
+consumes. Paste the output into that page (or feed it to
+`buildChangeImpactReceipt`) to get the receipt: findings labeled
+verified / failed / unverified, the standard grading block, no risk
+scores. The page itself is unchanged.
+
+```bash
+cd packages/pr-gate
+npm ci
+npm run build
+AZURE_DEVOPS_PAT=<pat> node dist/packages/pr-gate/src/azure-receipt.js \
+  --org-url https://dev.azure.com/myorg \
+  --project WidgetProject --repository widget-repo --pr 42 \
+  --gate-result .pr-gate-out/result.json \
+  --out receipt-input.json
+```
+
+- `--org-url` is the organization root (`https://dev.azure.com/<org>`
+  for Azure DevOps Services; the collection URL for Azure DevOps
+  Server); `--project` and `--repository` are the team project and
+  repository names (or ids); `--pr` is the pull request id.
+- The credential is supplied by the operator at runtime and is never
+  stored, logged, or written to the output: `--token` takes a
+  personal access token (sent as HTTP Basic with an empty user name —
+  Microsoft's PAT route; falls back to `AZURE_DEVOPS_PAT`), and
+  `--bearer-token` takes an Entra / OAuth token (falls back to
+  `AZURE_DEVOPS_BEARER_TOKEN` and takes precedence when both are
+  supplied). Public projects read without one where the organization
+  allows anonymous access.
+- The collector reads the PR, its iterations, the latest iteration's
+  change list, its commit list, its status list, the current head of
+  its target branch, and a diffs count of head against that base.
+  Every field name and enum was verified against Microsoft's REST
+  API documentation
+  (https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-requests/get-pull-request?view=azure-devops-rest-7.1);
+  the mappings that matter:
+  - The change list is the PR's own iteration record. Each push
+    creates an iteration; the latest iteration's changes, read with
+    the endpoint's default comparison (against the common commit),
+    are the PR's full per-file change list as Azure computed it
+    (https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-iteration-changes/get?view=azure-devops-rest-7.1),
+    walked page by page via `nextSkip`/`nextTop`. Folder entries are
+    structure, not changed files. A deleted file's path comes from
+    `sourceServerItem`.
+  - The merge base is the latest iteration's `commonRefCommit` —
+    "the first common Git commit of the source and target refs"
+    (https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-iterations/list?view=azure-devops-rest-7.1).
+    Azure has no combined-tree preview equivalent to GitHub's, so
+    nothing here claims what a merge would produce; and when the PR
+    carries `hasMultipleMergeBases`, Azure itself warns the common
+    commit is not unique — the iteration's is still the base Azure
+    used for its own diff, and it is the one recorded.
+  - The API carries **no per-file line counts** for iteration
+    changes and no diff text to count from, so additions/deletions
+    are `0/0` for every file: the numbers are not estimated. (The
+    GitLab collector counts diff text because GitLab returns it;
+    Azure does not.)
+  - Reviews are the PR's reviewers and their current votes
+    (`IdentityRefWithVote.vote`: 10 approved, 5 approved with
+    suggestions, 0 no vote, -5 waiting for author, -10 rejected).
+    10 and 5 map to `APPROVED` (an approval with suggestions counts
+    as an approval in Azure's own policy evaluation); -10 and -5 are
+    the reviewer's recorded refusal to approve and map to
+    `CHANGES_REQUESTED`; 0 is no vote and is dropped; reviewer
+    containers (groups) are dropped — their members vote
+    individually. There is no separate reviews endpoint to read.
+  - CI evidence is the PR status list — the statuses services post
+    through the PR Status API
+    (https://learn.microsoft.com/en-us/rest/api/azure/devops/git/pull-request-statuses/list?view=azure-devops-rest-7.1).
+    Only statuses attached to the latest iteration (plus any
+    carrying no iteration id) count as current, reduced to the
+    newest status per context (`genre/name`); older iterations'
+    statuses are history. States map: `succeeded` → success,
+    `failed`/`error` → failure, `notApplicable` → neutral,
+    `pending` → in progress, `notSet` → queued with no conclusion.
+  - Mergeability comes from `mergeStatus` (PullRequestAsyncStatus),
+    claimed only for active PRs: `conflicts` is `dirty`;
+    `succeeded` is `unstable` (Azure produced the merge commit —
+    the branches merge — with CI and review state reported
+    separately); `rejectedByPolicy` keeps Azure's own word with
+    mergeable true (the branches merge, a branch policy rejected
+    the completion); `failure` claims nothing and keeps Azure's
+    word; `queued`/`notSet` are `unknown`. A completed PR's
+    `mergeStatus` describes the merge that happened, so completed
+    and abandoned PRs record mergeable `null` / `unknown`.
+  - The PR object carries no updated-date field, so `updatedAt` is
+    the latest iteration's `updatedDate`, falling back to the
+    creation date; and its `url` field is the REST URL, so the
+    human URL is built from the documented web route
+    `{org}/{project}/_git/{repo}/pullrequest/{id}`.
+  - The compare runs on SHAs through the diffs endpoint
+    (https://learn.microsoft.com/en-us/rest/api/azure/devops/git/diffs/get?view=azure-devops-rest-7.1):
+    current target-branch head against the PR head, using the
+    counts Azure returns (`aheadCount`/`behindCount`). If the diffs
+    read cannot answer, `compare` is `null` and the builder labels
+    base drift unverified. If the target branch itself cannot be
+    read (for example it was deleted after completion), the base
+    falls back to the latest iteration's `targetRefCommit` — the
+    target head the PR's own diff was computed against — and the
+    compare is skipped for the same reason.
+- If any required read fails (PR, iterations, iteration changes,
+  commits, statuses), the collector exits `2` (operational error)
+  rather than emitting a partial input the builder would over-claim
+  from.
+- `--gate-result` embeds a PR Gate `result.json`
+  (`solvelang.pr-gate.result.v1`) as the receipt's PR Gate route.
+  With no result supplied, the route is recorded as not run — which
+  the builder labels failed, never silently dropped.
+
+Exit codes mirror the PR Gate CLI: `0` = input emitted, `2` =
+operational error.
+
+### Gate pipeline template
+
+- `workflow-template.azure-pipelines.yml` — copy to
+  `azure-pipelines.yml` (or merge the steps into your existing PR
+  pipeline).
+
+The pipeline runs for pull requests on the project's own agents,
+reads the PR facts (labels, head SHA, changed files) from the API —
+the latest iteration's change list, since a PR validation build
+checks out the merge commit, not the head — runs the same core CLI
+in report-only mode by default (`PR_GATE_MODE`), posts/updates ONE
+sticky PR thread (marker `<!-- pr-gate:report -->`) through the
+threads API, and posts a PR status with context genre `solvelang`,
+name `pr-gate` through the PR Status API
+(https://learn.microsoft.com/en-us/azure/devops/repos/git/create-pr-status-server).
+Azure statuses attach to the pull request itself (the server
+associates them with the current iteration), not to a commit. The
+status is mapped from the verdict recorded in `result.json`, never
+from the CLI exit code: in report-only mode the CLI exits 0 even on
+a policy FAIL, and the status says so ("advisory only"). Thread and
+status posts are best-effort — if the identity cannot write, the job
+warns and the report still lands in the job log and the published
+`pr-gate-out` artifact; the job's exit code is governed by the gate
+verdict and `PR_GATE_MODE` only. API calls use `PR_GATE_TOKEN` (a
+personal access token with Code read/write rights on the
+repository, set as a secret pipeline variable) when defined, and
+fall back to the build's OAuth token (`System.AccessToken`), whose
+identity — the project's build service account — needs the
+repository permission "Contribute to pull requests".
+
+**What blocks a merge on Azure DevOps — stated exactly, because the
+strength lives in branch policy configuration, not in this
+template**
+(https://learn.microsoft.com/en-us/azure/devops/repos/git/branch-policies):
+
+- The PR status this template posts (genre `solvelang`, name
+  `pr-gate`) blocks completion **only** when a branch policy of type
+  **Status checks** requires that exact `genre/name` with Policy
+  requirement set to **Required**. Without that policy the status is
+  a displayed signal on the PR: visible, blocking nothing. The
+  policy also carries reset conditions and an applicability choice
+  (apply by default, or only after the first status posts) — read
+  the policy, not the status, as the gate.
+- **Build validation** is the enforcement route available to every
+  project: name this pipeline in a build validation branch policy
+  set to Required and run with `PR_GATE_MODE=enforce` — a policy
+  failure fails the job, and the failed validation build blocks
+  completion.
+- In the default report-only mode with no branch policy, nothing
+  blocks: the thread and the status are advisory, exactly as
+  labeled.
