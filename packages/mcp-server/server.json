@@ -28,7 +28,7 @@
       "transport": {
         "type": "stdio"
       },
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ],
   "remotes": [
@@ -62,6 +62,6 @@
     "url": "https://github.com/saiidz/solvelang"
   },
   "title": "SolveLang",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "websiteUrl": "https://www.solve-lang.com/mcp/"
 }

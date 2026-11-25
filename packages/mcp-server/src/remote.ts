@@ -183,7 +183,7 @@ export function createRemoteSolveLangMcpServer(options: Readonly<{ authMode?: Re
   const authMode = options.authMode ?? "bearer";
   const rateLimit: RemoteRateLimit | null = options.rateLimit === undefined ? { ...REMOTE_MCP_RATE_LIMIT } : options.rateLimit;
   const server = new McpServer(
-    { name: "solvelang-remote", version: "0.3.0" },
+    { name: "solvelang-remote", version: "0.4.0" },
     {
       instructions: "Remote SolveLang is raw-JSON-only, deterministic, read-only analysis. It has no workspace path access, subprocess execution, repository mutation, credential inspection, or outbound provider access.",
     },

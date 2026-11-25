@@ -1,7 +1,7 @@
 {
   "name": "@solvelang/mcp-server",
   "mcpName": "io.github.saiidz/solvelang",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first and remote-ready, read-only MCP server for deterministic SolveLang and n8n workflow validation",
   "private": false,
   "type": "module",
@@ -25,10 +25,7 @@
     "validation"
   ],
   "bin": {
-    "solvelang-mcp": "dist/src/index.js",
-    "solvelang-mcp-remote": "dist/src/remote-cli.js",
-    "solvelang-bus": "dist/src/bus-cli.js",
-    "solvelang-mcp-relay": "dist/src/relay-cli.js"
+    "solvelang-mcp": "dist/src/index.js"
   },
   "files": [
     "dist/src/context-compaction-tools.d.ts",
