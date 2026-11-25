@@ -25,10 +25,10 @@ export default function SolveContextPage() {
 
         <div className="mt-10 space-y-10">
           <section aria-labelledby="current-verification">
-            <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-09-20</h2>
+            <h2 id="current-verification" className="text-2xl font-semibold tracking-tight">Current verification — 2026-11-24</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
-              <p>MCP v0.3.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
-              <p>Status: <strong>implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.3.0 package; not yet proven by complete real-agent/provider measurements</strong></p>
+              <p>MCP v0.4.0 is published on npm and GitHub; main protection is enforced. See <Link className="font-semibold text-accent underline" href="/technical-evidence/">the current completion checklist</Link> for fresh evidence and remaining live acceptance gates. Older checkpoints below are historical.</p>
+              <p>Status: <strong>implemented repository product foundation with real-source regression coverage; distributed in the tagged MCP v0.4.0 package; not yet proven by complete real-agent/provider measurements</strong></p>
               <p>Independent evaluation: in progress</p>
               <p>Repository status reconciled on 2026-09-15.</p>
             </div>
@@ -67,7 +67,7 @@ export default function SolveContextPage() {
             <div className="mt-4 space-y-4 leading-7 text-body">
               <p>The repository does <strong>not</strong> currently establish:</p>
               <ul className="list-disc space-y-2 pl-6">
-                <li>verified managed-workspace installation or public Plugin Directory listing for the published MCP v0.3.0 package;</li>
+                <li>verified managed-workspace installation or public Plugin Directory listing for the published MCP v0.4.0 package;</li>
                 <li>real Claude/Codex provider-token savings;</li>
                 <li>real-agent task-success improvement or quality equivalence across the full benchmark suite;</li>
                 <li>provider cache-reuse improvement;</li>
@@ -190,7 +190,7 @@ export default function SolveContextPage() {
           <section aria-labelledby="distribution-truth">
             <h2 id="distribution-truth" className="text-2xl font-semibold tracking-tight">Distribution truth</h2>
             <div className="mt-4 space-y-4 leading-7 text-body">
-              <p>MCP <code className={code}>@solvelang/mcp-server@0.3.0</code> is published on npm and GitHub, verified on 2026-09-20. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
+              <p>MCP <code className={code}>@solvelang/mcp-server@0.4.0</code> is published on npm and GitHub, verified on 2026-11-24. It distributes the tagged release source; later main changes require separate distribution. Managed-workspace marketplace installation and public Plugin Directory listing remain unverified. v0.2.0 is historical.</p>
               <p>External distribution verification remains a distinct milestone from repository source/tag state.</p>
             </div>
           </section>

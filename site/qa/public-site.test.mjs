@@ -1561,9 +1561,9 @@ test("documentation hub documents each guide with problem-first titles and pinne
   );
   const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
   const localText = JSON.stringify(local);
-  assert.ok(localText.includes("npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp"), "local setup guide states the published npx command");
+  assert.ok(localText.includes("npx --yes @solvelang/mcp-server@0.4.0"), "local setup guide states the published npx command");
   assert.ok(localText.includes("SOLVELANG_WORKSPACE_ROOT"), "local setup guide states the workspace root variable");
-  assert.ok(localText.includes("29 read-only tools"), "local setup guide states the published tool count");
+  assert.ok(localText.includes("31 read-only tools"), "local setup guide states the published tool count");
   assert.ok(localText.includes("Node.js 20 or newer"), "local setup guide states the Node requirement");
   const llms = read("public/llms.txt");
   assert.ok(llms.includes("https://www.solve-lang.com/docs/"), "llms.txt links the documentation hub");
@@ -1683,16 +1683,16 @@ test("premium pool is presented exactly: services shelf, FAQ, labels, checkout, 
   assert.ok(llms.includes("solvelang-runners-premium runs the pull request's jobs on the Premium pool, drawing from the Premium balance"), "llms names the premium PR label");
 });
 
-test("Step 1: MCP install surfaces state the working --package command verbatim", () => {
-  const working = "npx -y --package @solvelang/mcp-server@0.3.0 solvelang-mcp";
+test("Step 1: MCP install surfaces state the working bare npx command verbatim", () => {
+  const working = "npx --yes @solvelang/mcp-server@0.4.0";
   const landing = read("app/components/homepage/LandingPage.tsx");
   assert.ok(landing.includes(`<pre><code>${working}</code></pre>`), "homepage card states the working command");
-  assert.doesNotMatch(landing, /npx --yes @solvelang\/mcp-server/);
+  assert.doesNotMatch(landing, /@solvelang\/mcp-server@0\.3\.0/);
   const { guides } = require("../.studio-test-dist/public-site/(english)/docs/docs-data.js");
   const local = guides.find((entry) => entry.slug === "mcp-server-local-setup");
   const localText = JSON.stringify(local);
   assert.ok(localText.includes(working), "local setup guide states the working command");
-  assert.ok(localText.includes("--package"), "local setup guide Codex form uses the --package args");
+  assert.ok(localText.includes("args = [\\\"--yes\\\", \\\"@solvelang/mcp-server@0.4.0\\\"]"), "local setup guide Codex form uses the bare npx args");
   assert.ok(
     localText.includes("the pinned package command above is the supported route today"),
     "local setup guide states the supported-route sentence",
@@ -1701,7 +1701,7 @@ test("Step 1: MCP install surfaces state the working --package command verbatim"
   assert.doesNotMatch(localText, /the npx path above is the supported route today/);
   const setup = read("app/(english)/mcp-setup/page.tsx");
   assert.ok(
-    setup.includes('args = ["-y", "--package", "@solvelang/mcp-server@0.3.0", "solvelang-mcp"]'),
+    setup.includes('args = ["--yes", "@solvelang/mcp-server@0.4.0"]'),
     "mcp setup states the working Codex args",
   );
   assert.ok(setup.includes(`solvelang -- ${working}`), "mcp setup states the working Claude registration");
