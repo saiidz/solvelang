@@ -43,7 +43,7 @@ import {
 const serviceDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.VERIFICATION_REPO_ROOT
   ? path.resolve(process.env.VERIFICATION_REPO_ROOT)
-  : path.resolve(serviceDir, "..", "..");
+  : path.resolve(serviceDir, "..", "..", "..");
 
 const config = {
   port: Number(process.env.VERIFICATION_PORT || 8080),
@@ -67,7 +67,7 @@ const kit = {
     repoRoot,
     "packages/pr-gate/dist/packages/pr-gate/src/policy.js"
   )),
-  receiptCore: require(path.join(serviceDir, "..", "dist-receipt", "receipt.js")),
+  receiptCore: require(path.join(serviceDir, "..", "dist-receipt", "receipt.cjs")),
 };
 
 // --- App credentials (created by the manifest flow) ---
