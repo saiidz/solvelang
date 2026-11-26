@@ -1,0 +1,15 @@
+{
+  "description": "SolveLang Verification service: self-serve GitHub App loop that posts graded change-impact receipts as check runs (report-only by default, in-repo enforce mode), writing every run to the governance audit log.",
+  "engines": {
+    "node": ">=20"
+  },
+  "name": "@solvelang/verification",
+  "private": true,
+  "scripts": {
+    "build:kit": "node scripts/build-kit.mjs",
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
