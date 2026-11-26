@@ -155,7 +155,7 @@ export default function ServicesPage() {
         <header className="mx-auto max-w-3xl py-12 text-center">
           <p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">SolveLang services</p>
           <h1 className="mt-5 text-5xl font-bold tracking-tight md:text-6xl">What you can buy today — and what is live but not for sale.</h1>
-          <p className="mt-6 text-lg leading-8 text-body">Four services. Three are live and purchasable on this site today. The fourth is live and is labeled as one, with no public price and no self-serve signup.</p>
+          <p className="mt-6 text-lg leading-8 text-body">Four services. Three are live and purchasable on this site today. The fourth is live and is labeled as one, with no public price and no self-serve signup. The free tools and SolveLang Verification follow below.</p>
         </header>
 
         <section className="rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="runner-minutes-heading">
@@ -318,6 +318,31 @@ export default function ServicesPage() {
           </div>
         </section>
 
+        <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="free-tools-heading">
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 id="free-tools-heading" className="text-3xl font-bold">Free tools</h2>
+            <LiveBadge />
+          </div>
+          <p className="mt-4 max-w-4xl leading-7 text-body">Three checks that run on any public repository today — no signup, no install. Every finding is graded verified / failed / unverified, with its evidence attached.</p>
+          <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-body">
+            <li><strong className="text-ink">Repo Security Scan:</strong> scan a public repository and get its security findings graded one by one — <Link className="font-semibold text-ink underline" href="/security-scan/">run a scan</Link>.</li>
+            <li><strong className="text-ink">CI Bill Check:</strong> price a public repo&apos;s recent GitHub Actions runs under per-minute vs per-second billing, from the runs&apos; real job seconds — <Link className="font-semibold text-ink underline" href="/ci-bill-check/">check a bill</Link>.</li>
+            <li><strong className="text-ink">Change Impact Receipts:</strong> a graded receipt for a pull request — what it touches, and what the evidence shows — <Link className="font-semibold text-ink underline" href="/change-impact-receipt/">see how receipts work</Link>.</li>
+          </ul>
+        </section>
+
+        <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="verification-heading">
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 id="verification-heading" className="text-3xl font-bold">SolveLang Verification</h2>
+            <span className="rounded-full bg-panel-alt px-3 py-1 text-xs font-bold uppercase tracking-wider text-body">Proven — opening next</span>
+          </div>
+          <p className="mt-4 max-w-4xl leading-7 text-body">An installable GitHub check that grades pull-request changes: a Change Impact Receipt — verified / failed / unverified — posted as a check run with inline annotations and a receipt comment, with every run written to an audit log. Report-only by default; a repository can switch it to enforce mode in its own config.</p>
+          <p className="mt-4 max-w-4xl leading-7 text-body"><strong className="text-ink">Status:</strong> proven end-to-end on our own repositories — a deliberately defective pull request was caught in enforce mode, clean pull requests passed, and the graded receipts posted on the PR. Opening to outside repositories next. There is no public price and no self-serve signup yet.</p>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <Link href="/change-impact-receipt/" className="inline-flex rounded-xl border border-line-strong px-5 py-3 font-semibold hover:bg-canvas">How Change Impact Receipts work</Link>
+          </div>
+        </section>
+
         <section className="mt-10 rounded-3xl border border-line bg-panel p-8 sm:p-10" aria-labelledby="status-matrix-heading">
           <h2 id="status-matrix-heading" className="text-3xl font-bold">What is live, what is published, what is pilot</h2>
           <p className="mt-4 max-w-4xl leading-7 text-body">SolveLang has several surfaces, and they do not all stand in the same place. This table is the single reference for what each one is today — what works, where its boundary sits, and what it takes to use it. If anything elsewhere on this site reads differently, this table is the one to believe, and the date on each row is when it was last checked against the live service.</p>
@@ -334,6 +359,10 @@ export default function ServicesPage() {
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">MCP server — hosted endpoint</td><td className="py-3 pr-4">Live — read-only</td><td className="py-3 pr-4 leading-6 text-body"><code>https://mcp.solve-lang.com</code> — the same read-only analysis over raw JSON you send in the request: 10 tools, no server-side workspace, a 4 MiB request ceiling, and a rate limit of 60 requests per minute per source address. A bearer token is required.</td><td className="py-3 pr-4">By request</td><td className="py-3 pr-4">Token required — tokens are issued by SolveLang; write to hello@solve-lang.com for access</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Runner Minutes &amp; Speed Lane Cache</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Prepaid GitHub Actions runner minutes on fresh Linux machines created for each job and destroyed after it, metered per second with a 10-second minimum, never auto-renewing, expiring 12 months after purchase. Standard (2-vCPU class): 5,000 minutes $20 · 25,000 $100 · 100,000 $400. High-Power (16-vCPU class): 1,000 minutes $80 up to 10,000 $400. Start with 300 free Standard minutes when you connect GitHub — no card required, valid 30 days. Optional Speed Lane Cache: 10 GB for $2/month. Guaranteed on-demand starts draw minutes at 2× — faster is never free.</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">API access plans</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Monthly weighted-credit plans for the SolveLang API and repository-audit integrations. One base credit covers up to 5,000 input tokens and 1,000 output tokens. Developer $49/month (1,000 credits) · Pro $199/month (10,000 credits) · Business $699/month (50,000 credits).</td><td className="py-3 pr-4">Yes — on SolveLang&apos;s own checkout page</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 22, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Free tools (Repo Security Scan, CI Bill Check, Change Impact Receipts)</td><td className="py-3 pr-4">Live — free</td><td className="py-3 pr-4 leading-6 text-body">Run on any public repository with no signup; every finding graded verified / failed / unverified.</td><td className="py-3 pr-4">Yes</td><td className="py-3 pr-4">No</td><td className="py-3">November 26, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Team Context Index</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">A shared context index for a team&apos;s repositories: $8 per seat per month — billing counts active members only, and the owner counts as a seat.</td><td className="py-3 pr-4">Yes — in your account</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 26, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Weekly CI Health Digest</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">A weekly digest of your CI health in your account, published Mondays 06:00 EST.</td><td className="py-3 pr-4">Yes — in your account</td><td className="py-3 pr-4">Yes</td><td className="py-3">November 26, 2026</td></tr>
+                <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">SolveLang Verification</td><td className="py-3 pr-4">Proven — opening next</td><td className="py-3 pr-4 leading-6 text-body">Graded verification for pull requests — a receipt posted as a check run with a receipt comment, every run written to an audit log. Proven end-to-end on our own repositories; opening to outside repositories next. There is no public price and no self-serve signup yet.</td><td className="py-3 pr-4">No</td><td className="py-3 pr-4">—</td><td className="py-3">November 26, 2026</td></tr>
                 <tr className="border-b border-line align-top last:border-0"><td className="py-3 pr-4 font-semibold">Process Solution (merge governance)</td><td className="py-3 pr-4">Live</td><td className="py-3 pr-4 leading-6 text-body">Combined-tree batch checks, merge decisions, and audit logs for pull-request queues — running on the operator&apos;s own queues today. There is no public price and no self-serve signup yet.</td><td className="py-3 pr-4">No</td><td className="py-3 pr-4">— (live)</td><td className="py-3">November 25, 2026</td></tr>
               </tbody>
             </table>
