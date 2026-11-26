@@ -11,6 +11,7 @@
 // build (see README.md). Idempotent; safe to re-run.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { rename } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -50,11 +51,18 @@ run(
   repoRoot
 );
 
+// The compiled receipt core is CommonJS inside an ESM package —
+// rename it to .cjs so Node loads it as CJS through createRequire.
+await rename(
+  path.join(receiptOutDir, "receipt.js"),
+  path.join(receiptOutDir, "receipt.cjs")
+);
+
 const expected = [
   path.join(prGateDir, "dist/packages/pr-gate/src/github-receipt.js"),
   path.join(prGateDir, "dist/packages/pr-gate/src/cli.js"),
   path.join(prGateDir, "dist/packages/pr-gate/src/policy.js"),
-  path.join(receiptOutDir, "receipt.js"),
+  path.join(receiptOutDir, "receipt.cjs"),
 ];
 for (const artifact of expected) {
   if (!existsSync(artifact)) {
