@@ -67,7 +67,7 @@ const kit = {
     repoRoot,
     "packages/pr-gate/dist/packages/pr-gate/src/policy.js"
   )),
-  receiptCore: require(path.join(serviceDir, "..", "dist-receipt", "receipt.js")),
+  receiptCore: require(path.join(serviceDir, "..", "dist-receipt", "receipt.cjs")),
 };
 
 // --- App credentials (created by the manifest flow) ---
