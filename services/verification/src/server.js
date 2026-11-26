@@ -39,6 +39,13 @@ import {
   createTarballTreeFetcher,
   createVerificationRunner,
 } from "./runner.js";
+import {
+  renderManifestCallbackFailurePage,
+  renderManifestCallbackMissingCodePage,
+  renderManifestCallbackSuccessPage,
+  renderSetupAppCreatedPage,
+  renderSetupCreatePage,
+} from "./pages.js";
 
 const serviceDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.VERIFICATION_REPO_ROOT
@@ -246,38 +253,26 @@ const setupState = randomBytes(16).toString("hex");
 async function handleSetup(res) {
   const credentials = await loadCredentials();
   if (credentials) {
-    html(
-      res,
-      200,
-      `<!doctype html><title>SolveLang Verification — app created</title><h1>SolveLang Verification</h1><p>The GitHub App <strong>${credentials.name || credentials.slug}</strong> is created and this service holds its credentials.</p><p><a href="https://github.com/apps/${credentials.slug}/installations/new">Install it on a repository</a></p>`
-    );
+    html(res, 200, renderSetupAppCreatedPage(credentials));
     return;
   }
   const manifest = JSON.stringify(buildManifest(config.publicBase));
-  html(
-    res,
-    200,
-    `<!doctype html><title>SolveLang Verification — create the app</title><h1>Create the SolveLang Verification GitHub App</h1><p>One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests read, issues write, metadata read — and the pull_request event.</p><form action="https://github.com/settings/apps/new?state=${setupState}" method="post"><input type="hidden" name="manifest" value='${manifest.replace(/'/g, "&#39;")}'><button type="submit">Create GitHub App</button></form>`
-  );
+  html(res, 200, renderSetupCreatePage({ state: setupState, manifest }));
 }
 
 async function handleManifestCallback(req, res, url) {
   const code = url.searchParams.get("code");
   if (!code) {
-    html(res, 400, "<h1>Missing manifest code</h1>");
+    html(res, 400, renderManifestCallbackMissingCodePage());
     return;
   }
   try {
     const credentials = await exchangeManifestCode(code);
     await sealCredentials(credentials);
-    html(
-      res,
-      200,
-      `<!doctype html><title>SolveLang Verification — app created</title><h1>App created</h1><p><strong>${credentials.name}</strong> (${credentials.slug}, id ${credentials.id}) is created and its credentials are sealed on this service.</p><p><a href="https://github.com/apps/${credentials.slug}/installations/new">Install it on a repository</a></p>`
-    );
+    html(res, 200, renderManifestCallbackSuccessPage(credentials));
   } catch (err) {
     console.error("manifest_callback_failed", err?.name || "Error");
-    html(res, 502, "<h1>App creation exchange failed</h1><p>The manifest code could not be exchanged. It is valid for a few minutes only — restart from /setup.</p>");
+    html(res, 502, renderManifestCallbackFailurePage());
   }
 }
 
