@@ -188,6 +188,8 @@ export function RepositoryConnectPanel() {
 
   useEffect(() => {
     if (session !== "signed-in") return;
+    // The load reconciles client state with the server-owned connection lists.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadConnections();
   }, [session, loadConnections]);
 
