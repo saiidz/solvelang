@@ -244,12 +244,12 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(section.includes('href="/solutions/job-protection/"'), "section links to job protection");
   assert.ok(section.includes("How it works"), "services link label");
   assert.ok(section.includes("The guarantees"), "job protection link label");
-  /* the chooser: renumbered eyebrow and five cards, the fifth is Runner Minutes */
+  /* the chooser: renumbered eyebrow and seven cards, the fifth is Runner Minutes */
   assert.ok(landing.includes("07 / START WITH SOLVE"), "chooser eyebrow renumbered");
   assert.ok(!landing.includes("06 / START WITH SOLVE"), "old chooser eyebrow is gone");
   const chooser = landing.slice(landing.indexOf('id="quickstart"'), landing.indexOf("styles.finalSection"));
   const cards = chooser.match(/<article data-reveal/g) ?? [];
-  assert.equal(cards.length, 5, "chooser has five cards");
+  assert.equal(cards.length, 7, "chooser has seven cards");
   assert.ok(chooser.includes("<span>05 / PREPAID RUNNER MINUTES</span>"), "fifth card title line");
   assert.ok(chooser.includes("<h3>Runner Minutes</h3>"), "fifth card heading");
   assert.ok(chooser.includes("Run your GitHub Actions on SolveLang machines. Prepaid minutes, metered per second, on fresh machines created per job."), "fifth card body");
