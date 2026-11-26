@@ -108,6 +108,14 @@ test("llms convenience map stays public-only and truth-labeled", () => {
   assert.doesNotMatch(llms, /api[_-]?key/i);
 });
 
+test("llms states Process Solution merge governance as live, never pilot", () => {
+  assert.ok(
+    llms.includes("- [Services](https://www.solve-lang.com/services/): Runner minutes, API access plans, and Process Solution merge governance — live, with no public price and no self-serve signup"),
+    "llms.txt Services entry states Process Solution as live",
+  );
+  assert.doesNotMatch(llms, /pilot/i);
+});
+
 test("llms pricing facts state the exact shelf and the embedded-payment fact", () => {
   assert.match(llms, /## Pricing facts/);
   for (const fact of [
