@@ -12,7 +12,7 @@ Start the SolveLang MCP server — Solve Context tools for your AI coding agent 
 npx --yes @solvelang/mcp-server@0.4.0
 ```
 
-## Current verification — 2026-09-20
+## Current verification — 2026-11-26
 
 MCP v0.4.0 is published on npm and GitHub; main protection is enforced.
 Older checkpoints below are historical.
@@ -31,8 +31,8 @@ Prepaid GitHub Actions runner minutes. Buy a pack on the SolveLang site, connect
 
 - Metering is per second, measured from each job's own GitHub start and finish timestamps, with a 10-second minimum per job.
 - Spot capacity serves first at 1x. If Spot cannot start a job in time, guaranteed on-demand capacity starts it instead, and those minutes draw at 2x — always shown as a separate line in your usage.
-- Two pools: Standard (2-vCPU class) and High-Power (16-vCPU class — the Speed lane, with a guaranteed start and a colocated cache).
-- Jobs pick their pool by `runs-on` label: `[self-hosted, solvelang-runners-standard]` or `[self-hosted, solvelang-runners-high-power]`. Label routing: label a pull request `solvelang` and its jobs route to SolveLang runners.
+- Three pools: Standard (2-vCPU class), High-Power (16-vCPU class — the Speed lane, with a guaranteed start and a colocated cache), and Premium (96-vCPU class).
+- Jobs pick their pool by `runs-on` label: `[self-hosted, solvelang-runners-standard]`, `[self-hosted, solvelang-runners-high-power]`, or `[self-hosted, solvelang-runners-premium]`. Label routing: label a pull request `solvelang` and its jobs route to SolveLang runners.
 - Pause or resume serving at any time from your account. Balances expire 12 months after purchase and are always visible. Linux runners for private repositories.
 
 Prices (USD, tax included — the price shown is the full amount charged):
@@ -50,11 +50,11 @@ Prices (USD, tax included — the price shown is the full amount charged):
 | | | 9,000 | $382.50 |
 | | | 10,000 | $400 |
 
-Speed Lane Cache: a 10 GB colocated cache beside the high-power machines, $2 per month. Buying happens only through the site's own embedded checkout: [Buy runner minutes](https://www.solve-lang.com/account/runner-minutes-checkout/).
+Speed Lane Cache: a 10 GB colocated cache beside the high-power machines, $2 per month. Premium minutes: $0.50 per minute at every pack size — 5,000 for $2,500 up to 100,000 for $50,000. Buying happens only through the site's own embedded checkout: [Buy runner minutes](https://www.solve-lang.com/account/runner-minutes-checkout/).
 
 ### Language, toolchain, and Live Center — live
 
-The SolveLang language and the `solvec` CLI (below), the [browser workspace](https://www.solve-lang.com/run/), Workflow Intelligence Studio, the Repository Audit / Solve Graph / Server Audit surfaces, and Solve Context over MCP. A customer account adds the **Live Center**: a live view of your pull requests, the merge queue, checks, runners, and your minutes balance.
+The SolveLang language and the `solvec` CLI (below), the [browser workspace](https://www.solve-lang.com/run/), Workflow Intelligence Studio, the Repository Audit / Solve Graph / Server Audit surfaces, and Solve Context over MCP. A customer account adds the **Live Center**: a live view of your pull requests, the merge queue, checks, runners, and your minutes balance. The **Team Context Index** gives a team a shared context index for its repositories — $8 per seat per month; billing counts active members only, and the owner counts as a seat. The **Weekly CI Health Digest** publishes a digest of your CI health in your account every Monday at 06:00 EST.
 
 ### API access plans — live
 
@@ -63,6 +63,14 @@ Monthly weighted-credit API plans: Developer $49/month (1,000 credits, 2 API key
 ### Merge governance (Process Solution) — live
 
 Governed merge automation for busy repositories: it builds the exact tree that will land, tests the combined tree once, and lands it only on FULL GREEN, with a written reason for every merge and block. Process Solution is **live** — the full governed cycle (plan, combined tree, battery, land) is proven end-to-end in production, with the landed tree verified identical to the tested tree and every decision written to the audit log. There is no public price and no self-serve signup yet. How it works: [Process Solution](https://www.solve-lang.com/process-solution/). The service is described here only; its source is not in this repository.
+
+### Free tools — live, no signup
+
+Three checks that run on any public repository today, each grading its findings verified / failed / unverified: [Repo Security Scan](https://www.solve-lang.com/security-scan/), [CI Bill Check](https://www.solve-lang.com/ci-bill-check/) (per-minute vs per-second pricing of a repo's real Actions runs), and [Change Impact Receipts](https://www.solve-lang.com/change-impact-receipt/).
+
+### SolveLang Verification — proven on our own repositories
+
+An installable GitHub check that posts a graded Change Impact Receipt — verified / failed / unverified — as a check run with a receipt comment, and writes every run to an audit log. Proven end-to-end on our own repositories on 2026-11-26: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Opening to outside repositories next. There is no public price and no self-serve signup yet.
 
 ## Why SolveLang exists
 
