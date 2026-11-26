@@ -1807,3 +1807,27 @@ test("MCP page: Serverdex badge present with the exact href, src, and alt", () =
   assert.ok(mcpPage.includes('width="123"'), "mcp page badge carries the specified width");
   assert.ok(mcpPage.includes('height="40"'), "mcp page badge carries the specified height");
 });
+
+test("the 404 page is the branded route receipt with verified exits", () => {
+  const notFound = read("app/not-found.tsx");
+  assert.match(notFound, /Route check/);
+  assert.match(notFound, /This page doesn&rsquo;t exist\./);
+  assert.match(notFound, /Route receipt/);
+  assert.match(notFound, /HTTP 404/);
+  // The receipt grades the dead route honestly: two failed rows, one verified.
+  assert.equal((notFound.match(/status: "failed"/g) || []).length, 2);
+  assert.equal((notFound.match(/status: "verified"/g) || []).length, 1);
+  // The frozen brand assets, never the logo as text.
+  assert.match(notFound, /\/solvelang-mark\.svg/);
+  assert.match(notFound, /\/solvelang-logo\.svg/);
+  // Every exit is a real route on the site.
+  for (const href of ["/security-scan/", "/ci-bill-check/", "/status/", "/docs/"]) {
+    assert.ok(notFound.includes(`href: "${href}"`) || notFound.includes(`href="${href}"`), `404 page links ${href}`);
+  }
+  assert.match(notFound, /href="\/"/);
+  // Claims discipline: no percentages, no benchmark figures on an error page.
+  assert.doesNotMatch(notFound, /\d+%/);
+  // Operator identity comes from the legal record, never retyped.
+  assert.match(notFound, /legal-content\.json/);
+  assert.match(notFound, /legalContent\.operator/);
+});
