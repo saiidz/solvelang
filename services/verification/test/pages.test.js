@@ -86,7 +86,7 @@ test("setup create page: permission wording is verbatim", () => {
   const page = renderSetupCreatePage({ state: STATE, manifest: MANIFEST });
   assert.ok(
     page.includes(
-      "One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests read, issues write, metadata read — and the pull_request event."
+      "One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests write, issues write, metadata read — and the pull_request event."
     )
   );
   assert.ok(

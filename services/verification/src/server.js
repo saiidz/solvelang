@@ -17,8 +17,10 @@
 // The app itself is created by the manifest flow, so its permission
 // set is exactly the manifest's — locked minimal at creation
 // (teardown U4 / move M3). The published set:
-//   checks: write, contents: read, pull_requests: read,
+//   checks: write, contents: read, pull_requests: write,
 //   issues: write, metadata: read. Events: pull_request only.
+//   (pull_requests is write because GitHub gates an app token's PR
+//   conversation comments on it — see src/manifest.js.)
 
 import { randomBytes } from "node:crypto";
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -33,6 +35,7 @@ import {
   verifyWebhookSignature,
 } from "./app-auth.js";
 import { createGitHubClient } from "./github.js";
+import { buildManifest } from "./manifest.js";
 import {
   createChangedFilesReader,
   createGateCliRunner,
@@ -62,6 +65,9 @@ const config = {
     "https://2l346svz17.execute-api.us-east-2.amazonaws.com").replace(/\/$/, ""),
   mgovAdminToken: process.env.VERIFICATION_MGOV_ADMIN_TOKEN || "",
   settleTimeoutMs: Number(process.env.VERIFICATION_CHECKS_SETTLE_TIMEOUT_MS || 180_000),
+  settleRegistrationMs: Number(
+    process.env.VERIFICATION_CHECKS_SETTLE_REGISTRATION_MS || 60_000
+  ),
 };
 
 const require = createRequire(import.meta.url);
@@ -108,29 +114,6 @@ async function sealCredentials(value) {
 }
 
 // --- Manifest ---
-
-export function buildManifest(publicBase) {
-  return {
-    name: "SolveLang Verification",
-    url: "https://www.solve-lang.com/change-impact-receipt/",
-    hook_attributes: {
-      url: `${publicBase}/webhooks/github`,
-      active: true,
-    },
-    redirect_url: `${publicBase}/app-manifest-callback`,
-    description:
-      "Independent verification for pull requests: graded change-impact receipts (verified / failed / unverified), Solve Graph blast-radius and policy evidence, posted as a check run with inline annotations and a receipt comment. Report-only by default; enforce mode is an in-repo setting.",
-    public: true,
-    default_permissions: {
-      checks: "write",
-      contents: "read",
-      issues: "write",
-      metadata: "read",
-      pull_requests: "read",
-    },
-    default_events: ["pull_request"],
-  };
-}
 
 // --- Audit client (governance decision log, via MGOV) ---
 
@@ -191,6 +174,7 @@ async function startRun(payload) {
     postAudit,
     workRoot: config.workRoot,
     settleTimeoutMs: config.settleTimeoutMs,
+    settleRegistrationMs: config.settleRegistrationMs,
     log: (event, detail) => console.error(event, detail),
   });
   const repository = payload.repository || {};
