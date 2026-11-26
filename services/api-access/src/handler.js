@@ -43,6 +43,9 @@ import { createMergeGovernanceConnectService } from "./merge-governance-connect.
 import { createProductConnectLinkService } from "./product-connect-link.js";
 import { createLiveCenterService } from "./live-center.js";
 import { createGitHubBindingsService } from "./github-bindings.js";
+import { createPlatformConnectionsService } from "./platform-connections.js";
+import { createDynamoPlatformConnectionsStore } from "./platform-connections-store.js";
+import { createPlatformTokenProtector } from "./platform-token-protector.js";
 import { applyInstallationWebhook, buildAuthorizeUrl, buildInstallUrl, exchangeOAuthCode, fetchGitHubUser, linkInstallationFromGitHub, verifyWebhookSignature } from "./github-app.js";
 import { createDynamoGitHubStore } from "./github-store.js";
 import { runRepositoryAuditRead } from "./github-repo-reader.js";
@@ -200,6 +203,7 @@ let accountIdentityResolver;
 let customerAuth;
 let githubApp;
 let customerAuthStoreForAdmin;
+let platformConnections;
 if (environment.customerAccountsEnabled) {
   const accountAccessStore = createDynamoAccountAccessStore(documentClient, { tableName: environment.customerAuthTable });
   const accountAccessReader = createDynamoAccountAccessReader(documentClient, { tableName: environment.customerAuthTable });
@@ -207,6 +211,25 @@ if (environment.customerAccountsEnabled) {
   const totpProtector = environment.customerTotpEnabled ? createTotpSecretProtector(new KMSClient({}), environment.customerTotpKmsKeyArn) : undefined;
   const customerAuthStore = createDynamoCustomerAuthStore(documentClient, environment.customerAuthTable);
   customerAuthStoreForAdmin = customerAuthStore;
+  // Repository-audit platform doors: the connections service is
+  // constructed wherever customer accounts exist, storing into
+  // the same auth table. The token protector exists only when a
+  // well-formed KMS key ARN is configured for the platform
+  // purpose (API_PLATFORM_TOKENS_KMS_KEY_ARN — the customer
+  // secrets key, separately conditioned in the template); a
+  // missing or malformed pointer leaves the protector undefined
+  // rather than crashing the handler, and the service then
+  // refuses token-bearing registrations with a 503 while
+  // tokenless registrations keep working.
+  const platformTokensKmsKeyArn = process.env.API_PLATFORM_TOKENS_KMS_KEY_ARN;
+  const platformTokenProtector = typeof platformTokensKmsKeyArn === "string"
+    && /^arn:[^:]+:kms:[^:]+:\d{12}:key\/.+/.test(platformTokensKmsKeyArn)
+    ? createPlatformTokenProtector(new KMSClient({}), platformTokensKmsKeyArn)
+    : undefined;
+  platformConnections = createPlatformConnectionsService({
+    store: createDynamoPlatformConnectionsStore(documentClient, environment.customerAuthTable),
+    protector: platformTokenProtector,
+  });
   accountIdentityResolver = createAccountIdentityResolver({ store: customerAuthStore, pepper: environment.customerAuthPepper, previousPepper: environment.customerAuthPreviousPepper });
   const guardedAuthStore = createAccessGuardedCustomerAuthStore(
     customerAuthStore,
@@ -389,6 +412,7 @@ const application = createApiAccessHandler({
   liveCenter: createLiveCenterService({ config: environment.liveCenter }),
   agUiPilotEnabled: environment.agUiPilotEnabled,
   githubBindings,
+  platformConnections,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,

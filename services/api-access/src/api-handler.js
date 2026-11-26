@@ -68,6 +68,7 @@ export function createApiAccessHandler({
   liveCenter,
   agUiPilotEnabled = false,
   githubBindings = null,
+  platformConnections = null,
   subscriptionPortal,
   subscriptionLifecycle,
   stripeGateway,
@@ -484,6 +485,29 @@ export function createApiAccessHandler({
         } catch {
           return response(503, { error: "bindings_unavailable" });
         }
+      }
+      // Repository-audit platform doors (GitLab, Azure DevOps,
+      // Bitbucket, Forgejo / Gitea): the connections a signed-in
+      // customer registers by hand for the platforms that have no
+      // app-install flow. The tenant is always the session's
+      // accountId — nothing in the body can name another account.
+      // A supplied access token is sealed server-side and never
+      // returned; reads carry only its fingerprint. An
+      // unconstructed service fails closed with 503.
+      if (method === "POST" && path.endsWith("/customer/platform-connections")) {
+        const session = await customerSession(event, true);
+        if (!platformConnections) throw new ApiAccessError(503, "platform_connections_not_configured", "Platform connections are being switched on.");
+        return response(201, await platformConnections.register(session.accountId, parseJson(event)));
+      }
+      if (method === "GET" && path.endsWith("/customer/platform-connections")) {
+        const session = await customerSession(event);
+        if (!platformConnections) throw new ApiAccessError(503, "platform_connections_not_configured", "Platform connections are being switched on.");
+        return response(200, await platformConnections.list(session.accountId));
+      }
+      if (method === "POST" && path.endsWith("/customer/platform-connections/audit")) {
+        const session = await customerSession(event, true);
+        if (!platformConnections) throw new ApiAccessError(503, "platform_connections_not_configured", "Platform connections are being switched on.");
+        return response(200, await platformConnections.audit(session.accountId, parseJson(event)?.connectionId));
       }
       // "Connect a repository by app sign-in": read-only proxies to
       // the merge-governance pilot service's product-app routes. The
