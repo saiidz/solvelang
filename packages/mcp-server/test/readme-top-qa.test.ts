@@ -41,7 +41,7 @@ test("root README opens with title, badge block, then the capture", async () => 
 test("tagline leads; the dated verification note follows it unchanged", async () => {
   const readme = await rootReadme();
   const taglineAt = readme.indexOf(TAGLINE);
-  const noteAt = readme.indexOf("## Current verification \u2014 2026-09-20");
+  const noteAt = readme.indexOf("## Current verification \u2014 2026-11-26");
   assert.ok(taglineAt >= 0, "tagline present");
   assert.ok(noteAt > taglineAt, "verification note moved below the tagline");
   assert.ok(
@@ -54,7 +54,7 @@ test("tagline leads; the dated verification note follows it unchanged", async ()
 test("working MCP one-liner sits near the top; the failing bare form is absent", async () => {
   const readme = await rootReadme();
   const cmdAt = readme.indexOf(WORKING);
-  const noteAt = readme.indexOf("## Current verification \u2014 2026-09-20");
+  const noteAt = readme.indexOf("## Current verification \u2014 2026-11-26");
   assert.ok(cmdAt >= 0, "working bare npx command present");
   assert.ok(cmdAt < noteAt, "one-liner sits above the verification note, near the top");
   assert.ok(!readme.includes(FAILING), "the stale 0.3.0 bare npx form must not appear");
