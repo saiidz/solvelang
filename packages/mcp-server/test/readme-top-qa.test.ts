@@ -68,3 +68,27 @@ test("the capture asset is a real GIF of sane size", async () => {
   assert.ok(gif.length > 10_000, "asset is not a stub");
   assert.ok(gif.length < 5_000_000, "asset stays under 5 MB for README rendering");
 });
+
+test("README services section states three runner pools, the free tools, Verification, Team Context and the digest", async () => {
+  const readme = await rootReadme();
+  /* three pools, mirroring the /services/ shelf */
+  assert.ok(readme.includes("Three pools: Standard (2-vCPU class), High-Power (16-vCPU class"), "three pools line");
+  assert.ok(readme.includes("Premium (96-vCPU class)"), "premium pool named with its machine class");
+  assert.ok(!readme.includes("Two pools:"), "the stale two-pools line is gone");
+  assert.ok(readme.includes("[self-hosted, solvelang-runners-premium]"), "premium runs-on label present");
+  assert.ok(readme.includes("Premium minutes: $0.50 per minute at every pack size — 5,000 for $2,500 up to 100,000 for $50,000."), "premium shelf line mirrors /services/");
+  /* team context + digest in the Live Center entry */
+  assert.ok(readme.includes("Team Context Index"), "team context named");
+  assert.ok(readme.includes("$8 per seat per month; billing counts active members only, and the owner counts as a seat."), "team context price rule");
+  assert.ok(readme.includes("Weekly CI Health Digest"), "digest named");
+  assert.ok(readme.includes("every Monday at 06:00 EST"), "digest schedule");
+  /* free tools subsection with the three site links */
+  assert.ok(readme.includes("### Free tools — live, no signup"), "free tools subsection");
+  assert.ok(readme.includes("[Repo Security Scan](https://www.solve-lang.com/security-scan/)"), "security scan link");
+  assert.ok(readme.includes("[CI Bill Check](https://www.solve-lang.com/ci-bill-check/)"), "CI bill check link");
+  assert.ok(readme.includes("[Change Impact Receipts](https://www.solve-lang.com/change-impact-receipt/)"), "receipts link");
+  /* verification subsection: honest wording only */
+  assert.ok(readme.includes("### SolveLang Verification — proven on our own repositories"), "verification subsection");
+  assert.ok(readme.includes("Proven end-to-end on our own repositories on 2026-11-26: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Opening to outside repositories next."), "verification honest status wording");
+  assert.ok(!readme.includes("github.com/apps/solvelang-verification"), "no install link — installs are not publicly opened");
+});
