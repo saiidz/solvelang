@@ -8,17 +8,20 @@
 //   1. open the Check Run (in_progress) on the PR head SHA;
 //   2. read the repo's verification config at the BASE sha (a PR
 //      cannot weaken its own gate);
-//   3. wait for the head's other check runs to settle (bounded), so
-//      the receipt's CI evidence reflects finished CI, not a snapshot
-//      of a still-running pipeline;
+//   3. wait for the head's other check runs to settle (bounded) —
+//      registered runs finished, and expected runs given a grace
+//      window to register at all — so the receipt's CI evidence
+//      reflects finished CI, not a snapshot of a still-running (or
+//      not-yet-started) pipeline;
 //   4. fetch the head tree (tarball — no token ever rides a process
 //      argument), run the PR Gate CLI report-only on it with the
 //      config's ignorePaths removed from the changed set;
 //   5. collect the receipt input (GitHub collector, gate result
 //      embedded), build the receipt with the site's own builder;
-//   6. compute the verdict + annotations, complete the Check Run
-//      (full receipt markdown in the output text), post/update the
-//      sticky receipt comment;
+//   6. compute the verdict + annotations, post/update the sticky
+//      receipt comment, THEN complete the Check Run (full receipt
+//      markdown in the output text) — comment first, so a comment
+//      failure can never overwrite the graded verdict;
 //   7. append the audit record through the governance audit route.
 // Any operational failure completes the check as "failure" with a
 // sanitized error class (mirroring the gate CLI's exit code 2) and
@@ -60,20 +63,46 @@ export function createVerificationRunner(deps) {
     workRoot,
     settleTimeoutMs = 180_000,
     settlePollMs = 10_000,
+    settleRegistrationMs = 60_000,
     sleep = defaultSleep,
     log = () => {},
   } = deps;
 
-  async function waitForChecksToSettle(client, owner, repo, headSha) {
-    const deadline = Date.now() + settleTimeoutMs;
+  // Settle means two things, not one: every run that has registered
+  // has finished, AND the runs we expect have had the chance to
+  // register at all. The old loop read an empty list as "settled", so
+  // a run could grade a head whose CI had not even appeared yet (the
+  // enforce proof legs completed before the repo's Tests run
+  // registered). Expected names (the config's requiredChecks) are
+  // awaited until the settle deadline; with none expected, the first
+  // registration gets a bounded grace window so a repo with no CI at
+  // all does not wait forever.
+  async function waitForChecksToSettle(client, owner, repo, headSha, expectedCheckNames = []) {
+    const startedAt = Date.now();
+    const deadline = startedAt + settleTimeoutMs;
+    const registrationDeadline = startedAt + settleRegistrationMs;
+    const expected = [
+      ...new Set(
+        (expectedCheckNames ?? []).filter(
+          (name) => typeof name === "string" && name !== "" && name !== CHECK_RUN_NAME
+        )
+      ),
+    ];
     for (;;) {
       const runs = await client.listCheckRuns(owner, repo, headSha);
-      const pending = runs.filter(
-        (run) => run.name !== CHECK_RUN_NAME && run.status !== "completed"
-      );
-      if (pending.length === 0) return;
-      if (Date.now() >= deadline) {
-        log("checks_settle_timeout", `${owner}/${repo}@${headSha.slice(0, 12)} pending=${pending.length}`);
+      const others = runs.filter((run) => run.name !== CHECK_RUN_NAME);
+      const pending = others.filter((run) => run.status !== "completed");
+      const presentNames = new Set(others.map((run) => run.name));
+      const missingExpected = expected.filter((name) => !presentNames.has(name));
+      const nowMs = Date.now();
+      if (pending.length === 0 && missingExpected.length === 0) {
+        if (others.length > 0 || nowMs >= registrationDeadline) return;
+      }
+      if (nowMs >= deadline) {
+        log(
+          "checks_settle_timeout",
+          `${owner}/${repo}@${headSha.slice(0, 12)} pending=${pending.length} missing=${missingExpected.join(",") || "none"}`
+        );
         return;
       }
       await sleep(settlePollMs);
@@ -94,12 +123,15 @@ export function createVerificationRunner(deps) {
       grading: null,
       blockedReasons: [],
       annotations: 0,
+      commentOk: null,
+      commentError: null,
       auditOk: false,
       durationMs: 0,
     };
 
     let client = null;
     let checkRunId = null;
+    let verdictCompleted = false;
     try {
       const token = await getToken(installationId);
       client = createClient(token);
@@ -116,7 +148,7 @@ export function createVerificationRunner(deps) {
       const { config, invalid: configInvalid } = parseVerificationConfig(configText);
       record.mode = config.mode;
 
-      await waitForChecksToSettle(client, owner, repo, headSha);
+      await waitForChecksToSettle(client, owner, repo, headSha, config.requiredChecks);
 
       const workDir = path.join(workRoot, `${owner}-${repo}-${prNumber}-${headSha.slice(0, 12)}`);
       await mkdir(workDir, { recursive: true });
@@ -193,7 +225,7 @@ export function createVerificationRunner(deps) {
         record.annotations = annotations.length;
         const durationMs = Date.now() - startedAt;
         record.durationMs = durationMs;
-        const { title, summary } = composeCheckSummary({
+        const composed = composeCheckSummary({
           mode: config.mode,
           blocked,
           reasons,
@@ -202,6 +234,8 @@ export function createVerificationRunner(deps) {
           ignoredCount: ignored.length,
           durationMs,
         });
+        const title = composed.title;
+        let summary = composed.summary;
         const conclusion =
           config.mode === "enforce" && blocked ? "failure" : "success";
         record.conclusion = conclusion;
@@ -212,14 +246,15 @@ export function createVerificationRunner(deps) {
             receiptMd.slice(0, CHECK_TEXT_LIMIT) +
             "\n\n_Receipt truncated at the check-run output limit; the full receipt is in the PR comment._\n";
         }
-        await client.completeCheckRun(owner, repo, checkRunId, {
-          conclusion,
-          title,
-          summary,
-          text: receiptMd,
-          annotations,
-        });
 
+        // The receipt comment goes BEFORE the check run is completed,
+        // and its failure is non-fatal to the verdict: the old order
+        // completed the check with the graded verdict and then let a
+        // throwing comment call fall into the run-level error path,
+        // which re-completed the check as "Verification run failed"
+        // and erased the evidence. A failed comment is recorded on
+        // the run record, noted in the check summary and carried
+        // into the audit record — visible, never silently swallowed.
         const commentBody = [
           COMMENT_MARKER,
           `## SolveLang Verification — ${title}`,
@@ -234,12 +269,31 @@ export function createVerificationRunner(deps) {
         ]
           .filter((line) => line !== "")
           .join("\n");
-        await client.upsertReceiptComment(owner, repo, prNumber, commentBody);
+        try {
+          await client.upsertReceiptComment(owner, repo, prNumber, commentBody);
+          record.commentOk = true;
+        } catch (commentErr) {
+          record.commentOk = false;
+          record.commentError = `${commentErr?.name || "Error"}${
+            commentErr?.status ? ` ${commentErr.status}` : ""
+          }`;
+          log("receipt_comment_failed", `${fullName}#${prNumber} ${record.commentError}`);
+          summary += `\n\n**Receipt comment not posted:** GitHub refused the pull request comment (${record.commentError}). The full receipt is in this check run's output; the failure is recorded in the audit log.`;
+        }
+
+        await client.completeCheckRun(owner, repo, checkRunId, {
+          conclusion,
+          title,
+          summary,
+          text: receiptMd,
+          annotations,
+        });
+        verdictCompleted = true;
       } finally {
         await rm(workDir, { recursive: true, force: true }).catch(() => {});
       }
 
-      const audit = await postAudit(auditBody(record, installationId));
+      const audit = await postAudit(auditBody(record, installationId)).catch(() => null);
       record.auditOk = Boolean(audit?.ok);
       return record;
     } catch (err) {
@@ -247,7 +301,7 @@ export function createVerificationRunner(deps) {
       record.durationMs = Date.now() - startedAt;
       const errorName = err?.name || "Error";
       log("verification_run_failed", `${fullName}#${prNumber} ${errorName}`);
-      if (client && checkRunId) {
+      if (client && checkRunId && !verdictCompleted) {
         await client
           .completeCheckRun(owner, repo, checkRunId, {
             conclusion: "failure",
@@ -273,6 +327,10 @@ function auditBody(record, installationId) {
     conclusion: record.conclusion,
     grading: record.grading ?? undefined,
     checkRunId: record.checkRunId ?? undefined,
+    ...(record.commentOk !== null && record.commentOk !== undefined
+      ? { commentOk: record.commentOk }
+      : {}),
+    ...(record.commentError ? { commentError: record.commentError } : {}),
     headSha: record.headSha,
     installationId: installationId ?? undefined,
     durationMs: record.durationMs,
