@@ -43,7 +43,7 @@ import {
 const serviceDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.VERIFICATION_REPO_ROOT
   ? path.resolve(process.env.VERIFICATION_REPO_ROOT)
-  : path.resolve(serviceDir, "..", "..");
+  : path.resolve(serviceDir, "..", "..", "..");
 
 const config = {
   port: Number(process.env.VERIFICATION_PORT || 8080),
