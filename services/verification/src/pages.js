@@ -215,7 +215,7 @@ export function renderSetupCreatePage({ state, manifest }) {
   return layout(
     "SolveLang Verification — create the app",
     `    <h1>Create the SolveLang Verification GitHub App</h1>
-    <p class="lede">One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests read, issues write, metadata read — and the pull_request event.</p>
+    <p class="lede">One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests write, issues write, metadata read — and the pull_request event.</p>
     <div class="actions"><form action="https://github.com/settings/apps/new?state=${state}" method="post"><input type="hidden" name="manifest" value='${manifestValue}'><button class="btn" type="submit">Create GitHub App</button></form></div>`
   );
 }
