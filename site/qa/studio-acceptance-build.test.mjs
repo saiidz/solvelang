@@ -70,3 +70,21 @@ test("the production selector cannot enable another branch or acceptance preview
 test("the acceptance branch cannot build against a non-production API origin", () => {
   assert.throws(() => studioBuildEnvironment({ ...base, NEXT_PUBLIC_API_ACCESS_BASE_URL: "https://api.example.test" }), /verified production API/);
 });
+
+test("the verification service public paths proxy to the verify origin before the catch-all", () => {
+  const spec = readFileSync(new URL("../../amplify.yml", import.meta.url), "utf8");
+  const expected = [
+    ["/setup", "https://verify.solve-lang.com/setup"],
+    ["/app-manifest-callback", "https://verify.solve-lang.com/app-manifest-callback"],
+    ["/install", "https://verify.solve-lang.com/install"],
+    ["/webhooks/github", "https://verify.solve-lang.com/webhooks/github"],
+  ];
+  const catchAllIndex = spec.indexOf("source: '/<*>'");
+  assert.ok(catchAllIndex > -1, "the catch-all 404 rule must remain");
+  for (const [source, target] of expected) {
+    const block = `source: '${source}'\n        target: '${target}'\n        status: '200'`;
+    const idx = spec.indexOf(block);
+    assert.ok(idx > -1, `missing 200 rewrite for ${source} -> ${target}`);
+    assert.ok(idx < catchAllIndex, `rewrite for ${source} must precede the catch-all rule`);
+  }
+});
