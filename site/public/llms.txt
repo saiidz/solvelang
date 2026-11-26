@@ -18,7 +18,7 @@ SolveLang is not a production durable workflow engine or a general-purpose auton
 - [n8n workflow preflight](https://www.solve-lang.com/check/): Deterministic preflight checks for n8n workflows
 - [Privacy for workflow preflight](https://www.solve-lang.com/preflight-privacy/): How workflow preflight handles your data
 - [API pricing](https://www.solve-lang.com/api-pricing/): Developer, Pro, and Business API plan pricing
-- [Services](https://www.solve-lang.com/services/): Runner minutes, API access plans, and the merge governance pilot
+- [Services](https://www.solve-lang.com/services/): Runner minutes, API access plans, and Process Solution merge governance — live, with no public price and no self-serve signup
 - [SolveLang MCP/plugin reference](https://www.solve-lang.com/mcp/): MCP and plugin integration reference
 - [Public support](https://www.solve-lang.com/support/): How to get help with SolveLang
 - [Solutions library](https://www.solve-lang.com/solutions/): Step-by-step fixes for common SolveLang problems
