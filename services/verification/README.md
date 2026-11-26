@@ -18,13 +18,13 @@ permissions later forces every installation to re-consent:
 | --- | --- | --- |
 | Metadata | read | baseline |
 | Contents | read | fetch the PR head tree (tarball) and read config/policy files |
-| Pull requests | read | PR metadata, changed files, reviews for the receipt |
+| Pull requests | write | PR metadata and changed files for the receipt — and the receipt comment itself: GitHub gates an app token's PR conversation comments on this permission (issues: write alone is refused 403 on PRs; proven first-hand in the Nov 26, 2026 stranger proof). The service never merges, never approves, never writes code |
 | Checks | write | create + complete the verification check run, with annotations |
-| Issues | write | the sticky receipt comment (PR conversations are issues) |
+| Issues | write | the sticky receipt comment on plain issues (PR conversations need pull requests: write — see above) |
 
-Events: `pull_request` only. Not requested: contents write, pull
-requests write, actions, administration, workflows — the service
-never writes code, never merges, never touches settings.
+Events: `pull_request` only. Not requested: contents write, actions,
+administration, workflows — the service never writes code, never
+merges, never touches settings.
 
 ## Per-repo configuration (in-repo, from day one)
 
