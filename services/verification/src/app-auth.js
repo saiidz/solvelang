@@ -13,7 +13,7 @@
 // app's credentials come into existence; they are written by the
 // caller to the service's sealed credentials file, never printed.
 
-import { createSign } from "node:crypto";
+import { createHmac, createSign, timingSafeEqual } from "node:crypto";
 
 const GITHUB_API_BASE = "https://api.github.com";
 const GITHUB_API_VERSION = "2022-11-28";
@@ -180,4 +180,20 @@ export async function exchangeManifestCode(code, fetchImpl = fetch) {
       typeof payload.client_secret === "string" ? payload.client_secret : "",
     htmlUrl: typeof payload.html_url === "string" ? payload.html_url : "",
   };
+}
+
+// Webhook signature verification (mirrors the governance ingress):
+// HMAC-SHA256 over the raw body, timing-safe compare.
+export function verifyWebhookSignature(secret, rawBody, signatureHeader) {
+  if (!secret || !signatureHeader || typeof signatureHeader !== "string") {
+    return false;
+  }
+  if (!signatureHeader.startsWith("sha256=")) return false;
+  const expected =
+    "sha256=" +
+    createHmac("sha256", secret).update(rawBody || "", "utf8").digest("hex");
+  const a = Buffer.from(signatureHeader);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

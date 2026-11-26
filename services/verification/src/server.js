@@ -20,14 +20,18 @@
 //   checks: write, contents: read, pull_requests: read,
 //   issues: write, metadata: read. Events: pull_request only.
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createAppAuth, exchangeManifestCode } from "./app-auth.js";
+import {
+  createAppAuth,
+  exchangeManifestCode,
+  verifyWebhookSignature,
+} from "./app-auth.js";
 import { createGitHubClient } from "./github.js";
 import {
   createChangedFilesReader,
@@ -94,22 +98,6 @@ async function sealCredentials(value) {
   });
   await rename(tmp, config.credentialsPath);
   credentialsCache = null;
-}
-
-// --- Webhook signature (mirrors the governance ingress) ---
-
-export function verifyWebhookSignature(secret, rawBody, signatureHeader) {
-  if (!secret || !signatureHeader || typeof signatureHeader !== "string") {
-    return false;
-  }
-  if (!signatureHeader.startsWith("sha256=")) return false;
-  const expected =
-    "sha256=" +
-    createHmac("sha256", secret).update(rawBody || "", "utf8").digest("hex");
-  const a = Buffer.from(signatureHeader);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
 }
 
 // --- Manifest ---
