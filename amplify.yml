@@ -19,6 +19,18 @@ applications:
         paths:
           - node_modules/**/*
     customRules:
+      - source: '/setup'
+        target: 'https://verify.solve-lang.com/setup'
+        status: '200'
+      - source: '/app-manifest-callback'
+        target: 'https://verify.solve-lang.com/app-manifest-callback'
+        status: '200'
+      - source: '/install'
+        target: 'https://verify.solve-lang.com/install'
+        status: '200'
+      - source: '/webhooks/github'
+        target: 'https://verify.solve-lang.com/webhooks/github'
+        status: '200'
       - source: '/<*>'
         target: '/404.html'
         status: '404'
