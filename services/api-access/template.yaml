@@ -267,6 +267,7 @@ Rules:
 Conditions:
   CustomerAccountsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   CustomerTotpFeatureEnabled: !Equals [!Ref CustomerTotpEnabled, "true"]
+  PlatformConnectionsFeatureEnabled: !Equals [!Ref CustomerAccountsEnabled, "true"]
   AdminCrmFeatureEnabled: !Equals [!Ref AdminCrmEnabled, "true"]
 
 Resources:
@@ -1208,6 +1209,7 @@ Resources:
           API_CUSTOMER_ACCOUNTS_ENABLED: !Ref CustomerAccountsEnabled
           API_CUSTOMER_TOTP_ENABLED: !Ref CustomerTotpEnabled
           API_CUSTOMER_TOTP_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
+          API_PLATFORM_TOKENS_KMS_KEY_ARN: !Ref CustomerTotpKmsKeyArn
           API_ADMIN_CRM_ENABLED: !Ref AdminCrmEnabled
           API_ADMIN_CRM_TABLE: !If [AdminCrmFeatureEnabled, !Ref AdminCrmTable, disabled]
           API_ADMIN_CRM_PROFILE_INDEX: RecordTypeUpdatedAtIndex
@@ -1266,6 +1268,24 @@ Resources:
             TableName: !Ref ApiCustomerAuthTable
         - DynamoDBCrudPolicy:
             TableName: !Ref GitHubInstallationsTable
+        - !If
+          - PlatformConnectionsFeatureEnabled
+          - Statement:
+              Effect: Allow
+              Action:
+                - kms:Encrypt
+                - kms:Decrypt
+              Resource: !Ref CustomerTotpKmsKeyArn
+              Condition:
+                StringEquals:
+                  kms:EncryptionContext:purpose: solvelang-platform-connection
+                StringLike:
+                  kms:EncryptionContext:accountId: acct_*
+                ForAllValues:StringEquals:
+                  kms:EncryptionContextKeys:
+                    - purpose
+                    - accountId
+          - !Ref AWS::NoValue
       Events:
         GitHubAuthAuthorize:
           Type: HttpApi
@@ -1321,6 +1341,24 @@ Resources:
             ApiId: !Ref ApiAccessHttpApi
             Path: /customer/github/bindings
             Method: GET
+        CustomerPlatformConnectionsRegister:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/platform-connections
+            Method: POST
+        CustomerPlatformConnectionsList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/platform-connections
+            Method: GET
+        CustomerPlatformConnectionsAudit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref ApiAccessHttpApi
+            Path: /customer/platform-connections/{proxy+}
+            Method: POST
 
   ApiAccessFunctionLogGroup:
     Type: AWS::Logs::LogGroup
