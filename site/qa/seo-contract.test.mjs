@@ -89,6 +89,9 @@ test("sitemap route registry includes high-value public proof and excludes priva
   assert.match(routes, /segment: "studio"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "api-pricing"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "process-solution"[^\n]+sitemap: true/);
+  assert.match(routes, /segment: "security-scan"[^\n]+sitemap: true/);
+  assert.match(routes, /segment: "ci-bill-check"[^\n]+sitemap: true/);
+  assert.match(routes, /segment: "change-impact-receipt"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "services"[^\n]+sitemap: true/);
   assert.match(routes, /segment: "checkout"[^\n]+sitemap: false/);
   assert.match(routes, /segment: "success"[^\n]+sitemap: false/);
