@@ -17,8 +17,10 @@
 // The app itself is created by the manifest flow, so its permission
 // set is exactly the manifest's — locked minimal at creation
 // (teardown U4 / move M3). The published set:
-//   checks: write, contents: read, pull_requests: read,
+//   checks: write, contents: read, pull_requests: write,
 //   issues: write, metadata: read. Events: pull_request only.
+//   (pull_requests is write because GitHub gates an app token's PR
+//   conversation comments on it — see src/manifest.js.)
 
 import { randomBytes } from "node:crypto";
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
@@ -33,12 +35,20 @@ import {
   verifyWebhookSignature,
 } from "./app-auth.js";
 import { createGitHubClient } from "./github.js";
+import { buildManifest } from "./manifest.js";
 import {
   createChangedFilesReader,
   createGateCliRunner,
   createTarballTreeFetcher,
   createVerificationRunner,
 } from "./runner.js";
+import {
+  renderManifestCallbackFailurePage,
+  renderManifestCallbackMissingCodePage,
+  renderManifestCallbackSuccessPage,
+  renderSetupAppCreatedPage,
+  renderSetupCreatePage,
+} from "./pages.js";
 
 const serviceDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = process.env.VERIFICATION_REPO_ROOT
@@ -55,6 +65,9 @@ const config = {
     "https://2l346svz17.execute-api.us-east-2.amazonaws.com").replace(/\/$/, ""),
   mgovAdminToken: process.env.VERIFICATION_MGOV_ADMIN_TOKEN || "",
   settleTimeoutMs: Number(process.env.VERIFICATION_CHECKS_SETTLE_TIMEOUT_MS || 180_000),
+  settleRegistrationMs: Number(
+    process.env.VERIFICATION_CHECKS_SETTLE_REGISTRATION_MS || 60_000
+  ),
 };
 
 const require = createRequire(import.meta.url);
@@ -101,29 +114,6 @@ async function sealCredentials(value) {
 }
 
 // --- Manifest ---
-
-export function buildManifest(publicBase) {
-  return {
-    name: "SolveLang Verification",
-    url: "https://www.solve-lang.com/change-impact-receipt/",
-    hook_attributes: {
-      url: `${publicBase}/webhooks/github`,
-      active: true,
-    },
-    redirect_url: `${publicBase}/app-manifest-callback`,
-    description:
-      "Independent verification for pull requests: graded change-impact receipts (verified / failed / unverified), Solve Graph blast-radius and policy evidence, posted as a check run with inline annotations and a receipt comment. Report-only by default; enforce mode is an in-repo setting.",
-    public: true,
-    default_permissions: {
-      checks: "write",
-      contents: "read",
-      issues: "write",
-      metadata: "read",
-      pull_requests: "read",
-    },
-    default_events: ["pull_request"],
-  };
-}
 
 // --- Audit client (governance decision log, via MGOV) ---
 
@@ -184,6 +174,7 @@ async function startRun(payload) {
     postAudit,
     workRoot: config.workRoot,
     settleTimeoutMs: config.settleTimeoutMs,
+    settleRegistrationMs: config.settleRegistrationMs,
     log: (event, detail) => console.error(event, detail),
   });
   const repository = payload.repository || {};
@@ -246,38 +237,26 @@ const setupState = randomBytes(16).toString("hex");
 async function handleSetup(res) {
   const credentials = await loadCredentials();
   if (credentials) {
-    html(
-      res,
-      200,
-      `<!doctype html><title>SolveLang Verification — app created</title><h1>SolveLang Verification</h1><p>The GitHub App <strong>${credentials.name || credentials.slug}</strong> is created and this service holds its credentials.</p><p><a href="https://github.com/apps/${credentials.slug}/installations/new">Install it on a repository</a></p>`
-    );
+    html(res, 200, renderSetupAppCreatedPage(credentials));
     return;
   }
   const manifest = JSON.stringify(buildManifest(config.publicBase));
-  html(
-    res,
-    200,
-    `<!doctype html><title>SolveLang Verification — create the app</title><h1>Create the SolveLang Verification GitHub App</h1><p>One click, signed in as the app owner. The manifest requests only: checks write, contents read, pull requests read, issues write, metadata read — and the pull_request event.</p><form action="https://github.com/settings/apps/new?state=${setupState}" method="post"><input type="hidden" name="manifest" value='${manifest.replace(/'/g, "&#39;")}'><button type="submit">Create GitHub App</button></form>`
-  );
+  html(res, 200, renderSetupCreatePage({ state: setupState, manifest }));
 }
 
 async function handleManifestCallback(req, res, url) {
   const code = url.searchParams.get("code");
   if (!code) {
-    html(res, 400, "<h1>Missing manifest code</h1>");
+    html(res, 400, renderManifestCallbackMissingCodePage());
     return;
   }
   try {
     const credentials = await exchangeManifestCode(code);
     await sealCredentials(credentials);
-    html(
-      res,
-      200,
-      `<!doctype html><title>SolveLang Verification — app created</title><h1>App created</h1><p><strong>${credentials.name}</strong> (${credentials.slug}, id ${credentials.id}) is created and its credentials are sealed on this service.</p><p><a href="https://github.com/apps/${credentials.slug}/installations/new">Install it on a repository</a></p>`
-    );
+    html(res, 200, renderManifestCallbackSuccessPage(credentials));
   } catch (err) {
     console.error("manifest_callback_failed", err?.name || "Error");
-    html(res, 502, "<h1>App creation exchange failed</h1><p>The manifest code could not be exchanged. It is valid for a few minutes only — restart from /setup.</p>");
+    html(res, 502, renderManifestCallbackFailurePage());
   }
 }
 
