@@ -244,12 +244,12 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(section.includes('href="/solutions/job-protection/"'), "section links to job protection");
   assert.ok(section.includes("How it works"), "services link label");
   assert.ok(section.includes("The guarantees"), "job protection link label");
-  /* the chooser: renumbered eyebrow and five cards, the fifth is Runner Minutes */
+  /* the chooser: renumbered eyebrow and seven cards, the fifth is Runner Minutes */
   assert.ok(landing.includes("07 / START WITH SOLVE"), "chooser eyebrow renumbered");
   assert.ok(!landing.includes("06 / START WITH SOLVE"), "old chooser eyebrow is gone");
   const chooser = landing.slice(landing.indexOf('id="quickstart"'), landing.indexOf("styles.finalSection"));
   const cards = chooser.match(/<article data-reveal/g) ?? [];
-  assert.equal(cards.length, 5, "chooser has five cards");
+  assert.equal(cards.length, 7, "chooser has seven cards");
   assert.ok(chooser.includes("<span>05 / PREPAID RUNNER MINUTES</span>"), "fifth card title line");
   assert.ok(chooser.includes("<h3>Runner Minutes</h3>"), "fifth card heading");
   assert.ok(chooser.includes("Run your GitHub Actions on SolveLang machines. Prepaid minutes, metered per second, on fresh machines created per job."), "fifth card body");
@@ -1830,4 +1830,50 @@ test("the 404 page is the branded route receipt with verified exits", () => {
   // Operator identity comes from the legal record, never retyped.
   assert.match(notFound, /legal-content\.json/);
   assert.match(notFound, /legalContent\.operator/);
+});
+
+test("homepage chooser carries the free tools and verification cards", () => {
+  const landing = read("app/components/homepage/LandingPage.tsx");
+  const chooser = landing.slice(landing.indexOf('id="quickstart"'), landing.indexOf("styles.finalSection"));
+  /* sixth card: the free tools, one line each with its page link */
+  assert.ok(chooser.includes("<span>06 / FREE TOOLS — NO SIGNUP</span>"), "sixth card title line");
+  assert.ok(chooser.includes("<h3>Free tools for any public repo</h3>"), "sixth card heading");
+  assert.ok(chooser.includes("Three checks that run on any public repository today — no account, no install:"), "sixth card lead");
+  assert.ok(chooser.includes('href="/security-scan/"'), "sixth card links the security scan");
+  assert.ok(chooser.includes("Repo Security Scan"), "sixth card names the security scan");
+  assert.ok(chooser.includes('href="/ci-bill-check/"'), "sixth card links the CI bill check");
+  assert.ok(chooser.includes("CI Bill Check"), "sixth card names the CI bill check");
+  assert.ok(chooser.includes("Change Impact Receipts"), "sixth card names the receipts");
+  /* seventh card: Verification with the honest status wording only */
+  assert.ok(chooser.includes("<span>07 / VERIFICATION — PROVEN ON OUR OWN REPOS</span>"), "seventh card title line");
+  assert.ok(chooser.includes("<h3>SolveLang Verification</h3>"), "seventh card heading");
+  assert.ok(chooser.includes("Proven end-to-end on our own repositories: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Opening to outside repositories next."), "seventh card honest status wording");
+  assert.ok(chooser.includes("every run written to an audit log"), "seventh card audit line");
+  assert.ok(!chooser.includes('href="/install"'), "no card links the install path — installs are not publicly opened");
+});
+
+test("services page publishes the free tools, verification, team context and digest entries", () => {
+  const page = read("app/(english)/services/page.tsx");
+  /* free tools section */
+  assert.ok(page.includes('id="free-tools-heading"'), "free tools section exists");
+  assert.ok(page.includes("Three checks that run on any public repository today — no signup, no install."), "free tools lead line");
+  assert.ok(page.includes('href="/security-scan/"'), "free tools link the security scan");
+  assert.ok(page.includes('href="/ci-bill-check/"'), "free tools link the CI bill check");
+  assert.ok(page.includes('href="/change-impact-receipt/"'), "free tools link the receipts page");
+  /* verification section: honest wording, no price, no self-serve claim, no install link */
+  assert.ok(page.includes('id="verification-heading"'), "verification section exists");
+  assert.ok(page.includes("Proven — opening next"), "verification status chip");
+  assert.ok(page.includes("proven end-to-end on our own repositories — a deliberately defective pull request was caught in enforce mode, clean pull requests passed, and the graded receipts posted on the PR. Opening to outside repositories next."), "verification honest status wording");
+  const vsection = page.slice(page.indexOf('id="verification-heading"'), page.indexOf('id="status-matrix-heading"'));
+  assert.ok(!vsection.includes("$"), "verification section carries no price");
+  assert.ok(!vsection.includes('href="/install"'), "verification section does not link the install path");
+  assert.ok(vsection.includes('href="/change-impact-receipt/"'), "verification section links the receipts explainer");
+  /* status table rows, all verified November 26, 2026 */
+  assert.ok(page.includes("Free tools (Repo Security Scan, CI Bill Check, Change Impact Receipts)"), "table lists the free tools");
+  assert.ok(page.includes("Team Context Index"), "table lists Team Context Index");
+  assert.ok(page.includes("$8 per seat per month — billing counts active members only, and the owner counts as a seat."), "team context price rule");
+  assert.ok(page.includes("Weekly CI Health Digest"), "table lists the CI digest");
+  assert.ok(page.includes("published Mondays 06:00 EST"), "digest schedule");
+  assert.ok(page.includes("SolveLang Verification</td>"), "table lists Verification");
+  assert.ok(page.includes("November 26, 2026"), "new rows carry the November 26, 2026 verified date");
 });
