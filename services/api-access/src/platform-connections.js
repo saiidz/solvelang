@@ -1,5 +1,6 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { ApiAccessError } from "./service.js";
+import { readPlatformRepository } from "./platform-repo-reader.js";
 
 // Platform connections for the repository audit's "connect a
 // repository" doors (GitLab, Azure DevOps, Bitbucket, Forgejo /
@@ -7,18 +8,28 @@ import { ApiAccessError } from "./service.js";
 // these are the platforms whose connection is a set of identifiers
 // the customer types by hand.
 //
-// What a connection is today — stated plainly, because the audit
-// page repeats it to the customer: registering a connection saves
-// its identifiers (and, when the customer supplies one, its access
+// What a connection is — stated plainly, because the audit page
+// repeats it to the customer: registering a connection saves its
+// identifiers (and, when the customer supplies one, its access
 // token, sealed with KMS — see platform-token-protector.js) under
 // the customer's account so the connection is listed as theirs.
-// The repository-audit summary itself is produced today only for
-// GitHub-connected repositories; for these platforms the audit
-// action answers with the honest awaiting-configuration status
-// below. Nothing is ever run against the customer's repository at
-// registration time, and no audit result is ever fabricated: the
-// status text is the whole answer until a platform's live audit
-// is configured.
+// Nothing is ever run against the customer's repository at
+// registration time, and no audit result is ever fabricated.
+//
+// The audit action RUNS a live repository read for the platforms
+// in PLATFORM_AUDIT_LIVE_PLATFORMS when the connection has a
+// stored token: the token is unsealed, each repository in the
+// connection is read through its platform's own API
+// (platform-repo-reader.js) into the same manifest the GitHub
+// leg produces, and one run record per repository is stored —
+// read_complete with the manifest facts, or read_failed when the
+// platform could not be read. A failed read never masquerades as
+// a completed audit, and when every repository fails the action
+// answers with an error, mirroring the GitHub read. A platform
+// joins the live list only after its leg has run end-to-end in
+// proof; until then — and whenever a live platform's connection
+// has no stored token — the audit action answers with the honest
+// awaiting-configuration status below.
 //
 // The token is optional at registration: a connection saved
 // without one is listed as having no token stored, which the page
@@ -33,6 +44,33 @@ export const PLATFORM_AUDIT_AWAITING_CONFIGURATION = "awaiting_configuration";
 
 export const PLATFORM_AUDIT_AWAITING_MESSAGE =
   "Connection saved — the first live audit for this platform is enabled when its access is configured. Nothing has been run against your repository yet.";
+
+// Platforms whose live audit leg has run end-to-end in proof and
+// may therefore run for real connections. Every other platform
+// keeps the awaiting-configuration answer, verbatim, until its
+// own proof exists. Forge (the Forgejo / Gitea /api/v1 family)
+// was proven end-to-end against a self-hosted Gitea instance on
+// 2026-11-28; GitLab, Azure DevOps, and Bitbucket readers are
+// implemented but unproven against a live workspace, so they are
+// deliberately NOT in this list.
+export const PLATFORM_AUDIT_LIVE_PLATFORMS = ["forge"];
+
+export const PLATFORM_AUDIT_READ_COMPLETE = "read_complete";
+export const PLATFORM_AUDIT_READ_PARTIAL = "read_partial";
+export const PLATFORM_AUDIT_READ_FAILED = "read_failed";
+
+export const PLATFORM_AUDIT_READ_COMPLETE_MESSAGE =
+  "Audit read complete — every repository in this connection was read and its run record stored.";
+
+export const PLATFORM_AUDIT_READ_PARTIAL_MESSAGE =
+  "Audit read finished — some repositories in this connection were read and stored; the rest could not be read.";
+
+const PLATFORM_LABELS = {
+  gitlab: "GitLab",
+  azure: "Azure DevOps",
+  bitbucket: "Bitbucket",
+  forge: "the Forgejo / Gitea instance",
+};
 
 const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
 const MAX_REPOSITORIES = 25;
@@ -166,17 +204,20 @@ export function tokenFingerprint(token) {
   return createHash("sha256").update(token, "utf8").digest("hex").slice(0, 12);
 }
 
-export function platformConnectionView(record) {
+export function platformConnectionView(record, auditState = PLATFORM_AUDIT_AWAITING_CONFIGURATION) {
   // The ONLY shape a read ever returns: identifiers, the audit
   // state, and whether a token is stored (plus its fingerprint).
   // The sealed ciphertext never leaves the store through a view.
+  // The audit state is the connection's latest run state when the
+  // caller resolved one from stored run records, and the honest
+  // awaiting-configuration state otherwise.
   const view = {
     connectionId: record.connectionId,
     platform: record.platform,
     repositories: record.repositories,
     tokenStored: typeof record.tokenCiphertext === "string" && record.tokenCiphertext.length > 0,
     tokenFingerprint: typeof record.tokenFingerprint === "string" ? record.tokenFingerprint : null,
-    auditState: PLATFORM_AUDIT_AWAITING_CONFIGURATION,
+    auditState,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -187,7 +228,37 @@ export function platformConnectionView(record) {
   return view;
 }
 
-export function createPlatformConnectionsService({ store, protector, now = () => new Date(), createId = randomUUID } = {}) {
+// Derives a connection's audit state from its stored run
+// records: the latest run per repository decides — all complete
+// is read_complete, a mix is read_partial, runs that all failed
+// are read_failed, and no runs at all leaves the connection in
+// the awaiting-configuration state.
+export function latestAuditState(runs, connectionId) {
+  const latestByRepository = new Map();
+  for (const run of runs ?? []) {
+    if (!run || run.connectionId !== connectionId || typeof run.repository !== "string") continue;
+    const previous = latestByRepository.get(run.repository);
+    if (!previous || String(run.createdAt ?? "") >= String(previous.createdAt ?? "")) {
+      latestByRepository.set(run.repository, run);
+    }
+  }
+  if (latestByRepository.size === 0) return PLATFORM_AUDIT_AWAITING_CONFIGURATION;
+  const statuses = [...latestByRepository.values()].map((run) => run.status);
+  const completed = statuses.filter((status) => status === PLATFORM_AUDIT_READ_COMPLETE).length;
+  if (completed === statuses.length) return PLATFORM_AUDIT_READ_COMPLETE;
+  if (completed > 0) return PLATFORM_AUDIT_READ_PARTIAL;
+  return PLATFORM_AUDIT_READ_FAILED;
+}
+
+export function createPlatformConnectionsService({
+  store,
+  protector,
+  readers,
+  fetchImpl = fetch,
+  now = () => new Date(),
+  createId = randomUUID,
+  createRunId = () => `run_${randomBytes(12).toString("hex")}`,
+} = {}) {
   if (!store || typeof store.addConnection !== "function" || typeof store.listConnections !== "function") {
     throw new Error("A platform connections store is required.");
   }
@@ -220,7 +291,10 @@ export function createPlatformConnectionsService({ store, protector, now = () =>
 
     async list(accountId) {
       const records = await store.listConnections(accountId);
-      return { connections: records.map(platformConnectionView) };
+      const runs = typeof store.listAuditRuns === "function" ? await store.listAuditRuns(accountId) : [];
+      return {
+        connections: records.map((record) => platformConnectionView(record, latestAuditState(runs, record.connectionId))),
+      };
     },
 
     async audit(accountId, connectionId) {
@@ -230,11 +304,93 @@ export function createPlatformConnectionsService({ store, protector, now = () =>
       const records = await store.listConnections(accountId);
       const record = records.find((entry) => entry.connectionId === connectionId);
       if (!record) throw new ApiAccessError(404, "connection_not_found", "That connection does not exist for your account.");
+
+      const hasToken = typeof record.tokenCiphertext === "string" && record.tokenCiphertext.length > 0;
+      if (!PLATFORM_AUDIT_LIVE_PLATFORMS.includes(record.platform) || !hasToken) {
+        // Not a live-proven platform yet, or a live platform whose
+        // connection carries no access token: the honest answer is
+        // the awaiting-configuration status, unchanged.
+        return {
+          connectionId: record.connectionId,
+          platform: record.platform,
+          auditState: PLATFORM_AUDIT_AWAITING_CONFIGURATION,
+          message: PLATFORM_AUDIT_AWAITING_MESSAGE,
+        };
+      }
+      if (!protector || typeof protector.decrypt !== "function" || typeof store.putAuditRun !== "function") {
+        throw new ApiAccessError(503, "platform_connections_not_configured", "Platform connections are being switched on.");
+      }
+
+      const token = await protector.decrypt(accountId, record.tokenCiphertext);
+      const readRepository = readers?.[record.platform]
+        ?? ((repository) => readPlatformRepository({
+          platform: record.platform,
+          token,
+          connection: record,
+          repository,
+          fetchImpl,
+        }));
+
+      const runs = [];
+      for (const repository of record.repositories) {
+        const runId = createRunId();
+        const createdAt = now().toISOString();
+        try {
+          const manifest = await readRepository(repository);
+          await store.putAuditRun(accountId, {
+            runId,
+            connectionId: record.connectionId,
+            platform: record.platform,
+            repository,
+            status: PLATFORM_AUDIT_READ_COMPLETE,
+            manifest: {
+              defaultBranch: manifest.defaultBranch,
+              commitSha: manifest.commitSha,
+              totals: manifest.totals,
+            },
+            createdAt,
+          });
+          runs.push({
+            repository,
+            runId,
+            status: PLATFORM_AUDIT_READ_COMPLETE,
+            defaultBranch: manifest.defaultBranch,
+            commitSha: manifest.commitSha,
+            totals: manifest.totals,
+          });
+        } catch {
+          // A failed read is recorded as exactly that — never as a
+          // completed audit — and the run continues with the next
+          // repository in the connection.
+          await store.putAuditRun(accountId, {
+            runId,
+            connectionId: record.connectionId,
+            platform: record.platform,
+            repository,
+            status: PLATFORM_AUDIT_READ_FAILED,
+            createdAt,
+          });
+          runs.push({ repository, runId, status: PLATFORM_AUDIT_READ_FAILED });
+        }
+      }
+
+      const completed = runs.filter((run) => run.status === PLATFORM_AUDIT_READ_COMPLETE);
+      if (completed.length === 0) {
+        throw new ApiAccessError(
+          502,
+          "platform_repo_read_failed",
+          `The repositories could not be read from ${PLATFORM_LABELS[record.platform] ?? "the platform"}.`,
+        );
+      }
+      const auditState = completed.length === runs.length ? PLATFORM_AUDIT_READ_COMPLETE : PLATFORM_AUDIT_READ_PARTIAL;
       return {
         connectionId: record.connectionId,
         platform: record.platform,
-        auditState: PLATFORM_AUDIT_AWAITING_CONFIGURATION,
-        message: PLATFORM_AUDIT_AWAITING_MESSAGE,
+        auditState,
+        message: auditState === PLATFORM_AUDIT_READ_COMPLETE
+          ? PLATFORM_AUDIT_READ_COMPLETE_MESSAGE
+          : PLATFORM_AUDIT_READ_PARTIAL_MESSAGE,
+        runs,
       };
     },
   };
