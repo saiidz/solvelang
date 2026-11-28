@@ -30,6 +30,7 @@ export const publicRoutes = [
   { segment: "security-scan", classification: "english-only-technical", sitemap: true },
   { segment: "ci-bill-check", classification: "english-only-technical", sitemap: true },
   { segment: "runner-pricing-compared", classification: "english-only-technical", sitemap: true },
+  { segment: "runson-alternative", classification: "english-only-technical", sitemap: true },
   { segment: "namespace-pricing", classification: "english-only-technical", sitemap: true },
   { segment: "depot-alternative", classification: "english-only-technical", sitemap: true },
   { segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true },
