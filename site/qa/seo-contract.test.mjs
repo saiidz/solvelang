@@ -294,3 +294,58 @@ test("runson-alternative page carries RunsOn own dated figures (SEO Phase 1 #7c)
   assert.match(page, /utm_campaign=runson-alternative/);
   assert.doesNotMatch(page, /44%|25% faster/);
 });
+
+test("namespace-pricing page explains the unit minute from Namespace own pricing (SEO Phase 1 #7b)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "namespace-pricing", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/namespace-pricing/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /1 vCPU with 2 GB of RAM for one minute/);
+  assert.match(page, /\$0\.002\/min prepaid, \$0\.003\/min overage/);
+  assert.match(page, /\$0\.004\/min prepaid, \$0\.006\/min overage/);
+  assert.match(page, /Team is \$100\/mo including 100,000 unit minutes/);
+  assert.match(page, /utm_campaign=namespace-pricing/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("depot-alternative page carries Depot own dated figures (SEO Phase 1 #7a)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "depot-alternative", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/depot-alternative/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /\$0\.006\/min for the base 2 vCPU Linux/);
+  assert.match(page, /Developer is \$20\/mo and includes 2,000/);
+  assert.match(page, /Startup is \$200\/mo and includes 20,000/);
+  assert.match(page, /tracks usage by the second, but bills whole minutes at month end/);
+  assert.match(page, /No plan fee/);
+  assert.match(page, /utm_campaign=depot-alternative/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("github-actions-alternatives page puts the runner swap first (SEO Phase 1 #5)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/github-actions-alternatives/page.tsx");
+  assert.match(page, /swap the runners, keep GitHub Actions/);
+  assert.match(page, /Sengi \(Basic\): \$0\.001\/min/);
+  assert.match(page, /Latchkey: \$0\.0025\/min/);
+  assert.match(page, /Blacksmith: \$0\.004\/min/);
+  assert.match(page, /Depot tracks usage by the second but bills whole minutes at month end/);
+  assert.match(page, /rewritten in a new syntax/);
+  assert.match(page, /utm_campaign=alternatives/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("self-hosted-runners-cost page carries the dated ops-bill arithmetic (SEO Phase 1 #4)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "self-hosted-runners-cost", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/self-hosted-runners-cost/page.tsx");
+  assert.match(page, /December 16, 2025/);
+  assert.match(page, /postponed that charge before it took effect/);
+  assert.match(page, /not in force as of November 28, 2026/);
+  assert.match(page, /\$0\.10 per hour per cluster/);
+  assert.match(page, /\$73 a month/);
+  assert.match(page, /worked example, not a quote/);
+  assert.match(page, /utm_campaign=self-hosted-cost/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
