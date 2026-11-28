@@ -281,3 +281,39 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
+
+
+test("first-touch UTM capture is mounted once in the English layout (SEO P0)", () => {
+  const layout = read("app/(english)/layout.tsx");
+  assert.match(layout, /import \{ FirstTouchCapture \} from "..\/attribution\/FirstTouchCapture";/);
+  assert.match(layout, /<FirstTouchCapture \/>/);
+});
+
+test("first-touch core pins the triple, first-touch-wins and the shared wire shape (SEO P0)", () => {
+  const core = read("app/attribution/first-touch.ts");
+  assert.match(core, /FIRST_TOUCH_COOKIE_NAME = "sl_first_touch"/);
+  assert.match(core, /FIRST_TOUCH_STORAGE_KEY = "solvelang-first-touch"/);
+  assert.match(core, /utm_source: attribution\.utmSource/);
+  assert.match(core, /utm_medium: attribution\.utmMedium/);
+  assert.match(core, /utm_campaign: attribution\.utmCampaign/);
+  assert.match(core, /return existing \?\? incoming;/, "first touch wins");
+  assert.match(core, /readFirstTouchCampaign/);
+});
+
+test("the capture component persists to localStorage and the parent-domain cookie (SEO P0)", () => {
+  const capture = read("app/attribution/FirstTouchCapture.tsx");
+  assert.match(capture, /localStorage\.setItem\(FIRST_TOUCH_STORAGE_KEY, wire\)/);
+  assert.match(capture, /domain=\.solve-lang\.com/);
+  assert.match(capture, /SameSite=Lax/);
+  assert.match(capture, /if \(existing\) return;/, "a stored first touch is never overwritten");
+});
+
+test("the bill check sends the persisted campaign and the API logs it additively (SEO P0)", () => {
+  const app = read("app/ci-bill-check/CiBillCheckApp.tsx");
+  assert.match(app, /readFirstTouchCampaign\(\)/);
+  assert.match(app, /\.\.\.\(campaign \? \{ campaign \} : \{\}\)/);
+  const service = fs.readFileSync(path.resolve(here, "../../services/api-access/src/ci-bill-check.js"), "utf8");
+  assert.match(service, /export function normalizeCampaignTag/);
+  assert.match(service, /\.\.\.\(campaign \? \{ campaign \} : \{\}\)/);
+  assert.match(service, /log\("served", slug, campaign\)/);
+});
