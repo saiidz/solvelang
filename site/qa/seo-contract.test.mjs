@@ -281,3 +281,16 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
+
+test("runson-alternative page carries RunsOn own dated figures (SEO Phase 1 #7c)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "runson-alternative", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/runson-alternative/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /\$350\/yr under 50,000 jobs a month/);
+  assert.match(page, /\$4,200\/yr at 500,000 and up/);
+  assert.match(page, /CloudFormation stack in your AWS account/);
+  assert.match(page, /no AWS account, no license tiers/);
+  assert.match(page, /utm_campaign=runson-alternative/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
