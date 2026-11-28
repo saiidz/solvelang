@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildBillSummary, formatUsd, formatUsdOrSubCent, parseBillCheckResponse, renderBillCheckMarkdown, type CiBillCheck } from "./bill-check";
+import { buildBillSummary, formatUsd, formatUsdOrSubCent, parseBillCheckResponse, priceTypedMinutes, renderBillCheckMarkdown, TYPED_GITHUB_PER_MINUTE_USD, TYPED_RATES_PROVENANCE, TYPED_STANDARD_PER_MINUTE_USD, type CiBillCheck } from "./bill-check";
 
 const CHECK: CiBillCheck = {
   schema: "solvelang.ci-bill-check.v1",
@@ -71,4 +71,23 @@ test("the markdown report carries the sample totals and routes", () => {
   assert.match(markdown, /# CI Bill Check - acme\/widgets/);
   assert.match(markdown, /Linux: 2 jobs, 125s measured/);
   assert.match(markdown, /Difference on Linux/);
+});
+
+test("typed-minutes mode prices the typed minutes on the Jan 2026 card vs Standard $0.004", () => {
+  const estimate = priceTypedMinutes({ linuxMinutes: 40000, windowsMinutes: 4000, macosMinutes: 3000 });
+  assert.equal(estimate.totalMinutes, 47000);
+  assert.equal(estimate.github.linuxUsd, 240);
+  assert.equal(estimate.github.windowsUsd, 40);
+  assert.equal(estimate.github.macosUsd, 186);
+  assert.equal(estimate.github.totalUsd, 466);
+  assert.equal(estimate.solvelangStandardUsd, 188);
+  assert.equal(estimate.differenceUsd, 278);
+});
+
+test("typed-minutes rates are the Jan 2026 card and the Standard rate, never the API card", () => {
+  assert.equal(TYPED_GITHUB_PER_MINUTE_USD.linux, 0.006);
+  assert.equal(TYPED_GITHUB_PER_MINUTE_USD.windows, 0.01);
+  assert.equal(TYPED_GITHUB_PER_MINUTE_USD.macos, 0.062);
+  assert.equal(TYPED_STANDARD_PER_MINUTE_USD, 0.004);
+  assert.match(TYPED_RATES_PROVENANCE, /January 2026 rate card/);
 });
