@@ -282,6 +282,20 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
 
+test("depot-alternative page carries Depot own dated figures (SEO Phase 1 #7a)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "depot-alternative", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/depot-alternative/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /\$0\.006\/min for the base 2 vCPU Linux/);
+  assert.match(page, /Developer is \$20\/mo and includes 2,000/);
+  assert.match(page, /Startup is \$200\/mo and includes 20,000/);
+  assert.match(page, /tracks usage by the second, but bills whole minutes at month end/);
+  assert.match(page, /No plan fee/);
+  assert.match(page, /utm_campaign=depot-alternative/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
 test("github-actions-alternatives page puts the runner swap first (SEO Phase 1 #5)", () => {
   const routes = read("app/i18n/routes.ts");
   assert.match(routes, /segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true/);
