@@ -21,7 +21,7 @@ test("manifest requests exactly the published permission set", () => {
     metadata: "read",
     pull_requests: "write",
   });
-  assert.deepEqual(manifest.default_events, ["pull_request"]);
+  assert.deepEqual(manifest.default_events, ["pull_request", "issue_comment"]);
 });
 
 test("manifest URLs derive from the public base", () => {
