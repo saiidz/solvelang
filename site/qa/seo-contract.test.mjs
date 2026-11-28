@@ -394,6 +394,21 @@ test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite 
   assert.doesNotMatch(page, /November 26, 2026/);
 });
 
+test("reduce-bill guide leads with measurement, then the honest levers (SEO Phase 1a #3)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "reduce-bill", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/reduce-bill/page.tsx");
+  assert.match(page, /canonical: "https:\/\/www\.solve-lang\.com\/reduce-bill\/"/);
+  assert.match(page, /Lever 1: measure your rounding number/);
+  assert.match(page, /meters per second with a 10-second minimum/);
+  assert.match(page, /Lever 2: size runners to the job/);
+  assert.match(page, /Lever 3: cache what you rebuild every run/);
+  assert.match(page, /Lever 4: run the tests the change can affect/);
+  assert.match(page, /Lever 5: batch work that does not need its own run/);
+  assert.ok(page.indexOf("Lever 1") < page.indexOf("Lever 2"), "measurement comes first");
+  assert.match(page, /utm_campaign=reduce-bill/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
 test("minutes-cost page carries the full Jan 2026 card and the worked month (SEO Phase 1a #2)", () => {
   const routes = read("app/i18n/routes.ts");
   assert.match(routes, /segment: "minutes-cost", classification: "english-only-technical", sitemap: true/);
