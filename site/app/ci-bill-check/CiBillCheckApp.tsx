@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { readFirstTouchCampaign } from "../attribution/first-touch";
 import {
   buildBillSummary,
   parseBillCheckResponse,
@@ -31,13 +32,19 @@ export function CiBillCheckApp() {
       setError("Enter a public repository as owner/repo (or paste its GitHub URL).");
       return;
     }
+    const campaign = readFirstTouchCampaign();
     setBusy(true);
     setError(null);
     try {
       const response = await fetch(API_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(parsed),
+        // The landing campaign rides along when this visit carries
+        // a persisted first touch, so the completion is logged with
+        // the page that sent the visitor (SEO -> Sales map, section
+        // 3, item 3). With no first touch the body is exactly the
+        // owner/repo pair it has always been.
+        body: JSON.stringify({ ...parsed, ...(campaign ? { campaign } : {}) }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
