@@ -281,3 +281,17 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
+
+test("github-actions-alternatives page puts the runner swap first (SEO Phase 1 #5)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/github-actions-alternatives/page.tsx");
+  assert.match(page, /swap the runners, keep GitHub Actions/);
+  assert.match(page, /Sengi \(Basic\): \$0\.001\/min/);
+  assert.match(page, /Latchkey: \$0\.0025\/min/);
+  assert.match(page, /Blacksmith: \$0\.004\/min/);
+  assert.match(page, /Depot tracks usage by the second but bills whole minutes at month end/);
+  assert.match(page, /rewritten in a new syntax/);
+  assert.match(page, /utm_campaign=alternatives/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
