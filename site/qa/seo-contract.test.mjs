@@ -295,3 +295,17 @@ test("github-actions-alternatives page puts the runner swap first (SEO Phase 1 #
   assert.match(page, /utm_campaign=alternatives/);
   assert.doesNotMatch(page, /44%|25% faster/);
 });
+
+test("self-hosted-runners-cost page carries the dated ops-bill arithmetic (SEO Phase 1 #4)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "self-hosted-runners-cost", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/self-hosted-runners-cost/page.tsx");
+  assert.match(page, /December 16, 2025/);
+  assert.match(page, /postponed that charge before it took effect/);
+  assert.match(page, /not in force as of November 28, 2026/);
+  assert.match(page, /\$0\.10 per hour per cluster/);
+  assert.match(page, /\$73 a month/);
+  assert.match(page, /worked example, not a quote/);
+  assert.match(page, /utm_campaign=self-hosted-cost/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
