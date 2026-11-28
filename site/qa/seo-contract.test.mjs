@@ -235,3 +235,49 @@ test("homepage runner minutes section answers the cost question with the dated G
   assert.match(landing, /rate card, January 2026/);
   assert.doesNotMatch(landing, /44%/);
 });
+
+test("ci-bill-check page carries the question heading and the dated GitHub rate table (GEO/AEO edit 3)", () => {
+  const page = read("app/(english)/ci-bill-check/page.tsx");
+  assert.match(page, /Why is my GitHub Actions bill so high\?/);
+  assert.match(page, /Two meters set the bill: the per-minute rate and the number of minutes rounding creates/);
+  assert.match(page, /a 12-second job bills as 60 seconds/);
+  assert.match(page, /over the measured sample only/);
+  assert.match(page, /\$0\.006\/min/);
+  assert.match(page, /\$0\.010\/min/);
+  assert.match(page, /\$0\.062\/min/);
+  assert.match(page, /January 2026 rate card; read November 28, 2026/);
+  assert.doesNotMatch(page, /\$0\.008|\$0\.016/);
+});
+
+test("runner-pricing-compared page carries the dated honest rate table (GEO/AEO edit 4)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "runner-pricing-compared", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/runner-pricing-compared/page.tsx");
+  assert.match(page, /SolveLang is not the cheapest headline rate in this table\. It is the only one that meters per second\./);
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 26, 2026/);
+  assert.match(page, /Sengi \(Basic\)/);
+  assert.match(page, /\$0\.00125\u20130\.002/);
+  assert.match(page, /Latchkey/);
+  assert.match(page, /\$0\.0025/);
+  assert.match(page, /Blacksmith/);
+  assert.match(page, /WarpBuild/);
+  assert.match(page, /Depot/);
+  assert.match(page, /Per second, 10-second minimum/);
+  assert.match(page, /GitHub \$600/);
+  assert.match(page, /SolveLang Standard: \$400/);
+  assert.match(page, /postponed it before it took effect \u2014 it is not in force as of November 2026/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("process-solution page carries the FAQ block with approved status language (GEO/AEO edit 5)", () => {
+  const page = read("app/(english)/process-solution/page.tsx");
+  assert.match(page, /What is merge governance\?/);
+  assert.match(page, /deciding, with evidence, what is allowed to land on your main branch/);
+  assert.match(page, /How is Process Solution different from GitHub\u2019s merge queue\?/);
+  assert.match(page, /bisects the batch, ejects only the guilty PR with its reason, and lands the rest/);
+  assert.match(page, /What does it cost\?/);
+  assert.match(page, /There is no public price and no self-serve signup yet\. Process Solution is live and onboarding a small number of design-partner teams\./);
+  assert.match(page, /Does my code leave my infrastructure\?/);
+  assert.match(page, /never a checkout/);
+  assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
+});
