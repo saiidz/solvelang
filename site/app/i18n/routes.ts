@@ -36,6 +36,7 @@ export const publicRoutes = [
   { segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true },
   { segment: "self-hosted-runners-cost", classification: "english-only-technical", sitemap: true },
   { segment: "minutes-cost", classification: "english-only-technical", sitemap: true },
+  { segment: "reduce-bill", classification: "english-only-technical", sitemap: true },
   { segment: "change-impact-receipt", classification: "english-only-technical", sitemap: true },
   { segment: "verification/proof", classification: "english-only-technical", sitemap: true },
   { segment: "verification/methodology", classification: "english-only-technical", sitemap: true },
