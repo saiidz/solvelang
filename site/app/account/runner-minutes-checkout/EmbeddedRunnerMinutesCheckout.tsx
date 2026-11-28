@@ -22,6 +22,7 @@ import {
   resolveRunnerMinutesPack,
 } from "@/app/account/core/runner-minutes-checkout";
 import { RUNNER_MINUTES_AUTO_RELOAD_BODY } from "@/app/account/core/runner-minutes-auto-reload";
+import { firstTouchWire, readFirstTouch } from "@/app/attribution/first-touch";
 import {
   RUNNER_MINUTES_PAUSED_LINE,
   runnerMinutesStatus,
@@ -208,17 +209,24 @@ export function EmbeddedRunnerMinutesCheckout() {
       // The verification code rides along only when one was actually
       // entered; with no code the request body is exactly today's.
       const trimmedCode = verificationCode.trim();
+      const firstTouch = readFirstTouch();
       const result = await customerApi<CheckoutResponse>(
         RUNNERS_API_BASE,
         "/customer/runner-minutes/elements-checkout",
         {
           method: "POST",
           csrfToken: account.csrfToken,
-          body: JSON.stringify(
-            trimmedCode
-              ? { pack: pack.key, requestId, verificationCode: trimmedCode }
-              : { pack: pack.key, requestId },
-          ),
+          // The persisted first-touch attribution rides along when
+          // this visit carries one, so the runners service can copy
+          // it into the Stripe session metadata and the sale keeps
+          // its source campaign (SEO -> Sales map, section 3, item
+          // 2). With no first touch the body is exactly today's.
+          body: JSON.stringify({
+            pack: pack.key,
+            requestId,
+            ...(trimmedCode ? { verificationCode: trimmedCode } : {}),
+            ...(firstTouch ? { attribution: firstTouchWire(firstTouch) } : {}),
+          }),
         },
       );
       // A verification purchase never touches Stripe: the service has
