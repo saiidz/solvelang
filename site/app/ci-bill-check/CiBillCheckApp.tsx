@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import { readFirstTouchCampaign } from "../attribution/first-touch";
 import {
   buildBillSummary,
+  formatUsd,
   parseBillCheckResponse,
+  priceTypedMinutes,
   renderBillCheckMarkdown,
+  TYPED_RATES_PROVENANCE,
   type CiBillCheck,
 } from "./core/bill-check";
 
@@ -15,6 +18,49 @@ function splitSlug(input: string): { owner: string; repo: string } | null {
   const parts = input.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "").split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
   return { owner: parts[0], repo: parts[1].replace(/\.git$/, "") };
+}
+
+
+function TypedMinutesEstimator() {
+  const [linux, setLinux] = useState("40000");
+  const [windows, setWindows] = useState("4000");
+  const [macos, setMacos] = useState("3000");
+  const estimate = useMemo(
+    () =>
+      priceTypedMinutes({
+        linuxMinutes: Number(linux),
+        windowsMinutes: Number(windows),
+        macosMinutes: Number(macos),
+      }),
+    [linux, windows, macos],
+  );
+  const field = "mt-2 w-full rounded-2xl border border-line bg-canvas p-4 font-mono text-sm text-ink";
+  return (
+    <div className="mb-8 rounded-3xl border border-line bg-panel p-6">
+      <h2 className="text-xl font-semibold text-ink">Estimate from your bill&apos;s minutes</h2>
+      <p className="mt-2 text-sm leading-6 text-muted">Type the minutes from your own GitHub bill - the whole minutes GitHub billed you for, by operating system. The GitHub figure prices those minutes on GitHub&apos;s January 2026 rate card (Linux bash.006/min, Windows bash.010/min, macOS bash.062/min). The SolveLang figure is those same minutes at SolveLang Standard&apos;s bash.004/min, metered per second. This is an estimate from your invoice numbers, computed here in your browser - nothing is sent anywhere. Typed minutes are already whole billed minutes, so this mode measures no rounding: for your measured rounding number, run the real-runs check below, which prices your repository&apos;s actual job seconds.</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="block text-sm font-medium text-ink" htmlFor="typed-linux">Linux minutes</label>
+          <input id="typed-linux" type="number" min="0" className={field} value={linux} onChange={(event) => setLinux(event.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-ink" htmlFor="typed-windows">Windows minutes</label>
+          <input id="typed-windows" type="number" min="0" className={field} value={windows} onChange={(event) => setWindows(event.target.value)} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-ink" htmlFor="typed-macos">macOS minutes</label>
+          <input id="typed-macos" type="number" min="0" className={field} value={macos} onChange={(event) => setMacos(event.target.value)} />
+        </div>
+      </div>
+      <div className="mt-4 space-y-2 text-sm leading-6 text-ink">
+        <p>GitHub&apos;s bill for these minutes: Linux {formatUsd(estimate.github.linuxUsd)} + Windows {formatUsd(estimate.github.windowsUsd)} + macOS {formatUsd(estimate.github.macosUsd)} = {formatUsd(estimate.github.totalUsd)}.</p>
+        <p>The same {estimate.totalMinutes.toLocaleString("en-US")} minutes on SolveLang Standard at bash.004/min metered per second: {formatUsd(estimate.solvelangStandardUsd)}.</p>
+        <p>Difference on these typed minutes: {formatUsd(estimate.differenceUsd)} - before any rounding is counted. Your rounding number is measured, not typed: the real-runs check below reads it from your actual jobs.</p>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-muted">Rates: {TYPED_RATES_PROVENANCE}</p>
+    </div>
+  );
 }
 
 export function CiBillCheckApp() {
@@ -74,6 +120,7 @@ export function CiBillCheckApp() {
 
   return (
     <section className="mx-auto max-w-6xl px-6 pb-20 lg:px-8">
+      <TypedMinutesEstimator />
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="rounded-3xl border border-line bg-panel p-6">
           <h2 className="text-xl font-semibold text-ink">Check a public repository</h2>

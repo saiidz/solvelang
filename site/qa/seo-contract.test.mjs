@@ -409,3 +409,32 @@ test("reduce-bill guide leads with measurement, then the honest levers (SEO Phas
   assert.match(page, /utm_campaign=reduce-bill/);
   assert.doesNotMatch(page, /44%|25% faster/);
 });
+test("minutes-cost page carries the full Jan 2026 card and the worked month (SEO Phase 1a #2)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "minutes-cost", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/minutes-cost/page.tsx");
+  assert.match(page, /canonical: "https:\/\/www\.solve-lang\.com\/minutes-cost\/"/);
+  assert.match(page, /\$0\.006\/min/);
+  assert.match(page, /\$0\.010\/min/);
+  assert.match(page, /\$0\.062\/min/);
+  assert.match(page, /\$0\.012\/min \(4-core\) to \$0\.252\/min \(96-core\)/);
+  assert.match(page, /\$12 on Free, \$18 on Pro and Team, and \$300 on Enterprise Cloud/);
+  assert.match(page, /since October 28, 2026/);
+  assert.match(page, /6,000 jobs × 30 seconds = 180,000 seconds/);
+  assert.match(page, /6,000 × \$0\.006 = \$36/);
+  assert.match(page, /3,000 minutes × \$0\.004 = \$12/);
+  assert.match(page, /utm_campaign=minutes-cost/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("typed-minutes mode prices typed minutes client-side on the Jan 2026 card (SEO Phase 1a #1)", () => {
+  const core = read("app/ci-bill-check/core/bill-check.ts");
+  assert.match(core, /TYPED_GITHUB_PER_MINUTE_USD = \{ linux: 0\.006, windows: 0\.01, macos: 0\.062 \}/);
+  assert.match(core, /TYPED_STANDARD_PER_MINUTE_USD = 0\.004/);
+  assert.match(core, /export function priceTypedMinutes/);
+  const app = read("app/ci-bill-check/CiBillCheckApp.tsx");
+  assert.match(app, /TypedMinutesEstimator/);
+  assert.match(app, /Estimate from your bill/);
+  assert.match(app, /real-runs check below/);
+  assert.match(app, /priceTypedMinutes/);
+});
