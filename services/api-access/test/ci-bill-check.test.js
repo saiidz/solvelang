@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyJobOs, computeBillCheck, createCiBillCheck, jobSeconds } from "../src/ci-bill-check.js";
+import { classifyJobOs, computeBillCheck, createCiBillCheck, jobSeconds, normalizeCampaignTag } from "../src/ci-bill-check.js";
 
 const silent = { info() {} };
 
@@ -164,4 +164,41 @@ test("repeat checks are served from cache and say so", async () => {
   const second = await checkRequest(check);
   assert.equal(second.body.check.cached, true);
   assert.equal(calls.length, after);
+});
+
+test("normalizeCampaignTag keeps slug-shaped tags and drops everything else", () => {
+  assert.equal(normalizeCampaignTag("minutes-cost"), "minutes-cost");
+  assert.equal(normalizeCampaignTag("  pricing-compared  "), "pricing-compared");
+  assert.equal(normalizeCampaignTag("bad campaign!"), null);
+  assert.equal(normalizeCampaignTag(""), null);
+  assert.equal(normalizeCampaignTag("x".repeat(65)), null);
+  assert.equal(normalizeCampaignTag(undefined), null);
+  assert.equal(normalizeCampaignTag(42), null);
+});
+
+test("a completed check is logged with the landing campaign tag", async () => {
+  const records = [];
+  const logger = { info(record) { records.push(record); } };
+  const calls = [];
+  const check = createCiBillCheck({ enabled: true, logger, fetchImpl: fixtureFetch(calls) });
+  const outcome = await checkRequest(check, { owner: "acme", repo: "widgets", campaign: "minutes-cost" });
+  assert.equal(outcome.statusCode, 200);
+  const served = records.find((record) => record.outcome === "served");
+  assert.equal(served.campaign, "minutes-cost");
+  assert.equal(served.repo, "acme/widgets");
+  // A cached repeat is a completion too and carries the tag as well.
+  const second = await checkRequest(check, { owner: "acme", repo: "widgets", campaign: "minutes-cost" });
+  assert.equal(second.body.check.cached, true);
+  assert.equal(records.find((record) => record.outcome === "served_cached").campaign, "minutes-cost");
+});
+
+test("an invalid or absent campaign leaves the log record in its original shape", async () => {
+  const records = [];
+  const logger = { info(record) { records.push(record); } };
+  const calls = [];
+  const check = createCiBillCheck({ enabled: true, logger, fetchImpl: fixtureFetch(calls) });
+  await checkRequest(check, { owner: "acme", repo: "widgets", campaign: "bad campaign!" });
+  await checkRequest(check, { owner: "acme", repo: "widgets" });
+  assert.ok(records.length > 0);
+  for (const record of records) assert.ok(!("campaign" in record), "untagged calls log no campaign field");
 });
