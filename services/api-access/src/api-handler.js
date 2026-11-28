@@ -4,6 +4,7 @@ import { isAllowedStudioOrigin, parseStudioAcceptanceOrigin } from "./studio-acc
 import { unverifiedPublicStatus } from "./public-status.js";
 import { runEventFromBody } from "./run-telemetry.js";
 import { agUiBoardErrorEvents, agUiBoardEvents, agUiRunIds, encodeAgUiSse } from "./ag-ui.js";
+import { parseAttributionCookie } from "./attribution.js";
 
 // A sign-in form submitted faster than this is a bot, not a person.
 const BOT_TIMING_MIN_MS = 1_200;
@@ -318,7 +319,7 @@ export function createApiAccessHandler({
 
       if (method === "GET" && path.endsWith("/github/auth/authorize")) {
         if (!customerAccountsEnabled || !githubApp) throw new ApiAccessError(503, "github_app_disabled", "GitHub sign-in is not enabled.");
-        const { location } = await githubApp.beginAuthorize();
+        const { location } = await githubApp.beginAuthorize(parseAttributionCookie(cookieHeader(event)));
         return redirect(location);
       }
       if (method === "GET" && path.endsWith("/github/auth/callback")) {

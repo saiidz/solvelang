@@ -409,3 +409,17 @@ test("githubApp slug defaults to solvelang-reader and can be overridden", () => 
   assert.equal(parseApiAccessEnvironment(base).githubApp.slug, "solvelang-reader");
   assert.equal(parseApiAccessEnvironment({ ...base, API_GITHUB_APP_SLUG: "solvelang-dev" }).githubApp.slug, "solvelang-dev");
 });
+
+test("OAuth state carries the first-touch attribution to the sign-in consume (SEO P0)", async () => {
+  const store = createDynamoGitHubStore(fakeDocumentClient(), "github-table", { now: () => AT });
+  const attribution = JSON.stringify({ utm_source: "solve-lang.com", utm_medium: "seo", utm_campaign: "minutes-cost" });
+  await store.putOAuthState({ nonce: "attr-1", ttlSeconds: 600, attribution });
+  const consumed = await store.consumeOAuthStateRecord("attr-1");
+  assert.equal(consumed.attribution, attribution);
+  assert.equal(consumed.purpose, undefined);
+  // Single-use still holds, and a state without attribution returns
+  // exactly the shape it always has (no attribution key).
+  assert.equal(await store.consumeOAuthStateRecord("attr-1"), null);
+  await store.putOAuthState({ nonce: "plain-1", ttlSeconds: 600 });
+  assert.deepEqual(await store.consumeOAuthStateRecord("plain-1"), { purpose: undefined, accountId: undefined });
+});
