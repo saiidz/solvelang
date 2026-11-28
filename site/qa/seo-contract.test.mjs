@@ -248,3 +248,23 @@ test("ci-bill-check page carries the question heading and the dated GitHub rate 
   assert.match(page, /January 2026 rate card; read November 28, 2026/);
   assert.doesNotMatch(page, /\$0\.008|\$0\.016/);
 });
+
+test("runner-pricing-compared page carries the dated honest rate table (GEO/AEO edit 4)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "runner-pricing-compared", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/runner-pricing-compared/page.tsx");
+  assert.match(page, /SolveLang is not the cheapest headline rate in this table\. It is the only one that meters per second\./);
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 26, 2026/);
+  assert.match(page, /Sengi \(Basic\)/);
+  assert.match(page, /\$0\.00125\u20130\.002/);
+  assert.match(page, /Latchkey/);
+  assert.match(page, /\$0\.0025/);
+  assert.match(page, /Blacksmith/);
+  assert.match(page, /WarpBuild/);
+  assert.match(page, /Depot/);
+  assert.match(page, /Per second, 10-second minimum/);
+  assert.match(page, /GitHub \$600/);
+  assert.match(page, /SolveLang Standard: \$400/);
+  assert.match(page, /postponed it before it took effect \u2014 it is not in force as of November 2026/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
