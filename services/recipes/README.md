@@ -45,6 +45,10 @@ claimed to work only when its registry flag flips on proof.
   identity (its real author login is stated in the receipt finding).
   Header rule: the exact configured template at the file head,
   allowing only a UTF-8 BOM and/or one shebang line before it.
+- `src/fix-dispatch.js` — MGOV fix-dispatch client
+  (`POST /recipes/fix-dispatch` in saiidz/solvelang-merge-governance),
+  admin-token auth identical to the audit client, fail-closed like
+  it. Used by fix mode in dispatch mode (below).
 - `src/github.js` — the small GitHub REST surface the executor
   needs (tree listing, file bytes at a ref, one Git-Data fix PR),
   token injected by the wiring; production tokens are SolveLang
@@ -70,10 +74,35 @@ fail-closed admin gates) are the verification service's, reused.
 
 ## Run / test
 
+## Fix delivery modes (license-headers fix mode)
+
+Fix mode computes its header-only changes deterministically, exactly
+the same in both modes; only PR delivery differs:
+
+- **Direct mode (default):** the executor opens the fix PR itself via
+  GitHub REST under the injected token (`RECIPES_GITHUB_TOKEN` /
+  `RECIPES_GITHUB_TOKEN_FILE`), and the receipt finding states that
+  token's actual author login.
+- **Dispatch mode (`RECIPES_FIX_VIA_MGOV=1`):** the executor sends
+  the changes to MGOV's `POST /recipes/fix-dispatch` as
+  `contentBase64` per changed file, on branch
+  `solvelang-recipes/<recipeId>/<first 8 of runId>`. MGOV opens the
+  PR through its governed batch path as
+  `solvelang-process-solution[bot]` — the process-solution-app
+  identity class the registry records for this recipe — and the
+  author login MGOV returns is the one recorded in the receipt
+  finding. There is **no silent fallback**: if dispatch fails or is
+  unconfigured, the run's fix outcome is graded honestly (an
+  unverified finding carrying the dispatch error code, conclusion
+  failure) and no PR is opened under any other identity.
+  `RECIPES_TENANT_ID` (or a per-dispatch `tenantId`) is forwarded
+  when set so MGOV can verify the tenant binds the repo.
+
 ```sh
 npm test          # node --test test/*.test.js
 npm start         # node src/server.js (RECIPES_PORT, RECIPES_ADMIN_TOKEN,
-                  # RECIPES_MGOV_BASE, RECIPES_MGOV_ADMIN_TOKEN, RECIPES_TICK_MS)
+                  # RECIPES_MGOV_BASE, RECIPES_MGOV_ADMIN_TOKEN, RECIPES_TICK_MS,
+                  # RECIPES_FIX_VIA_MGOV, RECIPES_TENANT_ID)
 ```
 
 The Docker image builds from the repo root, like the verification

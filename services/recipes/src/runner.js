@@ -45,6 +45,7 @@ export function createRecipesRunner(deps) {
     headSha = null,
     prNumber = null,
     installationId = null,
+    tenantId = null,
     options = undefined,
   }) {
     const startedAt = now();
@@ -122,6 +123,8 @@ export function createRecipesRunner(deps) {
         definition,
         repo,
         trigger,
+        runId: id,
+        tenantId,
         baseSha,
         headSha,
         prNumber,
