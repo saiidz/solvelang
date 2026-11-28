@@ -22,7 +22,9 @@ permissions later forces every installation to re-consent:
 | Checks | write | create + complete the verification check run, with annotations |
 | Issues | write | the sticky receipt comment on plain issues (PR conversations need pull requests: write — see above) |
 
-Events: `pull_request` only. Not requested: contents write, actions,
+Events: `pull_request`; apps created from the current manifest also
+subscribe to `issue_comment` (the `/solvelang verify` command — see
+"Slice 2" below). Not requested: contents write, actions,
 administration, workflows — the service never writes code, never
 merges, never touches settings.
 
@@ -89,6 +91,45 @@ the app needs no restart. Until the file exists, `/health` reports
 | `VERIFICATION_MGOV_BASE` | the governance API base | audit route host |
 | `VERIFICATION_MGOV_ADMIN_TOKEN` | — | required for audit writes; keep in a 0600 env file |
 | `VERIFICATION_CHECKS_SETTLE_TIMEOUT_MS` | `180000` | CI settle wait bound |
+| `VERIFICATION_BACKTEST_DIR` | `/data/backtests` | persisted backtest jobs + the 24h per-repo report cache (on the data volume) |
+
+## Slice 2 — backtest, re-review trigger, free tier
+
+**Backtest** (`POST /backtest`, `GET /backtest/<id>`): replays the
+grading over a **public** repository's most recent merged PRs
+(default 10, max 10) — the same collector, receipt builder, and PR
+Gate run a live check uses, with the repo's own verification config
+read at each PR's base SHA. Unauthenticated GitHub reads throughout
+(public repos only; trees come from codeload, outside the REST
+budget). Output per PR: the graded finding counts
+(verified / failed / unverified) and a classification — **catch**,
+**false-block candidate**, **evidence incomplete** — under the
+definitions published on the methodology page and carried verbatim
+in every report. No check run is created and no audit record is
+written for a replay. Completed reports are cached per repo for
+24h; job starts are rate-limited per IP (3/hour); if GitHub
+rate-limits a job mid-run, the remaining PRs are reported as
+ungraded with the reason rather than failing the job.
+
+**Re-review trigger**: a PR comment whose line is exactly
+`/solvelang verify` starts a fresh verification run on the PR's
+current head; the new check run and the updated sticky receipt
+comment supersede the previous evidence. This needs the
+`issue_comment` event on the app. Apps created from the current
+manifest subscribe to it automatically. **The live app (created in
+Slice 1) subscribes to `pull_request` only — enabling the trigger
+on it is an owner step**: GitHub → Settings → Developer settings →
+GitHub Apps → SolveLang Verification → Permissions & events →
+Subscribe to events → check **Issue comments** → Save. (Event
+subscriptions cannot be changed through the API.) Until then, real
+comment events are not delivered; the service-side handler is live
+and answers correctly signed deliveries.
+
+**Free tier**: the check is free for public repositories and needs
+no card and no trial signup — the service contains no billing code
+at all. Install the app and it runs (report-only by default). There
+is no public price yet; pricing is the owner's decision, informed
+by the measured per-run cost.
 
 ## Deploy (host)
 
