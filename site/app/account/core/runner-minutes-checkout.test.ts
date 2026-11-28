@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   RUNNER_MINUTES_ALL_PACKS,
@@ -92,4 +93,10 @@ test("premium packs match the service catalog: flat $0.50/min, owner-priced", ()
   const premiumMinutes = RUNNER_MINUTES_PREMIUM_PACKS.map((p) => p.minutes ?? 0);
   assert.deepEqual(premiumMinutes, [...premiumMinutes].sort((a, b) => a - b), "premium packs climb by minutes");
   assert.equal(RUNNER_MINUTES_LABELS.premium, "runs-on: [self-hosted, solvelang-runners-premium]");
+});
+
+test("runner-minutes elements-checkout request carries the first-touch attribution (SEO P0)", () => {
+  const checkout = readFileSync("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx", "utf8");
+  assert.match(checkout, /import \{ firstTouchWire, readFirstTouch \} from "@\/app\/attribution\/first-touch";/);
+  assert.match(checkout, /\{ \.\.\.baseBody, attribution: firstTouchWire\(firstTouch\) \}/);
 });
