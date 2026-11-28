@@ -120,12 +120,14 @@ export function boundAuditSelection(repository: {
 // their signed-in account through the api-access platform
 // connections routes (/customer/platform-connections). Registering
 // saves the connection so it is listed as theirs; it runs nothing
-// against the repository. The audit summary runs today only for
-// GitHub-connected repositories — for these platforms the audit
-// action answers with the awaiting-configuration status the
-// service returns, and the copy below says exactly that. The
-// client-side validation mirrors the server's rules so the panel
-// can ask again immediately; the server stays authoritative.
+// against the repository. The audit read runs live today for
+// Forgejo / Gitea connections that carry an access token (proven
+// end-to-end on 2026-11-28); for the other platforms — and for a
+// Forgejo / Gitea connection without a token — the audit action
+// answers with the awaiting-configuration status the service
+// returns, and the copy below says exactly that. The client-side
+// validation mirrors the server's rules so the panel can ask
+// again immediately; the server stays authoritative.
 
 export type AuditPlatformId = "github" | "gitlab" | "azure" | "bitbucket" | "forge";
 export type ConnectionPlatformId = Exclude<AuditPlatformId, "github">;
@@ -142,6 +144,19 @@ export const PLATFORM_AUDIT_AWAITING_STATE = "awaiting_configuration";
 
 export const PLATFORM_AUDIT_AWAITING_COPY =
   "Connection saved — the first live audit for this platform is enabled when its access is configured. Nothing has been run against your repository yet.";
+
+export const PLATFORM_AUDIT_READ_COMPLETE_STATE = "read_complete";
+export const PLATFORM_AUDIT_READ_PARTIAL_STATE = "read_partial";
+export const PLATFORM_AUDIT_READ_FAILED_STATE = "read_failed";
+
+export const PLATFORM_AUDIT_READ_COMPLETE_COPY =
+  "Audit read complete — every repository in this connection was read and its run record stored.";
+
+export const PLATFORM_AUDIT_READ_PARTIAL_COPY =
+  "Audit read finished — some repositories in this connection were read and stored; the rest could not be read.";
+
+export const PLATFORM_AUDIT_READ_FAILED_COPY =
+  "The last audit read could not read any repository in this connection.";
 
 export function platformConnectionsPath(): string {
   return "/customer/platform-connections";
@@ -216,6 +231,9 @@ export function platformConnectionTitle(connection: PlatformConnection): string 
 
 export function platformAuditStateCopy(auditState: string): string {
   if (auditState === PLATFORM_AUDIT_AWAITING_STATE) return PLATFORM_AUDIT_AWAITING_COPY;
+  if (auditState === PLATFORM_AUDIT_READ_COMPLETE_STATE) return PLATFORM_AUDIT_READ_COMPLETE_COPY;
+  if (auditState === PLATFORM_AUDIT_READ_PARTIAL_STATE) return PLATFORM_AUDIT_READ_PARTIAL_COPY;
+  if (auditState === PLATFORM_AUDIT_READ_FAILED_STATE) return PLATFORM_AUDIT_READ_FAILED_COPY;
   return auditState;
 }
 

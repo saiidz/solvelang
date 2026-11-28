@@ -8,6 +8,7 @@ const { statusPage } = require("../.studio-test-dist/public-site/(english)/statu
 const { observedState, overallState, isCurrentIncident, MAX_HEALTH_AGE_MS } = require("../.studio-test-dist/public-site/(english)/status/status-health.js");
 const { parseStatusObservations, fetchStatusObservations } = require("../.studio-test-dist/public-site/(english)/status/status-live.js");
 const { capabilityGroups, billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
+const { LIVE_RUNS, RECEIPT_AUDITS, liveTotals, receiptTotals, combinedTotals } = require("../.studio-test-dist/public-site/verification/demo-data.js");
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const now = Date.parse("2026-09-13T21:00:00Z");
 const healthy = { name: "Test", description: "Test fixture, not live evidence", state: "operational", checkedAt: new Date(now - 1000).toISOString(), validForMs: 60_000 };
@@ -235,7 +236,7 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(sectionStart < landing.indexOf('id="quickstart"'), "runner minutes section precedes the chooser");
   const section = landing.slice(sectionStart, landing.indexOf("styles.builtBand"));
   assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
-  assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
+  assert.ok(section.includes("How much do GitHub Actions minutes cost \u2014 and what does SolveLang charge?"), "section heading");
   assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
   assert.ok(section.includes("Start with 300 free Standard minutes: they are added when you connect GitHub and claim them in your account \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
   assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
@@ -1876,4 +1877,43 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes("published Mondays 06:00 EST"), "digest schedule");
   assert.ok(page.includes("SolveLang Verification</td>"), "table lists Verification");
   assert.ok(page.includes("November 26, 2026"), "new rows carry the November 26, 2026 verified date");
+});
+
+test("verification proof dataset: the published numbers are the recorded numbers", () => {
+  const live = liveTotals();
+  assert.equal(LIVE_RUNS.length, 8);
+  assert.equal(live.verified, 44);
+  assert.equal(live.failed, 11);
+  assert.equal(live.unverified, 9);
+  assert.equal(live.gradedItems, 64);
+  assert.equal(live.defectiveCaught, 3);
+  assert.equal(live.defectiveTotal, 3);
+  assert.equal(live.cleanFalseBlocks, 0);
+  assert.equal(live.cleanTotal, 5);
+  assert.equal(live.falseVerifiedLabels, 0);
+  assert.ok(LIVE_RUNS.every((run) => run.auditWritten), "every live run wrote its audit record");
+  assert.ok(LIVE_RUNS.every((run) => Number.isSafeInteger(run.checkRunId) && run.checkRunId > 0), "every live run names its check run");
+  const receipts = receiptTotals();
+  assert.equal(RECEIPT_AUDITS.length, 5);
+  assert.equal(receipts.catches, 28);
+  assert.equal(receipts.toolFalsePositives, 5);
+  assert.equal(receipts.unverified, 14);
+  assert.equal(receipts.gradedItems, 53);
+  assert.equal(receipts.falseVerifiedLabels, 0);
+  const combined = combinedTotals();
+  assert.equal(combined.prs, 13);
+  assert.equal(combined.gradedItems, 117);
+  assert.equal(combined.unverified, 23);
+  assert.equal(combined.falseVerifiedLabels, 0);
+  assert.ok(Math.abs(combined.unverifiedShare - 23 / 117) < 1e-12, "combined unverified share is 23 of 117");
+  const routes = read("app/i18n/routes.ts");
+  for (const segment of ["verification/proof", "verification/methodology", "verification/backtest"]) {
+    assert.ok(routes.includes(`segment: "${segment}"`), `route registered: ${segment}`);
+  }
+  const proofPage = read("app/(english)/verification/proof/page.tsx");
+  assert.ok(proofPage.includes("Graded in the open, unverified share and all."), "proof page headline");
+  const methodology = read("app/verification/methodology/MethodologyApp.tsx");
+  assert.ok(methodology.includes("Missing evidence is never guessed into a verdict."), "methodology states the unverified rule");
+  assert.ok(methodology.includes("missing evidence is not evidence"), "methodology states the backtest evidence rule");
+  assert.ok(methodology.includes("are excluded"), "methodology states the proof-set exclusions");
 });
