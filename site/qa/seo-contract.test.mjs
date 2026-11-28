@@ -281,3 +281,12 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
+
+test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite block (SEO Phase 1 #6)", () => {
+  const page = read("app/(english)/runner-pricing-compared/page.tsx");
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 28, 2026/);
+  assert.match(page, /Cite this table/);
+  assert.match(page, /Runner pricing compared \u2014 SolveLang, rates read November 28, 2026/);
+  assert.match(page, /utm_campaign=pricing-compared/);
+  assert.doesNotMatch(page, /November 26, 2026/);
+});
