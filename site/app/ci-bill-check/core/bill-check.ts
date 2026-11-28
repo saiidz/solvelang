@@ -146,3 +146,55 @@ export function renderBillCheckMarkdown(check: CiBillCheck): string {
   lines.push("");
   return lines.join("\n");
 }
+// ---------------------------------------------------------------------------
+// Typed-minutes mode (SEO Phase 1a, build order #1).
+//
+// The visitor types the Linux / Windows / macOS minutes from their own
+// GitHub bill and gets two figures for those same minutes: GitHub's bill
+// on the published January 2026 rate card, and SolveLang Standard at
+// $0.004/min metered per second. This is an estimate from the visitor's
+// invoice numbers - it is computed entirely on the client and is never
+// sent to the bill-check API, whose rates price real measured runs and
+// are a separate, older card. Typed minutes carry no rounding
+// measurement: the minutes typed are already the whole minutes GitHub
+// billed. The measured rounding number comes from the real-runs check.
+
+export const TYPED_GITHUB_PER_MINUTE_USD = { linux: 0.006, windows: 0.01, macos: 0.062 } as const;
+export const TYPED_STANDARD_PER_MINUTE_USD = 0.004;
+export const TYPED_RATES_PROVENANCE =
+  "GitHub's published per-minute rates for standard GitHub-hosted runners - January 2026 rate card; read November 28, 2026. SolveLang Standard: $0.004/min metered per second, 10-second minimum.";
+
+export type TypedMinutesInput = {
+  linuxMinutes: number;
+  windowsMinutes: number;
+  macosMinutes: number;
+};
+
+export type TypedMinutesEstimate = {
+  totalMinutes: number;
+  github: { linuxUsd: number; windowsUsd: number; macosUsd: number; totalUsd: number };
+  solvelangStandardUsd: number;
+  differenceUsd: number;
+};
+
+function cleanMinutes(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+export function priceTypedMinutes(input: TypedMinutesInput): TypedMinutesEstimate {
+  const linuxMinutes = cleanMinutes(input.linuxMinutes);
+  const windowsMinutes = cleanMinutes(input.windowsMinutes);
+  const macosMinutes = cleanMinutes(input.macosMinutes);
+  const linuxUsd = linuxMinutes * TYPED_GITHUB_PER_MINUTE_USD.linux;
+  const windowsUsd = windowsMinutes * TYPED_GITHUB_PER_MINUTE_USD.windows;
+  const macosUsd = macosMinutes * TYPED_GITHUB_PER_MINUTE_USD.macos;
+  const totalMinutes = linuxMinutes + windowsMinutes + macosMinutes;
+  const githubTotalUsd = linuxUsd + windowsUsd + macosUsd;
+  const solvelangStandardUsd = totalMinutes * TYPED_STANDARD_PER_MINUTE_USD;
+  return {
+    totalMinutes,
+    github: { linuxUsd, windowsUsd, macosUsd, totalUsd: githubTotalUsd },
+    solvelangStandardUsd,
+    differenceUsd: githubTotalUsd - solvelangStandardUsd,
+  };
+}
