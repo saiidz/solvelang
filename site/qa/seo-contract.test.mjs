@@ -221,3 +221,17 @@ test("compatibility page states the platform truth without overclaiming", () => 
   assert.doesNotMatch(page, new RegExp(`Runner minutes[\\s\\S]{0,120}${otherPlatforms}`, "i"));
   assert.doesNotMatch(page, new RegExp(`governance[\\s\\S]{0,120}${otherPlatforms}`, "i"));
 });
+
+test("homepage runner minutes section answers the cost question with the dated GitHub comparison (GEO/AEO edit 2)", () => {
+  assert.match(landing, /How much do GitHub Actions minutes cost \u2014 and what does SolveLang charge\?/);
+  assert.match(landing, /GitHub charges \$0\.006 per minute for a standard 2-core Linux runner and rounds every job up to a whole minute/);
+  assert.match(landing, /SolveLang Standard costs \$0\.004 per minute and meters per second with a 10-second minimum/);
+  assert.match(landing, /a 12-second job costs 12 seconds, not a minute/);
+  assert.match(landing, /Whole minute, rounded up per job/);
+  assert.match(landing, /Per second, 10-second minimum/);
+  assert.match(landing, /\$30 at list rate/);
+  assert.match(landing, /\$20 \(pack\)/);
+  assert.match(landing, /300 free minutes, no card, 30 days/);
+  assert.match(landing, /rate card, January 2026/);
+  assert.doesNotMatch(landing, /44%/);
+});
