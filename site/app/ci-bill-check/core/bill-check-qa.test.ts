@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildBillSummary, formatUsdOrSubCent, parseBillCheckResponse, renderBillCheckMarkdown, type CiBillCheck } from "./bill-check";
+import { buildBillSummary, formatUsdOrSubCent, parseBillCheckResponse, priceTypedMinutes, renderBillCheckMarkdown, type CiBillCheck } from "./bill-check";
 
 const BASE: CiBillCheck = {
   schema: "solvelang.ci-bill-check.v1",
@@ -54,4 +54,19 @@ test("QA: an ok response missing its sample renders the statement only, never fi
   const lines = buildBillSummary(broken);
   assert.equal(lines[0], BASE.statement);
   assert.ok(!lines.join("\n").includes("billed minutes"));
+});
+
+test("QA: typed-minutes mode zeroes invalid input instead of producing figures from it", () => {
+  const estimate = priceTypedMinutes({ linuxMinutes: -100, windowsMinutes: Number.NaN, macosMinutes: 0 });
+  assert.equal(estimate.totalMinutes, 0);
+  assert.equal(estimate.github.totalUsd, 0);
+  assert.equal(estimate.solvelangStandardUsd, 0);
+  assert.equal(estimate.differenceUsd, 0);
+});
+
+test("QA: typed-minutes mode prices a single-OS month exactly", () => {
+  const estimate = priceTypedMinutes({ linuxMinutes: 10000, windowsMinutes: 0, macosMinutes: 0 });
+  assert.equal(estimate.github.totalUsd, 60);
+  assert.equal(estimate.solvelangStandardUsd, 40);
+  assert.equal(estimate.differenceUsd, 20);
 });

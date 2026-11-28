@@ -393,3 +393,15 @@ test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite 
   assert.match(page, /utm_campaign=pricing-compared/);
   assert.doesNotMatch(page, /November 26, 2026/);
 });
+
+test("typed-minutes mode prices typed minutes client-side on the Jan 2026 card (SEO Phase 1a #1)", () => {
+  const core = read("app/ci-bill-check/core/bill-check.ts");
+  assert.match(core, /TYPED_GITHUB_PER_MINUTE_USD = \{ linux: 0\.006, windows: 0\.01, macos: 0\.062 \}/);
+  assert.match(core, /TYPED_STANDARD_PER_MINUTE_USD = 0\.004/);
+  assert.match(core, /export function priceTypedMinutes/);
+  const app = read("app/ci-bill-check/CiBillCheckApp.tsx");
+  assert.match(app, /TypedMinutesEstimator/);
+  assert.match(app, /Estimate from your bill/);
+  assert.match(app, /real-runs check below/);
+  assert.match(app, /priceTypedMinutes/);
+});
