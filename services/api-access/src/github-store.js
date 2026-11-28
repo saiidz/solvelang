@@ -105,7 +105,7 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
       }));
     },
 
-    async putOAuthState({ nonce, ttlSeconds = OAUTH_STATE_TTL_SECONDS, purpose, accountId } = {}) {
+    async putOAuthState({ nonce, ttlSeconds = OAUTH_STATE_TTL_SECONDS, purpose, accountId, attribution } = {}) {
       if (typeof nonce !== "string" || !nonce) throw new Error("GitHub OAuth state nonce is required.");
       if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds <= 0) throw new Error("GitHub OAuth state TTL is invalid.");
       const expiresAt = nowSeconds() + ttlSeconds;
@@ -119,6 +119,10 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
           // install flow); sign-in states carry neither field.
           ...(typeof purpose === "string" && purpose ? { purpose } : {}),
           ...(typeof accountId === "string" && accountId ? { accountId } : {}),
+          // Sign-in states may carry the first-touch attribution JSON
+          // (attribution.js) so the callback can persist it on the
+          // account at creation; absent for every other state.
+          ...(typeof attribution === "string" && attribution ? { attribution } : {}),
         },
       }));
       return { expiresAt };
@@ -150,6 +154,7 @@ export function createDynamoGitHubStore(documentClient, tableName, { now = Date.
       return {
         purpose: typeof deleted.purpose === "string" && deleted.purpose ? deleted.purpose : undefined,
         accountId: typeof deleted.accountId === "string" && deleted.accountId ? deleted.accountId : undefined,
+        ...(typeof deleted.attribution === "string" && deleted.attribution ? { attribution: deleted.attribution } : {}),
       };
     },
 

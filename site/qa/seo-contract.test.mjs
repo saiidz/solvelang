@@ -254,7 +254,7 @@ test("runner-pricing-compared page carries the dated honest rate table (GEO/AEO 
   assert.match(routes, /segment: "runner-pricing-compared", classification: "english-only-technical", sitemap: true/);
   const page = read("app/(english)/runner-pricing-compared/page.tsx");
   assert.match(page, /SolveLang is not the cheapest headline rate in this table\. It is the only one that meters per second\./);
-  assert.match(page, /read from the provider\u2019s own published pricing page on November 26, 2026/);
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 28, 2026/);
   assert.match(page, /Sengi \(Basic\)/);
   assert.match(page, /\$0\.00125\u20130\.002/);
   assert.match(page, /Latchkey/);
@@ -280,4 +280,116 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /Does my code leave my infrastructure\?/);
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
+});
+
+
+test("first-touch UTM capture is mounted once in the English layout (SEO P0)", () => {
+  const layout = read("app/(english)/layout.tsx");
+  assert.match(layout, /import \{ FirstTouchCapture \} from "..\/attribution\/FirstTouchCapture";/);
+  assert.match(layout, /<FirstTouchCapture \/>/);
+});
+
+test("first-touch core pins the triple, first-touch-wins and the shared wire shape (SEO P0)", () => {
+  const core = read("app/attribution/first-touch.ts");
+  assert.match(core, /FIRST_TOUCH_COOKIE_NAME = "sl_first_touch"/);
+  assert.match(core, /FIRST_TOUCH_STORAGE_KEY = "solvelang-first-touch"/);
+  assert.match(core, /utm_source: attribution\.utmSource/);
+  assert.match(core, /utm_medium: attribution\.utmMedium/);
+  assert.match(core, /utm_campaign: attribution\.utmCampaign/);
+  assert.match(core, /return existing \?\? incoming;/, "first touch wins");
+  assert.match(core, /readFirstTouchCampaign/);
+});
+
+test("the capture component persists to localStorage and the parent-domain cookie (SEO P0)", () => {
+  const capture = read("app/attribution/FirstTouchCapture.tsx");
+  assert.match(capture, /localStorage\.setItem\(FIRST_TOUCH_STORAGE_KEY, wire\)/);
+  assert.match(capture, /domain=\.solve-lang\.com/);
+  assert.match(capture, /SameSite=Lax/);
+  assert.match(capture, /if \(existing\) return;/, "a stored first touch is never overwritten");
+});
+
+test("the bill check sends the persisted campaign and the API logs it additively (SEO P0)", () => {
+  const app = read("app/ci-bill-check/CiBillCheckApp.tsx");
+  assert.match(app, /readFirstTouchCampaign\(\)/);
+  assert.match(app, /\.\.\.\(campaign \? \{ campaign \} : \{\}\)/);
+  const service = fs.readFileSync(path.resolve(here, "../../services/api-access/src/ci-bill-check.js"), "utf8");
+  assert.match(service, /export function normalizeCampaignTag/);
+  assert.match(service, /\.\.\.\(campaign \? \{ campaign \} : \{\}\)/);
+  assert.match(service, /log\("served", slug, campaign\)/);
+});
+test("runson-alternative page carries RunsOn own dated figures (SEO Phase 1 #7c)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "runson-alternative", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/runson-alternative/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /\$350\/yr under 50,000 jobs a month/);
+  assert.match(page, /\$4,200\/yr at 500,000 and up/);
+  assert.match(page, /CloudFormation stack in your AWS account/);
+  assert.match(page, /no AWS account, no license tiers/);
+  assert.match(page, /utm_campaign=runson-alternative/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("namespace-pricing page explains the unit minute from Namespace own pricing (SEO Phase 1 #7b)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "namespace-pricing", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/namespace-pricing/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /1 vCPU with 2 GB of RAM for one minute/);
+  assert.match(page, /\$0\.002\/min prepaid, \$0\.003\/min overage/);
+  assert.match(page, /\$0\.004\/min prepaid, \$0\.006\/min overage/);
+  assert.match(page, /Team is \$100\/mo including 100,000 unit minutes/);
+  assert.match(page, /utm_campaign=namespace-pricing/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("depot-alternative page carries Depot own dated figures (SEO Phase 1 #7a)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "depot-alternative", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/depot-alternative/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /\$0\.006\/min for the base 2 vCPU Linux/);
+  assert.match(page, /Developer is \$20\/mo and includes 2,000/);
+  assert.match(page, /Startup is \$200\/mo and includes 20,000/);
+  assert.match(page, /tracks usage by the second, but bills whole minutes at month end/);
+  assert.match(page, /No plan fee/);
+  assert.match(page, /utm_campaign=depot-alternative/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("github-actions-alternatives page puts the runner swap first (SEO Phase 1 #5)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "github-actions-alternatives", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/github-actions-alternatives/page.tsx");
+  assert.match(page, /swap the runners, keep GitHub Actions/);
+  assert.match(page, /Sengi \(Basic\): \$0\.001\/min/);
+  assert.match(page, /Latchkey: \$0\.0025\/min/);
+  assert.match(page, /Blacksmith: \$0\.004\/min/);
+  assert.match(page, /Depot tracks usage by the second but bills whole minutes at month end/);
+  assert.match(page, /rewritten in a new syntax/);
+  assert.match(page, /utm_campaign=alternatives/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("self-hosted-runners-cost page carries the dated ops-bill arithmetic (SEO Phase 1 #4)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "self-hosted-runners-cost", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/self-hosted-runners-cost/page.tsx");
+  assert.match(page, /December 16, 2025/);
+  assert.match(page, /postponed that charge before it took effect/);
+  assert.match(page, /not in force as of November 28, 2026/);
+  assert.match(page, /\$0\.10 per hour per cluster/);
+  assert.match(page, /\$73 a month/);
+  assert.match(page, /worked example, not a quote/);
+  assert.match(page, /utm_campaign=self-hosted-cost/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite block (SEO Phase 1 #6)", () => {
+  const page = read("app/(english)/runner-pricing-compared/page.tsx");
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 28, 2026/);
+  assert.match(page, /Cite this table/);
+  assert.match(page, /Runner pricing compared \u2014 SolveLang, rates read November 28, 2026/);
+  assert.match(page, /utm_campaign=pricing-compared/);
+  assert.doesNotMatch(page, /November 26, 2026/);
 });
