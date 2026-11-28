@@ -5,9 +5,13 @@ import { ApiAccessError } from "../src/service.js";
 import {
   PLATFORM_AUDIT_AWAITING_CONFIGURATION,
   PLATFORM_AUDIT_AWAITING_MESSAGE,
+  PLATFORM_AUDIT_LIVE_PLATFORMS,
+  PLATFORM_AUDIT_READ_COMPLETE,
+  PLATFORM_AUDIT_READ_PARTIAL,
   PLATFORM_CONNECTION_PLATFORMS,
   cleanPlatformConnectionInput,
   createPlatformConnectionsService,
+  latestAuditState,
   platformConnectionView,
   tokenFingerprint,
 } from "../src/platform-connections.js";
@@ -19,14 +23,25 @@ const KEY_ARN = "arn:aws:kms:us-east-2:817198673108:key/1234abcd-12ab-34cd-56ef-
 
 function fakeStore() {
   const records = new Map();
+  const runs = new Map();
   return {
     records,
+    runs,
     async addConnection(accountId, record) {
       records.set(`${accountId}#${record.connectionId}`, { accountId, ...record });
       return record;
     },
     async listConnections(accountId) {
       return [...records.values()].filter((record) => record.accountId === accountId);
+    },
+    async putAuditRun(accountId, run) {
+      runs.set(`${accountId}#${run.runId}`, { accountId, ...run });
+      return run;
+    },
+    async listAuditRuns(accountId) {
+      return [...runs.values()]
+        .filter((run) => run.accountId === accountId)
+        .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
     },
   };
 }
@@ -219,4 +234,203 @@ test("the token protector seals under the platform purpose bound to the account"
   await assert.rejects(protector.encrypt("not-an-account", "glpat-test-token-123456"));
   assert.throws(() => createPlatformTokenProtector(kms, "not-an-arn"));
   assert.throws(() => createPlatformTokenProtector(null, KEY_ARN));
+});
+
+// --- Live audit legs -------------------------------------------------
+
+function reversibleProtector() {
+  const calls = [];
+  return {
+    calls,
+    async encrypt(accountId, token) {
+      calls.push(["encrypt", accountId, token]);
+      return `sealed:${Buffer.from(token, "utf8").toString("base64")}`;
+    },
+    async decrypt(accountId, ciphertext) {
+      calls.push(["decrypt", accountId, ciphertext]);
+      return Buffer.from(ciphertext.replace(/^sealed:/, ""), "base64").toString("utf8");
+    },
+  };
+}
+
+function stubManifest(repository) {
+  return {
+    repoFullName: repository,
+    defaultBranch: "main",
+    commitSha: "abc123",
+    files: [],
+    skipped: [],
+    totals: { files: 2, bytes: 27, skipped: 0 },
+  };
+}
+
+function liveServiceWith(overrides = {}) {
+  let runCounter = 0;
+  return serviceWith({
+    protector: reversibleProtector(),
+    createRunId: () => `run-${(runCounter += 1)}`,
+    ...overrides,
+  });
+}
+
+test("the live platform set names only the platform proven end-to-end", () => {
+  assert.deepEqual(PLATFORM_AUDIT_LIVE_PLATFORMS, ["forge"]);
+});
+
+test("audit runs the live leg for a forge connection with a token and stores run records", async () => {
+  const store = fakeStore();
+  const protector = reversibleProtector();
+  const readCalls = [];
+  const service = liveServiceWith({
+    store,
+    protector,
+    readers: {
+      forge: async (repository) => {
+        readCalls.push(repository);
+        return stubManifest(repository);
+      },
+    },
+  });
+  await service.register(ACCOUNT, {
+    platform: "forge",
+    baseUrl: "https://git.example.com",
+    repositories: ["acme/alpha", "acme/beta"],
+    token: "forge-token-value-123",
+  });
+  const result = await service.audit(ACCOUNT, "conn-1");
+  assert.equal(result.auditState, PLATFORM_AUDIT_READ_COMPLETE);
+  assert.deepEqual(readCalls, ["acme/alpha", "acme/beta"]);
+  assert.equal(result.runs.length, 2);
+  assert.deepEqual(result.runs[0], {
+    repository: "acme/alpha",
+    runId: "run-1",
+    status: "read_complete",
+    defaultBranch: "main",
+    commitSha: "abc123",
+    totals: { files: 2, bytes: 27, skipped: 0 },
+  });
+  assert.equal(store.runs.size, 2);
+  const stored = [...store.runs.values()].find((run) => run.repository === "acme/beta");
+  assert.equal(stored.status, "read_complete");
+  assert.equal(stored.connectionId, "conn-1");
+  assert.deepEqual(stored.manifest, { defaultBranch: "main", commitSha: "abc123", totals: { files: 2, bytes: 27, skipped: 0 } });
+  assert.equal(protector.calls.filter(([kind]) => kind === "decrypt").length, 1);
+  const { connections } = await service.list(ACCOUNT);
+  assert.equal(connections[0].auditState, PLATFORM_AUDIT_READ_COMPLETE);
+});
+
+test("audit reports read_partial when one repository fails and stores the failure as failed", async () => {
+  const store = fakeStore();
+  const service = liveServiceWith({
+    store,
+    readers: {
+      forge: async (repository) => {
+        if (repository === "acme/beta") throw new Error("platform refused");
+        return stubManifest(repository);
+      },
+    },
+  });
+  await service.register(ACCOUNT, {
+    platform: "forge",
+    baseUrl: "https://git.example.com",
+    repositories: ["acme/alpha", "acme/beta"],
+    token: "forge-token-value-123",
+  });
+  const result = await service.audit(ACCOUNT, "conn-1");
+  assert.equal(result.auditState, PLATFORM_AUDIT_READ_PARTIAL);
+  assert.deepEqual(result.runs.map((run) => run.status), ["read_complete", "read_failed"]);
+  const stored = [...store.runs.values()];
+  assert.equal(stored.filter((run) => run.status === "read_failed").length, 1);
+  const { connections } = await service.list(ACCOUNT);
+  assert.equal(connections[0].auditState, PLATFORM_AUDIT_READ_PARTIAL);
+});
+
+test("audit refuses with 502 when every repository read fails, and the runs stay failed", async () => {
+  const store = fakeStore();
+  const service = liveServiceWith({
+    store,
+    readers: { forge: async () => { throw new Error("platform refused"); } },
+  });
+  await service.register(ACCOUNT, {
+    platform: "forge",
+    baseUrl: "https://git.example.com",
+    repositories: ["acme/alpha"],
+    token: "forge-token-value-123",
+  });
+  await assert.rejects(
+    service.audit(ACCOUNT, "conn-1"),
+    (error) => error instanceof ApiAccessError && error.statusCode === 502 && error.code === "platform_repo_read_failed",
+  );
+  assert.deepEqual([...store.runs.values()].map((run) => run.status), ["read_failed"]);
+  const { connections } = await service.list(ACCOUNT);
+  assert.equal(connections[0].auditState, "read_failed");
+});
+
+test("audit keeps the awaiting answer for a platform that is not live-proven, even with a token", async () => {
+  const store = fakeStore();
+  let readerCalled = false;
+  const service = liveServiceWith({
+    store,
+    readers: {
+      gitlab: async () => {
+        readerCalled = true;
+        return stubManifest("group/project");
+      },
+    },
+  });
+  await service.register(ACCOUNT, {
+    platform: "gitlab",
+    baseUrl: "https://gitlab.example.com",
+    repositories: ["group/project"],
+    token: "glpat-test-token-123456",
+  });
+  const result = await service.audit(ACCOUNT, "conn-1");
+  assert.equal(result.auditState, PLATFORM_AUDIT_AWAITING_CONFIGURATION);
+  assert.equal(result.message, PLATFORM_AUDIT_AWAITING_MESSAGE);
+  assert.equal(readerCalled, false);
+  assert.equal(store.runs.size, 0);
+});
+
+test("audit keeps the awaiting answer for a live platform connection that has no token", async () => {
+  const store = fakeStore();
+  let readerCalled = false;
+  const service = liveServiceWith({
+    store,
+    readers: {
+      forge: async () => {
+        readerCalled = true;
+        return stubManifest("acme/alpha");
+      },
+    },
+  });
+  await service.register(ACCOUNT, {
+    platform: "forge",
+    baseUrl: "https://git.example.com",
+    repositories: ["acme/alpha"],
+  });
+  const result = await service.audit(ACCOUNT, "conn-1");
+  assert.equal(result.auditState, PLATFORM_AUDIT_AWAITING_CONFIGURATION);
+  assert.equal(result.message, PLATFORM_AUDIT_AWAITING_MESSAGE);
+  assert.equal(readerCalled, false);
+  assert.equal(store.runs.size, 0);
+});
+
+test("latestAuditState derives state from the latest run per repository", () => {
+  const run = (repository, status, createdAt) => ({ connectionId: "c1", repository, status, createdAt });
+  assert.equal(latestAuditState([], "c1"), PLATFORM_AUDIT_AWAITING_CONFIGURATION);
+  assert.equal(latestAuditState([run("a/x", "read_complete", "2026-11-28T00:00:00.000Z")], "c1"), "read_complete");
+  assert.equal(latestAuditState([
+    run("a/x", "read_complete", "2026-11-28T00:00:00.000Z"),
+    run("a/y", "read_failed", "2026-11-28T00:00:00.000Z"),
+  ], "c1"), "read_partial");
+  assert.equal(latestAuditState([run("a/x", "read_failed", "2026-11-28T00:00:00.000Z")], "c1"), "read_failed");
+  // A newer complete run supersedes an older failure for the same repository.
+  assert.equal(latestAuditState([
+    run("a/x", "read_failed", "2026-11-28T00:00:00.000Z"),
+    run("a/x", "read_complete", "2026-11-28T01:00:00.000Z"),
+  ], "c1"), "read_complete");
+  // Runs of another connection never leak into this one's state.
+  assert.equal(latestAuditState([
+    { connectionId: "other", repository: "a/x", status: "read_complete", createdAt: "2026-11-28T00:00:00.000Z" },
+  ], "c1"), PLATFORM_AUDIT_AWAITING_CONFIGURATION);
 });
