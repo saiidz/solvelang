@@ -98,5 +98,5 @@ test("premium packs match the service catalog: flat $0.50/min, owner-priced", ()
 test("runner-minutes elements-checkout request carries the first-touch attribution (SEO P0)", () => {
   const checkout = readFileSync("app/account/runner-minutes-checkout/EmbeddedRunnerMinutesCheckout.tsx", "utf8");
   assert.match(checkout, /import \{ firstTouchWire, readFirstTouch \} from "@\/app\/attribution\/first-touch";/);
-  assert.match(checkout, /\.\.\.\(firstTouch \? \{ attribution: firstTouchWire\(firstTouch\) \} : \{\}\)/);
+  assert.match(checkout, /\{ \.\.\.baseBody, attribution: firstTouchWire\(firstTouch\) \}/);
 });

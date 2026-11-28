@@ -210,23 +210,26 @@ export function EmbeddedRunnerMinutesCheckout() {
       // entered; with no code the request body is exactly today's.
       const trimmedCode = verificationCode.trim();
       const firstTouch = readFirstTouch();
+      // The base body keeps its exact historic shape; the persisted
+      // first-touch attribution is merged in only when this visit
+      // carries one, so the runners service can copy it into the
+      // Stripe session metadata and the sale keeps its source
+      // campaign (SEO -> Sales map, section 3, item 2). With no
+      // first touch the body is exactly today's.
+      const baseBody = trimmedCode
+        ? { pack: pack.key, requestId, verificationCode: trimmedCode }
+        : { pack: pack.key, requestId };
       const result = await customerApi<CheckoutResponse>(
         RUNNERS_API_BASE,
         "/customer/runner-minutes/elements-checkout",
         {
           method: "POST",
           csrfToken: account.csrfToken,
-          // The persisted first-touch attribution rides along when
-          // this visit carries one, so the runners service can copy
-          // it into the Stripe session metadata and the sale keeps
-          // its source campaign (SEO -> Sales map, section 3, item
-          // 2). With no first touch the body is exactly today's.
-          body: JSON.stringify({
-            pack: pack.key,
-            requestId,
-            ...(trimmedCode ? { verificationCode: trimmedCode } : {}),
-            ...(firstTouch ? { attribution: firstTouchWire(firstTouch) } : {}),
-          }),
+          body: JSON.stringify(
+            firstTouch
+              ? { ...baseBody, attribution: firstTouchWire(firstTouch) }
+              : baseBody,
+          ),
         },
       );
       // A verification purchase never touches Stripe: the service has
