@@ -128,20 +128,20 @@ export default function LandingPage() {
             <p className="mt-6 max-w-2xl leading-8 text-body" data-reveal style={{ "--i": 3 } as React.CSSProperties}>Standard minutes: 5,000 for $20 · 25,000 for $100 · 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2×, always shown as their own line.</p>
             <div className="mt-10 max-w-3xl overflow-x-auto" data-reveal style={{ "--i": 5 } as React.CSSProperties}>
               <table className="w-full border-collapse text-left text-sm leading-6">
-                <caption className="pb-3 text-left font-semibold text-[#102036]">GitHub-hosted vs SolveLang Standard — standard 2-core Linux</caption>
+                <caption className="pb-3 text-left font-semibold text-ink">GitHub-hosted vs SolveLang Standard — standard 2-core Linux</caption>
                 <thead>
-                  <tr className="border-b border-[#c9d4da] text-[#102036]">
+                  <tr className="border-b border-line-strong text-ink">
                     <th scope="col" className="py-2 pr-4 font-semibold"><span className="sr-only">Measure</span></th>
                     <th scope="col" className="py-2 pr-4 font-semibold">GitHub-hosted (2-core Linux)</th>
                     <th scope="col" className="py-2 font-semibold">SolveLang Standard</th>
                   </tr>
                 </thead>
                 <tbody className="text-body">
-                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Rate</th><td className="py-2 pr-4">$0.006/min</td><td className="py-2">$0.004/min</td></tr>
-                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Billing unit</th><td className="py-2 pr-4">Whole minute, rounded up per job</td><td className="py-2">Per second, 10-second minimum</td></tr>
-                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">5,000 minutes</th><td className="py-2 pr-4">$30 at list rate</td><td className="py-2">$20 (pack)</td></tr>
-                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Machine</th><td className="py-2 pr-4">Shared pool</td><td className="py-2">Fresh machine per job, destroyed after</td></tr>
-                  <tr><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Start</th><td className="py-2 pr-4">—</td><td className="py-2">300 free minutes, no card, 30 days</td></tr>
+                  <tr className="border-b border-line"><th scope="row" className="py-2 pr-4 font-semibold text-ink">Rate</th><td className="py-2 pr-4">$0.006/min</td><td className="py-2">$0.004/min</td></tr>
+                  <tr className="border-b border-line"><th scope="row" className="py-2 pr-4 font-semibold text-ink">Billing unit</th><td className="py-2 pr-4">Whole minute, rounded up per job</td><td className="py-2">Per second, 10-second minimum</td></tr>
+                  <tr className="border-b border-line"><th scope="row" className="py-2 pr-4 font-semibold text-ink">5,000 minutes</th><td className="py-2 pr-4">$30 at list rate</td><td className="py-2">$20 (pack)</td></tr>
+                  <tr className="border-b border-line"><th scope="row" className="py-2 pr-4 font-semibold text-ink">Machine</th><td className="py-2 pr-4">Shared pool</td><td className="py-2">Fresh machine per job, destroyed after</td></tr>
+                  <tr><th scope="row" className="py-2 pr-4 font-semibold text-ink">Start</th><td className="py-2 pr-4">—</td><td className="py-2">300 free minutes, no card, 30 days</td></tr>
                 </tbody>
               </table>
               <p className="mt-3 text-sm leading-6 text-body">GitHub rate from GitHub’s rate card, January 2026.</p>
