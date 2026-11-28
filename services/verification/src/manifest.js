@@ -31,6 +31,11 @@ export function buildManifest(publicBase) {
       metadata: "read",
       pull_requests: "write",
     },
-    default_events: ["pull_request"],
+    // issue_comment powers the `/solvelang verify` re-review
+    // command (src/trigger.js). NOTE: the manifest only shapes apps
+    // created from it — the live Slice 1 app subscribes to
+    // pull_request only, and enabling issue_comment on it is an
+    // app-settings step for the owner (README, "Slice 2").
+    default_events: ["pull_request", "issue_comment"],
   };
 }
