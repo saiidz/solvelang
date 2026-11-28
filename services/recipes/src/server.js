@@ -23,8 +23,12 @@
 
 import { createServer } from "node:http";
 
+import { readFileSync } from "node:fs";
+
 import { createRecipesAuditClient } from "./audit.js";
 import { enabledRecipes, parseRecipesConfig } from "./config.js";
+import { createRecipesGitHubClient, splitRepo } from "./github.js";
+import { createLicenseHeadersExecutor } from "./license-headers.js";
 import { defaultRegistry } from "./registry.js";
 import { createRecipesRunner } from "./runner.js";
 import { createScheduleRegistry, createScheduler } from "./scheduler.js";
@@ -36,6 +40,16 @@ const config = {
     "https://2l346svz17.execute-api.us-east-2.amazonaws.com").replace(/\/$/, ""),
   mgovAdminToken: process.env.RECIPES_MGOV_ADMIN_TOKEN || "",
   tickMs: Number(process.env.RECIPES_TICK_MS || 60_000),
+  // The token every GitHub read/write of this service runs under.
+  // In production this must be a SolveLang Process Solution App
+  // installation token (the license-headers identity class); the
+  // service never mints one itself and never logs the value. Supply
+  // RECIPES_GITHUB_TOKEN or RECIPES_GITHUB_TOKEN_FILE.
+  githubToken:
+    process.env.RECIPES_GITHUB_TOKEN ||
+    (process.env.RECIPES_GITHUB_TOKEN_FILE
+      ? readFileSync(process.env.RECIPES_GITHUB_TOKEN_FILE, "utf8").trim()
+      : ""),
 };
 
 export function createRecipesService(overrides = {}) {
@@ -48,20 +62,50 @@ export function createRecipesService(overrides = {}) {
       adminToken: config.mgovAdminToken,
       log: (event, detail) => console.error(event, detail),
     });
+  const githubSource =
+    overrides.githubSource ??
+    (config.githubToken
+      ? createRecipesGitHubClient({ token: config.githubToken })
+      : null);
+  const licenseHeadersExecutor = githubSource
+    ? createLicenseHeadersExecutor({ source: githubSource })
+    : null;
   const runner = createRecipesRunner({
     registry,
-    readConfigTextAtRef: overrides.readConfigTextAtRef ?? (async () => null),
+    readConfigTextAtRef:
+      overrides.readConfigTextAtRef ??
+      (async ({ repo, path, ref }) => {
+        if (!githubSource) return null;
+        const { owner, name } = splitRepo(repo);
+        return githubSource.getFileTextAtRef(owner, name, path, ref);
+      }),
     executeRecipe:
       overrides.executeRecipe ??
-      (async ({ definition }) => ({
-        conclusion: "success",
-        findings: [
-          {
-            label: "unverified",
-            text: `Stage 0: the executor for ${definition.id} is not built yet. This run proves the packaging machinery only; no recipe work is claimed.`,
-          },
-        ],
-      })),
+      (async (args) => {
+        if (args.definition.id === "license-headers") {
+          if (!licenseHeadersExecutor) {
+            return {
+              conclusion: "failure",
+              findings: [
+                {
+                  label: "unverified",
+                  text: "license-headers: no GitHub token configured for this service (RECIPES_GITHUB_TOKEN / RECIPES_GITHUB_TOKEN_FILE), so the executor could not run. In production the token is a SolveLang Process Solution App installation token.",
+                },
+              ],
+            };
+          }
+          return licenseHeadersExecutor(args);
+        }
+        return {
+          conclusion: "success",
+          findings: [
+            {
+              label: "unverified",
+              text: `Stage 0: the executor for ${args.definition.id} is not built yet. This run proves the packaging machinery only; no recipe work is claimed.`,
+            },
+          ],
+        };
+      }),
     postAudit,
     log: (event, detail) => console.error(event, detail),
   });

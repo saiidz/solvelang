@@ -2,8 +2,9 @@
 
 The packaging layer for the SolveLang recipes program: one catalog,
 one per-repo config, one scheduler, graded receipts for every run.
-Stage 0 is **machinery only** — no recipe executor is built, and no
-recipe is proven or claimed to work.
+Stage 0 shipped the machinery only. Stage 1 adds the first real
+executor (license-headers, see below); a recipe is proven or
+claimed to work only when its registry flag flips on proof.
 
 ## Pieces
 
@@ -36,6 +37,19 @@ recipe is proven or claimed to work.
 - `src/audit.js` — MGOV audit client (`POST /recipes/audit` in
   saiidz/solvelang-merge-governance), fail-closed like the
   verification audit client.
+- `src/license-headers.js` — the Stage 1 license-headers executor
+  (deterministic, no model calls): check mode grades every scanned
+  source file verified / failed / unverified against the header
+  template in the repo config's options; fix mode opens ONE fix PR
+  with header-only changes under the injected token's actual
+  identity (its real author login is stated in the receipt finding).
+  Header rule: the exact configured template at the file head,
+  allowing only a UTF-8 BOM and/or one shebang line before it.
+- `src/github.js` — the small GitHub REST surface the executor
+  needs (tree listing, file bytes at a ref, one Git-Data fix PR),
+  token injected by the wiring; production tokens are SolveLang
+  Process Solution App installation tokens supplied via
+  RECIPES_GITHUB_TOKEN / RECIPES_GITHUB_TOKEN_FILE.
 - `src/server.js` — HTTP wiring: `GET /health`, admin-gated
   `POST /dispatch/manual`, `POST /dispatch/pull-request`,
   `POST /register`, `POST /tick`, plus the internal tick timer
