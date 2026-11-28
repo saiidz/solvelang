@@ -122,9 +122,30 @@ export default function LandingPage() {
         <section id="runner-minutes" className="light-island scroll-mt-24 bg-[#f5f6f4] py-24 sm:py-32" aria-labelledby="runner-minutes-title">
           <div className="mx-auto max-w-[1440px] px-5 sm:px-8 lg:px-10">
             <SectionEyebrow revealIndex={0}>06 / RUNNER MINUTES</SectionEyebrow>
-            <h2 id="runner-minutes-title" className="mt-5 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>Your GitHub Actions, on fresh machines, metered per second.</h2>
+            <h2 id="runner-minutes-title" className="mt-5 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.06em] sm:text-7xl" data-reveal style={{ "--i": 1 } as React.CSSProperties}>How much do GitHub Actions minutes cost — and what does SolveLang charge?</h2>
+            <p className="mt-7 max-w-2xl text-xl leading-8 text-body" data-reveal style={{ "--i": 2 } as React.CSSProperties}>GitHub charges $0.006 per minute for a standard 2-core Linux runner and rounds every job up to a whole minute (GitHub’s rate card, January 2026). SolveLang Standard costs $0.004 per minute and meters per second with a 10-second minimum — a 12-second job costs 12 seconds, not a minute.</p>
             <p className="mt-7 max-w-2xl text-xl leading-8 text-body" data-reveal style={{ "--i": 2 } as React.CSSProperties}>Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once — minutes never auto-renew — connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account. Start with 300 free Standard minutes: they are added when you connect GitHub and claim them in your account — no card required — and stay valid for 30 days.</p>
             <p className="mt-6 max-w-2xl leading-8 text-body" data-reveal style={{ "--i": 3 } as React.CSSProperties}>Standard minutes: 5,000 for $20 · 25,000 for $100 · 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2×, always shown as their own line.</p>
+            <div className="mt-10 max-w-3xl overflow-x-auto" data-reveal style={{ "--i": 5 } as React.CSSProperties}>
+              <table className="w-full border-collapse text-left text-sm leading-6">
+                <caption className="pb-3 text-left font-semibold text-[#102036]">GitHub-hosted vs SolveLang Standard — standard 2-core Linux</caption>
+                <thead>
+                  <tr className="border-b border-[#c9d4da] text-[#102036]">
+                    <th scope="col" className="py-2 pr-4 font-semibold"><span className="sr-only">Measure</span></th>
+                    <th scope="col" className="py-2 pr-4 font-semibold">GitHub-hosted (2-core Linux)</th>
+                    <th scope="col" className="py-2 font-semibold">SolveLang Standard</th>
+                  </tr>
+                </thead>
+                <tbody className="text-body">
+                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Rate</th><td className="py-2 pr-4">$0.006/min</td><td className="py-2">$0.004/min</td></tr>
+                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Billing unit</th><td className="py-2 pr-4">Whole minute, rounded up per job</td><td className="py-2">Per second, 10-second minimum</td></tr>
+                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">5,000 minutes</th><td className="py-2 pr-4">$30 at list rate</td><td className="py-2">$20 (pack)</td></tr>
+                  <tr className="border-b border-[#dde4e8]"><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Machine</th><td className="py-2 pr-4">Shared pool</td><td className="py-2">Fresh machine per job, destroyed after</td></tr>
+                  <tr><th scope="row" className="py-2 pr-4 font-semibold text-[#102036]">Start</th><td className="py-2 pr-4">—</td><td className="py-2">300 free minutes, no card, 30 days</td></tr>
+                </tbody>
+              </table>
+              <p className="mt-3 text-sm leading-6 text-body">GitHub rate from GitHub’s rate card, January 2026.</p>
+            </div>
             <p className="mt-6 max-w-2xl leading-8 text-body" data-reveal style={{ "--i": 4 } as React.CSSProperties}>Every minute carries Job Protection — billed only for jobs a SolveLang machine actually ran, exactly once.</p>
             <div className="flex flex-wrap gap-x-10" data-reveal style={{ "--i": 5 } as React.CSSProperties}><Link href="/services/" className={styles.darkInlineLink}>How it works <span aria-hidden="true">↗</span></Link><Link href="/solutions/job-protection/" className={styles.darkInlineLink}>The guarantees <span aria-hidden="true">↗</span></Link></div>
           </div>
