@@ -1846,11 +1846,12 @@ test("homepage chooser carries the free tools and verification cards", () => {
   assert.ok(chooser.includes("CI Bill Check"), "sixth card names the CI bill check");
   assert.ok(chooser.includes("Change Impact Receipts"), "sixth card names the receipts");
   /* seventh card: Verification with the honest status wording only */
-  assert.ok(chooser.includes("<span>07 / VERIFICATION — PROVEN ON OUR OWN REPOS</span>"), "seventh card title line");
+  assert.ok(chooser.includes("<span>07 / VERIFICATION — LIVE, FREE FOR PUBLIC REPOS</span>"), "seventh card title line");
   assert.ok(chooser.includes("<h3>SolveLang Verification</h3>"), "seventh card heading");
-  assert.ok(chooser.includes("Proven end-to-end on our own repositories: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Opening to outside repositories next."), "seventh card honest status wording");
+  assert.ok(chooser.includes("Proven end-to-end on our own repositories: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Now live for any repository — free for public repositories, no card, report-only by default."), "seventh card honest status wording");
   assert.ok(chooser.includes("every run written to an audit log"), "seventh card audit line");
-  assert.ok(!chooser.includes('href="/install"'), "no card links the install path — installs are not publicly opened");
+  assert.ok(chooser.includes('href="/verification/proof/"'), "seventh card links the public proof");
+  assert.ok(!chooser.includes('href="/install"'), "no card links a site-relative install path");
 });
 
 test("services page publishes the free tools, verification, team context and digest entries", () => {
@@ -1861,13 +1862,17 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes('href="/security-scan/"'), "free tools link the security scan");
   assert.ok(page.includes('href="/ci-bill-check/"'), "free tools link the CI bill check");
   assert.ok(page.includes('href="/change-impact-receipt/"'), "free tools link the receipts page");
-  /* verification section: honest wording, no price, no self-serve claim, no install link */
+  /* verification section: live wording, no price, install + proof + backtest links */
   assert.ok(page.includes('id="verification-heading"'), "verification section exists");
-  assert.ok(page.includes("Proven — opening next"), "verification status chip");
-  assert.ok(page.includes("proven end-to-end on our own repositories — a deliberately defective pull request was caught in enforce mode, clean pull requests passed, and the graded receipts posted on the PR. Opening to outside repositories next."), "verification honest status wording");
+  assert.ok(page.includes("Live — free for public repositories"), "verification status chip");
+  assert.ok(page.includes("live. Install the app on any repository today — free for public repositories, no card required, report-only by default."), "verification honest status wording");
+  assert.ok(page.includes("13 real pull requests graded with the unverified share published"), "verification status names the public proof");
+  assert.ok(page.includes("There is no public price yet."), "verification status keeps the no-price fact");
   const vsection = page.slice(page.indexOf('id="verification-heading"'), page.indexOf('id="status-matrix-heading"'));
   assert.ok(!vsection.includes("$"), "verification section carries no price");
-  assert.ok(!vsection.includes('href="/install"'), "verification section does not link the install path");
+  assert.ok(vsection.includes('href="https://verify.solve-lang.com/install"'), "verification section links the install URL");
+  assert.ok(vsection.includes('href="/verification/proof/"'), "verification section links the proof page");
+  assert.ok(vsection.includes('href="/verification/backtest/"'), "verification section links the backtest page");
   assert.ok(vsection.includes('href="/change-impact-receipt/"'), "verification section links the receipts explainer");
   /* status table rows, all verified November 26, 2026 */
   assert.ok(page.includes("Free tools (Repo Security Scan, CI Bill Check, Change Impact Receipts)"), "table lists the free tools");
@@ -1877,6 +1882,7 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes("published Mondays 06:00 EST"), "digest schedule");
   assert.ok(page.includes("SolveLang Verification</td>"), "table lists Verification");
   assert.ok(page.includes("November 26, 2026"), "new rows carry the November 26, 2026 verified date");
+  assert.ok(page.includes("November 28, 2026"), "the verification row carries the November 28, 2026 verified date");
 });
 
 test("verification proof dataset: the published numbers are the recorded numbers", () => {
