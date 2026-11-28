@@ -109,3 +109,56 @@ test("renders through the CLI from stdin", () => {
   assert.match(result.stdout, /# Solve Context agent-eval summary/);
   assert.match(result.stdout, new RegExp(report.reportId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
+
+function syntheticRecord(variant) {
+  return {
+    schema: "solvelang.context.agent-eval-record.v0",
+    suiteId: "synthetic-renderer-contract",
+    pairId: "renderer-synthetic-pair-1",
+    fixture: {
+      id: "renderer-synthetic-fixture",
+      category: "github-issue-triage",
+      revisionSha256,
+      handoffDirection: null,
+    },
+    agent: "codex",
+    variant,
+    provider: { name: "synthetic-provider", model: "synthetic-model" },
+    recordClass: "synthetic-test",
+    outcome: { taskSuccess: true, basis: "synthetic", evidenceRequired: 2, evidenceRetained: 2 },
+    usage: {
+      inputTokens: variant === "baseline" ? 100 : 80,
+      outputTokens: 10,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      basis: "synthetic",
+      tokenizer: "synthetic-fixture",
+    },
+    latency: { wallMs: variant === "baseline" ? 20 : 15, basis: "synthetic" },
+    context: variant === "baseline"
+      ? { packId: null, selectedBytes: null, cacheHotBytesChanged: null, cacheHotBytesChangedBasis: "unavailable", selectionPrecision: null, selectionRecall: null, selectionMetricsBasis: "unavailable" }
+      : { packId, selectedBytes: 512, cacheHotBytesChanged: null, cacheHotBytesChangedBasis: "unavailable", selectionPrecision: 1, selectionRecall: 1, selectionMetricsBasis: "synthetic" },
+  };
+}
+
+test("renders a Task success section with per-agent and all-agents pass counts for measured pairs", () => {
+  const report = buildContextAgentEvalReport([measuredRecord("baseline"), measuredRecord("solve_context")]);
+  const markdown = renderAgentEvalSummary(report);
+  const sectionStart = markdown.indexOf("## Task success");
+  assert.ok(sectionStart > markdown.indexOf("## Measured aggregates"), "Task success follows Measured aggregates");
+  assert.ok(sectionStart < markdown.indexOf("## Coverage"), "Task success precedes Coverage");
+  const section = markdown.slice(sectionStart, markdown.indexOf("## Coverage"));
+  assert.match(section, /\| Agent \| Baseline pass \| Solve Context pass \|/);
+  assert.match(section, /\| claude \| 1 of 1 \| 1 of 1 \|/);
+  assert.match(section, /\| all agents \| 1 of 1 \| 1 of 1 \|/);
+});
+
+test("Task success section says plainly when there are no measured pairs instead of printing zeros", () => {
+  const report = buildContextAgentEvalReport([syntheticRecord("baseline"), syntheticRecord("solve_context")]);
+  assert.equal(report.aggregate.measuredPairCount, 0);
+  const markdown = renderAgentEvalSummary(report);
+  const section = markdown.slice(markdown.indexOf("## Task success"), markdown.indexOf("## Coverage"));
+  assert.match(section, /No measured pairs in this report/);
+  assert.doesNotMatch(section, /0 of 0/);
+  assert.doesNotMatch(section, /\| all agents \|/);
+});
