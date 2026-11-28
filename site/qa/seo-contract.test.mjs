@@ -281,3 +281,16 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /never a checkout/);
   assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
+
+test("namespace-pricing page explains the unit minute from Namespace own pricing (SEO Phase 1 #7b)", () => {
+  const routes = read("app/i18n/routes.ts");
+  assert.match(routes, /segment: "namespace-pricing", classification: "english-only-technical", sitemap: true/);
+  const page = read("app/(english)/namespace-pricing/page.tsx");
+  assert.match(page, /read November 28, 2026/);
+  assert.match(page, /1 vCPU with 2 GB of RAM for one minute/);
+  assert.match(page, /\$0\.002\/min prepaid, \$0\.003\/min overage/);
+  assert.match(page, /\$0\.004\/min prepaid, \$0\.006\/min overage/);
+  assert.match(page, /Team is \$100\/mo including 100,000 unit minutes/);
+  assert.match(page, /utm_campaign=namespace-pricing/);
+  assert.doesNotMatch(page, /44%|25% faster/);
+});
