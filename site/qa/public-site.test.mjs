@@ -8,6 +8,7 @@ const { statusPage } = require("../.studio-test-dist/public-site/(english)/statu
 const { observedState, overallState, isCurrentIncident, MAX_HEALTH_AGE_MS } = require("../.studio-test-dist/public-site/(english)/status/status-health.js");
 const { parseStatusObservations, fetchStatusObservations } = require("../.studio-test-dist/public-site/(english)/status/status-live.js");
 const { capabilityGroups, billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
+const { LIVE_RUNS, RECEIPT_AUDITS, liveTotals, receiptTotals, combinedTotals } = require("../.studio-test-dist/public-site/verification/demo-data.js");
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const now = Date.parse("2026-09-13T21:00:00Z");
 const healthy = { name: "Test", description: "Test fixture, not live evidence", state: "operational", checkedAt: new Date(now - 1000).toISOString(), validForMs: 60_000 };
@@ -1876,4 +1877,43 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes("published Mondays 06:00 EST"), "digest schedule");
   assert.ok(page.includes("SolveLang Verification</td>"), "table lists Verification");
   assert.ok(page.includes("November 26, 2026"), "new rows carry the November 26, 2026 verified date");
+});
+
+test("verification proof dataset: the published numbers are the recorded numbers", () => {
+  const live = liveTotals();
+  assert.equal(LIVE_RUNS.length, 8);
+  assert.equal(live.verified, 44);
+  assert.equal(live.failed, 11);
+  assert.equal(live.unverified, 9);
+  assert.equal(live.gradedItems, 64);
+  assert.equal(live.defectiveCaught, 3);
+  assert.equal(live.defectiveTotal, 3);
+  assert.equal(live.cleanFalseBlocks, 0);
+  assert.equal(live.cleanTotal, 5);
+  assert.equal(live.falseVerifiedLabels, 0);
+  assert.ok(LIVE_RUNS.every((run) => run.auditWritten), "every live run wrote its audit record");
+  assert.ok(LIVE_RUNS.every((run) => Number.isSafeInteger(run.checkRunId) && run.checkRunId > 0), "every live run names its check run");
+  const receipts = receiptTotals();
+  assert.equal(RECEIPT_AUDITS.length, 5);
+  assert.equal(receipts.catches, 28);
+  assert.equal(receipts.toolFalsePositives, 5);
+  assert.equal(receipts.unverified, 14);
+  assert.equal(receipts.gradedItems, 53);
+  assert.equal(receipts.falseVerifiedLabels, 0);
+  const combined = combinedTotals();
+  assert.equal(combined.prs, 13);
+  assert.equal(combined.gradedItems, 117);
+  assert.equal(combined.unverified, 23);
+  assert.equal(combined.falseVerifiedLabels, 0);
+  assert.ok(Math.abs(combined.unverifiedShare - 23 / 117) < 1e-12, "combined unverified share is 23 of 117");
+  const routes = read("app/i18n/routes.ts");
+  for (const segment of ["verification/proof", "verification/methodology", "verification/backtest"]) {
+    assert.ok(routes.includes(`segment: "${segment}"`), `route registered: ${segment}`);
+  }
+  const proofPage = read("app/(english)/verification/proof/page.tsx");
+  assert.ok(proofPage.includes("Graded in the open, unverified share and all."), "proof page headline");
+  const methodology = read("app/verification/methodology/MethodologyApp.tsx");
+  assert.ok(methodology.includes("Missing evidence is never guessed into a verdict."), "methodology states the unverified rule");
+  assert.ok(methodology.includes("missing evidence is not evidence"), "methodology states the backtest evidence rule");
+  assert.ok(methodology.includes("are excluded"), "methodology states the proof-set exclusions");
 });
