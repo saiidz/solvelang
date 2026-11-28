@@ -235,3 +235,16 @@ test("homepage runner minutes section answers the cost question with the dated G
   assert.match(landing, /rate card, January 2026/);
   assert.doesNotMatch(landing, /44%/);
 });
+
+test("ci-bill-check page carries the question heading and the dated GitHub rate table (GEO/AEO edit 3)", () => {
+  const page = read("app/(english)/ci-bill-check/page.tsx");
+  assert.match(page, /Why is my GitHub Actions bill so high\?/);
+  assert.match(page, /Two meters set the bill: the per-minute rate and the number of minutes rounding creates/);
+  assert.match(page, /a 12-second job bills as 60 seconds/);
+  assert.match(page, /over the measured sample only/);
+  assert.match(page, /\$0\.006\/min/);
+  assert.match(page, /\$0\.010\/min/);
+  assert.match(page, /\$0\.062\/min/);
+  assert.match(page, /January 2026 rate card; read November 28, 2026/);
+  assert.doesNotMatch(page, /\$0\.008|\$0\.016/);
+});
