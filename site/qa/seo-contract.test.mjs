@@ -279,5 +279,5 @@ test("process-solution page carries the FAQ block with approved status language 
   assert.match(page, /There is no public price and no self-serve signup yet\. Process Solution is live and onboarding a small number of design-partner teams\./);
   assert.match(page, /Does my code leave my infrastructure\?/);
   assert.match(page, /never a checkout/);
-  assert.match(page, /Live status: Process Solution is live\. The full governed cycle/);
+  assert.match(page, /Process Solution is live\. The full governed cycle \u2014 plan, combined tree, battery, land/);
 });
