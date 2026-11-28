@@ -20,6 +20,7 @@ import { createDynamoPublicStatusStore } from "./public-status-store.js";
 import { createDynamoRunTelemetryStore } from "./run-telemetry-store.js";
 import { createAgentTalkback } from "./agent-talkback.js";
 import { createCiBillCheck } from "./ci-bill-check.js";
+import { normalizeAttribution, parseAttributionJson, serializeAttribution } from "./attribution.js";
 import { createRepoSecurityScan } from "./repo-security-scan.js";
 import { createDynamoAgentActionsStore } from "./agent-actions-store.js";
 import { createAgentActionsService } from "./agent-actions-service.js";
@@ -105,9 +106,12 @@ function githubTotpState(account) {
 
 function createGitHubAppService({ config, store, authStore, identityResolver, pepper }) {
   return {
-    async beginAuthorize() {
+    async beginAuthorize(attribution) {
       const nonce = Buffer.from(nodeRandomBytes(24)).toString("hex");
-      await store.putOAuthState({ nonce });
+      // The first-touch triple (from the sl_first_touch cookie the
+      // site set) rides the single-use state record to the callback.
+      const serialized = serializeAttribution(normalizeAttribution(attribution));
+      await store.putOAuthState({ nonce, ...(serialized ? { attribution: serialized } : {}) });
       return { location: buildAuthorizeUrl({ clientId: config.clientId, state: nonce }) };
     },
 
@@ -128,7 +132,9 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
 
     async completeSignIn({ code, state }) {
       if (typeof code !== "string" || !code || typeof state !== "string" || !state) throw new Error("GitHub sign-in callback is incomplete.");
-      if (!(await store.consumeOAuthState(state))) throw new Error("GitHub sign-in state is invalid or expired.");
+      const consumedState = await store.consumeOAuthStateRecord(state);
+      if (!consumedState || consumedState.purpose !== undefined) throw new Error("GitHub sign-in state is invalid or expired.");
+      const attribution = parseAttributionJson(consumedState.attribution);
       const { accessToken } = await exchangeOAuthCode({ clientId: config.clientId, clientSecret: config.clientSecret, code });
       const user = await fetchGitHubUser({ token: accessToken });
       // Account resolution binds ONLY to a GitHub-verified email — the
@@ -146,7 +152,7 @@ function createGitHubAppService({ config, store, authStore, identityResolver, pe
       // TOTP. (The auth store itself throws on an invalid TOTP state.)
       if (githubTotpState(account) !== "disabled") throw new Error("GitHub sign-in is unavailable for this account.");
       if (!account) {
-        account = await authStore.ensureAccount({ accountId, email, createdAt: new Date(timestamp).toISOString() });
+        account = await authStore.ensureAccount({ accountId, email, createdAt: new Date(timestamp).toISOString(), ...(attribution ? { attribution } : {}) });
       }
       const sessionId = Buffer.from(nodeRandomBytes(12)).toString("hex");
       const secret = Buffer.from(nodeRandomBytes(32)).toString("base64url");

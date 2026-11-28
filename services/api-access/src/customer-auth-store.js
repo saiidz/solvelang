@@ -230,7 +230,7 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
       return { accountId: magic.accountId, email: magic.email, authVersion: currentAuthVersion, mfaRequired };
     },
 
-    async ensureAccount({ accountId, email, createdAt }) {
+    async ensureAccount({ accountId, email, createdAt, attribution }) {
       try {
         await documentClient.send(new PutCommand({
           TableName: tableName,
@@ -242,6 +242,14 @@ export function createDynamoCustomerAuthStore(documentClient, tableName) {
             authVersion: 1,
             createdAt,
             updatedAt: createdAt,
+            // First-touch attribution (attribution.js field mapping,
+            // inlined to keep this store dependency-free): present
+            // only when the creating flow carried a tag, and only
+            // ever written by this conditional create - an existing
+            // account's first touch is never overwritten.
+            ...(attribution?.utmSource ? { firstTouchSource: attribution.utmSource } : {}),
+            ...(attribution?.utmMedium ? { firstTouchMedium: attribution.utmMedium } : {}),
+            ...(attribution?.utmCampaign ? { firstTouchCampaign: attribution.utmCampaign } : {}),
           },
           ConditionExpression: "attribute_not_exists(authKey)",
         }));

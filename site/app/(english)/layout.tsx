@@ -7,6 +7,7 @@ import "../globals.css";
 import { LegalFooter } from "../components/LegalFooter";
 import { SiteHeader } from "../components/SiteHeader";
 import { ThemeDeviceListener } from "../components/ThemeDeviceListener";
+import { FirstTouchCapture } from "../attribution/FirstTouchCapture";
 import { ToolPagesShell } from "../components/ToolPagesShell";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <LegalFooter />
         <LanguageSuggestion countryHintEndpoint="" />
         <ThemeDeviceListener />
+        <FirstTouchCapture />
       </body>
     </html>
   );
