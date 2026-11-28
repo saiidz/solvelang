@@ -268,3 +268,16 @@ test("runner-pricing-compared page carries the dated honest rate table (GEO/AEO 
   assert.match(page, /postponed it before it took effect \u2014 it is not in force as of November 2026/);
   assert.doesNotMatch(page, /44%|25% faster/);
 });
+
+test("process-solution page carries the FAQ block with approved status language (GEO/AEO edit 5)", () => {
+  const page = read("app/(english)/process-solution/page.tsx");
+  assert.match(page, /What is merge governance\?/);
+  assert.match(page, /deciding, with evidence, what is allowed to land on your main branch/);
+  assert.match(page, /How is Process Solution different from GitHub\u2019s merge queue\?/);
+  assert.match(page, /bisects the batch, ejects only the guilty PR with its reason, and lands the rest/);
+  assert.match(page, /What does it cost\?/);
+  assert.match(page, /There is no public price and no self-serve signup yet\. Process Solution is live and onboarding a small number of design-partner teams\./);
+  assert.match(page, /Does my code leave my infrastructure\?/);
+  assert.match(page, /never a checkout/);
+  assert.match(page, /Live status: Process Solution is live\. The full governed cycle/);
+});
