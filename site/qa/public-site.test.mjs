@@ -8,6 +8,7 @@ const { statusPage } = require("../.studio-test-dist/public-site/(english)/statu
 const { observedState, overallState, isCurrentIncident, MAX_HEALTH_AGE_MS } = require("../.studio-test-dist/public-site/(english)/status/status-health.js");
 const { parseStatusObservations, fetchStatusObservations } = require("../.studio-test-dist/public-site/(english)/status/status-live.js");
 const { capabilityGroups, billingAvailability } = require("../.studio-test-dist/public-site/product-capabilities.js");
+const { LIVE_RUNS, RECEIPT_AUDITS, liveTotals, receiptTotals, combinedTotals } = require("../.studio-test-dist/public-site/verification/demo-data.js");
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const now = Date.parse("2026-09-13T21:00:00Z");
 const healthy = { name: "Test", description: "Test fixture, not live evidence", state: "operational", checkedAt: new Date(now - 1000).toISOString(), validForMs: 60_000 };
@@ -235,7 +236,7 @@ test("homepage carries the Runner Minutes section and the fifth chooser card", (
   assert.ok(sectionStart < landing.indexOf('id="quickstart"'), "runner minutes section precedes the chooser");
   const section = landing.slice(sectionStart, landing.indexOf("styles.builtBand"));
   assert.ok(section.includes("06 / RUNNER MINUTES"), "section eyebrow");
-  assert.ok(section.includes("Your GitHub Actions, on fresh machines, metered per second."), "section heading");
+  assert.ok(section.includes("How much do GitHub Actions minutes cost \u2014 and what does SolveLang charge?"), "section heading");
   assert.ok(section.includes("Runner Minutes are prepaid GitHub Actions runner minutes. Buy a pack once \u2014 minutes never auto-renew \u2014 connect GitHub a single time, and point your workflows at the SolveLang labels. Every job runs on a fresh machine created for that job alone and destroyed when the job ends. Minutes meter per second with a 10-second minimum, and your balance and its expiry are always visible in your account."), "section body");
   assert.ok(section.includes("Start with 300 free Standard minutes: they are added when you connect GitHub and claim them in your account \u2014 no card required \u2014 and stay valid for 30 days."), "trial line");
   assert.ok(section.includes("Standard minutes: 5,000 for $20 \u00b7 25,000 for $100 \u00b7 100,000 for $400. High-Power minutes for heavy jobs are a separate pool at their own prices. Faster is never free: guaranteed on-demand starts draw at 2\u00d7, always shown as their own line."), "price line");
@@ -1845,11 +1846,12 @@ test("homepage chooser carries the free tools and verification cards", () => {
   assert.ok(chooser.includes("CI Bill Check"), "sixth card names the CI bill check");
   assert.ok(chooser.includes("Change Impact Receipts"), "sixth card names the receipts");
   /* seventh card: Verification with the honest status wording only */
-  assert.ok(chooser.includes("<span>07 / VERIFICATION — PROVEN ON OUR OWN REPOS</span>"), "seventh card title line");
+  assert.ok(chooser.includes("<span>07 / VERIFICATION — LIVE, FREE FOR PUBLIC REPOS</span>"), "seventh card title line");
   assert.ok(chooser.includes("<h3>SolveLang Verification</h3>"), "seventh card heading");
-  assert.ok(chooser.includes("Proven end-to-end on our own repositories: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Opening to outside repositories next."), "seventh card honest status wording");
+  assert.ok(chooser.includes("Proven end-to-end on our own repositories: a deliberately defective pull request was caught in enforce mode, and clean pull requests passed. Now live for any repository — free for public repositories, no card, report-only by default."), "seventh card honest status wording");
   assert.ok(chooser.includes("every run written to an audit log"), "seventh card audit line");
-  assert.ok(!chooser.includes('href="/install"'), "no card links the install path — installs are not publicly opened");
+  assert.ok(chooser.includes('href="/verification/proof/"'), "seventh card links the public proof");
+  assert.ok(!chooser.includes('href="/install"'), "no card links a site-relative install path");
 });
 
 test("services page publishes the free tools, verification, team context and digest entries", () => {
@@ -1860,13 +1862,17 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes('href="/security-scan/"'), "free tools link the security scan");
   assert.ok(page.includes('href="/ci-bill-check/"'), "free tools link the CI bill check");
   assert.ok(page.includes('href="/change-impact-receipt/"'), "free tools link the receipts page");
-  /* verification section: honest wording, no price, no self-serve claim, no install link */
+  /* verification section: live wording, no price, install + proof + backtest links */
   assert.ok(page.includes('id="verification-heading"'), "verification section exists");
-  assert.ok(page.includes("Proven — opening next"), "verification status chip");
-  assert.ok(page.includes("proven end-to-end on our own repositories — a deliberately defective pull request was caught in enforce mode, clean pull requests passed, and the graded receipts posted on the PR. Opening to outside repositories next."), "verification honest status wording");
+  assert.ok(page.includes("Live — free for public repositories"), "verification status chip");
+  assert.ok(page.includes("live. Install the app on any repository today — free for public repositories, no card required, report-only by default."), "verification honest status wording");
+  assert.ok(page.includes("13 real pull requests graded with the unverified share published"), "verification status names the public proof");
+  assert.ok(page.includes("There is no public price yet."), "verification status keeps the no-price fact");
   const vsection = page.slice(page.indexOf('id="verification-heading"'), page.indexOf('id="status-matrix-heading"'));
   assert.ok(!vsection.includes("$"), "verification section carries no price");
-  assert.ok(!vsection.includes('href="/install"'), "verification section does not link the install path");
+  assert.ok(vsection.includes('href="https://verify.solve-lang.com/install"'), "verification section links the install URL");
+  assert.ok(vsection.includes('href="/verification/proof/"'), "verification section links the proof page");
+  assert.ok(vsection.includes('href="/verification/backtest/"'), "verification section links the backtest page");
   assert.ok(vsection.includes('href="/change-impact-receipt/"'), "verification section links the receipts explainer");
   /* status table rows, all verified November 26, 2026 */
   assert.ok(page.includes("Free tools (Repo Security Scan, CI Bill Check, Change Impact Receipts)"), "table lists the free tools");
@@ -1876,4 +1882,44 @@ test("services page publishes the free tools, verification, team context and dig
   assert.ok(page.includes("published Mondays 06:00 EST"), "digest schedule");
   assert.ok(page.includes("SolveLang Verification</td>"), "table lists Verification");
   assert.ok(page.includes("November 26, 2026"), "new rows carry the November 26, 2026 verified date");
+  assert.ok(page.includes("November 28, 2026"), "the verification row carries the November 28, 2026 verified date");
+});
+
+test("verification proof dataset: the published numbers are the recorded numbers", () => {
+  const live = liveTotals();
+  assert.equal(LIVE_RUNS.length, 8);
+  assert.equal(live.verified, 44);
+  assert.equal(live.failed, 11);
+  assert.equal(live.unverified, 9);
+  assert.equal(live.gradedItems, 64);
+  assert.equal(live.defectiveCaught, 3);
+  assert.equal(live.defectiveTotal, 3);
+  assert.equal(live.cleanFalseBlocks, 0);
+  assert.equal(live.cleanTotal, 5);
+  assert.equal(live.falseVerifiedLabels, 0);
+  assert.ok(LIVE_RUNS.every((run) => run.auditWritten), "every live run wrote its audit record");
+  assert.ok(LIVE_RUNS.every((run) => Number.isSafeInteger(run.checkRunId) && run.checkRunId > 0), "every live run names its check run");
+  const receipts = receiptTotals();
+  assert.equal(RECEIPT_AUDITS.length, 5);
+  assert.equal(receipts.catches, 28);
+  assert.equal(receipts.toolFalsePositives, 5);
+  assert.equal(receipts.unverified, 14);
+  assert.equal(receipts.gradedItems, 53);
+  assert.equal(receipts.falseVerifiedLabels, 0);
+  const combined = combinedTotals();
+  assert.equal(combined.prs, 13);
+  assert.equal(combined.gradedItems, 117);
+  assert.equal(combined.unverified, 23);
+  assert.equal(combined.falseVerifiedLabels, 0);
+  assert.ok(Math.abs(combined.unverifiedShare - 23 / 117) < 1e-12, "combined unverified share is 23 of 117");
+  const routes = read("app/i18n/routes.ts");
+  for (const segment of ["verification/proof", "verification/methodology", "verification/backtest"]) {
+    assert.ok(routes.includes(`segment: "${segment}"`), `route registered: ${segment}`);
+  }
+  const proofPage = read("app/(english)/verification/proof/page.tsx");
+  assert.ok(proofPage.includes("Graded in the open, unverified share and all."), "proof page headline");
+  const methodology = read("app/verification/methodology/MethodologyApp.tsx");
+  assert.ok(methodology.includes("Missing evidence is never guessed into a verdict."), "methodology states the unverified rule");
+  assert.ok(methodology.includes("missing evidence is not evidence"), "methodology states the backtest evidence rule");
+  assert.ok(methodology.includes("are excluded"), "methodology states the proof-set exclusions");
 });

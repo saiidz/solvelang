@@ -3,6 +3,9 @@ import test from "node:test";
 import {
   AUDIT_PLATFORMS,
   PLATFORM_AUDIT_AWAITING_COPY,
+  PLATFORM_AUDIT_READ_COMPLETE_COPY,
+  PLATFORM_AUDIT_READ_FAILED_COPY,
+  PLATFORM_AUDIT_READ_PARTIAL_COPY,
   PRODUCT_APP_INSTALL_URL,
   boundAuditSelection,
   buildPlatformConnectionPayload,
@@ -172,6 +175,26 @@ test("the awaiting-configuration copy is the honest status, verbatim", () => {
     "Connection saved — the first live audit for this platform is enabled when its access is configured. Nothing has been run against your repository yet.",
   );
   assert.equal(PLATFORM_AUDIT_AWAITING_COPY, platformAuditStateCopy("awaiting_configuration"));
+});
+
+test("the live audit states carry their customer copy, verbatim", () => {
+  assert.equal(
+    platformAuditStateCopy("read_complete"),
+    "Audit read complete — every repository in this connection was read and its run record stored.",
+  );
+  assert.equal(PLATFORM_AUDIT_READ_COMPLETE_COPY, platformAuditStateCopy("read_complete"));
+  assert.equal(
+    platformAuditStateCopy("read_partial"),
+    "Audit read finished — some repositories in this connection were read and stored; the rest could not be read.",
+  );
+  assert.equal(PLATFORM_AUDIT_READ_PARTIAL_COPY, platformAuditStateCopy("read_partial"));
+  assert.equal(
+    platformAuditStateCopy("read_failed"),
+    "The last audit read could not read any repository in this connection.",
+  );
+  assert.equal(PLATFORM_AUDIT_READ_FAILED_COPY, platformAuditStateCopy("read_failed"));
+  // An unknown state is never dressed up as a known one.
+  assert.equal(platformAuditStateCopy("some_future_state"), "some_future_state");
 });
 
 test("the empty-list copy applies only when every read succeeded and found nothing", () => {

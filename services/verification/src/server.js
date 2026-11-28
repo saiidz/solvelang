@@ -12,13 +12,18 @@
 //                                 them to the credentials file (0600)
 //   GET  /install                 redirect to the app's install page
 //   POST /webhooks/github         signed pull_request ingress: 202
-//                                 immediately, the run proceeds async
+//                                 immediately, the run proceeds async;
+//                                 also the `/solvelang verify` comment
+//                                 command (issue_comment events)
+//   POST /backtest                start a public-repo backtest job
+//   GET  /backtest/<id>           poll a backtest job / report
 //
 // The app itself is created by the manifest flow, so its permission
 // set is exactly the manifest's — locked minimal at creation
 // (teardown U4 / move M3). The published set:
 //   checks: write, contents: read, pull_requests: write,
-//   issues: write, metadata: read. Events: pull_request only.
+//   issues: write, metadata: read. Events: pull_request, and — for
+//   apps created from the current manifest — issue_comment.
 //   (pull_requests is write because GitHub gates an app token's PR
 //   conversation comments on it — see src/manifest.js.)
 
@@ -34,8 +39,19 @@ import {
   exchangeManifestCode,
   verifyWebhookSignature,
 } from "./app-auth.js";
-import { createGitHubClient } from "./github.js";
+import {
+  BACKTEST_DEFAULT_COUNT,
+  BACKTEST_MAX_COUNT,
+  createBacktestGrader,
+  createBacktestJobs,
+  createFileBacktestStore,
+  createPublicGithubReader,
+  createPublicTreeFetcher,
+  isValidRepoSlug,
+} from "./backtest.js";
+import { createGitHubClient, CHECK_RUN_NAME } from "./github.js";
 import { buildManifest } from "./manifest.js";
+import { parseIssueCommentTrigger } from "./trigger.js";
 import {
   createChangedFilesReader,
   createGateCliRunner,
@@ -61,6 +77,7 @@ const config = {
   credentialsPath:
     process.env.VERIFICATION_APP_CREDENTIALS || "/data/app.json",
   workRoot: process.env.VERIFICATION_WORK_ROOT || "/tmp/verification-runs",
+  backtestDir: process.env.VERIFICATION_BACKTEST_DIR || "/data/backtests",
   mgovBase: (process.env.VERIFICATION_MGOV_BASE ||
     "https://2l346svz17.execute-api.us-east-2.amazonaws.com").replace(/\/$/, ""),
   mgovAdminToken: process.env.VERIFICATION_MGOV_ADMIN_TOKEN || "",
@@ -201,6 +218,146 @@ async function startRun(payload) {
   inFlight.add(run);
 }
 
+// --- `/solvelang verify` comment trigger ---
+//
+// The comment carries no SHAs, so resolve the PR's current head/base
+// with an installation-token client, then hand startRun a payload in
+// the pull_request shape it already understands. The fresh run posts
+// a NEW check run on the head and updates the sticky receipt comment
+// in place — the new evidence supersedes the old visibly.
+async function startVerifyRun(trigger) {
+  const credentials = await loadCredentials();
+  if (!credentials) return;
+  const appAuth = createAppAuth({
+    appId: credentials.id,
+    privateKeyPem: credentials.pem,
+  });
+  const token = await appAuth.getInstallationToken(trigger.installationId);
+  const client = createGitHubClient({ token });
+  const pr = await client.getPullRequest(trigger.owner, trigger.repo, trigger.prNumber);
+  if (!pr?.head?.sha || !pr?.base?.sha) return;
+  startRun({
+    installation: { id: trigger.installationId },
+    repository: { name: trigger.repo, owner: { login: trigger.owner } },
+    pull_request: {
+      number: trigger.prNumber,
+      head: { sha: pr.head.sha },
+      base: { sha: pr.base.sha },
+    },
+  });
+}
+
+// --- Backtest (public, read-only) ---
+//
+// The site calls these routes cross-origin from the backtest page;
+// CORS is allowlisted to the site's own origins. Jobs are started
+// under a fixed-window per-IP limit (the unauthenticated upstream
+// GitHub budget is shared) and completed reports are cached per repo
+// for 24h on the data volume.
+
+const BACKTEST_ALLOWED_ORIGINS = new Set([
+  "https://www.solve-lang.com",
+  "https://solve-lang.com",
+]);
+const BACKTEST_START_LIMIT = 3;
+const BACKTEST_START_WINDOW_MS = 60 * 60_000;
+const backtestStarts = new Map();
+
+function backtestCorsHeaders(req) {
+  const origin = req.headers.origin || "";
+  if (!BACKTEST_ALLOWED_ORIGINS.has(origin)) return {};
+  return { "access-control-allow-origin": origin, vary: "Origin" };
+}
+
+function backtestStartAllowed(ip) {
+  const nowMs = Date.now();
+  const entry = backtestStarts.get(ip);
+  if (!entry || nowMs - entry.windowStart >= BACKTEST_START_WINDOW_MS) {
+    backtestStarts.set(ip, { windowStart: nowMs, count: 1 });
+    return true;
+  }
+  if (entry.count >= BACKTEST_START_LIMIT) return false;
+  entry.count += 1;
+  return true;
+}
+
+let backtestJobs = null;
+function getBacktestJobs() {
+  if (backtestJobs) return backtestJobs;
+  const reader = createPublicGithubReader({});
+  const grader = createBacktestGrader({
+    reader,
+    collectReceiptInput: (options) => kit.collector.collectGithubReceiptInput(options),
+    buildReceipt: (input) => kit.receiptCore.buildChangeImpactReceipt(input),
+    runGate: createGateCliRunner({
+      cliPath: path.join(
+        repoRoot,
+        "packages/pr-gate/dist/packages/pr-gate/src/cli.js"
+      ),
+    }),
+    fetchTree: createPublicTreeFetcher({}),
+    workRoot: config.workRoot,
+    matchGlob: kit.policy.matchGlob,
+    ownCheckName: CHECK_RUN_NAME,
+  });
+  backtestJobs = createBacktestJobs({
+    store: createFileBacktestStore({ dir: config.backtestDir }),
+    reader,
+    grader,
+    makeId: () => `bt_${randomBytes(8).toString("hex")}`,
+    log: (event, detail) => console.error(event, detail),
+  });
+  return backtestJobs;
+}
+
+async function handleBacktestStart(req, res) {
+  const cors = backtestCorsHeaders(req);
+  const ip = req.socket?.remoteAddress || "unknown";
+  if (!backtestStartAllowed(ip)) {
+    res.writeHead(429, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify({ error: "rate_limited" }));
+    return;
+  }
+  let body;
+  try {
+    body = JSON.parse((await readBody(req, 16 * 1024)) || "{}");
+  } catch {
+    res.writeHead(400, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify({ error: "invalid_json" }));
+    return;
+  }
+  const owner = typeof body.owner === "string" ? body.owner.trim() : "";
+  const repo = typeof body.repo === "string" ? body.repo.trim() : "";
+  if (!isValidRepoSlug(owner, repo)) {
+    res.writeHead(400, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify({ error: "invalid_repository" }));
+    return;
+  }
+  const requested = Number(body.count);
+  const count =
+    Number.isInteger(requested) && requested >= 1
+      ? Math.min(requested, BACKTEST_MAX_COUNT)
+      : BACKTEST_DEFAULT_COUNT;
+  const started = await getBacktestJobs().start({ owner, repo, count });
+  res.writeHead(started.cached ? 200 : 202, {
+    "content-type": "application/json",
+    ...cors,
+  });
+  res.end(JSON.stringify(started));
+}
+
+async function handleBacktestGet(req, res, id) {
+  const cors = backtestCorsHeaders(req);
+  const job = await getBacktestJobs().get(id);
+  if (!job) {
+    res.writeHead(404, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify({ error: "not_found" }));
+    return;
+  }
+  res.writeHead(200, { "content-type": "application/json", ...cors });
+  res.end(JSON.stringify(job));
+}
+
 // --- HTTP ---
 
 function json(res, statusCode, payload) {
@@ -281,6 +438,18 @@ async function handleWebhook(req, res) {
   }
   const eventName = req.headers["x-github-event"] || "";
   const action = payload.action || "";
+  if (eventName === "issue_comment" && action === "created") {
+    const trigger = parseIssueCommentTrigger(payload);
+    if (trigger && trigger.installationId) {
+      json(res, 202, { accepted: true });
+      startVerifyRun(trigger).catch((err) => {
+        console.error("verify_trigger_failed", err?.name || "Error");
+      });
+      return;
+    }
+    json(res, 200, { ok: true, skipped: `issue_comment:${action}` });
+    return;
+  }
   if (
     eventName === "pull_request" &&
     ["opened", "reopened", "synchronize"].includes(action) &&
@@ -331,6 +500,24 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && url.pathname === "/webhooks/github") {
       await handleWebhook(req, res);
+      return;
+    }
+    if (req.method === "OPTIONS" && url.pathname.startsWith("/backtest")) {
+      res.writeHead(204, {
+        ...backtestCorsHeaders(req),
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+        "access-control-max-age": "86400",
+      });
+      res.end();
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/backtest") {
+      await handleBacktestStart(req, res);
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/backtest/")) {
+      await handleBacktestGet(req, res, url.pathname.slice("/backtest/".length));
       return;
     }
     json(res, 404, { error: "not_found" });
