@@ -165,7 +165,28 @@ cat approved-agent-run-records.json | npm run eval:context:agent-records
 ```
 
 The command accepts no file/URL argument, reads at most 4 MiB from stdin, performs no
-provider/network call and uses no credentials. `npm run test:context-agent-eval-cli`
+provider/network call and uses no credentials.
+
+### Pickup pipeline for externally collected records
+
+Records collected outside this repository (for example a completed agent run on an
+operator machine) are picked up as **one JSON array file of v0 records, one record per
+arm, with every pair complete** (baseline + Solve Context arms sharing suite/pair,
+fixture, agent, provider/model and record class). Run the single pickup command from
+`packages/mcp-server`:
+
+```sh
+npm run eval:context:agent-pickup -- <records-file> <output-dir>
+```
+
+(The `--` is how npm forwards the two arguments to the script.) The pipeline validates
+every record (failing closed on the first invalid one), builds the report, and writes
+two artifacts into `<output-dir>` (created if needed): `agent-eval-report.json` (the
+report JSON) and `agent-eval-summary.md` (the rendered summary, including the per-agent
+Task success counts). It reads at most 4 MiB, performs no provider/network call and uses
+no credentials. The human-review leg and the publication decision are separate steps and
+are untouched by this pipeline; the report's truth flags stay false
+(`publicationAuthorized: false`, `publicPercentageClaimAllowed: false`). `npm run test:context-agent-eval-cli`
 uses synthetic-only records to verify CLI/claim boundaries in MCP CI. Do not commit
 real provider credentials, prompts containing secrets or private customer content as
 benchmark records.
