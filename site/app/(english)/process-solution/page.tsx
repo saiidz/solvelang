@@ -156,6 +156,28 @@ export default function ProcessSolutionPage() {
           </div>
         </section>
 
+        <section className="mt-12" aria-labelledby="faq-heading">
+          <h2 id="faq-heading" className="text-2xl font-semibold">Merge queue questions, answered</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            <article className="rounded-3xl border border-line bg-panel p-6 shadow-sm">
+              <h3 className="text-lg font-semibold">What is merge governance?</h3>
+              <p className="mt-2 text-sm leading-7 text-muted">Merge governance is deciding, with evidence, what is allowed to land on your main branch — and keeping a written reason for every decision. Process Solution builds the exact tree that will land, runs one capped battery of your existing checks on it, and lands it only on FULL GREEN.</p>
+            </article>
+            <article className="rounded-3xl border border-line bg-panel p-6 shadow-sm">
+              <h3 className="text-lg font-semibold">How is Process Solution different from GitHub’s merge queue?</h3>
+              <p className="mt-2 text-sm leading-7 text-muted">GitHub’s queue tests merge groups one entry at a time and removes a failing PR without bisecting the batch. Process Solution tests the combined landing tree once, and on red it bisects the batch, ejects only the guilty PR with its reason, and lands the rest. Every merge and block is written to a decision audit log.</p>
+            </article>
+            <article className="rounded-3xl border border-line bg-panel p-6 shadow-sm">
+              <h3 className="text-lg font-semibold">What does it cost?</h3>
+              <p className="mt-2 text-sm leading-7 text-muted">There is no public price and no self-serve signup yet. Process Solution is live and onboarding a small number of design-partner teams.</p>
+            </article>
+            <article className="rounded-3xl border border-line bg-panel p-6 shadow-sm">
+              <h3 className="text-lg font-semibold">Does my code leave my infrastructure?</h3>
+              <p className="mt-2 text-sm leading-7 text-muted">No. The control plane works from webhooks, PR metadata and check results — never a checkout.</p>
+            </article>
+          </div>
+        </section>
+
         <section className="mt-12 rounded-3xl bg-canvas p-7 text-ink" aria-labelledby="partner-heading">
           <h2 id="partner-heading" className="text-2xl font-semibold">Become a design partner</h2>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-body">
