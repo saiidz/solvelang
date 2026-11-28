@@ -288,5 +288,5 @@ test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite 
   assert.match(page, /Cite this table/);
   assert.match(page, /Runner pricing compared \u2014 SolveLang, rates read November 28, 2026/);
   assert.match(page, /utm_campaign=pricing-compared/);
-  assert.doesNotMatch(page, /November 28, 2026/);
+  assert.doesNotMatch(page, /November 26, 2026/);
 });
