@@ -349,3 +349,33 @@ test("revoke-all reports canceled transactions as conflicts and unknown accounts
     "missing",
   );
 });
+
+test("ensureAccount writes first-touch attribution only at creation (SEO P0)", async () => {
+  const commands = [];
+  const store = createDynamoCustomerAuthStore(clientWith(async (command) => {
+    commands.push(command.input);
+    if (commands.length === 1) return {};
+    return {
+      Item: {
+        authKey: "account#acct_1",
+        kind: "account",
+        accountId: "acct_1",
+        email: "dev@example.com",
+        authVersion: 1,
+      },
+    };
+  }), "auth-table");
+
+  await store.ensureAccount({
+    accountId: "acct_1",
+    email: "dev@example.com",
+    createdAt: "2026-11-28T12:00:00.000Z",
+    attribution: { utmSource: "solve-lang.com", utmMedium: "seo", utmCampaign: "minutes-cost" },
+  });
+  assert.equal(commands[0].Item.firstTouchSource, "solve-lang.com");
+  assert.equal(commands[0].Item.firstTouchMedium, "seo");
+  assert.equal(commands[0].Item.firstTouchCampaign, "minutes-cost");
+  // The conditional create is what makes it first-touch: an existing
+  // account is never rewritten by ensureAccount.
+  assert.equal(commands[0].ConditionExpression, "attribute_not_exists(authKey)");
+});
