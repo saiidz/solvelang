@@ -85,6 +85,27 @@ export function renderAgentEvalSummary(report) {
   lines.push(`| Mean wall latency (${aggregate.measuredLatencyPairCount} pairs) | ${ms(aggregate.meanBaselineWallMs)} | ${ms(aggregate.meanContextWallMs)} | ${ms(aggregate.meanWallDeltaMs)} |`);
   lines.push("");
 
+  lines.push("## Task success", "");
+  const measuredPairs = report.pairs.filter((pair) => pair.measuredPair);
+  if (measuredPairs.length === 0) {
+    lines.push("No measured pairs in this report; task success is counted over measured pairs only, so there are no pass counts to report here.");
+  } else {
+    lines.push("Measured pairs only; synthetic pairs are excluded from these counts.", "");
+    lines.push("| Agent | Baseline pass | Solve Context pass |", "| --- | --- | --- |");
+    const agents = [...new Set(measuredPairs.map((pair) => pair.agent))].sort();
+    const passCounts = (pairs) => ({
+      baseline: pairs.filter((pair) => pair.quality.baselineTaskSuccess).length,
+      context: pairs.filter((pair) => pair.quality.contextTaskSuccess).length,
+      total: pairs.length,
+    });
+    for (const agent of agents) {
+      const counts = passCounts(measuredPairs.filter((pair) => pair.agent === agent));
+      lines.push(`| ${agent} | ${counts.baseline} of ${counts.total} | ${counts.context} of ${counts.total} |`);
+    }
+    const totals = passCounts(measuredPairs);
+    lines.push(`| all agents | ${totals.baseline} of ${totals.total} | ${totals.context} of ${totals.total} |`);
+  }
+  lines.push("");
   lines.push("## Coverage", "");
   lines.push("| Category | Measured pairs |", "| --- | --- |");
   for (const entry of coverage.categories) lines.push(`| ${entry.category} | ${entry.measuredPairs} |`);
