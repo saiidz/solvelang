@@ -9,12 +9,22 @@
 //     be read or decoded). One finding per file, so the receipt's
 //     grading counts ARE the file counts.
 //   - fix: the same scan, then ONE governed fix PR carrying header-
-//     only changes for the failed files, opened under whatever
-//     identity the injected token actually belongs to. The PR's real
-//     author login (read back from GitHub's response) is stated in
-//     the finding text — the receipt never claims an identity the
-//     PR does not carry. Idempotent: a fix run on a compliant repo
-//     opens no PR and says so.
+//     only changes for the failed files. Two delivery modes, chosen
+//     by the wiring (see fixViaMgov in createLicenseHeadersExecutor):
+//       * direct (default): opened under whatever identity the
+//         injected token actually belongs to, via source.createFixPullRequest.
+//       * dispatch (RECIPES_FIX_VIA_MGOV=1): the computed changes are
+//         submitted to MGOV's governed fix-dispatch route
+//         (src/fix-dispatch.js) and MGOV opens the PR as
+//         solvelang-process-solution[bot]. NO silent fallback: a
+//         failed dispatch grades the fix outcome honestly (an
+//         unverified finding carrying the dispatch error code) and
+//         no PR is opened under any other identity.
+//     Either way the PR's real author login (read back from the
+//     response that created it) is stated in the finding text — the
+//     receipt never claims an identity the PR does not carry.
+//     Idempotent: a fix run on a compliant repo opens no PR and
+//     says so.
 //
 // Header rule (documented, deterministic): the configured template
 // (options.header — the exact header block as it appears in files,
@@ -136,8 +146,22 @@ export function decodeText(bytes) {
 // createFixPullRequest, see github.js), so the executor is fully
 // unit-testable with a fake and the production token/identity lives
 // only in the wiring (server.js).
-export function createLicenseHeadersExecutor({ source, createId = () => "run" } = {}) {
-  return async function executeLicenseHeaders({ definition, repo, trigger, baseSha, options = {} }) {
+export function createLicenseHeadersExecutor({
+  source,
+  createId = () => "run",
+  dispatchFix = null,
+  fixViaMgov = false,
+} = {}) {
+  return async function executeLicenseHeaders({
+    definition,
+    repo,
+    trigger,
+    baseSha,
+    options = {},
+    runId = null,
+    tenantId = null,
+    baseBranch = "main",
+  }) {
     const header = normalizeHeader(options.header);
     if (!header) {
       return {
@@ -193,18 +217,79 @@ export function createLicenseHeadersExecutor({ source, createId = () => "run" } 
       return { conclusion: failed.length > 0 ? "failure" : "success", findings };
     }
 
-    // Fix mode with failures: one PR, header-only changes.
+    // Fix mode with failures: one PR, header-only changes. The
+    // changes are computed identically in both delivery modes.
     const changes = failed.map(({ path, text }) => ({ path, content: applyHeader(text, header) }));
+    const title = "recipes(license-headers): add/correct license headers";
+    const body =
+      "Opened by the SolveLang Recipes license-headers recipe (Stage 1). " +
+      "Header-only changes: each file's head was set to the header template " +
+      "configured in `.github/solvelang-recipes.json`; no other lines were touched.";
+
+    if (fixViaMgov) {
+      // Dispatch mode: MGOV opens the PR as the Process Solution
+      // bot through its governed batch path. No fallback — a failed
+      // or unconfigured dispatch is graded honestly and no PR is
+      // opened under another identity.
+      const effectiveRunId = runId ?? createId();
+      const branchName = `solvelang-recipes/${definition.id}/${String(effectiveRunId).slice(0, 8)}`;
+      let result;
+      try {
+        result =
+          typeof dispatchFix === "function"
+            ? await dispatchFix({
+                recipeId: definition.id,
+                runId: effectiveRunId,
+                tenantId: tenantId ?? undefined,
+                repo,
+                baseBranch,
+                baseSha,
+                branchName,
+                title,
+                body,
+                changes: changes.map((change) => ({
+                  path: change.path,
+                  contentBase64: Buffer.from(change.content, "utf8").toString("base64"),
+                })),
+              })
+            : { ok: false, error: "fix_dispatch_unconfigured" };
+      } catch {
+        result = { ok: false, error: "fix_dispatch_request_failed" };
+      }
+      if (!result?.ok) {
+        const code = typeof result?.error === "string" && result.error ? result.error : "fix_dispatch_failed";
+        findings.push({
+          label: "unverified",
+          text:
+            `license-headers: fix dispatch via MGOV failed (${code}) — no fix PR was opened ` +
+            `for ${changes.length} file(s), and no fallback identity was used.`,
+        });
+        return { conclusion: "failure", findings };
+      }
+      const pr = {
+        number: result.prNumber ?? null,
+        url: result.prUrl ?? null,
+        authorLogin: result.authorLogin ?? null,
+        headBranch: result.headBranch ?? branchName,
+        plan: result.plan ?? null,
+      };
+      findings.push({
+        label: "verified",
+        evidence: true,
+        text:
+          `license-headers: fix PR #${pr.number} opened (${pr.url}) by ${pr.authorLogin ?? "unknown"} ` +
+          `covering ${changes.length} file(s), header-only changes, via MGOV fix dispatch.`,
+      });
+      return { conclusion: "success", findings, fixPullRequest: pr };
+    }
+
     const branch = `recipes/license-headers-${String(createId()).slice(0, 8)}`;
     const pr = await source.createFixPullRequest(owner, name, {
       baseSha,
       branch,
       changes,
-      title: "recipes(license-headers): add/correct license headers",
-      body:
-        "Opened by the SolveLang Recipes license-headers recipe (Stage 1). " +
-        "Header-only changes: each file's head was set to the header template " +
-        "configured in `.github/solvelang-recipes.json`; no other lines were touched.",
+      title,
+      body,
     });
     findings.push({
       label: "verified",
