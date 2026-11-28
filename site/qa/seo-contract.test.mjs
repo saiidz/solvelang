@@ -254,7 +254,7 @@ test("runner-pricing-compared page carries the dated honest rate table (GEO/AEO 
   assert.match(routes, /segment: "runner-pricing-compared", classification: "english-only-technical", sitemap: true/);
   const page = read("app/(english)/runner-pricing-compared/page.tsx");
   assert.match(page, /SolveLang is not the cheapest headline rate in this table\. It is the only one that meters per second\./);
-  assert.match(page, /read from the provider\u2019s own published pricing page on November 26, 2026/);
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 28, 2026/);
   assert.match(page, /Sengi \(Basic\)/);
   assert.match(page, /\$0\.00125\u20130\.002/);
   assert.match(page, /Latchkey/);
@@ -348,4 +348,13 @@ test("self-hosted-runners-cost page carries the dated ops-bill arithmetic (SEO P
   assert.match(page, /worked example, not a quote/);
   assert.match(page, /utm_campaign=self-hosted-cost/);
   assert.doesNotMatch(page, /44%|25% faster/);
+});
+
+test("runner-pricing-compared page keeps the November 28, 2026 re-read and cite block (SEO Phase 1 #6)", () => {
+  const page = read("app/(english)/runner-pricing-compared/page.tsx");
+  assert.match(page, /read from the provider\u2019s own published pricing page on November 28, 2026/);
+  assert.match(page, /Cite this table/);
+  assert.match(page, /Runner pricing compared \u2014 SolveLang, rates read November 28, 2026/);
+  assert.match(page, /utm_campaign=pricing-compared/);
+  assert.doesNotMatch(page, /November 26, 2026/);
 });
