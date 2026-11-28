@@ -26,6 +26,7 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 
 import { createRecipesAuditClient } from "./audit.js";
+import { createFixDispatchClient, fixViaMgovEnabled } from "./fix-dispatch.js";
 import { enabledRecipes, parseRecipesConfig } from "./config.js";
 import { createRecipesGitHubClient, splitRepo } from "./github.js";
 import { createLicenseHeadersExecutor } from "./license-headers.js";
@@ -39,6 +40,11 @@ const config = {
   mgovBase: (process.env.RECIPES_MGOV_BASE ||
     "https://2l346svz17.execute-api.us-east-2.amazonaws.com").replace(/\/$/, ""),
   mgovAdminToken: process.env.RECIPES_MGOV_ADMIN_TOKEN || "",
+  // Fix delivery mode for executors: "1" dispatches fix PRs through
+  // MGOV (opened as solvelang-process-solution[bot]); anything else
+  // keeps the direct injected-token mode. No fallback between modes.
+  fixViaMgov: fixViaMgovEnabled(),
+  tenantId: process.env.RECIPES_TENANT_ID || "",
   tickMs: Number(process.env.RECIPES_TICK_MS || 60_000),
   // The token every GitHub read/write of this service runs under.
   // In production this must be a SolveLang Process Solution App
@@ -67,8 +73,16 @@ export function createRecipesService(overrides = {}) {
     (config.githubToken
       ? createRecipesGitHubClient({ token: config.githubToken })
       : null);
+  const fixViaMgov = overrides.fixViaMgov ?? config.fixViaMgov;
+  const dispatchFix =
+    overrides.dispatchFix ??
+    createFixDispatchClient({
+      mgovBase: config.mgovBase,
+      adminToken: config.mgovAdminToken,
+      log: (event, detail) => console.error(event, detail),
+    });
   const licenseHeadersExecutor = githubSource
-    ? createLicenseHeadersExecutor({ source: githubSource })
+    ? createLicenseHeadersExecutor({ source: githubSource, dispatchFix, fixViaMgov })
     : null;
   const runner = createRecipesRunner({
     registry,
@@ -225,6 +239,7 @@ export function createRecipesService(overrides = {}) {
             trigger: "manual",
             baseSha: body.baseSha ?? null,
             installationId: body.installationId ?? null,
+            tenantId: body.tenantId ?? config.tenantId ?? null,
           });
           json(res, 200, { record, receipt });
           return;
