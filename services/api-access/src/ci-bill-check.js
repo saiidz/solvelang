@@ -56,6 +56,18 @@ export const STANDARD_MINIMUM_SECONDS = 10;
 const GITHUB_API_BASE = "https://api.github.com";
 
 const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/;
+const CAMPAIGN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+// The landing campaign tag the site sends with a check (the
+// persisted first-touch utm_campaign, SEO -> Sales map section 3
+// item 3). It is a slug the site's own SEO CTAs minted - bounded
+// and slug-shaped. Anything else is dropped, never logged: the
+// log line stays a record of our own pages, not of caller input.
+export function normalizeCampaignTag(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return CAMPAIGN_PATTERN.test(trimmed) ? trimmed : null;
+}
 const REPO_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 export function isValidRepoSlug(owner, repo) {
@@ -147,9 +159,12 @@ export function createCiBillCheck({ enabled = false, fetchImpl = globalThis.fetc
   const windows = new Map();
   const cache = new Map();
 
-  function log(outcome, repo) {
+  function log(outcome, repo, campaign = null) {
     try {
-      logger.info({ type: "ci_bill_check_call", at: new Date(now()).toISOString(), repo: repo ?? null, outcome });
+      // The campaign field is additive and present only when the
+      // call carried a valid tag, so existing log consumers see
+      // the exact shape they have always seen for untagged calls.
+      logger.info({ type: "ci_bill_check_call", at: new Date(now()).toISOString(), repo: repo ?? null, outcome, ...(campaign ? { campaign } : {}) });
     } catch {
       // Logging must never break the surface it observes.
     }
@@ -317,10 +332,11 @@ export function createCiBillCheck({ enabled = false, fetchImpl = globalThis.fetc
     }
 
     const slug = `${owner}/${repo}`;
+    const campaign = normalizeCampaignTag(parsed?.campaign);
     const cacheKey = slug.toLowerCase();
     const hit = cache.get(cacheKey);
     if (hit && now() - hit.at < cacheTtlMs) {
-      log("served_cached", slug);
+      log("served_cached", slug, campaign);
       return { statusCode: 200, body: { ok: true, check: { ...hit.check, cached: true } } };
     }
 
@@ -328,16 +344,16 @@ export function createCiBillCheck({ enabled = false, fetchImpl = globalThis.fetc
     try {
       outcome = await check(owner, repo);
     } catch (error) {
-      log("check_failed", slug);
+      log("check_failed", slug, campaign);
       return { statusCode: 500, body: { ok: false, error: { code: "check_failed", message: `The check could not be completed: ${String(error?.message ?? error)}` } } };
     }
     if (outcome.notFound) {
-      log("not_found", slug);
+      log("not_found", slug, campaign);
       return { statusCode: 404, body: { ok: false, error: { code: "repo_not_found", message: "Repository not found. The check reads public repositories only; GitHub answers the same way for a private repository as for a missing one." } } };
     }
 
     cache.set(cacheKey, { at: now(), check: outcome });
-    log("served", slug);
+    log("served", slug, campaign);
     return { statusCode: 200, body: { ok: true, check: outcome } };
   }
 
